@@ -1,0 +1,585 @@
+@startuml Modelo de Dominio - Sistema de Prestamos Academicos
+' ============================================================
+' Modelo de Dominio DDD - Sistema de Prestamos Academicos
+' Universidad Nacional San Agustin de Arequipa
+' Grupo 6 - Trabajo Interdisciplinar II
+' ============================================================
+
+skinparam packageStyle rectangle
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+skinparam defaultFontSize 11
+skinparam packageFontSize 13
+skinparam packageFontStyle bold
+skinparam classFontSize 11
+
+skinparam package {
+  BackgroundColor<<context>> #F5F5F5
+  BorderColor<<context>> #666666
+  FontColor<<context>> #333333
+}
+
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #333333
+  FontColor #333333
+  ArrowColor #333333
+}
+
+skinparam note {
+  BackgroundColor #FFFDE7
+  BorderColor #FBC02D
+  FontColor #5D4037
+}
+
+' ============================================================
+' CONTEXTO 1: GESTION DE USUARIOS
+' ============================================================
+package "Gestión de Usuarios" <<context>> {
+
+  class Usuario <<Aggregate Root>> {
+    - id : UUID
+    - nombre : String
+    - email : String
+    - contrasena : String
+    - activo : Boolean
+    - fechaRegistro : DateTime
+    --
+    + registrar(tipo: TipoUsuario) : Usuario
+    + actualizarPerfil(datos: Perfil) : void
+    + obtenerPuntaje() : PuntajeReputacion
+    + obtenerTier() : Tier
+    + estaActivo() : Boolean
+  }
+
+  class TipoUsuario <<Value Object>> {
+    - valor : Enum
+    --
+    ALUMNO
+    DOCENTE
+    ADMINISTRATIVO
+    GESTOR_ALMACEN
+    ADMINISTRADOR_SISTEMA
+  }
+
+  class Perfil <<Value Object>> {
+    - telefono : String
+    - direccion : String
+    - carrera : String
+    - departamento : String
+    - fechaActualizacion : DateTime
+  }
+
+  class PuntajeReputacion <<Value Object>> {
+    - valor : Integer
+    --
+    {static} RANGO_MINIMO = -500
+    {static} RANGO_MAXIMO = 500
+    {static} PUNTOS_INICIALES = 0
+    --
+    + sumar(puntos: Integer) : PuntajeReputacion
+    + restar(puntos: Integer) : PuntajeReputacion
+    + estaEnRango() : Boolean
+  }
+
+  class Tier <<Value Object>> {
+    - nivel : Enum
+    - rangoMinimo : Integer
+    - rangoMaximo : Integer
+    --
+    AVANZADO (201 a 500)
+    ESTANDAR (-50 a 200)
+    RESTRINGIDO (-500 a -51)
+    --
+    + calcularDesde(puntaje: PuntajeReputacion) : Tier
+    + tieneAccesoCompleto() : Boolean
+    + puedeSolicitarEquipos() : Boolean
+    + tieneDerechoProrrogas() : Boolean
+  }
+
+  class HistorialPrestamos <<Value Object>> {
+    - totalPrestamos : Integer
+    - prestamosActivos : Integer
+    - prestamosDevueltos : Integer
+    - prestamosVencidos : Integer
+    - fechaUltimoPrestamo : DateTime
+  }
+
+  Usuario "1" *-- "1" TipoUsuario : tiene
+  Usuario "1" *-- "1" Perfil : posee
+  Usuario "1" *-- "1" PuntajeReputacion : tiene
+  Usuario "1" *-- "1" Tier : posee
+  Usuario "1" *-- "1" HistorialPrestamos : mantiene
+}
+
+' ============================================================
+' CONTEXTO 2: GESTION DE INVENTARIO
+' ============================================================
+package "Gestión de Inventario" <<context>> {
+
+  class Material <<Aggregate Root>> {
+    - id : UUID
+    - nombre : String
+    - descripcion : String
+    - codigoInventario : String
+    - estado : EstadoMaterial
+    - tipo : TipoMaterial
+    - esAltoValor : Boolean
+    - fechaRegistro : DateTime
+    --
+    + cambiarEstado(nuevoEstado: EstadoMaterial) : void
+    + estaDisponible() : Boolean
+    + requiereGarantia() : Boolean
+    + obtenerTierMinimo() : Tier
+  }
+
+  class EstadoMaterial <<Value Object>> {
+    - valor : Enum
+    --
+    DISPONIBLE
+    EN_MANTENIMIENTO
+    RESERVADO
+    PRESTADO
+    --
+    + esDisponible() : Boolean
+    + puedePrestarse() : Boolean
+  }
+
+  class TipoMaterial <<Value Object>> {
+    - valor : Enum
+    --
+    EQUIPO
+    LIBRO
+    OBJETO
+  }
+
+  class FichaTecnica <<Value Object>> {
+    - marca : String
+    - modelo : String
+    - numeroSerie : String
+    - color : String
+    - estadoFisico : String
+    - fotoUrl : String
+  }
+
+  class AtributosReputacion <<Value Object>> {
+    - tierMinimoRequerido : Tier
+    - bonificacionDevolucionTiempo : Integer
+    - deduccionTardanza : Integer
+    - deduccionDanoParcial : Integer
+    - deduccionDanoTotal : Integer
+    - costoReparacion : Decimal
+    - costoReposicion : Decimal
+    --
+    + calcularBonificacion() : Integer
+    + calcularDeduccionTardanza(diasExcedidos: Integer) : Integer
+    + calcularDeduccionDano(tipo: TipoDano) : Integer
+  }
+
+  class TipoDano <<Value Object>> {
+    - valor : Enum
+    --
+    PARCIAL
+    TOTAL
+  }
+
+  Material "1" *-- "1" EstadoMaterial : tiene
+  Material "1" *-- "1" TipoMaterial : es
+  Material "1" *-- "0..1" FichaTecnica : posee
+  Material "1" *-- "1" AtributosReputacion : configura
+  AtributosReputacion "1" *-- "1" Tier : requiere
+}
+
+' ============================================================
+' CONTEXTO 3: GESTION DE PRESTAMOS Y RESERVAS
+' ============================================================
+package "Gestión de Préstamos y Reservas" <<context>> {
+
+  class Prestamo <<Aggregate Root>> {
+    - id : UUID
+    - fechaEntrega : DateTime
+    - fechaLimiteDevolucion : DateTime
+    - tiempoPrestamoDias : Integer
+    - estado : EstadoPrestamo
+    - observaciones : String
+    - activo : Boolean
+    --
+    + crear(usuario: Usuario, material: Material, dias: Integer) : Prestamo
+    + activar(garantia: Garantiah) : void
+    + devolver(checklist: Checklist) : void
+    + vencer() : void
+    + solicitarProrroga(disponibilidad: Boolean, tier: Tier) : Boolean
+    + calcularDiasRestantes() : Integer
+  }
+
+  class EstadoPrestamo <<Value Object>> {
+    - valor : Enum
+    --
+    RESERVADO
+    ACTIVO
+    DEVUELTO
+    VENCIDO
+    --
+    +.transicionesPermitidas() : List<EstadoPrestamo>
+  }
+
+  class FechasPrestamo <<Value Object>> {
+    - fechaSolicitud : DateTime
+    - fechaEntrega : DateTime
+    - fechaLimite : DateTime
+    - fechaDevolucionReal : DateTime
+    --
+    + estaVencido() : Boolean
+    + diasExcedidos() : Integer
+    + horasRestantes() : Integer
+  }
+
+  class Reserva <<Aggregate Root>> {
+    - id : UUID
+    - fechaHoraRecojo : DateTime
+    - prioridad : PrioridadReserva
+    - justificacion : String
+    - estado : EstadoReserva
+    - fechaCreacion : DateTime
+    - activa : Boolean
+    --
+    + crear(usuario: Usuario, material: Material, prioridad: PrioridadReserva, justificacion: String) : Reserva
+    + cancelarPorVencimiento() : void
+    + convertirAPrestamo() : Prestamo
+    + estaVigente() : Boolean
+    + expiro() : Boolean
+  }
+
+  class EstadoReserva <<Value Object>> {
+    - valor : Enum
+    --
+    RESERVADA
+    CANCELADA_POR_VENCIMIENTO
+    CONVERTIDA_EN_PRESTAMO
+    --
+    + estaActiva() : Boolean
+  }
+
+  class PrioridadReserva <<Value Object>> {
+    - valor : Enum
+    --
+    ALTA
+    MEDIA
+    BAJA
+    --
+    + esPrioritaria() : Boolean
+  }
+
+  class JustificacionReserva <<Value Object>> {
+    - descripcion : String
+    - propositoAcademico : Boolean
+    - urgencia : String
+    --
+    + esUrgente() : Boolean
+  }
+
+  class Prorroga <<Entity>> {
+    - id : UUID
+    - fechaSolicitud : DateTime
+    - diasExtension : Integer
+    - aprobada : Boolean
+    - motivo : String
+    --
+    + solicitar(prestamo: Prestamo, tier: Tier) : Boolean
+    + aprobar() : void
+    + rechazar(motivo: String) : void
+  }
+
+  Prestamo "1" *-- "1" EstadoPrestamo : tiene
+  Prestamo "1" *-- "1" FechasPrestamo : registra
+  Prestamo "0..*" -- "0..1" Prorroga : puede_tener
+  Reserva "1" *-- "1" EstadoReserva : tiene
+  Reserva "1" *-- "1" PrioridadReserva : define
+  Reserva "1" *-- "1" JustificacionReserva : incluye
+}
+
+' ============================================================
+' CONTEXTO 4: SISTEMA DE REPUTACION Y SANCIONES
+' ============================================================
+package "Sistema de Reputación y Sanciones" <<context>> {
+
+  class Sancion <<Aggregate Root>> {
+    - id : UUID
+    - tipo : TipoSancion
+    - puntosDescuento : Integer
+    - cobroEconomico : Decimal
+    - suspensionTemporal : Boolean
+    - diasSuspension : Integer
+    - fechaAplicacion : DateTime
+    - descripcion : String
+    - activa : Boolean
+    --
+    + calcular(prestamo: Prestamo, material: Material) : Sancion
+    + aplicarA(usuario: Usuario) : void
+    + esPorDano() : Boolean
+    + generarCobro(monto: Decimal) : void
+  }
+
+  class TipoSancion <<Value Object>> {
+    - valor : Enum
+    --
+    TARDANZA
+    DANO_PARCIAL
+    DANO_TOTAL
+    INASISTENCIA_RESERVA
+    --
+    + requiereCobroEconomico() : Boolean
+    + aplicaSuspension() : Boolean
+  }
+
+  class CalculoSancion <<Value Object>> {
+    - puntosBase : Integer
+    - factorTiempo : Decimal
+    - factorDano : Decimal
+    - montoReparacion : Decimal
+    - montoReposicion : Decimal
+    --
+    + calcularPuntosTardanza(diasExcedidos: Integer, deduccionPorDia: Integer) : Integer
+    + calcularPuntosDano(tipo: TipoDano, deduccion: Integer) : Integer
+    + calcularBonificacion(diasAnticipacion: Integer, bonificacion: Integer) : Integer
+  }
+
+  class Bonificacion <<Value Object>> {
+    - puntosOtorgados : Integer
+    - fechaOtorgacion : DateTime
+    - motivo : String
+    --
+    + otorgar(usuario: Usuario, puntos: Integer) : void
+  }
+
+  Sancion "1" *-- "1" TipoSancion : es
+  Sancion "1" *-- "1" CalculoSancion : utiliza
+  Sancion "1" *-- "0..1" Bonificacion : puede_generar
+}
+
+' ============================================================
+' CONTEXTO 5: SISTEMA DE GARANTIAS
+' ============================================================
+package "Sistema de Garantías" <<context>> {
+
+  class Garantia <<Aggregate Root>> {
+    - id : UUID
+    - tipo : TipoGarantia
+    - estado : EstadoGarantia
+    - fechaRegistro : DateTime
+    - fechaLiberacion : DateTime
+    - descripcionCompromiso : String
+    - documentoUrl : String
+    - activa : Boolean
+    --
+    + registrar(usuario: Usuario, prestamo: Prestamo, tipo: TipoGarantia) : Garantia
+    + liberar() : void
+    + verificar() : Boolean
+    + estaRegistrada() : Boolean
+  }
+
+  class TipoGarantia <<Value Object>> {
+    - valor : Enum
+    --
+    DOCUMENTO_IDENTIDAD
+    COMPROMISO_RESPONSABILIDAD_FIRMADO
+    DOCUMENTO_Y_COMPROMISO
+    --
+    + esDocumental() : Boolean
+  }
+
+  class EstadoGarantia <<Value Object>> {
+    - valor : Enum
+    --
+    PENDIENTE
+    REGISTRADA
+    LIBERADA
+    RETENIDA
+    --
+    + estaActiva() : Boolean
+  }
+
+  class CompromisoResponsabilidad <<Value Object>> {
+    - contenido : String
+    - fechaFirma : DateTime
+    - firmaUrl : String
+    - testigo : String
+    --
+    + esValido() : Boolean
+  }
+
+  Garantia "1" *-- "1" TipoGarantia : tiene
+  Garantia "1" *-- "1" EstadoGarantia : posee
+  Garantia "1" *-- "0..1" CompromisoResponsabilidad : incluye
+}
+
+' ============================================================
+' CONTEXTO 6: SISTEMA DE INSPECCION
+' ============================================================
+package "Sistema de Inspección" <<context>> {
+
+  class Checklist <<Aggregate Root>> {
+    - id : UUID
+    - prestamoId : UUID
+    - tipo : TipoChecklist
+    - fechaInspeccion : DateTime
+    - inspectorId : UUID
+    - observaciones : String
+    - fotosUrls : List<String>
+    - completo : Boolean
+    --
+    + crearInicial(prestamo: Prestamo, gestor: Usuario) : Checklist
+    + crearDevolucion(prestamo: Prestamo, gestor: Usuario) : Checklist
+    + compararCon(checklistInicial: Checklist) : ResultadoComparacion
+    + estaCompleto() : Boolean
+  }
+
+  class TipoChecklist <<Value Object>> {
+    - valor : Enum
+    --
+    ESTADO_INICIAL
+    ESTADO_DEVOLUCION
+  }
+
+  class ResultadoComparacion <<Value Object>> {
+    - tieneDanoNuevo : Boolean
+    - defectosEncontrados : List<String>
+    - defectosPreexistentes : List<String>
+    - danoParcialDetectado : Boolean
+    - danoTotalDetectado : Boolean
+    --
+    + hayDano() : Boolean
+    + generarSancion() : Sancion
+  }
+
+  class Defecto <<Value Object>> {
+    - descripcion : String
+    - ubicacion : String
+    - severidad : Enum
+    - fotoUrl : String
+    --
+    MENOR
+    MODERADO
+    GRAVE
+  }
+
+  Checklist "1" *-- "1" TipoChecklist : es
+  Checklist "1" *-- "1..*" Defecto : registra
+  Checklist "1" *-- "0..1" ResultadoComparacion : genera
+}
+
+' ============================================================
+' RELACIONES ENTRE CONTEXTO DELIMITADOS
+' ============================================================
+
+' --- Usuarios <-> Prestamos y Reservas ---
+Usuario "1" --> "0..*" Reserva : realiza
+Usuario "1" --> "0..*" Prestamo : es_titular
+Prestamo "1" --> "1" Usuario : pertenece_a
+Reserva "1" --> "1" Usuario : pertenece_a
+
+' --- Inventario <-> Prestamos y Reservas ---
+Material "1" --> "0..*" Reserva : es_reservado_en
+Material "1" --> "0..*" Prestamo : es_prestado_en
+Prestamo "1" --> "1" Material : afecta_a
+Reserva "1" --> "1" Material : reserva_a
+
+' --- Prestamos <-> Garantias ---
+Prestamo "1" --> "0..1" Garantia : requiere
+Garantia "1" --> "1" Prestamo : asocia_a
+
+' --- Prestamos <-> Inspeccion ---
+Prestamo "1" --> "1" Checklist : tiene_checklist_inicial
+Prestamo "1" --> "1" Checklist : tiene_checklist_devolucion
+Checklist "1" --> "1" Prestamo : corresponde_a
+
+' --- Prestamos <-> Sanciones ---
+Prestamo "1" --> "0..*" Sancion : puede_generar
+Sancion "1" --> "1" Prestamo : originada_por
+
+' --- Sanciones <-> Usuarios (Reputacion) ---
+Sancion "1" --> "1" Usuario : aplica_a
+Usuario "1" --> "0..*" Sancion : recibe
+
+' --- Inventario <-> Reputacion (parametros por objeto) ---
+Material "1" --> "1" AtributosReputacion : configura_parametros
+AtributosReputacion "1" --> "1" Material : parametriza_a
+
+' --- Garantias <-> Usuarios ---
+Garantia "1" --> "1" Usuario : entregada_por
+
+' --- Inspeccion <-> Inventario ---
+Checklist "1" --> "1" Material : inspecciona
+
+' ============================================================
+' REGLAS DE NEGOCIO CLAVE (Notas)
+' ============================================================
+
+note top of Usuario
+  **RN03 - Sistema de Reputación y Tiers:**
+  • Rango: [-500, 500]
+  • Inicio: 0 puntos (Neutral)
+  • Avanzado (201-500): Acceso total
+  • Estándar (-50 a 200): Acceso estándar
+  • Restringido (-500 a -51): Solo básico
+  • Excepción Académica: Documento + Compromiso
+end note
+
+note bottom of Material
+  **RN01 - Disponibilidad:**
+  Solo se presta si estado = "Disponible"
+  
+  **RN05 - Garantía:**
+  Equipos de alto valor (laptops, 
+  proyectores, cámaras) requieren
+  documento de identidad + compromiso firmado
+end note
+
+note right of Sancion
+  **RN06 - Cálculo Dinámico:**
+  • Bonificación por entrega a tiempo
+  • Descuento proporcional por tardanza
+  • Penalización severa por daño
+  • Cobro económico SOLO por daño físico
+  
+  **RF08 - Cobros:**
+  Exclusivamente ante daños físicos
+end note
+
+note as N1
+  **RN09 - Checklist Digital:**
+  • Obligatorio al entregar (CU03)
+  • Obligatorio al devolver (CU04)
+  • Sanciones solo por daños NUEVOS
+  • Se contrasta estado inicial vs. final
+end note
+
+note as N2
+  **RN04 - Vigencia de Reservas:**
+  • Máximo 24 horas desde recojo
+  • Sin recoger → "Cancelada por Vencimiento"
+  • Material vuelve a "Disponible"
+  • Penalización por inasistencia
+end note
+
+N1 .. Checklist
+N2 .. Reserva
+
+' ============================================================
+' DEPENDENCIAS ENTRE CONTEXTOS (resumen visual)
+' ============================================================
+
+package "Gestión de Usuarios" <<context>> {
+}
+package "Gestión de Inventario" <<context>> {
+}
+package "Gestión de Préstamos y Reservas" <<context>> {
+}
+package "Sistema de Reputación y Sanciones" <<context>> {
+}
+package "Sistema de Garantías" <<context>> {
+}
+package "Sistema de Inspección" <<context>> {
+}
+
+@enduml

@@ -3,18 +3,20 @@
 **ESCUELA PROFESIONAL DE  CIENCIA DE LA COMPUTACIÓN**  
 **Análisis de Requisitos**
 
-	**Docente	:**	Yari Ramos, Yessenia Deysi  
-	**Curso 	:**	Trabajo Interdisciplinar II  
+**Docente	:**	Yari Ramos, Yessenia Deysi  
+**Curso 	:**	Trabajo Interdisciplinar II  
 **Grupo	:**	6  
-	**Alumnos	:**        Ccaso Idme, Moises Robert   
+**Alumnos	:**        Ccaso Idme, Moises Robert   
 Rivera Olivera, Omar Joaquín  
-				Sucari Ccansaya, Edú André  
+Sucari Ccansaya, Edú André  
 Torres Chávez, Jhair Alejandro
 
 **Arequipa \- Perú**  
 **2026**  
 **Documento de Análisis de Requisitos**  
 *Sistema de Préstamos Académicos*
+
+**[LINK GOOGLE DOCS](https://docs.google.com/document/d/1XE7dGWWqA4Pc0tOqJZG6PJ733xt0i_t6zfkJ3markw8/edit?usp=sharing)**
 
 # 1\. Introducción
 
@@ -141,13 +143,11 @@ Se identifican a continuación los stakeholders y actores que interactúan direc
 
 * RN01: Disponibilidad de Materiales: Un material solo puede prestarse si su estado en el inventario es "Disponible". Si su estado es "En Mantenimiento", "Reservado" o "Prestado", la solicitud será rechazada automáticamente.
 
-* RN02: Plazos de Préstamo Diferenciados: Los plazos máximos se definen según el perfil: Alumnos (hasta 3 días para libros, 1 día para equipos), Docentes (hasta 7 días para libros y equipos) y Administrativos (hasta 5 días). Se concede una tolerancia máxima de 15 minutos en la devolución presencial.
-
-* RN03: Sistema de Reputación y Tiers de Acceso: El acceso a préstamos se rige por una escala de reputación en el rango de \[-500, 500\], iniciando cada usuario nuevo con 0 puntos (Neutral). Se establecen tres Tiers de acceso: 1\) Tier Avanzado (201 a 500 pts): Acceso total a todo el inventario (incluyendo equipos de alto valor), prioridad en reservas y prórrogas automáticas/extendidas. 2\) Tier Estándar (-50 a 200 pts): Acceso a libros y equipos estándar, incluyendo un margen de tolerancia en rango negativo (hasta \-50 pts) para imprevistos o retrasos menores sin degradar al usuario al nivel restringido. 3\) Tier Restringido (-500 a \-51 pts): Acceso limitado únicamente a materiales básicos/libros de bajo valor, sin derecho a préstamos de equipos ni prórrogas. Excepción Académica: Un usuario en Tier Restringido que requiera un bien de Tier Superior por necesidad académica urgente podrá acceder al préstamo de manera excepcional si presenta un compromiso de responsabilidad firmado y deja una garantía obligatoria registrada.
+* RN03: Sistema de Reputación y Tiers de Acceso: El acceso a préstamos se rige por una escala de reputación en el rango de \[-500, 500\], iniciando cada usuario nuevo con 0 puntos (Neutral). Se establecen tres Tiers de acceso: 1\) Tier Avanzado (201 a 500 pts): Acceso total a todo el inventario (incluyendo equipos de alto valor), prioridad en reservas y prórrogas automáticas/extendidas. 2\) Tier Estándar (-50 a 200 pts): Acceso a libros y equipos estándar, incluyendo un margen de tolerancia en rango negativo (hasta \-50 pts) para imprevistos o retrasos menores sin degradar al usuario al nivel restringido. 3\) Tier Restringido (-500 a \-51 pts): Acceso limitado únicamente a materiales básicos/libros de bajo valor, sin derecho a préstamos de equipos ni prórrogas. Excepción Académica: Un usuario en Tier Restringido que requiera un bien de Tier Superior por necesidad académica urgente podrá acceder al préstamo de manera excepcional si presenta un documento de identidad y un compromiso de responsabilidad firmado como garantía.
 
 * RN04: Vigencia de Reservas: Las reservas tienen una vigencia máxima de 24 horas desde la hora pactada de recojo. Cumplido este plazo sin que el material sea retirado, la reserva pasará automáticamente al estado "Cancelada por Vencimiento" y el recurso retornará a "Disponible".
 
-* RN05: Registro de Garantías y Excepciones: Para préstamos de equipos de alto valor (laptops, proyectores, cámaras) o para la activación de préstamos por excepción académica a usuarios en Tier Restringido, se requiere el registro y entrega obligatoria de un documento de identidad o depósito en garantía antes de cambiar el estado del préstamo a "Activo".
+* RN05: Registro de Garantías y Excepciones: Para préstamos de equipos de alto valor (laptops, proyectores, cámaras) o para la activación de préstamos por excepción académica a usuarios en Tier Restringido, se requiere el registro y entrega obligatoria de un documento de identidad y un compromiso de responsabilidad firmado como garantía antes de cambiar el estado del préstamo a "Activo".
 
 * RN06: Cálculo de Sanciones e Impacto en Reputación por Objeto: Al momento de la devolución, el sistema realiza un cálculo dinámico utilizando los parámetros configurados en la ficha del objeto devuelto: otorga puntos de bonificación por entrega a tiempo, aplica un descuento de puntos proporcional al tiempo excedido en caso de tardanza, y aplica una penalización severa de puntos junto con cobro económico de reparación/reposición únicamente en caso de daño parcial o total.
 
@@ -317,7 +317,6 @@ Los siguientes diagramas se desarrollarán como parte del modelado del sistema, 
 | RNF04 | Completar reserva en menos de 3 minutos sin capacitación | No funcional | Media |
 | RNF05 | Escalabilidad para incorporación de nuevos materiales y usuarios | No funcional | Baja |
 | RN01 | Disponibilidad obligatoria del material (estado "Disponible") | Regla de negocio | Alta |
-| RN02 | Plazos de préstamo según tipo de usuario/material y 15 min de tolerancia | Regla de negocio | Alta |
 | RN03 | Sistema de reputación (-500 a 500), Tiers de Acceso y cláusula de Excepción Académica  | Regla de negocio | Alta |
 | RN04 | Vigencia máxima de reserva de 24 horas | Regla de negocio | Alta |
 | RN05 | Registro previo obligatorio de garantía para equipos de alto valor o préstamos por excepción académica | Regla de negocio | Alta |

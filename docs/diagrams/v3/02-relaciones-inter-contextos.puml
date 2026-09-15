@@ -1,0 +1,111 @@
+@startuml
+title Relaciones entre Contextos Delimitados\n<b>Modelo de Dominio DDD</b>
+
+skinparam {
+  shadowing false
+  defaultFontSize 11
+  defaultFontName "Segoe UI"
+  linetype ortho
+  roundcorner 10
+  padding 15
+}
+
+skinparam rectangle<<context>> {
+  FontSize 13
+  FontStyle bold
+  BorderThickness 2
+  RoundCorner 12
+}
+
+skinparam rectangle<<ctx-usuario>> {
+  BackgroundColor #E3F2FD
+  BorderColor #1565C0
+  FontColor #0D47A1
+}
+
+skinparam rectangle<<ctx-inventario>> {
+  BackgroundColor #E8F5E9
+  BorderColor #2E7D32
+  FontColor #1B5E20
+}
+
+skinparam rectangle<<ctx-prestamos>> {
+  BackgroundColor #FFF3E0
+  BorderColor #E65100
+  FontColor #BF360C
+}
+
+skinparam rectangle<<ctx-reputacion>> {
+  BackgroundColor #F3E5F5
+  BorderColor #6A1B9A
+  FontColor #4A148C
+}
+
+skinparam rectangle<<ctx-garantia>> {
+  BackgroundColor #FBE9E7
+  BorderColor #BF360C
+  FontColor #BF360C
+}
+
+skinparam rectangle<<ctx-inspeccion>> {
+  BackgroundColor #E0F7FA
+  BorderColor #00695C
+  FontColor #004D40
+}
+
+skinparam note {
+  BackgroundColor #FFFDE7
+  BorderColor #FBC02D
+  FontColor #5D4037
+  FontSize 9
+}
+
+' ============================================================
+' CONTEXTOS
+' ============================================================
+
+rectangle "  <b>Gestión de Usuarios</b>\n──────\nUsuario, Tier,\nPuntajeReputación  " <<ctx-usuario>> as CTX1
+
+rectangle "  <b>Gestión de Inventario</b>\n──────\nMaterial,\nAtributosReputación  " <<ctx-inventario>> as CTX2
+
+rectangle "  <b>Gestión de Préstamos\ny Reservas</b>\n──────\nPréstamo, Reserva,\nPrórroga  " <<ctx-prestamos>> as CTX3
+
+rectangle "  <b>Sistema de Reputación\ny Sanciones</b>\n──────\nSanción,\nCálculoSanción  " <<ctx-reputacion>> as CTX4
+
+rectangle "  <b>Sistema de\nGarantías</b>\n──────\nGarantía,\nCompromiso  " <<ctx-garantia>> as CTX5
+
+rectangle "  <b>Sistema de\nInspección</b>\n──────\nChecklist,\nDefecto  " <<ctx-inspeccion>> as CTX6
+
+' ============================================================
+' RELACIONES
+' ============================================================
+
+CTX1 --> CTX3 : <color:#0D47A1><b>Usuario</b>\ncrea Reservas\nes titular de Préstamos</color>
+CTX2 --> CTX3 : <color:#1B5E20><b>Material</b>\nes el bien\nprestado/reservado</color>
+CTX3 --> CTX5 : <color:#BF360C><b>Préstamo</b>\nrequiere Garantía\n(alto valor)</color>
+CTX3 --> CTX6 : <color:#004D40><b>Préstamo</b>\ntiene Checklist\ninicial/devolución</color>
+CTX3 --> CTX4 : <color:#4A148C><b>Devolución</b>\ngenera Sanciones\ny actualiza puntos</color>
+CTX4 --> CTX1 : <color:#0D47A1><b>Sanciones</b>\nactualizan\nreputación del Usuario</color>
+CTX5 --> CTX1 : <color:#0D47A1><b>Garantía</b>\nes entregada\npor un Usuario</color>
+
+' ============================================================
+' FLUJO PRINCIPAL
+' ============================================================
+
+note as F1
+  <b>Flujo principal del sistema:</b>
+  ══════════════════════════════════
+  1. <color:#0D47A1>Usuario</color> busca <color:#1B5E20>Material</color>
+  2. <color:#0D47A1>Usuario</color> crea <b>Reserva</b>
+  3. Gestor registra <b>Préstamo</b>
+     → Verifica <color:#BF360C>Garantía</color> (si aplica)
+     → Completa <color:#004D40>Checklist</color> inicial
+  4. Devolución:
+     → <color:#004D40>Checklist</color> de devolución
+     → <color:#4A148C>Sanción</color> calculada
+     → <color:#0D47A1>Reputación</color> actualizada
+end note
+
+F1 .. CTX3
+
+@enduml

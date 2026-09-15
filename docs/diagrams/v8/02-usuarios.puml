@@ -1,0 +1,175 @@
+@startuml
+title Contexto: Gestión de Usuarios\n<b>Modelo de Dominio DDD</b>
+
+skinparam {
+  shadowing false
+  defaultFontSize 11
+  defaultFontName "Segoe UI"
+  classAttributeIconSize 0
+  linetype ortho
+  roundcorner 8
+  padding 5
+}
+
+skinparam class<<Aggregate Root>> {
+  BackgroundColor #FFF9C4
+  BorderColor #F9A825
+  FontColor #F57F17
+  FontStyle bold
+  BorderThickness 2
+}
+
+skinparam class<<Value Object>> {
+  BackgroundColor #FFFFFF
+  BorderColor #90A4AE
+  FontColor #37474F
+  FontStyle italic
+}
+
+skinparam note {
+  BackgroundColor #E3F2FD
+  BorderColor #1565C0
+  FontColor #0D47A1
+  FontSize 10
+}
+
+skinparam arrow {
+  Color #455A64
+  FontSize 9
+  FontColor #546E7A
+}
+
+' ============================================================
+' AGREGADOS Y OBJETOS DE VALOR
+' ============================================================
+
+class Usuario <<Aggregate Root>> {
+  --
+  __ Identidad __
+  id : UUID
+  nombre : String
+  email : String
+  contrasena : String
+  __ Estado __
+  activo : Boolean
+  fechaRegistro : DateTime
+  __ Dominio __
+  -tipoUsuario : TipoUsuario
+  -perfil : Perfil
+  -puntaje : PuntajeReputacion
+  -tier : Tier
+  -historial : HistorialPrestamos
+  --
+  +registrar(tipo) : Usuario
+  +actualizarPerfil(datos) : void
+  +obtenerPuntaje() : PuntajeReputacion
+  +obtenerTier() : Tier
+  +estaActivo() : Boolean
+}
+
+class TipoUsuario <<Value Object>> {
+  ALUMNO
+  DOCENTE
+  ADMINISTRATIVO
+  GESTOR_ALMACEN
+  ADMINISTRADOR_SISTEMA
+}
+
+class Perfil <<Value Object>> {
+  telefono : String
+  direccion : String
+  carrera : String
+  departamento : String
+}
+
+class PuntajeReputacion <<Value Object>> {
+  __ Constantes __
+  {static} RANGO_MIN = -500
+  {static} RANGO_MAX = 500
+  {static} INICIAL = 0
+  __ Estado __
+  valor : Integer
+  --
+  +sumar(puntos) : PuntajeReputacion
+  +restar(puntos) : PuntajeReputacion
+  +estaEnRango() : Boolean
+}
+
+class Tier <<Value Object>> {
+  __ Niveles __
+  AVANZADO [201..500]
+  ESTANDAR [-50..200]
+  RESTRINGIDO [-500..-51]
+  __ Estado __
+  nivel : Enum
+  rangoMin : Integer
+  rangoMax : Integer
+  --
+  +calcularDesde(puntaje) : Tier
+  +tieneAccesoCompleto() : Boolean
+  +puedeSolicitarEquipos() : Boolean
+  +tieneDerechoProrrogas() : Boolean
+}
+
+class HistorialPrestamos <<Value Object>> {
+  totalPrestamos : Integer
+  prestamosActivos : Integer
+  prestamosDevueltos : Integer
+  prestamosVencidos : Integer
+}
+
+' ============================================================
+' RELACIONES
+' ============================================================
+
+Usuario *-- TipoUsuario
+Usuario *-- Perfil
+Usuario *-- PuntajeReputacion
+Usuario *-- Tier
+Usuario *-- HistorialPrestamos
+
+' ============================================================
+' REGLAS DE NEGOCIO
+' ============================================================
+
+note top of Usuario
+  <b>RN03 - Sistema de Reputación y Tiers</b>
+  ═══════════════════════════════════════
+  Rango: [-500, 500]
+  Inicio: 0 puntos (Neutral)
+  ──────────────────────────────────────
+  <b>● Tier Avanzado [201..500]</b>
+  Acceso total a todo el inventario
+  Prioridad en reservas
+  Prórrogas automáticas/extendidas
+  ──────────────────────────────────────
+  <b>● Tier Estándar [-50..200]</b>
+  Acceso a libros y equipos estándar
+  Margen de tolerancia hasta -50 pts
+  ──────────────────────────────────────
+  <b>● Tier Restringido [-500..-51]</b>
+  Solo materiales básicos/libros
+  Sin equipos, sin prórrogas
+  ──────────────────────────────────────
+  <b>Excepción Académica:</b>
+  Tier Restringido puede acceder a
+  bien de Tier Superior con:
+  • Documento de identidad
+  • Compromiso de responsabilidad firmado
+end note
+
+note bottom of HistorialPrestamos
+  <b>RF10 - Historial</b>
+  Consulta de préstamos por usuario
+  y por material
+end note
+
+note right of Tier
+  <b>RF12 - Prórrogas</b>
+  Solicitud evaluada según:
+  • Tier de reputación del usuario
+  • Disponibilidad del bien
+  Prioridad para Tier Avanzado
+end note
+
+@enduml

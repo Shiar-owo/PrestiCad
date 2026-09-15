@@ -1,0 +1,145 @@
+@startuml
+title Contexto: Sistema de Inspección\n<b>Modelo de Dominio DDD</b>
+
+skinparam {
+  shadowing false
+  defaultFontSize 11
+  defaultFontName "Segoe UI"
+  classAttributeIconSize 0
+  linetype ortho
+  roundcorner 8
+  padding 5
+}
+
+skinparam class<<Aggregate Root>> {
+  BackgroundColor #FFF9C4
+  BorderColor #F9A825
+  FontColor #F57F17
+  FontStyle bold
+  BorderThickness 2
+}
+
+skinparam class<<Value Object>> {
+  BackgroundColor #FFFFFF
+  BorderColor #90A4AE
+  FontColor #37474F
+  FontStyle italic
+}
+
+skinparam note {
+  BackgroundColor #E0F7FA
+  BorderColor #00695C
+  FontColor #004D40
+  FontSize 10
+}
+
+skinparam arrow {
+  Color #455A64
+  FontSize 9
+  FontColor #546E7A
+}
+
+' ============================================================
+' AGREGADOS Y OBJETOS DE VALOR
+' ============================================================
+
+class Checklist <<Aggregate Root>> {
+  --
+  __ Identidad __
+  id : UUID
+  prestamoId : UUID
+  __ Clasificacion __
+  -tipo : TipoChecklist
+  __ Inspeccion __
+  fechaInspeccion : DateTime
+  inspectorId : UUID
+  observaciones : String
+  fotosUrls : List
+  completo : Boolean
+  --
+  +crearInicial(prestamo, gestor) : Checklist
+  +crearDevolucion(prestamo, gestor) : Checklist
+  +compararCon(inicial) : ResultadoComparacion
+  +estaCompleto() : Boolean
+}
+
+class TipoChecklist <<Value Object>> {
+  ESTADO_INICIAL
+  ESTADO_DEVOLUCION
+}
+
+class ResultadoComparacion <<Value Object>> {
+  tieneDanoNuevo : Boolean
+  defectosEncontrados : List
+  defectosPreexistentes : List
+  danoParcial : Boolean
+  danoTotal : Boolean
+  --
+  +hayDano() : Boolean
+  +generarSancion() : Sancion
+}
+
+class Defecto <<Value Object>> {
+  descripcion : String
+  ubicacion : String
+  severidad : Enum
+  fotoUrl : String
+}
+
+' ============================================================
+' RELACIONES
+' ============================================================
+
+Checklist *-- TipoChecklist
+Checklist "1" *-- "1..*" Defecto
+Checklist "0..1" *-- ResultadoComparacion
+
+' ============================================================
+' REGLAS DE NEGOCIO
+' ============================================================
+
+note top of Checklist
+  <b>RN09 - Inspección y Checklist Digital</b>
+  ═══════════════════════════════════════
+  En el registro de entrega de un
+  préstamo (CU03) es <b>obligatorio</b>
+  completar un checklist digital del
+  estado inicial del bien.
+  ──────────────────────────────────────
+  Este checklist se <b>contrasta</b> durante
+  la devolución (CU04) para garantizar
+  que las sanciones por daño apliquen
+  <b>únicamente a desperfectos nuevos</b>.
+end note
+
+note right of ResultadoComparacion
+  <b>Proceso de comparación</b>
+  ═══════════════════════════════════════
+  1. Se completa checklist de devolución
+  2. Se compara con checklist inicial
+  3. Se identifican:
+     • Defectos preexistentes
+     • Defectos nuevos (daño)
+  4. Solo los defectos <b>NUEVOS</b>
+     generan sanciones
+end note
+
+note left of Defecto
+  <b>Severidad del defecto</b>
+  ═══════════════════════════════════════
+  ● MENOR - Desperfecto leve
+  ● MODERADO - Daño parcial
+  ● GRAVE - Daño total
+end note
+
+note bottom of TipoChecklist
+  <b>CU03 - Registrar Préstamo</b>
+  Checklist de estado INICIAL
+  al entregar el material
+  ──────────────────────────────
+  <b>CU04 - Registrar Devolución</b>
+  Checklist de DEVOLUCIÓN
+  al recibir el material
+end note
+
+@enduml

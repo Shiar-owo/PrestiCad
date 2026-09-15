@@ -1,0 +1,141 @@
+@startuml
+title Contexto: Sistema de Garantías\n<b>Modelo de Dominio DDD</b>
+
+skinparam {
+  shadowing false
+  defaultFontSize 11
+  defaultFontName "Segoe UI"
+  classAttributeIconSize 0
+  linetype ortho
+  roundcorner 8
+  padding 5
+}
+
+skinparam class<<Aggregate Root>> {
+  BackgroundColor #FFF9C4
+  BorderColor #F9A825
+  FontColor #F57F17
+  FontStyle bold
+  BorderThickness 2
+}
+
+skinparam class<<Value Object>> {
+  BackgroundColor #FFFFFF
+  BorderColor #90A4AE
+  FontColor #37474F
+  FontStyle italic
+}
+
+skinparam note {
+  BackgroundColor #FBE9E7
+  BorderColor #BF360C
+  FontColor #BF360C
+  FontSize 10
+}
+
+skinparam arrow {
+  Color #455A64
+  FontSize 9
+  FontColor #546E7A
+}
+
+' ============================================================
+' AGREGADOS Y OBJETOS DE VALOR
+' ============================================================
+
+class Garantia <<Aggregate Root>> {
+  --
+  __ Identidad __
+  id : UUID
+  __ Clasificacion __
+  -tipo : TipoGarantia
+  -estado : EstadoGarantia
+  __ Datos __
+  fechaRegistro : DateTime
+  fechaLiberacion : DateTime
+  descripcionCompromiso : String
+  documentoUrl : String
+  activa : Boolean
+  --
+  +registrar(usuario, prestamo, tipo) : Garantia
+  +liberar() : void
+  +verificar() : Boolean
+  +estaRegistrada() : Boolean
+}
+
+class TipoGarantia <<Value Object>> {
+  DOCUMENTO_IDENTIDAD
+  COMPROMISO_RESPONSABILIDAD
+  DOCUMENTO_Y_COMPROMISO
+  --
+  +esDocumental() : Boolean
+}
+
+class EstadoGarantia <<Value Object>> {
+  PENDIENTE
+  REGISTRADA
+  LIBERADA
+  RETENIDA
+  --
+  +estaActiva() : Boolean
+}
+
+class CompromisoResponsabilidad <<Value Object>> {
+  contenido : String
+  fechaFirma : DateTime
+  firmaUrl : String
+  testigo : String
+  --
+  +esValido() : Boolean
+}
+
+' ============================================================
+' RELACIONES
+' ============================================================
+
+Garantia *-- TipoGarantia
+Garantia *-- EstadoGarantia
+Garantia "0..1" *-- CompromisoResponsabilidad
+
+' ============================================================
+' REGLAS DE NEGOCIO
+' ============================================================
+
+note top of Garantia
+  <b>RN05 - Registro de Garantías</b>
+  ═══════════════════════════════════════
+  Para préstamos de equipos de alto valor
+  (laptops, proyectores, cámaras) o
+  préstamos por Excepción Académica:
+  ──────────────────────────────────────
+  Se requiere <b>registro y entrega
+  obligatoria</b> de:
+  • Documento de identidad
+  • Compromiso de responsabilidad firmado
+  ──────────────────────────────────────
+  Antes de cambiar el estado del
+  préstamo a <b>"Activo"</b>
+end note
+
+note right of CompromisoResponsabilidad
+  <b>RF09 - Garantía</b>
+  ═══════════════════════════════════════
+  El sistema debe registrar la garantía
+  dejada por el usuario al solicitar
+  un préstamo, cuando corresponda.
+  ──────────────────────────────────────
+  <b>Casos que requieren garantía:</b>
+  • Equipos de alto valor
+  • Excepción Académica (Tier Restringido
+    accediendo a bien de Tier Superior)
+end note
+
+note left of EstadoGarantia
+  <b>Ciclo de vida de garantía</b>
+  ═══════════════════════════════════════
+  PENDIENTE → REGISTRADA → LIBERADA
+                         ↘ RETENIDA
+    (cuando hay daño del material)
+end note
+
+@enduml

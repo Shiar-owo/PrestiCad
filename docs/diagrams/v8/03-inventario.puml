@@ -1,0 +1,165 @@
+@startuml
+title Contexto: Gestión de Inventario\n<b>Modelo de Dominio DDD</b>
+
+skinparam {
+  shadowing false
+  defaultFontSize 11
+  defaultFontName "Segoe UI"
+  classAttributeIconSize 0
+  linetype ortho
+  roundcorner 8
+  padding 5
+}
+
+skinparam class<<Aggregate Root>> {
+  BackgroundColor #FFF9C4
+  BorderColor #F9A825
+  FontColor #F57F17
+  FontStyle bold
+  BorderThickness 2
+}
+
+skinparam class<<Value Object>> {
+  BackgroundColor #FFFFFF
+  BorderColor #90A4AE
+  FontColor #37474F
+  FontStyle italic
+}
+
+skinparam note {
+  BackgroundColor #E8F5E9
+  BorderColor #2E7D32
+  FontColor #1B5E20
+  FontSize 10
+}
+
+skinparam arrow {
+  Color #455A64
+  FontSize 9
+  FontColor #546E7A
+}
+
+' ============================================================
+' AGREGADOS Y OBJETOS DE VALOR
+' ============================================================
+
+class Material <<Aggregate Root>> {
+  --
+  __ Identidad __
+  id : UUID
+  nombre : String
+  descripcion : String
+  codigoInventario : String
+  __ Clasificacion __
+  -tipo : TipoMaterial
+  -estado : EstadoMaterial
+  esAltoValor : Boolean
+  __ Configuracion __
+  -atributosRep : AtributosReputacion
+  __ Metadata __
+  fechaRegistro : DateTime
+  --
+  +cambiarEstado(nuevo) : void
+  +estaDisponible() : Boolean
+  +requiereGarantia() : Boolean
+  +obtenerTierMinimo() : Tier
+}
+
+class EstadoMaterial <<Value Object>> {
+  DISPONIBLE
+  EN_MANTENIMIENTO
+  RESERVADO
+  PRESTADO
+  --
+  +esDisponible() : Boolean
+  +puedePrestarse() : Boolean
+}
+
+class TipoMaterial <<Value Object>> {
+  EQUIPO
+  LIBRO
+  OBJETO
+}
+
+class FichaTecnica <<Value Object>> {
+  marca : String
+  modelo : String
+  numeroSerie : String
+  color : String
+  estadoFisico : String
+  fotoUrl : String
+}
+
+class AtributosReputacion <<Value Object>> {
+  __ Penalizaciones __
+  tierMinimoRequerido : Tier
+  bonificacionTiempo : Integer
+  deduccionTardanza : Integer
+  deduccionDanoParcial : Integer
+  deduccionDanoTotal : Integer
+  __ Costos __
+  costoReparacion : Decimal
+  costoReposicion : Decimal
+  --
+  +calcularBonificacion() : Integer
+  +calcularDeduccionTardanza(dias) : Integer
+  +calcularDeduccionDano(tipo) : Integer
+}
+
+' ============================================================
+' RELACIONES
+' ============================================================
+
+Material *-- EstadoMaterial
+Material *-- TipoMaterial
+Material "0..1" *-- FichaTecnica
+Material *-- AtributosReputacion
+
+' ============================================================
+' REGLAS DE NEGOCIO
+' ============================================================
+
+note top of Material
+  <b>RN01 - Disponibilidad de Materiales</b>
+  ═══════════════════════════════════════
+  Un material solo puede prestarse si
+  su estado en inventario es <b>"Disponible"</b>
+  ──────────────────────────────────────
+  Estados que rechazan préstamo:
+  • En Mantenimiento
+  • Reservado
+  • Prestado
+end note
+
+note bottom of AtributosReputacion
+  <b>RN06 - Cálculo Dinámico por Objeto</b>
+  ═══════════════════════════════════════
+  Cada objeto tiene parametrizado:
+  • Bonificación por entrega a tiempo
+  • Deducción por tardanza (proporcional)
+  • Deducción por daño parcial
+  • Deducción por daño total
+  • Costo reparación/reposición
+  ──────────────────────────────────────
+  Las sanciones se calculan usando
+  estos parámetros al momento de
+  la devolución
+end note
+
+note right of Material
+  <b>RN05 - Garantía para Alto Valor</b>
+  ═══════════════════════════════════════
+  Equipos de alto valor requieren:
+  • Documento de identidad
+  • Compromiso de responsabilidad firmado
+  ──────────────────────────────────────
+  Ejemplos: laptops, proyectores, cámaras
+end note
+
+note right of EstadoMaterial
+  <b>RF03 - Estados</b>
+  El inventario gestiona
+  el estado de cada material
+end note
+
+@enduml

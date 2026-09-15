@@ -1,0 +1,149 @@
+@startuml
+title Contexto: Sistema de Reputación y Sanciones\n<b>Modelo de Dominio DDD</b>
+
+skinparam {
+  shadowing false
+  defaultFontSize 11
+  defaultFontName "Segoe UI"
+  classAttributeIconSize 0
+  linetype ortho
+  roundcorner 8
+  padding 5
+}
+
+skinparam class<<Aggregate Root>> {
+  BackgroundColor #FFF9C4
+  BorderColor #F9A825
+  FontColor #F57F17
+  FontStyle bold
+  BorderThickness 2
+}
+
+skinparam class<<Value Object>> {
+  BackgroundColor #FFFFFF
+  BorderColor #90A4AE
+  FontColor #37474F
+  FontStyle italic
+}
+
+skinparam note {
+  BackgroundColor #F3E5F5
+  BorderColor #6A1B9A
+  FontColor #4A148C
+  FontSize 10
+}
+
+skinparam arrow {
+  Color #455A64
+  FontSize 9
+  FontColor #546E7A
+}
+
+' ============================================================
+' AGREGADOS Y OBJETOS DE VALOR
+' ============================================================
+
+class Sancion <<Aggregate Root>> {
+  --
+  __ Identidad __
+  id : UUID
+  __ Clasificacion __
+  -tipo : TipoSancion
+  __ Impacto __
+  puntosDescuento : Integer
+  cobroEconomico : Decimal
+  suspensionTemporal : Boolean
+  diasSuspension : Integer
+  __ Metadata __
+  fechaAplicacion : DateTime
+  descripcion : String
+  activa : Boolean
+  --
+  +calcular(prestamo, material) : Sancion
+  +aplicarA(usuario) : void
+  +esPorDano() : Boolean
+  +generarCobro(monto) : void
+}
+
+class TipoSancion <<Value Object>> {
+  TARDANZA
+  DANO_PARCIAL
+  DANO_TOTAL
+  INASISTENCIA_RESERVA
+  --
+  +requiereCobroEconomico() : Boolean
+  +aplicaSuspension() : Boolean
+}
+
+class CalculoSancion <<Value Object>> {
+  __ Parametros __
+  puntosBase : Integer
+  factorTiempo : Decimal
+  factorDano : Decimal
+  montoReparacion : Decimal
+  montoReposicion : Decimal
+  --
+  +calcularPuntosTardanza(dias, deduccion) : Integer
+  +calcularPuntosDano(tipo, deduccion) : Integer
+  +calcularBonificacion(dias, bonif) : Integer
+}
+
+' ============================================================
+' RELACIONES
+' ============================================================
+
+Sancion *-- TipoSancion
+Sancion *-- CalculoSancion
+
+' ============================================================
+' REGLAS DE NEGOCIO
+' ============================================================
+
+note top of Sancion
+  <b>RF08 - Gestión de Reputación</b>
+  ═══════════════════════════════════════
+  Puntaje de reputación: -500 a 500
+  ──────────────────────────────────────
+  <b>Aplicar:</b>
+  • Descuentos de puntos por tardanza
+  • Suspensiones temporales
+  • Cobros económicos EXCLUSIVAMENTE
+    ante daños físicos en el material
+end note
+
+note right of TipoSancion
+  <b>RN06 - Cálculo Dinámico por Objeto</b>
+  ═══════════════════════════════════════
+  Al momento de la devolución, el
+  sistema calcula dinámicamente:
+  ──────────────────────────────────────
+  <b>● Bonificación:</b>
+  Puntos por entrega a tiempo
+  (parámetro del objeto)
+  ──────────────────────────────────────
+  <b>● Tardanza:</b>
+  Descuento proporcional al tiempo
+  excedido (parámetro del objeto)
+  ──────────────────────────────────────
+  <b>● Daño parcial:</b>
+  Penalización severa de puntos
+  + cobro reparación
+  ──────────────────────────────────────
+  <b>● Daño total:</b>
+  Penalización severa de puntos
+  + cobro reposición
+end note
+
+note bottom of CalculoSancion
+  <b>RF08 - Cobros Económicos</b>
+  ═══════════════════════════════════════
+  Los cobros económicos de
+  reparación/reposición se aplican
+  <b>ÚNICAMENTE</b> ante daños físicos
+  en el material.
+  ──────────────────────────────────────
+  No se cobran por tardanza o
+  inasistencia.
+end note
+
+@enduml

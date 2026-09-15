@@ -1,0 +1,350 @@
+@startuml
+title Modelo de Dominio Completo - Todos los Agregados\n<b>DDD - Sistema de Prestamos Academicos</b>
+
+skinparam {
+  shadowing false
+  defaultFontSize 10
+  defaultFontName "Segoe UI"
+  classAttributeIconSize 0
+  linetype ortho
+  roundcorner 8
+  padding 4
+  packageFontSize 12
+  packageFontStyle bold
+}
+
+skinparam class<<Aggregate Root>> {
+  BackgroundColor #FFF9C4
+  BorderColor #F9A825
+  FontColor #F57F17
+  FontStyle bold
+  BorderThickness 2
+}
+
+skinparam class<<Value Object>> {
+  BackgroundColor #FFFFFF
+  BorderColor #90A4AE
+  FontColor #37474F
+  FontStyle italic
+}
+
+skinparam class<<Entity>> {
+  BackgroundColor #E1F5FE
+  BorderColor #0288D1
+  FontColor #01579B
+}
+
+skinparam package<<ctx-usuario>> {
+  BackgroundColor #E3F2FD
+  BorderColor #1565C0
+  FontColor #0D47A1
+}
+
+skinparam package<<ctx-inventario>> {
+  BackgroundColor #E8F5E9
+  BorderColor #2E7D32
+  FontColor #1B5E20
+}
+
+skinparam package<<ctx-prestamos>> {
+  BackgroundColor #FFF3E0
+  BorderColor #E65100
+  FontColor #BF360C
+}
+
+skinparam package<<ctx-reputacion>> {
+  BackgroundColor #F3E5F5
+  BorderColor #6A1B9A
+  FontColor #4A148C
+}
+
+skinparam package<<ctx-garantia>> {
+  BackgroundColor #FBE9E7
+  BorderColor #BF360C
+  FontColor #BF360C
+}
+
+skinparam package<<ctx-inspeccion>> {
+  BackgroundColor #E0F7FA
+  BorderColor #00695C
+  FontColor #004D40
+}
+
+skinparam arrow {
+  Color #455A64
+  FontSize 8
+  FontColor #546E7A
+}
+
+' ============================================================
+' CONTEXTO 1: GESTION DE USUARIOS
+' ============================================================
+package "Gestión de Usuarios" <<ctx-usuario>> {
+  class Usuario <<Aggregate Root>> {
+    id : UUID
+    nombre : String
+    email : String
+    contrasena : String
+    activo : Boolean
+    fechaRegistro : DateTime
+    --
+    +registrar(tipo) : Usuario
+    +actualizarPerfil(datos) : void
+    +obtenerPuntaje() : PuntajeReputacion
+    +obtenerTier() : Tier
+  }
+
+  class TipoUsuario <<Value Object>> {
+    ALUMNO | DOCENTE | ADMINISTRATIVO
+    GESTOR_ALMACEN | ADMINISTRADOR_SISTEMA
+  }
+
+  class Perfil <<Value Object>> {
+    telefono : String
+    direccion : String
+    carrera : String
+    departamento : String
+  }
+
+  class PuntajeReputacion <<Value Object>> {
+    valor : Integer [-500..500]
+    --
+    +sumar(puntos) : PuntajeReputacion
+    +restar(puntos) : PuntajeReputacion
+  }
+
+  class Tier <<Value Object>> {
+    nivel : Enum
+    rangoMin : Integer
+    rangoMax : Integer
+    --
+    AVANZADO [201..500]
+    ESTANDAR [-50..200]
+    RESTRINGIDO [-500..-51]
+  }
+
+  Usuario *-- TipoUsuario
+  Usuario *-- Perfil
+  Usuario *-- PuntajeReputacion
+  Usuario *-- Tier
+}
+
+' ============================================================
+' CONTEXTO 2: GESTION DE INVENTARIO
+' ============================================================
+package "Gestión de Inventario" <<ctx-inventario>> {
+  class Material <<Aggregate Root>> {
+    id : UUID
+    nombre : String
+    codigoInventario : String
+    esAltoValor : Boolean
+    --
+    +cambiarEstado(nuevo) : void
+    +estaDisponible() : Boolean
+    +requiereGarantia() : Boolean
+  }
+
+  class EstadoMaterial <<Value Object>> {
+    DISPONIBLE | EN_MANTENIMIENTO
+    RESERVADO | PRESTADO
+  }
+
+  class TipoMaterial <<Value Object>> {
+    EQUIPO | LIBRO | OBJETO
+  }
+
+  class AtributosReputacion <<Value Object>> {
+    tierMinimoRequerido : Tier
+    bonificacionTiempo : Integer
+    deduccionTardanza : Integer
+    deduccionDanoParcial : Integer
+    deduccionDanoTotal : Integer
+    costoReparacion : Decimal
+    costoReposicion : Decimal
+  }
+
+  Material *-- EstadoMaterial
+  Material *-- TipoMaterial
+  Material *-- AtributosReputacion
+}
+
+' ============================================================
+' CONTEXTO 3: GESTION DE PRESTAMOS Y RESERVAS
+' ============================================================
+package "Gestión de Préstamos y Reservas" <<ctx-prestamos>> {
+  class Prestamo <<Aggregate Root>> {
+    id : UUID
+    fechaEntrega : DateTime
+    fechaLimiteDevolucion : DateTime
+    tiempoPrestamoDias : Integer
+    activo : Boolean
+    --
+    +crear(usuario, material, dias) : Prestamo
+    +activar(garantia) : void
+    +devolver(checklist) : void
+    +solicitarProrroga(disp, tier) : Boolean
+  }
+
+  class EstadoPrestamo <<Value Object>> {
+    RESERVADO | ACTIVO | DEVUELTO | VENCIDO
+  }
+
+  class Reserva <<Aggregate Root>> {
+    id : UUID
+    fechaHoraRecojo : DateTime
+    justificacion : String
+    activa : Boolean
+    --
+    +crear(usuario, material, prio, just) : Reserva
+    +cancelarPorVencimiento() : void
+    +convertirAPrestamo() : Prestamo
+  }
+
+  class EstadoReserva <<Value Object>> {
+    RESERVADA | CANCELADA_POR_VENCIMIENTO
+    CONVERTIDA_EN_PRESTAMO
+  }
+
+  class PrioridadReserva <<Value Object>> {
+    ALTA | MEDIA | BAJA
+  }
+
+  class Prorroga <<Entity>> {
+    id : UUID
+    diasExtension : Integer
+    aprobada : Boolean
+    --
+    +solicitar(prestamo, tier) : Boolean
+  }
+
+  Prestamo *-- EstadoPrestamo
+  Prestamo "0..*" -- Prorroga
+  Reserva *-- EstadoReserva
+  Reserva *-- PrioridadReserva
+}
+
+' ============================================================
+' CONTEXTO 4: SISTEMA DE REPUTACION Y SANCIONES
+' ============================================================
+package "Sistema de Reputación y Sanciones" <<ctx-reputacion>> {
+  class Sancion <<Aggregate Root>> {
+    id : UUID
+    puntosDescuento : Integer
+    cobroEconomico : Decimal
+    suspensionTemporal : Boolean
+    activa : Boolean
+    --
+    +calcular(prestamo, material) : Sancion
+    +aplicarA(usuario) : void
+  }
+
+  class TipoSancion <<Value Object>> {
+    TARDANZA | DANO_PARCIAL
+    DANO_TOTAL | INASISTENCIA_RESERVA
+  }
+
+  Sancion *-- TipoSancion
+}
+
+' ============================================================
+' CONTEXTO 5: SISTEMA DE GARANTIAS
+' ============================================================
+package "Sistema de Garantías" <<ctx-garantia>> {
+  class Garantia <<Aggregate Root>> {
+    id : UUID
+    fechaRegistro : DateTime
+    activa : Boolean
+    --
+    +registrar(usuario, prestamo, tipo) : Garantia
+    +liberar() : void
+    +verificar() : Boolean
+  }
+
+  class TipoGarantia <<Value Object>> {
+    DOCUMENTO_IDENTIDAD
+    COMPROMISO_RESPONSABILIDAD
+    DOCUMENTO_Y_COMPROMISO
+  }
+
+  class EstadoGarantia <<Value Object>> {
+    PENDIENTE | REGISTRADA
+    LIBERADA | RETENIDA
+  }
+
+  Garantia *-- TipoGarantia
+  Garantia *-- EstadoGarantia
+}
+
+' ============================================================
+' CONTEXTO 6: SISTEMA DE INSPECCION
+' ============================================================
+package "Sistema de Inspección" <<ctx-inspeccion>> {
+  class Checklist <<Aggregate Root>> {
+    id : UUID
+    prestamoId : UUID
+    completo : Boolean
+    --
+    +crearInicial(prestamo, gestor) : Checklist
+    +crearDevolucion(prestamo, gestor) : Checklist
+    +compararCon(inicial) : ResultadoComparacion
+  }
+
+  class TipoChecklist <<Value Object>> {
+    ESTADO_INICIAL | ESTADO_DEVOLUCION
+  }
+
+  class ResultadoComparacion <<Value Object>> {
+    tieneDanoNuevo : Boolean
+    danoParcial : Boolean
+    danoTotal : Boolean
+  }
+
+  Checklist *-- TipoChecklist
+  Checklist "0..1" *-- ResultadoComparacion
+}
+
+' ============================================================
+' RELACIONES ENTRE CONTEXTOS
+' ============================================================
+
+Usuario "1" --> "0..*" Reserva
+Usuario "1" --> "0..*" Prestamo
+Material "1" --> "0..*" Reserva
+Material "1" --> "0..*" Prestamo
+Prestamo "1" --> "0..1" Garantia
+Prestamo "1" --> "2" Checklist
+Prestamo "1" --> "0..*" Sancion
+Sancion "1" --> "1" Usuario
+Checklist "1" --> "1" Material
+
+' ============================================================
+' REGLAS DE NEGOCIO
+' ============================================================
+
+note bottom of Usuario
+  <b>RN03</b> Reputación [-500,500]
+  Avanzado | Estándar | Restringido
+end note
+
+note bottom of Material
+  <b>RN01</b> Solo presta si "Disponible"
+  <b>RN05</b> Alto valor: garantía obligatoria
+end note
+
+note bottom of Prestamo
+  <b>RN04</b> Reservas: máx 24h
+  <b>RN07</b> Prórrogas según Tier
+  <b>RN08</b> Concurrencia atómica
+end note
+
+note bottom of Sancion
+  <b>RN06</b> Cálculo dinámico por objeto
+  <b>RF08</b> Cobros SOLO por daño físico
+end note
+
+note bottom of Checklist
+  <b>RN09</b> Checklist obligatorio
+  Sanciones solo por daños NUEVOS
+end note
+
+@enduml

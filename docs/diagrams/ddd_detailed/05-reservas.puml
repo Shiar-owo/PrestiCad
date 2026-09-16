@@ -1,5 +1,5 @@
 @startuml
-title Contexto: Gestión de Préstamos y Reservas\n<b>Modelo de Dominio DDD</b>
+title Contexto: Reservas\n<b>Modelo de Dominio DDD</b>
 
 skinparam {
   shadowing false
@@ -26,12 +26,6 @@ skinparam class<<Value Object>> {
   FontStyle italic
 }
 
-skinparam class<<Entity>> {
-  BackgroundColor #E1F5FE
-  BorderColor #0288D1
-  FontColor #01579B
-}
-
 skinparam note {
   BackgroundColor #FFF3E0
   BorderColor #E65100
@@ -48,37 +42,6 @@ skinparam arrow {
 ' ============================================================
 ' AGREGADOS Y OBJETOS DE VALOR
 ' ============================================================
-
-class Prestamo <<Aggregate Root>> {
-  --
-  __ Identidad __
-  id : UUID
-  __ Fechas __
-  fechaEntrega : DateTime
-  fechaLimiteDevolucion : DateTime
-  tiempoPrestamoDias : Integer
-  __ Estado __
-  -estado : EstadoPrestamo
-  activo : Boolean
-  __ Observaciones __
-  observaciones : String
-  --
-  +crear(usuario, material, dias) : Prestamo
-  +activar(garantia) : void
-  +devolver(checklist) : void
-  +vencer() : void
-  +solicitarProrroga(disp, tier) : Boolean
-  +calcularDiasRestantes() : Integer
-}
-
-class EstadoPrestamo <<Value Object>> {
-  RESERVADO
-  ACTIVO
-  DEVUELTO
-  VENCIDO
-  --
-  +transicionesPermitidas() : List
-}
 
 class Reserva <<Aggregate Root>> {
   --
@@ -105,6 +68,8 @@ class EstadoReserva <<Value Object>> {
   RESERVADA
   CANCELADA_POR_VENCIMIENTO
   CONVERTIDA_EN_PRESTAMO
+  --
+  +estaActiva() : Boolean
 }
 
 class PrioridadReserva <<Value Object>> {
@@ -115,24 +80,10 @@ class PrioridadReserva <<Value Object>> {
   +esPrioritaria() : Boolean
 }
 
-class Prorroga <<Entity>> {
-  id : UUID
-  fechaSolicitud : DateTime
-  diasExtension : Integer
-  aprobada : Boolean
-  motivo : String
-  --
-  +solicitar(prestamo, tier) : Boolean
-  +aprobar() : void
-  +rechazar(motivo) : void
-}
-
 ' ============================================================
 ' RELACIONES
 ' ============================================================
 
-Prestamo *-- EstadoPrestamo
-Prestamo "0..*" -- Prorroga
 Reserva *-- EstadoReserva
 Reserva *-- PrioridadReserva
 
@@ -140,7 +91,7 @@ Reserva *-- PrioridadReserva
 ' REGLAS DE NEGOCIO
 ' ============================================================
 
-note top of Prestamo
+note top of Reserva
   <b>RN04 - Vigencia de Reservas</b>
   ═══════════════════════════════════════
   Máximo 24 horas desde hora pactada
@@ -152,7 +103,7 @@ note top of Prestamo
   puntaje de reputación del usuario
 end note
 
-note right of Reserva
+note right of PrioridadReserva
   <b>RN08 - Control de Concurrencia</b>
   ═══════════════════════════════════════
   Reservas simultáneas para el mismo
@@ -160,27 +111,21 @@ note right of Reserva
   atómicas (prevenir race conditions)
   sobre la última unidad disponible
   ──────────────────────────────────────
-  <b>RN07 - Prórrogas</b>
-  Condicionadas a:
-  • Disponibilidad del bien
-  • Tier de reputación del usuario
-  Prioridad para Tier Avanzado
+  La prioridad y justificación sirven
+  para que el Gestor evalúe y priorice
+  la asignación en alta demanda
 end note
 
-note bottom of Prorroga
-  <b>RF12 - Solicitud de Prórroga</b>
+note left of EstadoReserva
+  <b>RF04 - Reserva</b>
   ═══════════════════════════════════════
-  Evaluación automática de elegibilidad:
-  • Tier de reputación del usuario
-  • Disponibilidad del bien
-  • Prioridad para Tier Avanzado
-end note
-
-note left of EstadoPrestamo
-  <b>RF07 - Estados del Préstamo</b>
-  ═══════════════════════════════════════
-  RESERVADO → ACTIVO → DEVUELTO
-                  ↘ VENCIDO
+  El usuario ingresa:
+  • Material deseado
+  • Prioridad (Alta/Media/Baja)
+  • Justificación del uso
+  ──────────────────────────────────────
+  <b>CU02 - Reservar material</b>
+  <b>CU05 - Cancelar vencidas</b>
 end note
 
 @enduml

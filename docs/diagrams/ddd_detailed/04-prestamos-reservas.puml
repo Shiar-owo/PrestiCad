@@ -1,5 +1,5 @@
 @startuml
-title Contexto: Sistema de Inspección\n<b>Modelo de Dominio DDD</b>
+title Contexto: Préstamos\n<b>Modelo de Dominio DDD</b>
 
 skinparam {
   shadowing false
@@ -26,10 +26,16 @@ skinparam class<<Value Object>> {
   FontStyle italic
 }
 
+skinparam class<<Entity>> {
+  BackgroundColor #E1F5FE
+  BorderColor #0288D1
+  FontColor #01579B
+}
+
 skinparam note {
-  BackgroundColor #E0F7FA
-  BorderColor #00695C
-  FontColor #004D40
+  BackgroundColor #FFF3E0
+  BorderColor #E65100
+  FontColor #BF360C
   FontSize 10
 }
 
@@ -42,6 +48,49 @@ skinparam arrow {
 ' ============================================================
 ' AGREGADOS Y OBJETOS DE VALOR
 ' ============================================================
+
+class Prestamo <<Aggregate Root>> {
+  --
+  __ Identidad __
+  id : UUID
+  __ Fechas __
+  fechaEntrega : DateTime
+  fechaLimiteDevolucion : DateTime
+  tiempoPrestamoDias : Integer
+  __ Estado __
+  -estado : EstadoPrestamo
+  activo : Boolean
+  __ Observaciones __
+  observaciones : String
+  --
+  +crear(usuario, material, dias) : Prestamo
+  +activar(garantia) : void
+  +devolver() : void
+  +vencer() : void
+  +solicitarProrroga(disp, tier) : Boolean
+  +calcularDiasRestantes() : Integer
+}
+
+class EstadoPrestamo <<Value Object>> {
+  RESERVADO
+  ACTIVO
+  DEVUELTO
+  VENCIDO
+  --
+  +transicionesPermitidas() : List
+}
+
+class Prorroga <<Entity>> {
+  id : UUID
+  fechaSolicitud : DateTime
+  diasExtension : Integer
+  aprobada : Boolean
+  motivo : String
+  --
+  +solicitar(prestamo, tier) : Boolean
+  +aprobar() : void
+  +rechazar(motivo) : void
+}
 
 class Checklist <<Aggregate Root>> {
   --
@@ -90,6 +139,9 @@ class Defecto <<Value Object>> {
 ' RELACIONES
 ' ============================================================
 
+Prestamo *-- EstadoPrestamo
+Prestamo "0..*" -- Prorroga
+Prestamo "1" --> "2" Checklist
 Checklist *-- TipoChecklist
 Checklist "1" *-- "1..*" Defecto
 Checklist "0..1" *-- ResultadoComparacion
@@ -98,48 +150,38 @@ Checklist "0..1" *-- ResultadoComparacion
 ' REGLAS DE NEGOCIO
 ' ============================================================
 
-note top of Checklist
-  <b>RN09 - Inspección y Checklist Digital</b>
+note top of Prestamo
+  <b>RF07 - Estados del Préstamo</b>
   ═══════════════════════════════════════
-  En el registro de entrega de un
-  préstamo (CU03) es <b>obligatorio</b>
-  completar un checklist digital del
-  estado inicial del bien.
+  RESERVADO → ACTIVO → DEVUELTO
+                  ↘ VENCIDO
   ──────────────────────────────────────
-  Este checklist se <b>contrasta</b> durante
-  la devolución (CU04) para garantizar
-  que las sanciones por daño apliquen
-  <b>únicamente a desperfectos nuevos</b>.
+  <b>RN07 - Prórrogas</b>
+  Condicionadas a:
+  • Disponibilidad del bien
+  • Tier de reputación del usuario
+  Prioridad para Tier Avanzado
 end note
 
-note right of ResultadoComparacion
-  <b>Proceso de comparación</b>
+note bottom of Checklist
+  <b>RN09 - Checklist Digital</b>
   ═══════════════════════════════════════
-  1. Se completa checklist de devolución
-  2. Se compara con checklist inicial
-  3. Se identifican:
-     • Defectos preexistentes
-     • Defectos nuevos (daño)
-  4. Solo los defectos <b>NUEVOS</b>
-     generan sanciones
+  ● Obligatorio al entregar (CU03)
+  ● Obligatorio al devolver (CU04)
+  ● Sanciones solo por daños NUEVOS
+  ● Se contrasta vs. estado inicial
+  ──────────────────────────────────────
+  El checklist nace y muere en la
+  transacción del préstamo (CU03→CU04)
 end note
 
-note left of Defecto
-  <b>Severidad del defecto</b>
+note bottom of Prorroga
+  <b>RF12 - Solicitud de Prórroga</b>
   ═══════════════════════════════════════
-  ● MENOR - Desperfecto leve
-  ● MODERADO - Daño parcial
-  ● GRAVE - Daño total
-end note
-
-note bottom of TipoChecklist
-  <b>CU03 - Registrar Préstamo</b>
-  Checklist de estado INICIAL
-  al entregar el material
-  ──────────────────────────────
-  <b>CU04 - Registrar Devolución</b>
-  Checklist de DEVOLUCIÓN
-  al recibir el material
+  Evaluación automática de elegibilidad:
+  • Tier de reputación del usuario
+  • Disponibilidad del bien
+  • Prioridad para Tier Avanzado
 end note
 
 @enduml

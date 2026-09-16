@@ -1,0 +1,155 @@
+@startuml
+title Mapa de Contexto - Subdominios, Bounded Contexts y Relaciones\n<b>Modelo de Dominio DDD</b>
+
+skinparam {
+  shadowing false
+  defaultFontSize 11
+  defaultFontName "Segoe UI"
+  linetype polyline
+  roundcorner 10
+  padding 12
+}
+
+skinparam rectangle<<subdomain>> {
+  FontSize 13
+  FontStyle bold
+  BorderThickness 3
+  RoundCorner 15
+}
+
+skinparam rectangle<<Bounded Context>> {
+  FontSize 12
+  FontStyle bold
+  BorderThickness 2
+  RoundCorner 10
+}
+
+skinparam rectangle<<Subdomain Acceso>> {
+  BackgroundColor #E8EAF6
+  BorderColor #3F51B5
+  FontColor #1A237E
+}
+
+skinparam rectangle<<Subdomain Reputación>> {
+  BackgroundColor #FCE4EC
+  BorderColor #C62828
+  FontColor #B71C1C
+}
+
+skinparam rectangle<<Subdomain Préstamos>> {
+  BackgroundColor #FFF3E0
+  BorderColor #E65100
+  FontColor #BF360C
+}
+
+skinparam rectangle<<Subdomain Bienes>> {
+  BackgroundColor #E8F5E9
+  BorderColor #2E7D32
+  FontColor #1B5E20
+}
+
+skinparam rectangle<<Bounded Context Generic>> {
+  BackgroundColor #FFFFFF
+  BorderColor #90A4AE
+  FontColor #37474F
+}
+
+skinparam rectangle<<Bounded Context Core>> {
+  BackgroundColor #FFF9C4
+  BorderColor #F9A825
+  FontColor #F57F17
+}
+
+skinparam rectangle<<Bounded Context Supporting>> {
+  BackgroundColor #FFFFFF
+  BorderColor #66BB6A
+  FontColor #2E7D32
+}
+
+' ============================================================
+' SUBDOMINIOS
+' ============================================================
+
+rectangle "  <b>SUBDOMINIO: Identidad y Acceso</b>\n<color:#546E7A><i>Generic — Problema resuelto</i></color>  " <<Subdomain Acceso>> as SD1 {
+  rectangle "  <b>Usuarios</b>\n──────\n<color:#546E7A>Registro, login\nPerfil, roles</color>  " <<Bounded Context Generic>> as BC1
+}
+
+rectangle "  <b>SUBDOMINIO: Reputación y Confianza</b>\n<color:#546E7A><i>Core — Diferenciador del sistema</i></color>  " <<Subdomain Reputación>> as SD2 {
+  rectangle "  <b>Reputación</b>\n──────\n<color:#546E7A>PerfilDeReputacion\nSanciones, Excepción\nAcadémica</color>  " <<Bounded Context Core>> as BC2
+}
+
+rectangle "  <b>SUBDOMINIO: Ciclo de Préstamo</b>\n<color:#546E7A><i>Core — Negocio principal</i></color>  " <<Subdomain Préstamos>> as SD3 {
+  rectangle "  <b>Reservas</b>\n──────\n<color:#546E7A>Prioridad, Vigencia 24h\nConcurrencia atómica</color>  " <<Bounded Context Core>> as BC3
+  rectangle "  <b>Préstamos</b>\n──────\n<color:#546E7A>Préstamo, Prórroga\nChecklist, Estados</color>  " <<Bounded Context Core>> as BC4
+  rectangle "  <b>Garantías</b>\n──────\n<color:#546E7A>Doc. identidad\nCompromiso firmado</color>  " <<Bounded Context Core>> as BC5
+}
+
+rectangle "  <b>SUBDOMINIO: Bienes y Conservación</b>\n<color:#546E7A><i>Supporting — Soporte al Core</i></color>  " <<Subdomain Bienes>> as SD4 {
+  rectangle "  <b>Inventario</b>\n──────\n<color:#546E7A>Material, Disponibilidad\nFicha técnica, Params</color>  " <<Bounded Context Supporting>> as BC6
+}
+
+' ============================================================
+' RELACIONES ENTRE BOUNDED CONTEXTS
+' Solo verbo corto en cada flecha
+' ============================================================
+
+' --- Identidad ---
+BC1 --> BC3 : <color:#3F51B5>① provee datos</color>
+BC1 --> BC4 : <color:#3F51B5>② provee datos</color>
+
+' --- Reservas ---
+BC3 --> BC6 : <color:#2E7D32>③ verifica disponibilidad</color>
+BC3 --> BC2 : <color:#C62828>④ consulta Tier</color>
+BC3 --> BC4 : <color:#E65100>⑤ convierte en préstamo</color>
+
+' --- Préstamos ---
+BC4 --> BC6 : <color:#2E7D32>⑥ actualiza estado</color>
+BC4 --> BC5 : <color:#E65100>⑦ exige garantía</color>
+BC4 --> BC2 : <color:#C62828>⑧ reporta hechos</color>
+
+' --- Reputación ---
+BC2 --> BC1 : <color:#3F51B5>⑨ actualiza puntaje</color>
+
+' ============================================================
+' FLUJO PRINCIPAL
+' ============================================================
+
+note as F1
+  <b>Flujo principal del sistema:</b>
+  ══════════════════════════════════
+  1. <color:#3F51B5>Usuario</color> busca <color:#2E7D32>Material</color>
+  2. <color:#3F51B5>Usuario</color> crea <color:#E65100>Reserva</color>
+     → Consulta <color:#C62828>Tier</color> (¿puede reservar?)
+  3. Gestor registra <color:#E65100>Préstamo</color>
+     → Verifica <color:#E65100>Garantía</color> (si aplica)
+     → Actualiza <color:#2E7D32>Inventario</color>
+  4. Devolución:
+     → <color:#E65100>Checklist</color> de devolución
+     → Reporta hechos a <color:#C62828>Reputación</color>
+     → <color:#C62828>Sanción</color> calculada
+     → <color:#3F51B5>Usuario</color> actualizado
+end note
+
+F1 .. SD3
+
+' ============================================================
+' LEYENDA COMPLETA
+' ============================================================
+
+legend bottom
+  |= # = |= Relación |= Patrón DDD |= Descripción |
+  | <color:#3F51B5>①②</color> | Usuarios → Reservas/Préstamos | Upstream/Conformist | Usuarios provee datos (UsuarioId + Rol), otros consumen sin transformar |
+  | <color:#2E7D32>③⑥</color> | Reservas/Préstamos → Inventario | Customer/Supplier | Consumidor solicita disponibilidad, proveedor responde y bloquea/actualiza |
+  | <color:#C62828>④</color> | Reservas → Reputación | Customer/Supplier + ACL | Consulta "¿tiene Tier mínimo?" sin conocer cómo se calcula |
+  | <color:#E65100>⑤</color> | Reservas → Préstamos | promueve | Reserva vigente se convierte en préstamo activo (CU03) |
+  | <color:#E65100>⑦</color> | Préstamos → Garantías | exige | Garantía registrada antes de activar préstamo (RN05) |
+  | <color:#C62828>⑧</color> | Préstamos → Reputación | Open Host Service | Reporta hechos objetivos (puntualidad, checklist), Reputación calcula impacto (RN06) |
+  | <color:#3F51B5>⑨</color> | Reputación → Usuarios | actualiza | Actualiza puntaje de reputación del usuario |
+  ─────────────────────────────
+  |= Tipo |= Significado |
+  | <back:#FFF9C4><color:#F57F17><b>Core</b></back> | Dominio diferenciador del negocio |
+  | <back:#FFFFFF><color:#90A4AE><i>Generic</i></back> | Problema resuelto, sin lógica diferenciadora |
+  | <back:#FFFFFF><color:#66BB6A><b>Supporting</b></back> | Soporte al dominio core |
+endlegend
+
+@enduml

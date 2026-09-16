@@ -1,0 +1,108 @@
+@startuml
+title Contexto: Gestión de Usuarios\n<b>Modelo de Dominio DDD</b>
+
+skinparam {
+  shadowing false
+  defaultFontSize 11
+  defaultFontName "Segoe UI"
+  classAttributeIconSize 0
+  linetype ortho
+  roundcorner 8
+  padding 5
+}
+
+skinparam class<<Aggregate Root>> {
+  BackgroundColor #FFF9C4
+  BorderColor #F9A825
+  FontColor #F57F17
+  FontStyle bold
+  BorderThickness 2
+}
+
+skinparam class<<Value Object>> {
+  BackgroundColor #FFFFFF
+  BorderColor #90A4AE
+  FontColor #37474F
+  FontStyle italic
+}
+
+skinparam note {
+  BackgroundColor #E3F2FD
+  BorderColor #1565C0
+  FontColor #0D47A1
+  FontSize 10
+}
+
+skinparam arrow {
+  Color #455A64
+  FontSize 9
+  FontColor #546E7A
+}
+
+' ============================================================
+' AGREGADOS Y OBJETOS DE VALOR
+' ============================================================
+
+class Usuario <<Aggregate Root>> {
+  --
+  __ Identidad __
+  id : UUID
+  nombre : String
+  email : String
+  contrasena : String
+  __ Estado __
+  activo : Boolean
+  fechaRegistro : DateTime
+  __ Dominio __
+  -tipoUsuario : TipoUsuario
+  -perfil : Perfil
+  --
+  +registrar(tipo) : Usuario
+  +actualizarPerfil(datos) : void
+  +estaActivo() : Boolean
+}
+
+class TipoUsuario <<Value Object>> {
+  ALUMNO
+  DOCENTE
+  ADMINISTRATIVO
+  GESTOR_ALMACEN
+  ADMINISTRADOR_SISTEMA
+}
+
+class Perfil <<Value Object>> {
+  telefono : String
+  direccion : String
+  carrera : String
+  departamento : String
+}
+
+' ============================================================
+' RELACIONES
+' ============================================================
+
+Usuario *-- TipoUsuario
+Usuario *-- Perfil
+
+' ============================================================
+' REGLAS DE NEGOCIO
+' ============================================================
+
+note top of Usuario
+  <b>Identidad y Acceso — BC Genérico</b>
+  ═══════════════════════════════════════
+  Responsabilidad: ¿quién es y puede
+  entrar al sistema?
+  ──────────────────────────────────────
+  <b>NO contiene:</b>
+  ● Puntaje de reputación → PerfilDeReputacion
+  ● Tier → PerfilDeReputacion
+  ● Historial de préstamos → BC Préstamos
+  ──────────────────────────────────────
+  La reputación se gestiona en el
+  BC <b>Reputación y Confianza</b> a través
+  del aggregate PerfilDeReputacion
+  (relación 1:1 por usuarioId)
+end note
+
+@enduml

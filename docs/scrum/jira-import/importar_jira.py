@@ -91,6 +91,256 @@ HISTORIAS = [
 
 
 # ─────────────────────────────────────────────
+# DATA: Tareas por Historia de Usuario
+# ─────────────────────────────────────────────
+
+TASKS = {
+    "HU01": [
+        {"summary": "Definir modelo de entidad Usuario", "type": "Backend"},
+        {"summary": "Crear migración/DDL de la tabla usuarios", "type": "Backend"},
+        {"summary": "Implementar servicio de registro con validación de email y DNI duplicados", "type": "Backend"},
+        {"summary": "Asignar Tier inicial Neutral (0 pts) al crear usuario", "type": "Backend"},
+        {"summary": "Crear endpoint POST /api/usuarios", "type": "Backend"},
+        {"summary": "Crear formulario de registro de usuario (Admin)", "type": "Frontend"},
+        {"summary": "Implementar validación de formulario y mensajes de error", "type": "Frontend"},
+        {"summary": "Integrar formulario con endpoint de registro", "type": "Integración"},
+    ],
+    "HU02": [
+        {"summary": "Definir modelo de entidad Rol y relación con Usuario", "type": "Backend"},
+        {"summary": "Implementar servicio de cambio de rol con validación", "type": "Backend"},
+        {"summary": "Crear middleware de autorización por roles", "type": "Backend"},
+        {"summary": "Crear endpoints GET /api/usuarios y PUT /api/usuarios/{id}/rol", "type": "Backend"},
+        {"summary": "Crear vista de lista de usuarios con columna de rol editable", "type": "Frontend"},
+        {"summary": "Implementar selector de rol con opciones", "type": "Frontend"},
+        {"summary": "Integrar vista con endpoints", "type": "Integración"},
+    ],
+    "HU03": [
+        {"summary": "Implementar servicio de autenticación (bcrypt)", "type": "Backend"},
+        {"summary": "Implementar bloqueo de cuenta tras 5 intentos fallidos", "type": "Backend"},
+        {"summary": "Implementar expiración de sesión por inactividad", "type": "Backend"},
+        {"summary": "Crear endpoints POST /api/auth/login y logout", "type": "Backend"},
+        {"summary": "Crear middleware de sesión autenticada", "type": "Backend"},
+        {"summary": "Crear pantalla de login", "type": "Frontend"},
+        {"summary": "Implementar redirección según rol post-login", "type": "Frontend"},
+        {"summary": "Integrar login con endpoints", "type": "Integración"},
+    ],
+    "HU04": [
+        {"summary": "Definir modelo de entidad Material", "type": "Backend"},
+        {"summary": "Crear migración/DDL de la tabla materiales", "type": "Backend"},
+        {"summary": "Implementar servicio CRUD de materiales con validación de código único", "type": "Backend"},
+        {"summary": "Implementar valores por defecto para parámetros de reputación", "type": "Backend"},
+        {"summary": "Crear endpoints POST/GET/PUT /api/materiales", "type": "Backend"},
+        {"summary": "Crear formulario de registro/edición de material", "type": "Frontend"},
+        {"summary": "Crear vista de listado de materiales", "type": "Frontend"},
+        {"summary": "Integrar formularios con endpoints", "type": "Integración"},
+    ],
+    "HU05": [
+        {"summary": "Implementar servicio de búsqueda con filtros", "type": "Backend"},
+        {"summary": "Implementar filtrado por Tier del usuario", "type": "Backend"},
+        {"summary": "Crear endpoint GET /api/materiales/buscar", "type": "Backend"},
+        {"summary": "Crear componente de barra de búsqueda con filtros", "type": "Frontend"},
+        {"summary": "Crear vista de resultados con tarjetas de material", "type": "Frontend"},
+        {"summary": "Integrar búsqueda con endpoint", "type": "Integración"},
+    ],
+    "HU06": [
+        {"summary": "Definir modelo de entidad Reserva", "type": "Backend"},
+        {"summary": "Crear migración/DDL de la tabla reservas", "type": "Backend"},
+        {"summary": "Implementar servicio de reserva con validación de Tier y disponibilidad", "type": "Backend"},
+        {"summary": "Implementar cambio de estado del material a Reservado", "type": "Backend"},
+        {"summary": "Crear endpoint POST /api/reservas", "type": "Backend"},
+        {"summary": "Crear formulario de reserva (prioridad, justificación)", "type": "Frontend"},
+        {"summary": "Crear vista Mis reservas", "type": "Frontend"},
+        {"summary": "Integrar formulario con endpoint", "type": "Integración"},
+    ],
+    "HU07": [
+        {"summary": "Implementar proceso periódico (cron/scheduler) de verificación de reservas", "type": "Backend"},
+        {"summary": "Implementar lógica de cancelación por vencimiento (24h)", "type": "Backend"},
+        {"summary": "Implementar penalización de reputación por inasistencia", "type": "Backend"},
+        {"summary": "Implementar cancelación manual por Gestor", "type": "Backend"},
+        {"summary": "Crear endpoint POST /api/reservas/{id}/cancelar", "type": "Backend"},
+        {"summary": "Agregar notificación de cancelación al usuario", "type": "Integración"},
+    ],
+    "HU08": [
+        {"summary": "Implementar servicio de cola de reservas por material", "type": "Backend"},
+        {"summary": "Implementar ordenamiento por prioridad, Tier y fecha", "type": "Backend"},
+        {"summary": "Implementar transacciones atómicas para evitar race conditions", "type": "Backend"},
+        {"summary": "Crear endpoints GET /api/reservas/cola/{id} y POST /api/reservas/{id}/aprobar", "type": "Backend"},
+        {"summary": "Crear vista de cola de reservas para Gestor", "type": "Frontend"},
+        {"summary": "Implementar botones de aprobar/rechazar individual", "type": "Frontend"},
+        {"summary": "Integrar vista con endpoints", "type": "Integración"},
+    ],
+    "HU09": [
+        {"summary": "Definir modelo de entidad Prestamo", "type": "Backend"},
+        {"summary": "Crear migración/DDL de la tabla prestamos", "type": "Backend"},
+        {"summary": "Implementar servicio de préstamo con verificación de elegibilidad", "type": "Backend"},
+        {"summary": "Implementar checklist digital de estado inicial", "type": "Backend"},
+        {"summary": "Implementar registro de garantía para equipos de alto valor", "type": "Backend"},
+        {"summary": "Implementar cálculo automático de fecha límite de devolución", "type": "Backend"},
+        {"summary": "Crear endpoint POST /api/prestamos", "type": "Backend"},
+        {"summary": "Crear formulario de registro de préstamo con checklist", "type": "Frontend"},
+        {"summary": "Implementar validación de garantía obligatoria antes de confirmar", "type": "Frontend"},
+        {"summary": "Integrar formulario con endpoint", "type": "Integración"},
+    ],
+    "HU10": [
+        {"summary": "Implementar servicio de consulta de préstamos por usuario con estados", "type": "Backend"},
+        {"summary": "Crear endpoint GET /api/prestamos/mis-prestamos", "type": "Backend"},
+        {"summary": "Crear vista de lista de préstamos con código de color por estado", "type": "Frontend"},
+        {"summary": "Implementar filtro por estado", "type": "Frontend"},
+        {"summary": "Crear vista de detalles del préstamo al seleccionar", "type": "Frontend"},
+        {"summary": "Integrar vista con endpoint", "type": "Integración"},
+    ],
+    "HU11": [
+        {"summary": "Implementar servicio de devolución con comparación de checklists", "type": "Backend"},
+        {"summary": "Implementar lógica de cálculo de sanciones parametrizada por objeto", "type": "Backend"},
+        {"summary": "Implementar bonificación por entrega a tiempo", "type": "Backend"},
+        {"summary": "Implementar descuento de puntos por tardanza proporcional", "type": "Backend"},
+        {"summary": "Implementar penalización + cobro por daño parcial/total", "type": "Backend"},
+        {"summary": "Implementar actualización de reputación y estados", "type": "Backend"},
+        {"summary": "Crear endpoint POST /api/prestamos/{id}/devolucion", "type": "Backend"},
+        {"summary": "Crear formulario de devolución con checklist de comparación", "type": "Frontend"},
+        {"summary": "Mostrar resumen de sanciones/bonificaciones antes de confirmar", "type": "Frontend"},
+        {"summary": "Integrar formulario con endpoint", "type": "Integración"},
+    ],
+    "HU12": [
+        {"summary": "Implementar servicio de reputación con rango [-500, 500]", "type": "Backend"},
+        {"summary": "Implementar cálculo automático de Tier según puntaje", "type": "Backend"},
+        {"summary": "Implementar clamping de puntos (no salir del rango)", "type": "Backend"},
+        {"summary": "Crear endpoint GET /api/usuarios/{id}/reputacion", "type": "Backend"},
+        {"summary": "Mostrar puntaje y Tier en perfil de usuario", "type": "Frontend"},
+    ],
+    "HU13": [
+        {"summary": "Implementar flujo de excepción académica en servicio de préstamo", "type": "Backend"},
+        {"summary": "Implementar registro de garantía especial (doc. identidad + compromiso)", "type": "Backend"},
+        {"summary": "Implementar penalización doble en devolución para excepciones", "type": "Backend"},
+        {"summary": "Crear endpoint POST /api/prestamos/excepcion", "type": "Backend"},
+        {"summary": "Crear flujo UI de Solicitar Excepción Académica", "type": "Frontend"},
+        {"summary": "Implementar upload de documentos de garantía", "type": "Frontend"},
+        {"summary": "Integrar flujo de excepción con endpoints", "type": "Integración"},
+    ],
+    "HU14": [
+        {"summary": "Implementar servicio de suspensión temporal", "type": "Backend"},
+        {"summary": "Implementar duración configurable de suspensión", "type": "Backend"},
+        {"summary": "Implementar restauración automática al cumplir el período", "type": "Backend"},
+        {"summary": "Implementar levantamiento manual de suspensión por Admin", "type": "Backend"},
+        {"summary": "Crear endpoints suspender y levantar-suspension", "type": "Backend"},
+        {"summary": "Mostrar estado de suspensión y fecha de fin en perfil", "type": "Frontend"},
+        {"summary": "Bloquear botones de reserva/préstamo si está suspendido", "type": "Frontend"},
+    ],
+    "HU15": [
+        {"summary": "Implementar servicio de prórroga con verificación de disponibilidad y Tier", "type": "Backend"},
+        {"summary": "Implementar aprobación automática para Tier Avanzado", "type": "Backend"},
+        {"summary": "Implementar flujo de aprobación manual para Tier Estándar", "type": "Backend"},
+        {"summary": "Bloquear solicitud para Tier Restringido", "type": "Backend"},
+        {"summary": "Crear endpoints POST /api/prestamos/{id}/prorroga y PUT .../aprobar", "type": "Backend"},
+        {"summary": "Crear botón Solicitar Prórroga en vista de préstamo activo", "type": "Frontend"},
+        {"summary": "Crear vista de solicitudes de prórroga pendientes para Gestor", "type": "Frontend"},
+        {"summary": "Integrar flujo con endpoints", "type": "Integración"},
+    ],
+    "HU16": [
+        {"summary": "Implementar servicio de consulta de perfil con reputación e historial", "type": "Backend"},
+        {"summary": "Implementar servicio de actualización de perfil (solo nombre y teléfono)", "type": "Backend"},
+        {"summary": "Crear endpoints GET /api/usuarios/perfil y PUT /api/usuarios/perfil", "type": "Backend"},
+        {"summary": "Crear vista de perfil con datos personales, reputación y Tier", "type": "Frontend"},
+        {"summary": "Crear formulario de edición de perfil (campos restringidos readonly)", "type": "Frontend"},
+        {"summary": "Mostrar historial de préstamos en perfil", "type": "Frontend"},
+        {"summary": "Integrar vista con endpoints", "type": "Integración"},
+    ],
+    "HU17": [
+        {"summary": "Implementar servicio de historial de préstamos por material con filtros", "type": "Backend"},
+        {"summary": "Crear endpoint GET /api/materiales/{id}/historial", "type": "Backend"},
+        {"summary": "Crear vista de historial de material (usuario, fechas, resultado)", "type": "Frontend"},
+        {"summary": "Implementar filtros por período", "type": "Frontend"},
+        {"summary": "Mostrar estadísticas (conteo total, % a tiempo vs tardío)", "type": "Frontend"},
+        {"summary": "Integrar vista con endpoint", "type": "Integración"},
+    ],
+    "HU18": [
+        {"summary": "Implementar servicio de métricas consolidadas", "type": "Backend"},
+        {"summary": "Implementar indicadores por período (semana, mes, semestre)", "type": "Backend"},
+        {"summary": "Implementar ranking de materiales más prestados", "type": "Backend"},
+        {"summary": "Implementar tasa de devoluciones a tiempo vs tardías", "type": "Backend"},
+        {"summary": "Implementar distribución de usuarios por Tier", "type": "Backend"},
+        {"summary": "Crear endpoints GET /api/reportes/dashboard y /metricas", "type": "Backend"},
+        {"summary": "Crear dashboard con gráficos y métricas", "type": "Frontend"},
+        {"summary": "Implementar exportación a PDF/CSV", "type": "Frontend"},
+        {"summary": "Integrar dashboard con endpoints", "type": "Integración"},
+    ],
+}
+
+
+# ─────────────────────────────────────────────
+# DATA: Sprints (MVP + Full Product) — COMENTADO: crear sprints manualmente en Jira
+# ─────────────────────────────────────────────
+
+# SPRINTS = [
+#     # ── FASE 1: MVP ──
+#     {
+#         "name": "M1 — Usuarios + Auth + Roles + Perfil",
+#         "goal": "Los usuarios pueden registrarse, autenticarse, el admin asigna roles y el usuario ve su perfil.",
+#         "phase": "MVP",
+#         "stories": ["HU01", "HU03", "HU02", "HU16"],
+#         "story_points": 14,
+#     },
+#     {
+#         "name": "M2 — Inventario + Búsqueda",
+#         "goal": "El administrador registra materiales y los usuarios pueden buscar y filtrar.",
+#         "phase": "MVP",
+#         "stories": ["HU04", "HU05"],
+#         "story_points": 8,
+#     },
+#     {
+#         "name": "M3 — Préstamos",
+#         "goal": "El gestor puede registrar préstamos con checklist digital y garantía.",
+#         "phase": "MVP",
+#         "stories": ["HU09"],
+#         "story_points": 8,
+#     },
+#     {
+#         "name": "M4 — Devoluciones + Ver mis préstamos",
+#         "goal": "Las devoluciones calculan sanciones/bonificaciones automáticamente; el usuario ve sus préstamos.",
+#         "phase": "MVP",
+#         "stories": ["HU11", "HU10"],
+#         "story_points": 11,
+#     },
+#     # ── FASE 2: FULL PRODUCT ──
+#     {
+#         "name": "S5 — Reputación + Tiers",
+#         "goal": "El sistema calcula reputación y Tiers de acceso basado en el comportamiento del usuario.",
+#         "phase": "Full",
+#         "stories": ["HU12"],
+#         "story_points": 8,
+#     },
+#     {
+#         "name": "S6 — Reservas + Cancelación",
+#         "goal": "Los usuarios pueden reservar materiales y el sistema cancela automáticamente las vencidas.",
+#         "phase": "Full",
+#         "stories": ["HU06", "HU07"],
+#         "story_points": 10,
+#     },
+#     {
+#         "name": "S7 — Cola de Reservas + Suspensiones",
+#         "goal": "El gestor gestiona la cola de prioridades de reservas y las suspensiones por bajo puntaje.",
+#         "phase": "Full",
+#         "stories": ["HU08", "HU14"],
+#         "story_points": 10,
+#     },
+#     {
+#         "name": "S8 — Prórrogas + Excepciones",
+#         "goal": "Los usuarios pueden solicitar prórroga y excepciones académicas.",
+#         "phase": "Full",
+#         "stories": ["HU15", "HU13"],
+#         "story_points": 10,
+#     },
+#     {
+#         "name": "S9 — Historial + Reportes",
+#         "goal": "El gestor ve historial por material; la Dirección ve reportes consolidados.",
+#         "phase": "Full",
+#         "stories": ["HU17", "HU18"],
+#         "story_points": 11,
+#     },
+# ]
+
+
+# ─────────────────────────────────────────────
 # CLIENTE JIRA
 # ─────────────────────────────────────────────
 
@@ -274,27 +524,301 @@ class JiraClient:
 
         return self._post("issue", {"fields": fields})
 
+    def create_subtask(self, project_key: str, summary: str, parent_key: str,
+                       description: str = "", labels: list[str] | None = None) -> dict:
+        fields: dict[str, Any] = {
+            "project": {"key": project_key},
+            "issuetype": {"name": "Subtask"},
+            "summary": summary,
+            "description": description,
+            "parent": {"key": parent_key},
+        }
+        if labels:
+            fields["labels"] = labels
+        return self._post("issue", {"fields": fields})
+
+    # ── Limpiar proyecto ──
+
+    def _search_issues(self, project_key: str) -> list[str]:
+        """Busca todos los issue keys del proyecto. Múltiples intentos."""
+        all_keys = []
+
+        # Intento 1: API v2 search con JQL
+        print("   🔍 Intento 1: API v2 search...")
+        try:
+            result = self._get("search", {
+                "jql": f"project = {project_key}",
+                "maxResults": 100,
+                "fields": "key",
+            })
+            for issue in result.get("issues", []):
+                all_keys.append(issue["key"])
+            if all_keys:
+                print(f"   ✅ API v2: {len(all_keys)} issues encontrados")
+                return all_keys
+        except Exception as e:
+            print(f"   ⚠️  Falló: {e}")
+
+        # Intento 2: API v3 search
+        print("   🔍 Intento 2: API v3 search...")
+        try:
+            url = f"{self.base_url}/rest/api/3/search"
+            resp = self.session.get(url, params={
+                "jql": f"project = {project_key}",
+                "maxResults": 100,
+                "fields": "key",
+            })
+            if resp.ok:
+                for issue in resp.json().get("issues", []):
+                    all_keys.append(issue["key"])
+                if all_keys:
+                    print(f"   ✅ API v3: {len(all_keys)} issues encontrados")
+                    return all_keys
+        except Exception as e:
+            print(f"   ⚠️  Falló: {e}")
+
+        # Intento 3: Buscar por issueType (epics primero, luego stories)
+        print("   🔍 Intento 3: Búsqueda por issue type...")
+        for issuetype in ["Epic", "Story", "Sub-task", "Task"]:
+            try:
+                result = self._get("search", {
+                    "jql": f"project = {project_key} AND issuetype = \"{issuetype}\"",
+                    "maxResults": 100,
+                    "fields": "key",
+                })
+                for issue in result.get("issues", []):
+                    key = issue["key"]
+                    if key not in all_keys:
+                        all_keys.append(key)
+            except Exception:
+                pass
+
+        if all_keys:
+            print(f"   ✅ Búsqueda por tipo: {len(all_keys)} issues encontrados")
+            return all_keys
+
+        print("   ℹ️  No se encontraron issues con ningún método")
+        return all_keys
+
+    def clear_project_issues(self, project_key: str) -> int:
+        """Elimina todos los issues del proyecto (subtasks, stories, epics). Retorna cantidad eliminada."""
+        print(f"\n🗑️  Buscando issues en {project_key}...")
+        all_keys = self._search_issues(project_key)
+
+        if not all_keys:
+            print("   ℹ️  No hay issues para eliminar.")
+            return 0
+
+        print(f"   📋 Encontrados {len(all_keys)} issues. Eliminando...")
+
+        # Intentar bulk delete (lotes de 1000)
+        deleted = 0
+        for i in range(0, len(all_keys), 1000):
+            batch = all_keys[i:i+1000]
+            try:
+                resp = self._request("POST", "bulk/issues/delete", data={
+                    "selectedIssueIdsOrKeys": batch,
+                    "sendBulkNotification": False,
+                })
+                if resp.ok:
+                    deleted += len(batch)
+                    print(f"   ✅ Eliminados {deleted}/{len(all_keys)} issues (bulk)")
+                else:
+                    # Fallback: delete individual
+                    print(f"   ⚠️  Bulk delete no disponible ({resp.status_code}), usando delete individual...")
+                    for key in batch:
+                        try:
+                            self._request("DELETE", f"issue/{key}?deleteSubtasks=true")
+                            deleted += 1
+                            time.sleep(0.1)
+                        except Exception:
+                            pass
+            except Exception as e:
+                print(f"   ⚠️  Error en bulk delete: {e}. Usando delete individual...")
+                for key in batch:
+                    try:
+                        self._request("DELETE", f"issue/{key}?deleteSubtasks=true")
+                        deleted += 1
+                        time.sleep(0.1)
+                    except Exception:
+                        pass
+
+        print(f"   ✅ Eliminados {deleted}/{len(all_keys)} issues")
+        return deleted
+
+    # ── Sprints (Jira Agile API) — COMENTADO: crear sprints manualmente en Jira ──
+
+    # def get_board(self, project_key: str) -> dict | None:
+    #     """Obtiene el board asociado al proyecto. Intenta Scrum, luego cualquier board."""
+    #     try:
+    #         boards = self._get_agile("board", {"projectKeyOrId": project_key, "maxResults": 20})
+    #         values = boards.get("values", [])
+    #         if values:
+    #             print(f"   📋 Boards encontrados para {project_key}: {len(values)}")
+    #             for b in values:
+    #                 print(f"      - {b['name']} (ID: {b['id']}, tipo: {b.get('type', 'desconocido')})")
+    #             for b in values:
+    #                 if b.get("type") == "scrum":
+    #                     return b
+    #             return values[0]
+    #         else:
+    #             print(f"   ⚠️  No se encontraron boards para el proyecto {project_key}")
+    #     except Exception as e:
+    #         print(f"   ⚠️  Error buscando boards del proyecto: {e}")
+    #     try:
+    #         boards = self._get_agile("board", {"maxResults": 50})
+    #         values = boards.get("values", [])
+    #         if values:
+    #             print(f"   📋 Boards globales encontrados: {len(values)}")
+    #             for b in values:
+    #                 print(f"      - {b['name']} (ID: {b['id']}, tipo: {b.get('type', 'desconocido')})")
+    #             for b in values:
+    #                 if b.get("type") == "scrum":
+    #                     return b
+    #             return values[0]
+    #     except Exception as e:
+    #         print(f"   ⚠️  Error buscando boards globales: {e}")
+    #     return None
+
+    # def create_filter(self, project_key: str, name: str = "") -> dict | None:
+    #     """Crea un filtro JQL para el proyecto. Si ya existe, lo reutiliza."""
+    #     if not name:
+    #         name = f"{project_key} Board Filter"
+    #     try:
+    #         result = self._get("filter/favourite", {})
+    #         for f in result if isinstance(result, list) else result.get("values", []):
+    #             if f.get("name") == name:
+    #                 print(f"   ✅ Filtro ya existe: {name} (ID: {f.get('id')})")
+    #                 return f
+    #     except Exception:
+    #         pass
+    #     data = {
+    #         "name": name,
+    #         "description": f"Filtro automático para el board de {project_key}",
+    #         "jql": f"project = {project_key} ORDER BY Rank ASC",
+    #         "favourite": False,
+    #     }
+    #     try:
+    #         result = self._post("filter", data)
+    #         print(f"   ✅ Filtro creado: {result.get('name')} (ID: {result.get('id')})")
+    #         return result
+    #     except Exception as e:
+    #         if "already exists" in str(e).lower():
+    #             print(f"   ℹ️  Filtro '{name}' ya existe, buscándolo...")
+    #             try:
+    #                 result = self._get("filter/favourite", {})
+    #                 for f in result if isinstance(result, list) else result.get("values", []):
+    #                     if f.get("name") == name:
+    #                         print(f"   ✅ Filtro encontrado: {name} (ID: {f.get('id')})")
+    #                         return f
+    #             except Exception:
+    #                 pass
+    #         print(f"   ❌ Error creando filtro: {e}")
+    #         return None
+
+    # def create_board(self, project_key: str, name: str = "", board_type: str = "scrum") -> dict | None:
+    #     """Crea un board Scrum/Kanban para el proyecto."""
+    #     if not name:
+    #         name = f"{project_key} Board"
+    #     filter_result = self.create_filter(project_key)
+    #     if not filter_result:
+    #         return None
+    #     filter_id = filter_result.get("id")
+    #     data = {
+    #         "name": name,
+    #         "type": board_type,
+    #         "filterId": filter_id,
+    #     }
+    #     try:
+    #         result = self._post_agile("board", data)
+    #         print(f"   ✅ Board creado: {result.get('name')} (ID: {result.get('id')})")
+    #         return result
+    #     except Exception as e:
+    #         print(f"   ❌ Error creando board: {e}")
+    #         return None
+
+    # def create_sprint(self, board_id: int, name: str, goal: str = "") -> dict:
+    #     """Crea un sprint via Jira Agile API."""
+    #     data = {
+    #         "name": name,
+    #         "originBoardId": board_id,
+    #     }
+    #     if goal:
+    #         data["goal"] = goal
+    #     return self._post_agile("sprint", data)
+
+    # def add_issues_to_sprint(self, sprint_id: int, issue_keys: list[str]) -> dict:
+    #     """Agrega issues a un sprint via Jira Agile API."""
+    #     data = {"issues": issue_keys}
+    #     return self._post_agile(f"sprint/{sprint_id}/issue", data)
+
+    # def _post_agile(self, endpoint: str, data: dict) -> dict:
+    #     """POST a la Agile API (/rest/agile/1.0/...)."""
+    #     url = f"{self.base_url}/rest/agile/1.0/{endpoint}"
+    #     resp = self.session.post(url, json=data)
+    #     if resp.status_code == 429:
+    #         retry = int(resp.headers.get("Retry-After", 5))
+    #         print(f"  ⏳ Rate limit, esperando {retry}s...")
+    #         time.sleep(retry)
+    #         return self._post_agile(endpoint, data)
+    #     if not resp.ok:
+    #         error_msg = resp.text[:500]
+    #         try:
+    #             err_json = resp.json()
+    #             error_msgs = [e.get("message", str(e)) for e in err_json.get("errors", [])]
+    #             if not error_msgs:
+    #                 error_msgs = [err_json.get("errorMessages", ["Unknown error"])]
+    #             error_msg = " | ".join(str(m) for msgs in error_msgs for m in (msgs if isinstance(msgs, list) else [msgs]))
+    #         except Exception:
+    #             pass
+    #         raise Exception(f"{resp.status_code} {resp.reason}: {error_msg}")
+    #     return resp.json()
+
+    # def _get_agile(self, endpoint: str, params: dict | None = None) -> Any:
+    #     """GET a la Agile API (/rest/agile/1.0/...)."""
+    #     url = f"{self.base_url}/rest/agile/1.0/{endpoint}"
+    #     resp = self.session.get(url, params=params)
+    #     if resp.status_code == 429:
+    #         retry = int(resp.headers.get("Retry-After", 5))
+    #         print(f"  ⏳ Rate limit, esperando {retry}s...")
+    #         time.sleep(retry)
+    #         return self._get_agile(endpoint, params)
+    #     if not resp.ok:
+    #         raise Exception(f"{resp.status_code} {resp.reason}: {resp.text[:300]}")
+    #     return resp.json()
+
 
 # ─────────────────────────────────────────────
 # IMPORTADOR
 # ─────────────────────────────────────────────
 
-def importar_a_jira(base_url: str, user: str, token: str, project_key: str, dry_run: bool = False):
+def importar_a_jira(base_url: str, user: str, token: str, project_key: str, dry_run: bool = False, clear: bool = False):
     print(f"\n{'='*60}")
     print(f"  Importar Historias de Usuario → Jira")
     print(f"{'='*60}")
     print(f"  Instancia: {base_url}")
     print(f"  Proyecto:  {project_key}")
     print(f"  Modo:      {'DRY RUN (sin cambios)' if dry_run else 'EJECUCIÓN REAL'}")
+    if clear:
+        print(f"  ⚠️  MODO CLEAR: Se eliminarán todos los issues existentes del proyecto")
     print(f"{'='*60}\n")
 
     if dry_run:
-        print("📦 Épicas a crear:")
+        print("📁 Épicas a crear:")
         for ep in EPICAS:
             print(f"   - [{ep['key']}] {ep['name']}")
         print(f"\n📝 Historias a crear: {len(HISTORIAS)}")
         for h in HISTORIAS:
-            print(f"   - [{h['id']}] {h['summary']} ({h['priority']}, {h['story_points']} SP) → {h['epic']}")
+            task_count = len(TASKS.get(h["id"], []))
+            print(f"   - [{h['id']}] {h['summary']} ({h['priority']}, {h['story_points']} SP, {task_count} tareas) → {h['epic']}")
+        total_tasks = sum(len(tasks) for tasks in TASKS.values())
+        print(f"\n🔧 Tareas a crear: {total_tasks}")
+        # Sprints: crear manualmente en Jira
+        # print(f"\n🏃 Sprints a crear: {len(SPRINTS)}")
+        # for s in SPRINTS:
+        #     print(f"   - {s['name']} ({s['phase']}, {s['story_points']} SP, HU: {', '.join(s['stories'])})")
+        if clear:
+            print(f"\n🗑️  MODO CLEAR: Se eliminarían todos los issues existentes del proyecto")
         print(f"\n✅ Dry run completado. No se crearon issues en Jira.")
         return
 
@@ -316,6 +840,10 @@ def importar_a_jira(base_url: str, user: str, token: str, project_key: str, dry_
 
     # Auto-detectar campos
     client.detect_fields(project_key)
+
+    # ── Clear: eliminar issues existentes ──
+    if clear:
+        client.clear_project_issues(project_key)
 
     # Verificar que hay un issue type "Story" disponible
     story_type_found = any("story" in t.lower() and "sub" not in t.lower() for t in client._issue_types)
@@ -343,6 +871,7 @@ def importar_a_jira(base_url: str, user: str, token: str, project_key: str, dry_
     # Crear historias
     print(f"\n📝 Creando historias de usuario ({len(HISTORIAS)})...")
     created_count = 0
+    story_keys: dict[str, str] = {}  # hu_id → jira_key
     for h in HISTORIAS:
         epic_jira_key = epic_keys.get(h["epic"])
         labels = [f"SP:{h['story_points']}", f"HU:{h['id']}"]
@@ -357,15 +886,96 @@ def importar_a_jira(base_url: str, user: str, token: str, project_key: str, dry_
                 labels=labels,
             )
             jira_key = result["key"]
+            story_keys[h["id"]] = jira_key
             created_count += 1
             print(f"   ✅ [{h['id']}] → {jira_key}: {h['summary']} ({h['story_points']} SP)")
             time.sleep(0.3)
         except Exception as e:
             print(f"   ❌ [{h['id']}] Error: {e}")
 
+    # Crear tareas (subtasks) para cada historia
+    total_tasks = sum(len(tasks) for tasks in TASKS.values())
+    print(f"\n🔧 Creando tareas por historia ({total_tasks} tareas)...")
+    task_count = 0
+    for hu_id, tasks in TASKS.items():
+        story_key = story_keys.get(hu_id)
+        if not story_key:
+            print(f"   ⏭️  [{hu_id}] Saltando tareas (historia no creada)")
+            continue
+        for i, task in enumerate(tasks, 1):
+            labels = [f"HU:{hu_id}", f"Tipo:{task['type']}"]
+            try:
+                result = client.create_subtask(
+                    project_key=project_key,
+                    summary=f"[{hu_id}] {task['summary']}",
+                    parent_key=story_key,
+                    description=f"**Historia:** {hu_id}\n**Tipo:** {task['type']}",
+                    labels=labels,
+                )
+                task_count += 1
+                print(f"   ✅ [{hu_id}.{i:02d}] → {result['key']}: {task['summary']}")
+                time.sleep(0.3)
+            except Exception as e:
+                print(f"   ❌ [{hu_id}.{i:02d}] Error: {e}")
+
+    # ── Crear sprints y asignar issues — COMENTADO: crear sprints manualmente en Jira ──
+    # print(f"\n🏃 Creando sprints ({len(SPRINTS)})...")
+    # board = client.get_board(project_key)
+    # board_id = None
+    # if board:
+    #     board_id = board.get("id")
+    #     print(f"   📋 Board encontrado: {board['name']} (ID: {board_id})")
+    # else:
+    #     print("   ⚠️  No se encontró ningún board. Intentando crear uno...")
+    #     new_board = client.create_board(project_key)
+    #     if new_board:
+    #         board_id = new_board.get("id")
+    #         print(f"   📋 Board creado: {new_board['name']} (ID: {board_id})")
+    #     else:
+    #         print("   ❌ No se pudo crear un board. Los sprints se omitirán.")
+    #         print("   💡 Crea un Scrum Board manualmente en Jira y vuelve a ejecutar.")
+
+    # sprint_count = 0
+    # for sprint_data in SPRINTS:
+    #     sprint_name = sprint_data["name"]
+    #     sprint_goal = sprint_data["goal"]
+    #     sprint_phase = sprint_data["phase"]
+    #     sprint_hu_ids = sprint_data["stories"]
+    #     sprint_sp = sprint_data["story_points"]
+    #     sprint_label = f"Sprint:{sprint_name.split('—')[0].strip()}"
+    #     phase_label = f"Fase:{sprint_phase}"
+    #     jira_sprint_id = None
+    #     if board_id:
+    #         try:
+    #             result = client.create_sprint(board_id, sprint_name, sprint_goal)
+    #             jira_sprint_id = result.get("id")
+    #             sprint_count += 1
+    #             print(f"   ✅ {sprint_name} ({sprint_sp} SP) → Sprint #{jira_sprint_id}")
+    #             time.sleep(0.3)
+    #         except Exception as e:
+    #             print(f"   ❌ {sprint_name} Error creando sprint: {e}")
+    #     else:
+    #         print(f"   ⏭️  {sprint_name} ({sprint_sp} SP) — sin board, se omite creación de sprint")
+    #     sprint_issue_keys = []
+    #     for hu_id in sprint_hu_ids:
+    #         if hu_id in story_keys:
+    #             sprint_issue_keys.append(story_keys[hu_id])
+    #     if jira_sprint_id and sprint_issue_keys:
+    #         try:
+    #             client.add_issues_to_sprint(jira_sprint_id, sprint_issue_keys)
+    #             print(f"      → {len(sprint_issue_keys)} historias asignadas al sprint")
+    #             time.sleep(0.3)
+    #         except Exception as e:
+    #             print(f"      ⚠️  Error asignando issues al sprint: {e}")
+    #     elif not jira_sprint_id:
+    #         print(f"      → {len(sprint_issue_keys)} historias (sin sprint en Jira)")
+
     print(f"\n{'='*60}")
-    print(f"  ✅ Importación completada: {created_count}/{len(HISTORIAS)} historias creadas")
-    print(f"  📁 Épicas: {len([v for v in epic_keys.values() if v])}/{len(EPICAS)}")
+    print(f"  ✅ Importación completada:")
+    print(f"     📁 Épicas:     {len([v for v in epic_keys.values() if v])}/{len(EPICAS)}")
+    print(f"     📝 Historias:  {created_count}/{len(HISTORIAS)}")
+    print(f"     🔧 Tareas:     {task_count}/{total_tasks}")
+    # print(f"     🏃 Sprints:    {sprint_count}/{len(SPRINTS)}")
     print(f"{'='*60}\n")
 
 
@@ -387,7 +997,8 @@ Las credenciales se leen del archivo .env-jira:
 Ejemplos:
   python importar_jira.py
   python importar_jira.py --dry-run
-  python importar_jira.py --project OTRO_PROYECTO
+  python importar_jira.py --clear
+  python importar_jira.py --clear --project OTRO_PROYECTO
         """,
     )
     parser.add_argument("--url", default=None, help="Override: URL de la instancia Jira")
@@ -395,6 +1006,7 @@ Ejemplos:
     parser.add_argument("--token", default=None, help="Override: API Token de Jira")
     parser.add_argument("--project", default=None, help="Override: Key del proyecto Jira")
     parser.add_argument("--dry-run", action="store_true", help="Solo mostrar qué se crearía, sin hacer cambios")
+    parser.add_argument("--clear", action="store_true", help="Eliminar todos los issues existentes del proyecto antes de importar")
 
     args = parser.parse_args()
 
@@ -415,7 +1027,7 @@ Ejemplos:
         print("   Define en .env-jira o pasa como argumento CLI")
         sys.exit(1)
 
-    importar_a_jira(url, user, token, project, args.dry_run)
+    importar_a_jira(url, user, token, project, args.dry_run, args.clear)
 
 
 if __name__ == "__main__":

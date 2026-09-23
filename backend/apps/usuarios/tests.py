@@ -1,5 +1,6 @@
 """Tests del módulo usuarios."""
 from django.test import SimpleTestCase, TestCase
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -7,6 +8,7 @@ from apps.usuarios.models import Credencial, Usuario
 from apps.usuarios.serializers import ActualizarPerfilSerializer, PerfilUsuarioSerializer
 from apps.usuarios.services import (
     UsuariosError,
+    autenticar_usuario,
     actualizar_perfil,
     obtener_perfil,
     registrar_usuario,
@@ -226,6 +228,90 @@ class RegistrarUsuarioServiceTestCase(TestCase):
 
         self.assertEqual(Usuario.objects.count(), 1)
         self.assertEqual(Credencial.objects.count(), 1)
+
+
+class AutenticacionServiceTestCase(TestCase):
+    """Pruebas del servicio base de autenticación de HU03."""
+
+    def setUp(self):
+        self.usuario = registrar_usuario(
+            nombre="Luis",
+            apellido="Ramos",
+            email="luis.ramos@unsa.edu.pe",
+            dni="11223344",
+            telefono="999888777",
+            tipo="alumno",
+            facultad="Ingeniería de Producción y Servicios",
+            departamento_carrera="Ingeniería de Sistemas",
+            password="ClaveSegura123",
+        )
+
+    def test_autenticar_usuario_exitoso_reinicia_intentos(self):
+        credencial = Credencial.objects.get(usuario=self.usuario)
+        credencial.failed_attempts = 3
+        credencial.locked_until = None
+        credencial.save(update_fields=["failed_attempts", "locked_until"])
+
+        usuario = autenticar_usuario(email="  LUIS.RAMOS@UNSA.EDU.PE ", password="ClaveSegura123")
+        credencial.refresh_from_db()
+
+        self.assertEqual(usuario.pk, self.usuario.pk)
+        self.assertEqual(credencial.failed_attempts, 0)
+        self.assertIsNone(credencial.locked_until)
+
+    def test_autenticar_usuario_con_password_incorrecta_incrementa_intentos(self):
+        with self.assertRaises(UsuariosError) as ctx:
+            autenticar_usuario(email="luis.ramos@unsa.edu.pe", password="clave-incorrecta")
+
+        credencial = Credencial.objects.get(usuario=self.usuario)
+
+        self.assertEqual(ctx.exception.campo, "password")
+        self.assertEqual(credencial.failed_attempts, 1)
+        self.assertIsNone(credencial.locked_until)
+
+    def test_autenticar_usuario_bloquea_al_quinto_intento_fallido(self):
+        for _ in range(4):
+            with self.assertRaises(UsuariosError):
+                autenticar_usuario(email="luis.ramos@unsa.edu.pe", password="12345678")
+
+        credencial = Credencial.objects.get(usuario=self.usuario)
+        self.assertEqual(credencial.failed_attempts, 4)
+        self.assertIsNone(credencial.locked_until)
+
+        with self.assertRaises(UsuariosError) as ctx:
+            autenticar_usuario(email="luis.ramos@unsa.edu.pe", password="12345678")
+
+        credencial.refresh_from_db()
+        self.assertEqual(ctx.exception.mensaje, "El email o la contraseña son incorrectos.")
+        self.assertEqual(credencial.failed_attempts, 5)
+        self.assertIsNotNone(credencial.locked_until)
+        self.assertGreater(credencial.locked_until, timezone.now())
+
+    def test_autenticar_usuario_rechaza_cuenta_bloqueada(self):
+        credencial = Credencial.objects.get(usuario=self.usuario)
+        credencial.failed_attempts = 5
+        credencial.locked_until = timezone.now() + timezone.timedelta(minutes=10)
+        credencial.save(update_fields=["failed_attempts", "locked_until"])
+
+        with self.assertRaises(UsuariosError) as ctx:
+            autenticar_usuario(email="luis.ramos@unsa.edu.pe", password="ClaveSegura123")
+
+        credencial.refresh_from_db()
+        self.assertEqual(ctx.exception.mensaje, "La cuenta está bloqueada temporalmente.")
+        self.assertEqual(credencial.failed_attempts, 5)
+
+    def test_autenticar_usuario_reanuda_si_el_bloqueo_vencio(self):
+        credencial = Credencial.objects.get(usuario=self.usuario)
+        credencial.failed_attempts = 5
+        credencial.locked_until = timezone.now() - timezone.timedelta(minutes=1)
+        credencial.save(update_fields=["failed_attempts", "locked_until"])
+
+        usuario = autenticar_usuario(email="luis.ramos@unsa.edu.pe", password="ClaveSegura123")
+        credencial.refresh_from_db()
+
+        self.assertEqual(usuario.pk, self.usuario.pk)
+        self.assertEqual(credencial.failed_attempts, 0)
+        self.assertIsNone(credencial.locked_until)
 
 
 class PerfilUsuarioServiceTestCase(TestCase):

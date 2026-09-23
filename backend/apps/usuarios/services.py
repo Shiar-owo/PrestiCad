@@ -3,10 +3,17 @@
 Las vistas son delgadas y delegan aquí. Los servicios NO acceden a tablas de
 otros módulos; se comunican con ellos solo a través de sus propios servicios.
 """
-from django.contrib.auth.hashers import make_password
+from datetime import timedelta
+
+from django.contrib.auth.hashers import check_password, make_password
 from django.db import IntegrityError, transaction
+from django.utils import timezone
 
 from apps.usuarios.models import Credencial, Usuario
+
+
+INTENTOS_FALLIDOS_MAXIMOS = 5
+MINUTOS_BLOQUEO_CUENTA = 15
 
 
 class UsuariosError(Exception):
@@ -28,6 +35,58 @@ def obtener_usuario_por_id(usuario_id):
         return Usuario.objects.get(pk=usuario_id)
     except Usuario.DoesNotExist:
         return None
+
+
+def obtener_credencial_por_email(email):
+    """Devuelve la credencial asociada a un email de acceso normalizado."""
+    email_normalizado = email.strip().lower()
+    return Credencial.objects.select_related("usuario").filter(email__iexact=email_normalizado).first()
+
+
+def _bloqueo_expirado(credencial):
+    """Indica si el bloqueo temporal ya venció."""
+    return bool(credencial.locked_until and credencial.locked_until <= timezone.now())
+
+
+def _reiniciar_intentos_autenticacion(credencial):
+    """Limpia el contador y desbloqueo de la credencial."""
+    credencial.failed_attempts = 0
+    credencial.locked_until = None
+    credencial.save(update_fields=["failed_attempts", "locked_until"])
+
+
+def _registrar_fallo_autenticacion(credencial):
+    """Incrementa fallos y bloquea la cuenta cuando alcanza el límite."""
+    credencial.failed_attempts += 1
+
+    if credencial.failed_attempts >= INTENTOS_FALLIDOS_MAXIMOS:
+        credencial.locked_until = timezone.now() + timedelta(minutes=MINUTOS_BLOQUEO_CUENTA)
+
+    credencial.save(update_fields=["failed_attempts", "locked_until"])
+
+
+def autenticar_usuario(*, email, password):
+    """Autentica un usuario por email y contraseña.
+
+    Reglas de negocio (HU03):
+    - El email se normaliza a minúsculas y se compara sin distinción de mayúsculas.
+    - Una credencial bloqueada no puede autenticar hasta que venza el bloqueo.
+    - Los fallos incrementan el contador; al quinto fallo se bloquea la cuenta.
+    - Un acceso exitoso reinicia el contador y el bloqueo.
+    """
+    credencial = obtener_credencial_por_email(email)
+    if credencial is None:
+        raise UsuariosError("email", "El email o la contraseña son incorrectos.")
+
+    if credencial.locked_until and not _bloqueo_expirado(credencial):
+        raise UsuariosError("email", "La cuenta está bloqueada temporalmente.")
+
+    if not check_password(password, credencial.password_hash):
+        _registrar_fallo_autenticacion(credencial)
+        raise UsuariosError("password", "El email o la contraseña son incorrectos.")
+
+    _reiniciar_intentos_autenticacion(credencial)
+    return credencial.usuario
 
 class RolInvalidoError(Exception):
     """El rol solicitado no existe en la taxonomía del sistema."""

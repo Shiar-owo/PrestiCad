@@ -30,6 +30,51 @@ def obtener_usuario_por_id(usuario_id):
         return None
 
 
+def obtener_perfil(usuario):
+    """Devuelve el perfil con los datos disponibles actualmente en Usuario.
+
+    El historial de préstamos se incorporará cuando exista el servicio
+    propietario de esos datos. La reputación se mantiene detrás de una
+    función privada para poder delegarla al módulo correspondiente cuando
+    HU12 esté implementada.
+    """
+    return {
+        "nombre": usuario.nombre,
+        "apellido": usuario.apellido,
+        "email": usuario.email,
+        "dni": usuario.dni,
+        "telefono": usuario.telefono,
+        "tipo": usuario.tipo,
+        **_obtener_reputacion_actual(usuario),
+    }
+
+
+def _obtener_reputacion_actual(usuario):
+    """Lee los valores provisionales de reputación almacenados en Usuario."""
+    return {
+        "reputacion_puntaje": usuario.reputacion_puntaje,
+        "reputacion_tier": usuario.reputacion_tier,
+    }
+
+
+def actualizar_perfil(usuario, *, nombre, telefono=None):
+    """Actualiza solo los campos editables del perfil.
+
+    La validación de entrada se realiza en el serializer. El servicio también
+    limita explícitamente los campos persistidos para proteger sus invariantes
+    si se invoca desde otro punto interno.
+    """
+    usuario.nombre = nombre.strip()
+    campos_actualizados = ["nombre", "updated_at"]
+
+    if telefono is not None:
+        usuario.telefono = telefono.strip()
+        campos_actualizados.append("telefono")
+
+    usuario.save(update_fields=campos_actualizados)
+    return usuario
+
+
 @transaction.atomic
 def registrar_usuario(*, nombre, apellido, email, dni, telefono="", tipo, facultad, departamento_carrera="", password):
     """Registra un usuario junto con su credencial de acceso.

@@ -98,6 +98,28 @@ class UsuarioRegistroSerializer(RechazarCamposNoPermitidosMixin, serializers.Mod
         }
 
 
+class PerfilUsuarioSerializer(serializers.Serializer):
+    """Contrato de salida parcial del perfil con los datos disponibles."""
+
+    nombre = serializers.CharField()
+    apellido = serializers.CharField()
+    email = serializers.EmailField()
+    dni = serializers.CharField()
+    telefono = serializers.CharField(allow_blank=True)
+    tipo = serializers.ChoiceField(choices=TIPOS_USUARIO)
+    reputacion_puntaje = serializers.IntegerField()
+    reputacion_tier = serializers.CharField()
+
+
+class ActualizarPerfilSerializer(RechazarCamposNoPermitidosMixin, serializers.Serializer):
+    """Valida únicamente los campos editables del perfil."""
+
+    nombre = serializers.CharField(
+        max_length=100,
+        error_messages=MENSAJES_CAMPO_NOMBRE,
+    )
+    telefono = serializers.CharField(max_length=20, required=False, allow_blank=True)
+
 class CredencialSerializer(serializers.ModelSerializer):
     """Contrato de entrada/salida JSON para las credenciales de acceso."""
 

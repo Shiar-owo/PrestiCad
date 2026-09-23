@@ -1,3 +1,4 @@
+import './estilos.css'
 import RegistroUsuario from './pages/RegistroUsuario'
 
 function App() {

@@ -42,6 +42,14 @@ class UsuarioSerializer(serializers.ModelSerializer):
         fields = "__all__"
         read_only_fields = ("id", "created_at", "updated_at")
 
+class CambioRolSerializer(serializers.ModelSerializer):
+    """Solo `rol` es escribible; el resto es contexto de solo lectura,
+    para mantener la independencia entre tipo y rol (HU02, criterio 3)."""
+
+    class Meta:
+        model = Usuario
+        fields = ("id", "nombre", "apellido", "tipo", "rol", "estado", "updated_at")
+        read_only_fields = ("id", "nombre", "apellido", "tipo", "estado", "updated_at")
 
 class UsuarioRegistroSerializer(RechazarCamposNoPermitidosMixin, serializers.ModelSerializer):
     """Contrato de entrada del endpoint POST /api/usuarios.

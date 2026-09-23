@@ -9,6 +9,26 @@ DNI_VALIDATOR = RegexValidator(
     message="El DNI debe tener exactamente 8 dígitos numéricos.",
 )
 
+MENSAJES_CAMPO_NOMBRE = {
+    "required": "El nombre es obligatorio.",
+    "blank": "El nombre es obligatorio.",
+}
+
+
+class RechazarCamposNoPermitidosMixin:
+    """Rechaza claves que no forman parte del contrato de entrada."""
+
+    def validate(self, attrs):
+        campos_no_permitidos = set(self.initial_data) - set(self.fields)
+        if campos_no_permitidos:
+            raise serializers.ValidationError(
+                {
+                    campo: "Este campo no está permitido."
+                    for campo in campos_no_permitidos
+                }
+            )
+        return super().validate(attrs)
+
 
 class UsuarioSerializer(serializers.ModelSerializer):
     """Contrato de salida JSON para el módulo usuarios.
@@ -23,7 +43,7 @@ class UsuarioSerializer(serializers.ModelSerializer):
         read_only_fields = ("id", "created_at", "updated_at")
 
 
-class UsuarioRegistroSerializer(serializers.ModelSerializer):
+class UsuarioRegistroSerializer(RechazarCamposNoPermitidosMixin, serializers.ModelSerializer):
     """Contrato de entrada del endpoint POST /api/usuarios.
 
     Valida el formato de los datos (T01.05). La unicidad de email/DNI NO se
@@ -70,7 +90,7 @@ class UsuarioRegistroSerializer(serializers.ModelSerializer):
             "password",
         )
         extra_kwargs = {
-            "nombre": {"error_messages": {"required": "El nombre es obligatorio.", "blank": "El nombre es obligatorio."}},
+            "nombre": {"error_messages": MENSAJES_CAMPO_NOMBRE},
             "apellido": {"error_messages": {"required": "El apellido es obligatorio.", "blank": "El apellido es obligatorio."}},
             "telefono": {"required": False, "allow_blank": True, "default": ""},
             "facultad": {"error_messages": {"required": "La facultad es obligatoria.", "blank": "La facultad es obligatoria."}},

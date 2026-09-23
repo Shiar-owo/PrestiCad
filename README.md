@@ -66,6 +66,7 @@ Presticad/
 Requisitos: Docker y Docker Compose.
 
 ```bash
+cp .env.example .env
 docker compose up --build
 ```
 

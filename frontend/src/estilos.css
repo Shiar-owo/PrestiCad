@@ -37,6 +37,11 @@ input[aria-invalid='true'] {
   font-size: 0.85rem;
 }
 
+.exito {
+  color: #1b5e20;
+  font-weight: 600;
+}
+
 button {
   padding: 0.6rem 1rem;
   font-size: 1rem;

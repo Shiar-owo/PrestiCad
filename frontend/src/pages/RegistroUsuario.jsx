@@ -1,10 +1,16 @@
 import { useState } from 'react'
 
+import { api, ErrorApi } from '../api/client'
+
 const TIPOS_USUARIO = [
   { valor: 'alumno', etiqueta: 'Alumno' },
   { valor: 'docente', etiqueta: 'Docente' },
   { valor: 'administrativo', etiqueta: 'Administrativo' },
 ]
+
+const NOMBRES_CAMPOS_API = {
+  departamento_carrera: 'departamentoCarrera',
+}
 
 const DATOS_INICIALES = {
   nombre: '',
@@ -72,25 +78,73 @@ function Campo({ etiqueta, error, children }) {
 function RegistroUsuario() {
   const [datos, setDatos] = useState(DATOS_INICIALES)
   const [errores, setErrores] = useState({})
+  const [enviando, setEnviando] = useState(false)
+  const [mensajeExito, setMensajeExito] = useState('')
 
   function actualizar(campo, valor) {
     setDatos((previos) => ({ ...previos, [campo]: valor }))
   }
 
-  function manejarEnvio(evento) {
+  function construirDatosParaApi() {
+    return {
+      nombre: datos.nombre.trim(),
+      apellido: datos.apellido.trim(),
+      email: datos.email.trim(),
+      dni: datos.dni.trim(),
+      telefono: datos.telefono.trim(),
+      tipo: datos.tipo,
+      facultad: datos.facultad.trim(),
+      departamento_carrera: datos.departamentoCarrera.trim(),
+      password: datos.password,
+    }
+  }
+
+  function mostrarErroresDelBackend(datosError) {
+    const erroresApi = {}
+    for (const campo of Object.keys(datosError)) {
+      const clave = NOMBRES_CAMPOS_API[campo] || campo
+      erroresApi[clave] = Array.isArray(datosError[campo])
+        ? datosError[campo][0]
+        : String(datosError[campo])
+    }
+    setErrores(erroresApi)
+  }
+
+  async function manejarEnvio(evento) {
     evento.preventDefault()
     const erroresDelFormulario = validar(datos)
     setErrores(erroresDelFormulario)
     if (Object.keys(erroresDelFormulario).length > 0) {
       return
     }
-    // TODO (T01.08): enviar al endpoint POST /api/usuarios.
+
+    setEnviando(true)
+    setMensajeExito('')
+    try {
+      await api.post('/usuarios/', construirDatosParaApi())
+      setMensajeExito('Usuario registrado correctamente.')
+      setDatos(DATOS_INICIALES)
+      setErrores({})
+    } catch (error) {
+      if (error instanceof ErrorApi && error.datos) {
+        mostrarErroresDelBackend(error.datos)
+      } else {
+        setErrores({
+          formulario: 'No se pudo conectar con el servidor. Inténtalo de nuevo.',
+        })
+      }
+    } finally {
+      setEnviando(false)
+    }
   }
 
   return (
     <section>
       <h2>Registrar usuario</h2>
       <form onSubmit={manejarEnvio} noValidate>
+        {mensajeExito && <p className="exito">{mensajeExito}</p>}
+        {errores.formulario && <p className="error">{errores.formulario}</p>}
+
         <Campo etiqueta="Nombre" error={errores.nombre}>
           <input
             type="text"
@@ -159,10 +213,11 @@ function RegistroUsuario() {
           />
         </Campo>
 
-        <Campo etiqueta="Departamento / Carrera">
+        <Campo etiqueta="Departamento / Carrera" error={errores.departamentoCarrera}>
           <input
             type="text"
             value={datos.departamentoCarrera}
+            aria-invalid={Boolean(errores.departamentoCarrera)}
             onChange={(e) => actualizar('departamentoCarrera', e.target.value)}
           />
         </Campo>
@@ -185,7 +240,9 @@ function RegistroUsuario() {
           />
         </Campo>
 
-        <button type="submit">Registrar</button>
+        <button type="submit" disabled={enviando}>
+          {enviando ? 'Registrando…' : 'Registrar'}
+        </button>
       </form>
     </section>
   )

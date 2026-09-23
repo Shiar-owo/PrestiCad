@@ -4,7 +4,13 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from apps.usuarios.models import Credencial, Usuario
-from apps.usuarios.services import UsuariosError, registrar_usuario
+from apps.usuarios.serializers import ActualizarPerfilSerializer, PerfilUsuarioSerializer
+from apps.usuarios.services import (
+    UsuariosError,
+    actualizar_perfil,
+    obtener_perfil,
+    registrar_usuario,
+)
 
 
 class ModuloUsuariosTestCase(SimpleTestCase):
@@ -220,3 +226,92 @@ class RegistrarUsuarioServiceTestCase(TestCase):
 
         self.assertEqual(Usuario.objects.count(), 1)
         self.assertEqual(Credencial.objects.count(), 1)
+
+
+class PerfilUsuarioServiceTestCase(TestCase):
+    """Pruebas de perfil que no dependen del flujo de autenticación."""
+
+    def setUp(self):
+        self.usuario = Usuario.objects.create(
+            nombre="Ana",
+            apellido="García",
+            email="ana.garcia@unsa.edu.pe",
+            dni="12345678",
+            telefono="987654321",
+            tipo="alumno",
+            facultad="Ciencias de la Computación",
+            reputacion_puntaje=225,
+            reputacion_tier="avanzado",
+        )
+
+    def test_obtener_perfil_devuelve_datos_disponibles_del_usuario(self):
+        datos = obtener_perfil(self.usuario)
+
+        self.assertEqual(
+            datos,
+            {
+                "nombre": "Ana",
+                "apellido": "García",
+                "email": "ana.garcia@unsa.edu.pe",
+                "dni": "12345678",
+                "telefono": "987654321",
+                "tipo": "alumno",
+                "reputacion_puntaje": 225,
+                "reputacion_tier": "avanzado",
+            },
+        )
+
+    def test_actualizar_perfil_modifica_solo_nombre_y_telefono(self):
+        actualizar_perfil(self.usuario, nombre=" Ana María ", telefono=" 912345678 ")
+        self.usuario.refresh_from_db()
+
+        self.assertEqual(self.usuario.nombre, "Ana María")
+        self.assertEqual(self.usuario.telefono, "912345678")
+        self.assertEqual(self.usuario.apellido, "García")
+        self.assertEqual(self.usuario.email, "ana.garcia@unsa.edu.pe")
+        self.assertEqual(self.usuario.dni, "12345678")
+        self.assertEqual(self.usuario.tipo, "alumno")
+        self.assertEqual(self.usuario.reputacion_puntaje, 225)
+        self.assertEqual(self.usuario.reputacion_tier, "avanzado")
+
+    def test_actualizar_perfil_sin_telefono_conserva_el_actual(self):
+        actualizar_perfil(self.usuario, nombre="Ana Sofía")
+        self.usuario.refresh_from_db()
+
+        self.assertEqual(self.usuario.nombre, "Ana Sofía")
+        self.assertEqual(self.usuario.telefono, "987654321")
+
+    def test_serializer_de_perfil_expone_solo_datos_del_perfil(self):
+        serializer = PerfilUsuarioSerializer(instance=obtener_perfil(self.usuario))
+
+        self.assertEqual(serializer.data["nombre"], "Ana")
+        self.assertEqual(serializer.data["reputacion_puntaje"], 225)
+        self.assertEqual(serializer.data["reputacion_tier"], "avanzado")
+        self.assertNotIn("id", serializer.data)
+        self.assertNotIn("password", serializer.data)
+
+    def test_serializer_de_actualizacion_acepta_nombre_y_telefono(self):
+        serializer = ActualizarPerfilSerializer(
+            data={"nombre": "Ana María", "telefono": "912345678"}
+        )
+
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertEqual(
+            serializer.validated_data,
+            {"nombre": "Ana María", "telefono": "912345678"},
+        )
+
+    def test_serializer_de_actualizacion_requiere_nombre(self):
+        serializer = ActualizarPerfilSerializer(data={"telefono": ""})
+
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("nombre", serializer.errors)
+
+    def test_serializer_de_actualizacion_rechaza_campos_no_editables(self):
+        serializer = ActualizarPerfilSerializer(
+            data={"nombre": "Ana", "email": "otra@unsa.edu.pe", "dni": "87654321"}
+        )
+
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("email", serializer.errors)
+        self.assertIn("dni", serializer.errors)

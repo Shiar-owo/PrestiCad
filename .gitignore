@@ -1,1 +1,20 @@
 .env*
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# Bases de datos / volumenes
+pgdata/
+
+# Sistema
+.DS_Store

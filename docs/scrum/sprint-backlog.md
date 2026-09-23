@@ -13,6 +13,7 @@ Credencial                      Usuario
 ├── email (para login)          ├── email (para contacto)
 ├── password_hash               ├── nombre, apellido
 ├── failed_attempts             ├── dni, telefono
+                                ├── facultad, departamento_carrera
 └── locked_until                ├── tipo, rol, estado
                                 ├── reputacion_puntaje (-500 a 500)
                                 ├── reputacion_tier (Avanzado/Estándar/Restringido)

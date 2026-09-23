@@ -1,5 +1,7 @@
 """Tests del módulo usuarios."""
 from django.test import SimpleTestCase, TestCase
+from rest_framework import status
+from rest_framework.test import APITestCase
 
 from apps.usuarios.models import Credencial, Usuario
 from apps.usuarios.services import UsuariosError, registrar_usuario
@@ -21,6 +23,88 @@ class ModuloUsuariosTestCase(SimpleTestCase):
 
         rutas = {str(p.pattern) for p in urlpatterns}
         self.assertIn("api/usuarios/", rutas)
+
+
+class RegistroUsuarioAPITestCase(APITestCase):
+    """Tests del endpoint POST /api/usuarios (T01.05)."""
+
+    URL = "/api/usuarios/"
+
+    def _post(self, **extra):
+        datos = dict(
+            nombre="Juan",
+            apellido="Pérez",
+            email="juan.perez@unsa.edu.pe",
+            dni="76543210",
+            telefono="987654321",
+            tipo="alumno",
+            facultad="Ingeniería de Producción y Servicios",
+            departamento_carrera="Ingeniería de Sistemas",
+            password="ClaveSegura123",
+        )
+        datos.update(extra)
+        return self.client.post(self.URL, datos, format="json")
+
+    def test_registro_exitoso_devuelve_201(self):
+        respuesta = self._post()
+
+        self.assertEqual(respuesta.status_code, status.HTTP_201_CREATED)
+        cuerpo = respuesta.json()
+        self.assertEqual(cuerpo["email"], "juan.perez@unsa.edu.pe")
+        self.assertEqual(cuerpo["facultad"], "Ingeniería de Producción y Servicios")
+        self.assertEqual(cuerpo["departamento_carrera"], "Ingeniería de Sistemas")
+        self.assertEqual(cuerpo["tipo"], "alumno")
+        self.assertEqual(cuerpo["estado"], "activo")
+        self.assertEqual(cuerpo["reputacion_puntaje"], 0)
+        self.assertNotIn("password", cuerpo)
+
+        credencial = Credencial.objects.get()
+        self.assertNotEqual(credencial.password_hash, "ClaveSegura123")
+
+    def test_email_duplicado_devuelve_409(self):
+        self._post()
+
+        respuesta = self._post(email="JUAN.PEREZ@unsa.edu.pe", dni="12345678")
+
+        self.assertEqual(respuesta.status_code, status.HTTP_409_CONFLICT)
+        cuerpo = respuesta.json()
+        self.assertIn("email", cuerpo)
+        self.assertEqual(cuerpo["email"], ["El email ya está registrado."])
+        self.assertEqual(Usuario.objects.count(), 1)
+
+    def test_dni_duplicado_devuelve_409(self):
+        self._post()
+
+        respuesta = self._post(dni="76543210", email="otro@unsa.edu.pe")
+
+        self.assertEqual(respuesta.status_code, status.HTTP_409_CONFLICT)
+        self.assertIn("dni", respuesta.json())
+        self.assertEqual(Usuario.objects.count(), 1)
+
+    def test_datos_invalidos_devuelven_400(self):
+        respuesta = self._post(password="123", dni="abc", tipo="invalido")
+
+        self.assertEqual(respuesta.status_code, status.HTTP_400_BAD_REQUEST)
+        cuerpo = respuesta.json()
+        self.assertIn("password", cuerpo)
+        self.assertIn("dni", cuerpo)
+        self.assertIn("tipo", cuerpo)
+        self.assertEqual(Usuario.objects.count(), 0)
+
+    def test_facultad_obligatoria_devuelve_400(self):
+        respuesta = self._post(facultad="")
+
+        self.assertEqual(respuesta.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("facultad", respuesta.json())
+        self.assertEqual(Usuario.objects.count(), 0)
+
+    def test_reputacion_no_es_sobrescribible_por_http(self):
+        """Enviar reputación en el POST produce 400: no es parte del contrato."""
+        respuesta = self._post(reputacion_puntaje=500, reputacion_tier="avanzado")
+
+        self.assertEqual(respuesta.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("reputacion_puntaje", respuesta.json())
+        self.assertEqual(Usuario.objects.count(), 0)
 
 
 class ReputacionInicialTestCase(TestCase):

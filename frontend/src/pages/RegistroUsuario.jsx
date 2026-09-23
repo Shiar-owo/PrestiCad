@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
 import { api, ErrorApi } from '../api/client'
+import { validarNombre, validarTelefono } from '../validaciones'
 
 const TIPOS_USUARIO = [
   { valor: 'alumno', etiqueta: 'Alumno' },
@@ -28,8 +29,9 @@ const DATOS_INICIALES = {
 function validar(datos) {
   const errores = {}
 
-  if (!datos.nombre.trim()) {
-    errores.nombre = 'El nombre es obligatorio.'
+  const errorNombre = validarNombre(datos.nombre)
+  if (errorNombre) {
+    errores.nombre = errorNombre
   }
 
   if (!datos.apellido.trim()) {
@@ -46,8 +48,9 @@ function validar(datos) {
     errores.dni = 'El DNI debe tener exactamente 8 dígitos numéricos.'
   }
 
-  if (datos.telefono.trim() && !/^[\d+\s-]+$/.test(datos.telefono.trim())) {
-    errores.telefono = 'El teléfono solo puede contener dígitos.'
+  const errorTelefono = validarTelefono(datos.telefono)
+  if (errorTelefono) {
+    errores.telefono = errorTelefono
   }
 
   if (!datos.facultad.trim()) {

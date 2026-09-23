@@ -5,9 +5,9 @@ from apps.usuarios.models import Credencial, Usuario
 
 @admin.register(Usuario)
 class UsuarioAdmin(admin.ModelAdmin):
-    list_display = ("nombre", "apellido", "email", "dni", "tipo", "rol", "estado", "reputacion_tier")
-    list_filter = ("tipo", "rol", "estado", "reputacion_tier")
-    search_fields = ("nombre", "apellido", "email", "dni")
+    list_display = ("nombre", "apellido", "email", "dni", "facultad", "departamento_carrera", "tipo", "rol", "estado", "reputacion_tier")
+    list_filter = ("tipo", "rol", "estado", "reputacion_tier", "facultad")
+    search_fields = ("nombre", "apellido", "email", "dni", "facultad", "departamento_carrera")
 
 
 @admin.register(Credencial)

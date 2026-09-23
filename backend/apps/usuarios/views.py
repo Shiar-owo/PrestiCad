@@ -8,20 +8,40 @@ from rest_framework.response import Response
 
 from apps.usuarios import services
 from apps.usuarios.models import Usuario
-from apps.usuarios.serializers import UsuarioSerializer, CambioRolSerializer
+from apps.usuarios.serializers import (
+    UsuarioSerializer,
+    UsuarioRegistroSerializer,
+    CambioRolSerializer,
+)
 
-class UsuarioListCreateView(ListCreateAPIView): 
-    """Lista y crea usuarios."""
+
+class UsuarioListCreateView(ListCreateAPIView):
+    """Lista usuarios (GET) y los registra (POST)."""
 
     queryset = Usuario.objects.all()
     serializer_class = UsuarioSerializer
 
+    def get_serializer_class(self):
+        if self.request.method == "POST":
+            return UsuarioRegistroSerializer
+        return UsuarioSerializer
+
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
+        # 400: el formato de los datos no es válido.
         serializer.is_valid(raise_exception=True)
-        # TODO: delegar la creación transaccional al servicio del módulo.
-        self.perform_create(serializer)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+        try:
+            usuario = services.registrar_usuario(**serializer.validated_data)
+        except services.UsuariosError as error:
+            # 409: email o DNI ya registrados (no se crea ningún registro).
+            return Response(
+                {error.campo: [error.mensaje]},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        return Response(UsuarioSerializer(usuario).data, status=status.HTTP_201_CREATED)
+
 
 class UsuarioRolView(RetrieveUpdateAPIView):
     """GET/PATCH /api/usuarios/<id>/rol/ — ver y cambiar el rol (HU02)."""
@@ -34,7 +54,7 @@ class UsuarioRolView(RetrieveUpdateAPIView):
         nuevo_rol = request.data.get("rol")
 
         if not nuevo_rol:
-            return Response({"detail": "El campo 'rol' es obl   igatorio."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": "El campo 'rol' es obligatorio."}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             usuario_actualizado = services.cambiar_rol_usuario(usuario.id, nuevo_rol)

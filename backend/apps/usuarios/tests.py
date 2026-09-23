@@ -1,13 +1,25 @@
-"""Validacion de que los modulos estan correctamente reconocidos por Django."""
-from django.apps import apps
-from django.test import SimpleTestCase
+"""Tests del módulo usuarios."""
+from django.test import SimpleTestCase, TestCase
+from rest_framework import status
+from rest_framework.test import APITestCase
 
-from apps.usuarios.apps import UsuariosConfig
+from apps.usuarios.models import Credencial, Usuario
+from apps.usuarios.serializers import ActualizarPerfilSerializer, PerfilUsuarioSerializer
+from apps.usuarios.services import (
+    UsuariosError,
+    actualizar_perfil,
+    obtener_perfil,
+    registrar_usuario,
+)
 
 
 class ModuloUsuariosTestCase(SimpleTestCase):
     def test_config_del_modulo(self):
         """La app `usuarios` existe y su config es la esperada."""
+        from django.apps import apps
+
+        from apps.usuarios.apps import UsuariosConfig
+
         conf = apps.get_app_config("usuarios")
         self.assertIsInstance(conf, UsuariosConfig)
 
@@ -17,3 +29,289 @@ class ModuloUsuariosTestCase(SimpleTestCase):
 
         rutas = {str(p.pattern) for p in urlpatterns}
         self.assertIn("api/usuarios/", rutas)
+
+
+class RegistroUsuarioAPITestCase(APITestCase):
+    """Tests del endpoint POST /api/usuarios (T01.05)."""
+
+    URL = "/api/usuarios/"
+
+    def _post(self, **extra):
+        datos = dict(
+            nombre="Juan",
+            apellido="Pérez",
+            email="juan.perez@unsa.edu.pe",
+            dni="76543210",
+            telefono="987654321",
+            tipo="alumno",
+            facultad="Ingeniería de Producción y Servicios",
+            departamento_carrera="Ingeniería de Sistemas",
+            password="ClaveSegura123",
+        )
+        datos.update(extra)
+        return self.client.post(self.URL, datos, format="json")
+
+    def test_registro_exitoso_devuelve_201(self):
+        respuesta = self._post()
+
+        self.assertEqual(respuesta.status_code, status.HTTP_201_CREATED)
+        cuerpo = respuesta.json()
+        self.assertEqual(cuerpo["email"], "juan.perez@unsa.edu.pe")
+        self.assertEqual(cuerpo["facultad"], "Ingeniería de Producción y Servicios")
+        self.assertEqual(cuerpo["departamento_carrera"], "Ingeniería de Sistemas")
+        self.assertEqual(cuerpo["tipo"], "alumno")
+        self.assertEqual(cuerpo["estado"], "activo")
+        self.assertEqual(cuerpo["reputacion_puntaje"], 0)
+        self.assertNotIn("password", cuerpo)
+
+        credencial = Credencial.objects.get()
+        self.assertNotEqual(credencial.password_hash, "ClaveSegura123")
+
+    def test_email_duplicado_devuelve_409(self):
+        self._post()
+
+        respuesta = self._post(email="JUAN.PEREZ@unsa.edu.pe", dni="12345678")
+
+        self.assertEqual(respuesta.status_code, status.HTTP_409_CONFLICT)
+        cuerpo = respuesta.json()
+        self.assertIn("email", cuerpo)
+        self.assertEqual(cuerpo["email"], ["El email ya está registrado."])
+        self.assertEqual(Usuario.objects.count(), 1)
+
+    def test_dni_duplicado_devuelve_409(self):
+        self._post()
+
+        respuesta = self._post(dni="76543210", email="otro@unsa.edu.pe")
+
+        self.assertEqual(respuesta.status_code, status.HTTP_409_CONFLICT)
+        self.assertIn("dni", respuesta.json())
+        self.assertEqual(Usuario.objects.count(), 1)
+
+    def test_datos_invalidos_devuelven_400(self):
+        respuesta = self._post(password="123", dni="abc", tipo="invalido")
+
+        self.assertEqual(respuesta.status_code, status.HTTP_400_BAD_REQUEST)
+        cuerpo = respuesta.json()
+        self.assertIn("password", cuerpo)
+        self.assertIn("dni", cuerpo)
+        self.assertIn("tipo", cuerpo)
+        self.assertEqual(Usuario.objects.count(), 0)
+
+    def test_facultad_obligatoria_devuelve_400(self):
+        respuesta = self._post(facultad="")
+
+        self.assertEqual(respuesta.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("facultad", respuesta.json())
+        self.assertEqual(Usuario.objects.count(), 0)
+
+    def test_reputacion_no_es_sobrescribible_por_http(self):
+        """Enviar reputación en el POST produce 400: no es parte del contrato."""
+        respuesta = self._post(reputacion_puntaje=500, reputacion_tier="avanzado")
+
+        self.assertEqual(respuesta.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("reputacion_puntaje", respuesta.json())
+        self.assertEqual(Usuario.objects.count(), 0)
+
+
+class ReputacionInicialTestCase(TestCase):
+    """Tests del Tier inicial Neutral (T01.04).
+
+    Al registrar un usuario la reputación inicia en Neutral: 0 puntos y
+    Tier Estándar. El servicio no recibe ni permite sobrescribir estos
+    valores, por lo que quedarán siempre en sus valores por defecto.
+    """
+
+    def _registrar(self, **extra):
+        datos = dict(
+            nombre="María",
+            apellido="López",
+            email="maria.lopez@unsa.edu.pe",
+            dni="87654321",
+            tipo="docente",
+            facultad="Ingeniería de Producción y Servicios",
+            password="ClaveSegura123",
+        )
+        datos.update(extra)
+        return registrar_usuario(**datos)
+
+    def test_reputacion_inicia_en_neutral_al_registrar(self):
+        """Puntaje 0 y tier Estándar (Neutral) al crear el usuario."""
+        usuario = self._registrar()
+
+        self.assertEqual(usuario.reputacion_puntaje, 0)
+        self.assertEqual(usuario.reputacion_tier, "estandar")
+
+    def test_el_servicio_no_expone_campos_de_reputacion(self):
+        """`registrar_usuario` no acepta parámetros de reputación.
+
+        La reputación no se puede sobrescribir al registrar: el contrato del
+        servicio no los recibe (el rechazo por HTTP se cubre en T01.05).
+        """
+        import inspect
+
+        firmados = inspect.signature(registrar_usuario).parameters
+        self.assertNotIn("reputacion_puntaje", firmados)
+        self.assertNotIn("reputacion_tier", firmados)
+
+
+class RegistrarUsuarioServiceTestCase(TestCase):
+    """Tests del servicio `registrar_usuario` (T01.03)."""
+
+    def _registrar(self, email="juan.perez@unsa.edu.pe", dni="76543210", **extra):
+        datos = dict(
+            nombre="Juan",
+            apellido="Pérez",
+            email=email,
+            dni=dni,
+            telefono="987654321",
+            tipo="alumno",
+            facultad="Ingeniería de Producción y Servicios",
+            departamento_carrera="Ingeniería de Sistemas",
+            password="ClaveSegura123",
+        )
+        datos.update(extra)
+        return registrar_usuario(**datos)
+
+    def test_registro_exitoso_crea_usuario_y_credencial(self):
+        usuario = self._registrar()
+
+        self.assertIsNotNone(usuario.pk)
+        self.assertEqual(Usuario.objects.count(), 1)
+
+        credencial = Credencial.objects.get(usuario=usuario)
+        self.assertEqual(credencial.email, "juan.perez@unsa.edu.pe")
+        self.assertEqual(usuario.estado, "activo")
+        self.assertEqual(usuario.tipo, "alumno")
+        self.assertEqual(usuario.facultad, "Ingeniería de Producción y Servicios")
+        self.assertEqual(usuario.departamento_carrera, "Ingeniería de Sistemas")
+
+    def test_password_se_almacena_hasheada(self):
+        self._registrar(password="ClaveSegura123")
+
+        credencial = Credencial.objects.get()
+        self.assertNotEqual(credencial.password_hash, "ClaveSegura123")
+        self.assertTrue(credencial.password_hash.startswith(("pbkdf2_", "bcrypt", "scrypt_")))
+        self.assertTrue(credencial.password_hash.startswith("pbkdf2_"))
+
+    def test_email_normalizado_a_minusculas_y_sin_espacios(self):
+        usuario = self._registrar(email="  Juan.Perez@UNSA.EDU.PE  ")
+
+        self.assertEqual(usuario.email, "juan.perez@unsa.edu.pe")
+        self.assertEqual(Credencial.objects.get().email, "juan.perez@unsa.edu.pe")
+
+    def test_email_duplicado_eleva_error(self):
+        self._registrar(email="juan.perez@unsa.edu.pe")
+
+        with self.assertRaises(UsuariosError) as ctx:
+            self._registrar(email="JUAN.PEREZ@unsa.edu.pe", dni="12345678")
+
+        self.assertEqual(ctx.exception.campo, "email")
+        self.assertEqual(Usuario.objects.count(), 1)
+
+    def test_dni_duplicado_eleva_error(self):
+        self._registrar(dni="76543210")
+
+        with self.assertRaises(UsuariosError) as ctx:
+            self._registrar(dni="76543210", email="otro@unsa.edu.pe")
+
+        self.assertEqual(ctx.exception.campo, "dni")
+        self.assertEqual(ctx.exception.mensaje, "El DNI ya está registrado.")
+        self.assertEqual(Usuario.objects.count(), 1)
+
+    def test_registro_duplicado_no_deja_restos(self):
+        """La creación es transaccional: no quedan usuarios ni credenciales."""
+        self._registrar(email="juan.perez@unsa.edu.pe")
+        with self.assertRaises(UsuariosError):
+            self._registrar(email="juan.perez@unsa.edu.pe", dni="12345678")
+
+        self.assertEqual(Usuario.objects.count(), 1)
+        self.assertEqual(Credencial.objects.count(), 1)
+
+
+class PerfilUsuarioServiceTestCase(TestCase):
+    """Pruebas de perfil que no dependen del flujo de autenticación."""
+
+    def setUp(self):
+        self.usuario = Usuario.objects.create(
+            nombre="Ana",
+            apellido="García",
+            email="ana.garcia@unsa.edu.pe",
+            dni="12345678",
+            telefono="987654321",
+            tipo="alumno",
+            facultad="Ciencias de la Computación",
+            reputacion_puntaje=225,
+            reputacion_tier="avanzado",
+        )
+
+    def test_obtener_perfil_devuelve_datos_disponibles_del_usuario(self):
+        datos = obtener_perfil(self.usuario)
+
+        self.assertEqual(
+            datos,
+            {
+                "nombre": "Ana",
+                "apellido": "García",
+                "email": "ana.garcia@unsa.edu.pe",
+                "dni": "12345678",
+                "telefono": "987654321",
+                "tipo": "alumno",
+                "reputacion_puntaje": 225,
+                "reputacion_tier": "avanzado",
+            },
+        )
+
+    def test_actualizar_perfil_modifica_solo_nombre_y_telefono(self):
+        actualizar_perfil(self.usuario, nombre=" Ana María ", telefono=" 912345678 ")
+        self.usuario.refresh_from_db()
+
+        self.assertEqual(self.usuario.nombre, "Ana María")
+        self.assertEqual(self.usuario.telefono, "912345678")
+        self.assertEqual(self.usuario.apellido, "García")
+        self.assertEqual(self.usuario.email, "ana.garcia@unsa.edu.pe")
+        self.assertEqual(self.usuario.dni, "12345678")
+        self.assertEqual(self.usuario.tipo, "alumno")
+        self.assertEqual(self.usuario.reputacion_puntaje, 225)
+        self.assertEqual(self.usuario.reputacion_tier, "avanzado")
+
+    def test_actualizar_perfil_sin_telefono_conserva_el_actual(self):
+        actualizar_perfil(self.usuario, nombre="Ana Sofía")
+        self.usuario.refresh_from_db()
+
+        self.assertEqual(self.usuario.nombre, "Ana Sofía")
+        self.assertEqual(self.usuario.telefono, "987654321")
+
+    def test_serializer_de_perfil_expone_solo_datos_del_perfil(self):
+        serializer = PerfilUsuarioSerializer(instance=obtener_perfil(self.usuario))
+
+        self.assertEqual(serializer.data["nombre"], "Ana")
+        self.assertEqual(serializer.data["reputacion_puntaje"], 225)
+        self.assertEqual(serializer.data["reputacion_tier"], "avanzado")
+        self.assertNotIn("id", serializer.data)
+        self.assertNotIn("password", serializer.data)
+
+    def test_serializer_de_actualizacion_acepta_nombre_y_telefono(self):
+        serializer = ActualizarPerfilSerializer(
+            data={"nombre": "Ana María", "telefono": "912345678"}
+        )
+
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertEqual(
+            serializer.validated_data,
+            {"nombre": "Ana María", "telefono": "912345678"},
+        )
+
+    def test_serializer_de_actualizacion_requiere_nombre(self):
+        serializer = ActualizarPerfilSerializer(data={"telefono": ""})
+
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("nombre", serializer.errors)
+
+    def test_serializer_de_actualizacion_rechaza_campos_no_editables(self):
+        serializer = ActualizarPerfilSerializer(
+            data={"nombre": "Ana", "email": "otra@unsa.edu.pe", "dni": "87654321"}
+        )
+
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("email", serializer.errors)
+        self.assertIn("dni", serializer.errors)

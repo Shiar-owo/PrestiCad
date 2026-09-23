@@ -18,6 +18,13 @@ class Usuario(models.Model):
     dni = models.CharField(max_length=8, unique=True)
     telefono = models.CharField(max_length=20, blank=True, default="")
     tipo = models.CharField(max_length=20, choices=TIPOS_USUARIO)
+    facultad = models.CharField(max_length=100, verbose_name="Facultad")
+    departamento_carrera = models.CharField(
+        max_length=100,
+        blank=True,
+        default="",
+        verbose_name="Departamento / Carrera",
+    )
     rol = models.CharField(max_length=20, choices=ROLES, default="prestatario")
     estado = models.CharField(max_length=20, choices=ESTADOS_USUARIO, default="activo")
 

@@ -1,10 +1,16 @@
 """Tests del módulo usuarios."""
+from datetime import timedelta
+
+from django.contrib.sessions.middleware import SessionMiddleware
+from django.http import HttpResponse
+from django.test import RequestFactory
 from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
 from apps.usuarios.models import Credencial, Usuario
+from apps.usuarios.middleware import ExpiracionSesionInactividadMiddleware
 from apps.usuarios.serializers import ActualizarPerfilSerializer, PerfilUsuarioSerializer
 from apps.usuarios.services import (
     UsuariosError,
@@ -13,6 +19,7 @@ from apps.usuarios.services import (
     obtener_perfil,
     registrar_usuario,
 )
+from apps.usuarios.sesiones import CLAVE_SESION_USUARIO_ID, CLAVE_SESION_ULTIMA_ACTIVIDAD
 
 
 class ModuloUsuariosTestCase(SimpleTestCase):
@@ -401,3 +408,50 @@ class PerfilUsuarioServiceTestCase(TestCase):
         self.assertFalse(serializer.is_valid())
         self.assertIn("email", serializer.errors)
         self.assertIn("dni", serializer.errors)
+
+
+class ExpiracionSesionInactividadMiddlewareTestCase(TestCase):
+    """Pruebas del middleware de expiración por inactividad (T03.03)."""
+
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.middleware = ExpiracionSesionInactividadMiddleware(lambda request: HttpResponse("ok"))
+
+    def _crear_request_con_sesion(self):
+        request = self.factory.get("/")
+        SessionMiddleware(lambda request: None).process_request(request)
+        request.session.save()
+        request.session[CLAVE_SESION_USUARIO_ID] = 1
+        return request
+
+    def test_actualiza_ultima_actividad_si_la_sesion_sigue_activa(self):
+        request = self._crear_request_con_sesion()
+        request.session[CLAVE_SESION_ULTIMA_ACTIVIDAD] = (
+            timezone.now() - timedelta(minutes=5)
+        ).isoformat()
+
+        self.middleware(request)
+
+        self.assertIn(CLAVE_SESION_USUARIO_ID, request.session)
+        self.assertIn(CLAVE_SESION_ULTIMA_ACTIVIDAD, request.session)
+        ultima_actividad = timezone.datetime.fromisoformat(
+            request.session[CLAVE_SESION_ULTIMA_ACTIVIDAD]
+        )
+        if timezone.is_naive(ultima_actividad):
+            ultima_actividad = timezone.make_aware(
+                ultima_actividad,
+                timezone.get_current_timezone(),
+            )
+        self.assertLess((timezone.now() - ultima_actividad).total_seconds(), 5)
+
+    def test_expira_la_sesion_si_supera_el_limite_de_inactividad(self):
+        request = self._crear_request_con_sesion()
+        request.session[CLAVE_SESION_ULTIMA_ACTIVIDAD] = (
+            timezone.now() - timedelta(minutes=31)
+        ).isoformat()
+
+        self.middleware(request)
+
+        self.assertIsNone(request.session.session_key)
+        self.assertNotIn(CLAVE_SESION_USUARIO_ID, request.session)
+        self.assertNotIn(CLAVE_SESION_ULTIMA_ACTIVIDAD, request.session)

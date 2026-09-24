@@ -237,6 +237,93 @@ class RegistrarUsuarioServiceTestCase(TestCase):
         self.assertEqual(Credencial.objects.count(), 1)
 
 
+class AuthEndpointsAPITestCase(APITestCase):
+    def setUp(self):
+        self.usuario = registrar_usuario(
+            nombre="Luis",
+            apellido="Ramos",
+            email="luis.ramos@unsa.edu.pe",
+            dni="11223344",
+            telefono="999888777",
+            tipo="alumno",
+            facultad="Ingeniería de Producción y Servicios",
+            departamento_carrera="Ingeniería de Sistemas",
+            password="ClaveSegura123",
+        )
+        self.login_url = "/api/auth/login/"
+        self.logout_url = "/api/auth/logout/"
+
+    def test_login_exitoso_crea_sesion_y_devuelve_usuario(self):
+        respuesta = self.client.post(
+            self.login_url,
+            {"email": "LUIS.RAMOS@UNSA.EDU.PE", "password": "ClaveSegura123"},
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, status.HTTP_200_OK)
+        cuerpo = respuesta.json()
+        self.assertEqual(cuerpo["mensaje"], "Sesión iniciada correctamente.")
+        self.assertEqual(cuerpo["usuario"]["email"], "luis.ramos@unsa.edu.pe")
+        self.assertEqual(cuerpo["usuario"]["rol"], "prestatario")
+
+        session = self.client.session
+        self.assertEqual(session[CLAVE_SESION_USUARIO_ID], self.usuario.id)
+        self.assertIn(CLAVE_SESION_ULTIMA_ACTIVIDAD, session)
+
+    def test_login_con_credenciales_invalidas_devuelve_401(self):
+        respuesta = self.client.post(
+            self.login_url,
+            {"email": "luis.ramos@unsa.edu.pe", "password": "incorrecta"},
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(respuesta.json()["detail"], "Email o contraseña incorrectos")
+
+    def test_logout_cierra_la_sesion(self):
+        self.client.post(
+            self.login_url,
+            {"email": "luis.ramos@unsa.edu.pe", "password": "ClaveSegura123"},
+            format="json",
+        )
+
+        respuesta = self.client.post(self.logout_url, format="json")
+
+        self.assertEqual(respuesta.status_code, status.HTTP_200_OK)
+        self.assertEqual(respuesta.json()["mensaje"], "Sesión cerrada correctamente.")
+
+        session = self.client.session
+        self.assertNotIn(CLAVE_SESION_USUARIO_ID, session)
+        self.assertNotIn(CLAVE_SESION_ULTIMA_ACTIVIDAD, session)
+
+    def test_login_con_cuenta_bloqueada_devuelve_423(self):
+        credencial = Credencial.objects.get(usuario=self.usuario)
+        credencial.failed_attempts = 5
+        credencial.locked_until = timezone.now() + timezone.timedelta(minutes=15)
+        credencial.save(update_fields=["failed_attempts", "locked_until"])
+
+        respuesta = self.client.post(
+            self.login_url,
+            {"email": "luis.ramos@unsa.edu.pe", "password": "ClaveSegura123"},
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, status.HTTP_423_LOCKED)
+        self.assertEqual(respuesta.json()["detail"], "La cuenta está bloqueada temporalmente.")
+
+    def test_login_con_datos_invalidos_devuelve_400(self):
+        respuesta = self.client.post(
+            self.login_url,
+            {"email": "correo-no-valido", "password": "123"},
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, status.HTTP_400_BAD_REQUEST)
+        errores = respuesta.json()
+        self.assertIn("email", errores)
+        self.assertIn("password", errores)
+
+
 class AutenticacionServiceTestCase(TestCase):
     """Pruebas del servicio base de autenticación de HU03."""
 

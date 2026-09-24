@@ -13,6 +13,7 @@ async function peticion(ruta, opciones = {}) {
   let respuesta
   try {
     respuesta = await fetch(`${API_URL}${ruta}`, {
+      credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
         ...(opciones.headers || {}),

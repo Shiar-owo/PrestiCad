@@ -116,3 +116,52 @@ button:disabled {
   margin-bottom: 1rem;
 }
 
+.dashboard {
+  max-width: 800px;
+  margin: 1.5rem auto;
+}
+
+.dashboard__cabecera {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #ddd;
+  margin-bottom: 1.5rem;
+}
+
+.dashboard__subtitulo {
+  margin: 0.25rem 0 0;
+  color: #555;
+  font-size: 0.95rem;
+}
+
+.dashboard__tarjetas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.dashboard__tarjeta {
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 1rem;
+  background: #fafafa;
+}
+
+.dashboard__tarjeta h4 {
+  margin: 0 0 0.5rem;
+}
+
+.boton-secundario {
+  background: #f5f5f5;
+  color: #333;
+  border: 1px solid #ccc;
+}
+
+.boton-secundario:hover {
+  background: #e0e0e0;
+}
+
+

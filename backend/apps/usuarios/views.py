@@ -4,16 +4,20 @@ Vistas delgadas: validan la petición y delegan la lógica a `services.py`.
 """
 from rest_framework import status
 from rest_framework.generics import ListCreateAPIView, RetrieveUpdateAPIView
+from rest_framework.views import APIView
 from rest_framework.response import Response
 
 from apps.usuarios import services
 from apps.usuarios.models import Usuario
 from apps.usuarios.permissions import EsAdministrador
 from apps.usuarios.serializers import (
+    LoginSerializer,
+    SesionUsuarioSerializer,
     UsuarioSerializer,
     UsuarioRegistroSerializer,
     CambioRolSerializer,
 )
+from apps.usuarios.sesiones import registrar_sesion_activa
 
 class UsuarioListCreateView(ListCreateAPIView):
     """Lista usuarios (GET) y los registra (POST)."""
@@ -81,3 +85,45 @@ class UsuarioRolView(RetrieveUpdateAPIView):
  
         serializer = self.get_serializer(usuario_actualizado)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class AuthLoginView(APIView):
+    def post(self, request, *args, **kwargs):
+        serializer = LoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            usuario = services.autenticar_usuario(**serializer.validated_data)
+        except services.UsuariosError as error:
+            if error.mensaje == "La cuenta está bloqueada temporalmente.":
+                return Response({"detail": error.mensaje}, status=status.HTTP_423_LOCKED)
+
+            return Response({"detail": "Email o contraseña incorrectos"}, status=status.HTTP_401_UNAUTHORIZED)
+
+        registrar_sesion_activa(request.session, usuario.id)
+
+        rol_str = usuario.rol.nombre if hasattr(usuario.rol, "nombre") else usuario.rol
+
+        return Response(
+            {
+                "mensaje": "Sesión iniciada correctamente.",
+                "usuario": SesionUsuarioSerializer(
+                    {
+                        "id": usuario.id,
+                        "nombre": usuario.nombre,
+                        "apellido": usuario.apellido,
+                        "email": usuario.email,
+                        "rol": rol_str,
+                        "estado": usuario.estado,
+                        "reputacion_tier": usuario.reputacion_tier,
+                    }
+                ).data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class AuthLogoutView(APIView):
+    def post(self, request, *args, **kwargs):
+        request.session.flush()
+        return Response({"mensaje": "Sesión cerrada correctamente."}, status=status.HTTP_200_OK)

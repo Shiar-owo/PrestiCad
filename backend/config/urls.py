@@ -10,5 +10,6 @@ from config.views import salud
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/salud/", salud, name="salud"),
+    path("api/auth/", include("apps.usuarios.auth_urls")),
     path("api/usuarios/", include("apps.usuarios.urls")),
 ]

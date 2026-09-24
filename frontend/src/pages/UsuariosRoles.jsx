@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api/client'
-import RolSelector from './RolSelector'
+import RolSelector from '../components/RolSelector'
 
 // HU03 (Iniciar sesión) aún no existe en el repo, así que todavía no hay
 // sesión/JWT de la que tomar "quién soy". Mientras tanto, esta vista pide

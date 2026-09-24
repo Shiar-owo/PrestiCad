@@ -42,4 +42,6 @@ export const api = {
   get: (ruta) => peticion(ruta),
   post: (ruta, datos) =>
     peticion(ruta, { method: 'POST', body: JSON.stringify(datos) }),
+  put: (ruta, datos, opciones = {}) =>
+    peticion(ruta, { ...opciones, method: 'PUT', body: JSON.stringify(datos)}),
 }

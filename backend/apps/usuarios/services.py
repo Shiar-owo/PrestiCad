@@ -3,31 +3,7 @@
 Las vistas son delgadas y delegan aquí. Los servicios NO acceden a tablas de
 otros módulos; se comunican con ellos solo a través de sus propios servicios.
 """
-from django.contrib.auth.hashers import make_password
-from django.db import IntegrityError, transaction
 
-from apps.usuarios.models import Credencial, Usuario
-
-
-class UsuariosError(Exception):
-    """Error de negocio del módulo usuarios.
-
-    Lleva el campo afectado y un mensaje en español para mostrarlo en la
-    respuesta HTTP (la vista lo traduce a un 409 Conflict).
-    """
-
-    def __init__(self, campo, mensaje):
-        self.campo = campo
-        self.mensaje = mensaje
-        super().__init__(mensaje)
-
-
-def obtener_usuario_por_id(usuario_id):
-    """Devuelve un usuario dado su id."""
-    try:
-        return Usuario.objects.get(pk=usuario_id)
-    except Usuario.DoesNotExist:
-        return None
 
 class RolInvalidoError(Exception):
     """El rol solicitado no existe en la taxonomía del sistema."""
@@ -35,6 +11,16 @@ class RolInvalidoError(Exception):
 
 class UsuarioNoEncontradoError(Exception):
     """No existe un usuario con el id indicado."""
+
+
+def obtener_usuario_por_id(usuario_id):
+    """Devuelve un usuario dado su id."""
+    from apps.usuarios.models import Usuario
+
+    try:
+        return Usuario.objects.get(pk=usuario_id)
+    except Usuario.DoesNotExist:
+        return None
 
 
 def listar_usuarios_con_rol():
@@ -45,24 +31,34 @@ def listar_usuarios_con_rol():
 
 
 def cambiar_rol_usuario(usuario_id, nuevo_rol):
-    """Cambia el rol de un usuario, validando la taxonomía del sistema.
+    """Cambia el rol de un usuario, validando contra la entidad Rol.
+
+    `nuevo_rol` es el código de texto del rol (ej. 'gestor'), igual que antes;
+    internamente ahora se resuelve contra la tabla `Rol` (PRTCAD-35/36).
 
     Reglas aplicadas (HU02):
-    - El rol debe pertenecer a la lista de ROLES definida en constants.py.
+    - El rol debe existir en la tabla Rol (sembrada desde constants.ROLES).
     - El cambio se persiste de inmediato (criterio 4).
     - `tipo` nunca se toca aquí: tipo y rol son independientes (criterio 3).
+
+    Lanza UsuarioNoEncontradoError o RolInvalidoError si corresponde.
+    Devuelve la instancia de Usuario ya actualizada.
     """
-    from apps.usuarios.constants import ROLES
+    from apps.usuarios.models import Rol
 
     usuario = obtener_usuario_por_id(usuario_id)
     if usuario is None:
         raise UsuarioNoEncontradoError(f"No existe un usuario con id={usuario_id}")
 
-    roles_validos = {clave for clave, _ in ROLES}
-    if nuevo_rol not in roles_validos:
-        raise RolInvalidoError(f"'{nuevo_rol}' no es un rol válido. Opciones: {sorted(roles_validos)}")
+    try:
+        rol = Rol.objects.get(nombre=nuevo_rol)
+    except Rol.DoesNotExist as exc:
+        from apps.usuarios.constants import ROLES
 
-    usuario.rol = nuevo_rol
+        opciones = sorted(clave for clave, _ in ROLES)
+        raise RolInvalidoError(f"'{nuevo_rol}' no es un rol válido. Opciones: {opciones}") from exc
+
+    usuario.rol = rol
     usuario.save(update_fields=["rol", "updated_at"])
     return usuario
 
@@ -70,98 +66,9 @@ def cambiar_rol_usuario(usuario_id, nuevo_rol):
 def usuario_tiene_prestamos_activos(usuario_id):
     """Indica si el usuario tiene préstamos activos (HU02, criterio 5).
 
-    TODO: el módulo `prestamos` aún no existe. Cuando se implemente,
-    reemplazar este stub por una llamada a su servicio.
+    TODO: el módulo `prestamos` aún no existe en el repositorio. Cuando se
+    implemente (HU09/HU17), reemplazar este stub por una llamada a su
+    servicio, p.ej. `from apps.prestamos.services import tiene_prestamos_activos`.
+    Por ahora devuelve False para no bloquear otras funcionalidades.
     """
     return False
-
-
-def obtener_perfil(usuario):
-    """Devuelve el perfil con los datos disponibles actualmente en Usuario.
-
-    El historial de préstamos se incorporará cuando exista el servicio
-    propietario de esos datos. La reputación se mantiene detrás de una
-    función privada para poder delegarla al módulo correspondiente cuando
-    HU12 esté implementada.
-    """
-    return {
-        "nombre": usuario.nombre,
-        "apellido": usuario.apellido,
-        "email": usuario.email,
-        "dni": usuario.dni,
-        "telefono": usuario.telefono,
-        "tipo": usuario.tipo,
-        **_obtener_reputacion_actual(usuario),
-    }
-
-
-def _obtener_reputacion_actual(usuario):
-    """Lee los valores provisionales de reputación almacenados en Usuario."""
-    return {
-        "reputacion_puntaje": usuario.reputacion_puntaje,
-        "reputacion_tier": usuario.reputacion_tier,
-    }
-
-
-def actualizar_perfil(usuario, *, nombre, telefono=None):
-    """Actualiza solo los campos editables del perfil.
-
-    La validación de entrada se realiza en el serializer. El servicio también
-    limita explícitamente los campos persistidos para proteger sus invariantes
-    si se invoca desde otro punto interno.
-    """
-    usuario.nombre = nombre.strip()
-    campos_actualizados = ["nombre", "updated_at"]
-
-    if telefono is not None:
-        usuario.telefono = telefono.strip()
-        campos_actualizados.append("telefono")
-
-    usuario.save(update_fields=campos_actualizados)
-    return usuario
-
-
-@transaction.atomic
-def registrar_usuario(*, nombre, apellido, email, dni, telefono="", tipo, facultad, departamento_carrera="", password):
-    """Registra un usuario junto con su credencial de acceso.
-
-    Reglas de negocio (HU01):
-    - El email y el DNI no pueden estar duplicados (email sin distinguir mayúsculas).
-    - La creación es transaccional: el usuario y su credencial se crean juntos
-      o no se crea ninguno.
-    - La contraseña se guarda hasheada, nunca en claro.
-    - El rol y el estado quedan en sus valores por defecto (prestatario y activo);
-      la reputación inicia en Neutral (0 puntos) — ver T01.04.
-
-    Eleva `UsuariosError` si el email o el DNI ya están registrados.
-    """
-    email = email.strip().lower()
-    if Usuario.objects.filter(email__iexact=email).exists():
-        raise UsuariosError("email", "El email ya está registrado.")
-    if Usuario.objects.filter(dni=dni).exists():
-        raise UsuariosError("dni", "El DNI ya está registrado.")
-
-    try:
-        usuario = Usuario.objects.create(
-            email=email,
-            nombre=nombre,
-            apellido=apellido,
-            dni=dni,
-            telefono=telefono,
-            tipo=tipo,
-            facultad=facultad,
-            departamento_carrera=departamento_carrera,
-        )
-        Credencial.objects.create(
-            usuario=usuario,
-            email=email,
-            password_hash=make_password(password),
-        )
-    except IntegrityError as exc:
-        # Respaldo frente a condiciones de carrera: la unicidad también está
-        # garantizada a nivel de base de datos.
-        if "email" in str(exc).lower():
-            raise UsuariosError("email", "El email ya está registrado.") from exc
-        raise UsuariosError("dni", "El DNI ya está registrado.") from exc
-
-    return usuario

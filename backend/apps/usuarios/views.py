@@ -51,8 +51,8 @@ class UsuarioRolView(RetrieveUpdateAPIView):
     PUT /api/usuarios/<id>/rol/  -> cambiar el rol (criterio 2)
  
     RetrieveUpdateAPIView expone tanto PUT como PATCH; ambos verbos llaman a
-    `update()` abajo, así que PATCH sigue funcionando como antes (compatible
-    hacia atrás) y PUT queda disponible tal como pide PRTCAD-38.
+    `update()` abajo, así que PATCH sigue funcionando como antes y PUT queda 
+    disponible tal como pide PRTCAD-38.
  
     Requiere el permiso EsAdministrador (PRTCAD-37): solo un usuario con
     rol 'administrador' puede ver o cambiar roles.

@@ -4,7 +4,26 @@ from datetime import datetime, timedelta
 from django.conf import settings
 from django.utils import timezone
 
+from apps.usuarios.services import obtener_usuario_por_id
 from apps.usuarios.sesiones import CLAVE_SESION_USUARIO_ID, CLAVE_SESION_ULTIMA_ACTIVIDAD
+
+
+class SesionAutenticadaMiddleware:
+    """Asigna el usuario autenticado a la petición según la sesión activa."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        usuario = None
+        session = getattr(request, "session", None)
+        if session:
+            usuario_id = session.get(CLAVE_SESION_USUARIO_ID)
+            if usuario_id:
+                usuario = obtener_usuario_por_id(usuario_id)
+
+        request.usuario_autenticado = usuario
+        return self.get_response(request)
 
 
 class ExpiracionSesionInactividadMiddleware:

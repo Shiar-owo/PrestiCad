@@ -2,7 +2,7 @@ from django.core.validators import RegexValidator
 from rest_framework import serializers
 
 from apps.usuarios.constants import TIPOS_USUARIO
-from apps.usuarios.models import Credencial, Usuario
+from apps.usuarios.models import Credencial, Usuario, Rol
 
 DNI_VALIDATOR = RegexValidator(
     r"^\d{8}$",

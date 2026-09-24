@@ -1,6 +1,6 @@
 import './estilos.css'
 import RegistroUsuario from './pages/RegistroUsuario'
-import UsuariosRoles from './components/UsuariosRoles'
+import UsuariosRoles from './pages/UsuariosRoles'
 
 function App() {
   return (

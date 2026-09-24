@@ -1,5 +1,6 @@
 import { useState } from 'react'
 
+import { api } from './api/client'
 import './estilos.css'
 import Dashboard from './pages/Dashboard'
 import Login from './pages/Login'
@@ -13,8 +14,14 @@ function App() {
     setUsuarioActual(usuario)
   }
 
-  function manejarCierreSesion() {
+  async function manejarCierreSesion() {
+    try {
+      await api.post('/auth/logout/')
+    } catch {
+      // Si falla la red, cerramos la sesión local de todas formas
+    }
     setUsuarioActual(null)
+    setVista('login')
   }
 
   if (usuarioActual) {

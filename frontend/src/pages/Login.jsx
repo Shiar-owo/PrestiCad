@@ -1,5 +1,6 @@
 import { useState } from 'react'
 
+import { api, ErrorApi } from '../api/client'
 import { validarEmail, validarPassword } from '../validaciones'
 
 function Campo({ etiqueta, error, children }) {
@@ -12,9 +13,11 @@ function Campo({ etiqueta, error, children }) {
   )
 }
 
-function Login({ onSubmit, onLoginExitoso, cargando = false, errorGeneral = '' }) {
+function Login({ onLoginExitoso }) {
   const [datos, setDatos] = useState({ email: '', password: '' })
   const [errores, setErrores] = useState({})
+  const [cargando, setCargando] = useState(false)
+  const [errorGeneral, setErrorGeneral] = useState('')
 
   function actualizar(campo, valor) {
     setDatos((previos) => ({ ...previos, [campo]: valor }))
@@ -23,7 +26,7 @@ function Login({ onSubmit, onLoginExitoso, cargando = false, errorGeneral = '' }
     }
   }
 
-  function manejarEnvio(evento) {
+  async function manejarEnvio(evento) {
     evento.preventDefault()
 
     const nuevosErrores = {}
@@ -34,26 +37,42 @@ function Login({ onSubmit, onLoginExitoso, cargando = false, errorGeneral = '' }
     if (errorPassword) nuevosErrores.password = errorPassword
 
     setErrores(nuevosErrores)
+    setErrorGeneral('')
 
     if (Object.keys(nuevosErrores).length > 0) {
       return
     }
 
-    if (onSubmit) {
-      onSubmit({
+    setCargando(true)
+
+    try {
+      const respuesta = await api.post('/auth/login/', {
         email: datos.email.trim(),
         password: datos.password,
       })
-    } else if (onLoginExitoso) {
-      onLoginExitoso({
-        id: 1,
-        nombre: 'Usuario',
-        apellido: 'Demo',
-        email: datos.email.trim(),
-        rol: 'prestatario',
-        estado: 'activo',
-        reputacion_tier: 'estandar',
-      })
+
+      if (onLoginExitoso) {
+        onLoginExitoso(respuesta.usuario)
+      }
+    } catch (error) {
+      if (error instanceof ErrorApi) {
+        if (error.status === 401) {
+          setErrorGeneral(error.datos?.detail || 'Email o contraseña incorrectos')
+        } else if (error.status === 423) {
+          setErrorGeneral(error.datos?.detail || 'La cuenta está bloqueada temporalmente.')
+        } else if (error.status === 400 && error.datos) {
+          const erroresApi = {}
+          if (error.datos.email) erroresApi.email = error.datos.email[0]
+          if (error.datos.password) erroresApi.password = error.datos.password[0]
+          setErrores(erroresApi)
+        } else {
+          setErrorGeneral('No se pudo conectar con el servidor.')
+        }
+      } else {
+        setErrorGeneral('Ocurrió un error inesperado.')
+      }
+    } finally {
+      setCargando(false)
     }
   }
 

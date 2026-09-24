@@ -2,7 +2,7 @@ from django.core.validators import RegexValidator
 from rest_framework import serializers
 
 from apps.usuarios.constants import ESTADOS_USUARIO, ROLES, TIERS, TIPOS_USUARIO
-from apps.usuarios.models import Credencial, Usuario
+from apps.usuarios.models import Credencial, Rol, Usuario
 
 DNI_VALIDATOR = RegexValidator(
     r"^\d{8}$",
@@ -43,13 +43,22 @@ class UsuarioSerializer(serializers.ModelSerializer):
         read_only_fields = ("id", "created_at", "updated_at")
 
 class CambioRolSerializer(serializers.ModelSerializer):
-    """Solo `rol` es escribible; el resto es contexto de solo lectura,
-    para mantener la independencia entre tipo y rol (HU02, criterio 3)."""
-
+    """Contrato de entrada/salida para el endpoint de cambio de rol.
+ 
+    Solo `rol` es escribible: el resto de campos (tipo, email, dni, etc.)
+    se muestran como contexto pero no pueden modificarse desde aquí, para
+    mantener la independencia entre tipo y rol (HU02, criterio 3).
+    `rol` se expone como el código de texto (ej. "gestor"), no como el id
+    interno de la tabla Rol, para no romper a los consumidores del API.
+    """
+ 
+    rol = serializers.SlugRelatedField(slug_field="nombre", queryset=Rol.objects.all())
+ 
     class Meta:
         model = Usuario
         fields = ("id", "nombre", "apellido", "tipo", "rol", "estado", "updated_at")
         read_only_fields = ("id", "nombre", "apellido", "tipo", "estado", "updated_at")
+
 
 class UsuarioRegistroSerializer(RechazarCamposNoPermitidosMixin, serializers.ModelSerializer):
     """Contrato de entrada del endpoint POST /api/usuarios.

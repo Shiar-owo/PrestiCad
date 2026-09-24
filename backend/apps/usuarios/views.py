@@ -9,6 +9,7 @@ from rest_framework.response import Response
 
 from apps.usuarios import services
 from apps.usuarios.models import Usuario
+from apps.usuarios.permissions import EsAdministrador
 from apps.usuarios.serializers import (
     LoginSerializer,
     SesionUsuarioSerializer,
@@ -17,7 +18,6 @@ from apps.usuarios.serializers import (
     CambioRolSerializer,
 )
 from apps.usuarios.sesiones import registrar_sesion_activa
-
 
 class UsuarioListCreateView(ListCreateAPIView):
     """Lista usuarios (GET) y los registra (POST)."""
@@ -47,26 +47,42 @@ class UsuarioListCreateView(ListCreateAPIView):
         return Response(UsuarioSerializer(usuario).data, status=status.HTTP_201_CREATED)
 
 
+ 
 class UsuarioRolView(RetrieveUpdateAPIView):
-    """GET/PATCH /api/usuarios/<id>/rol/ — ver y cambiar el rol (HU02)."""
-
-    queryset = Usuario.objects.all()
+    """Consulta y actualiza el rol de un usuario (HU02, PRTCAD-38).
+ 
+    GET /api/usuarios/<id>/rol/  -> ver el rol actual (criterio 1)
+    PUT /api/usuarios/<id>/rol/  -> cambiar el rol (criterio 2)
+ 
+    RetrieveUpdateAPIView expone tanto PUT como PATCH; ambos verbos llaman a
+    `update()` abajo, así que PATCH sigue funcionando como antes y PUT queda 
+    disponible tal como pide PRTCAD-38.
+ 
+    Requiere el permiso EsAdministrador (PRTCAD-37): solo un usuario con
+    rol 'administrador' puede ver o cambiar roles.
+    """
+ 
+    queryset = Usuario.objects.select_related("rol").all()
     serializer_class = CambioRolSerializer
-
+    permission_classes = [EsAdministrador]
+ 
     def update(self, request, *args, **kwargs):
         usuario = self.get_object()
         nuevo_rol = request.data.get("rol")
-
+ 
         if not nuevo_rol:
-            return Response({"detail": "El campo 'rol' es obligatorio."}, status=status.HTTP_400_BAD_REQUEST)
-
+            return Response(
+                {"detail": "El campo 'rol' es obligatorio."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+ 
         try:
             usuario_actualizado = services.cambiar_rol_usuario(usuario.id, nuevo_rol)
         except services.RolInvalidoError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         except services.UsuarioNoEncontradoError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_404_NOT_FOUND)
-
+ 
         serializer = self.get_serializer(usuario_actualizado)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -86,6 +102,8 @@ class AuthLoginView(APIView):
 
         registrar_sesion_activa(request.session, usuario.id)
 
+        rol_str = usuario.rol.nombre if hasattr(usuario.rol, "nombre") else usuario.rol
+
         return Response(
             {
                 "mensaje": "Sesión iniciada correctamente.",
@@ -95,7 +113,7 @@ class AuthLoginView(APIView):
                         "nombre": usuario.nombre,
                         "apellido": usuario.apellido,
                         "email": usuario.email,
-                        "rol": usuario.rol,
+                        "rol": rol_str,
                         "estado": usuario.estado,
                         "reputacion_tier": usuario.reputacion_tier,
                     }

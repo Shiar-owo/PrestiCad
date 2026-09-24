@@ -5,6 +5,7 @@ import './estilos.css'
 import Dashboard from './pages/Dashboard'
 import Login from './pages/Login'
 import RegistroUsuario from './pages/RegistroUsuario'
+import UsuariosRoles from './pages/UsuariosRoles'
 
 function App() {
   const [usuarioActual, setUsuarioActual] = useState(null)
@@ -38,7 +39,6 @@ function App() {
     <main>
       <h1>PrestiCad</h1>
       <p>Sistema de Préstamos Académicos</p>
-
       <nav className="navegacion-auth">
         <button
           type="button"
@@ -54,13 +54,18 @@ function App() {
         >
           Registrarse
         </button>
+        <button
+          type="button"
+          className={vista === 'roles' ? 'activo' : 'boton-secundario'}
+          onClick={() => setVista('roles')}
+        >
+          Roles (Admin)
+        </button>
       </nav>
 
-      {vista === 'login' ? (
-        <Login onLoginExitoso={manejarLoginExitoso} />
-      ) : (
-        <RegistroUsuario />
-      )}
+      {vista === 'login' && <Login onLoginExitoso={manejarLoginExitoso} />}
+      {vista === 'registro' && <RegistroUsuario />}
+      {vista === 'roles' && <UsuariosRoles />}
     </main>
   )
 }

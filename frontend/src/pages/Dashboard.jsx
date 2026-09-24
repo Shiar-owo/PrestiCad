@@ -1,4 +1,5 @@
 import RegistroUsuario from './RegistroUsuario'
+import UsuariosRoles from './UsuariosRoles'
 
 const ETIQUETAS_ROL = {
   prestatario: 'Prestatario',
@@ -55,6 +56,8 @@ function PanelAdministrador() {
     <div className="dashboard__panel">
       <h3>Panel de Administrador</h3>
       <p>Gestión global de usuarios, asignación de roles y permisos del sistema.</p>
+      <UsuariosRoles />
+      <hr style={{ margin: '2rem 0' }} />
       <RegistroUsuario />
     </div>
   )

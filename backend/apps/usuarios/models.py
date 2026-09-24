@@ -3,9 +3,10 @@ from django.db import models
 
 from apps.usuarios.constants import ESTADOS_USUARIO, ROLES, TIERS, TIPOS_USUARIO
 
+
 def rol_prestatario_por_defecto():
     """Devuelve el pk del rol 'prestatario', creándolo si aún no existe.
- 
+
     Se usa como `default` de Usuario.rol para no romper la creación de
     usuarios (HU01) ahora que el rol es una relación y no un choice-field.
     """
@@ -14,27 +15,27 @@ def rol_prestatario_por_defecto():
         defaults={"descripcion": "Rol por defecto: puede solicitar préstamos."},
     )
     return rol.pk
- 
- 
+
+
 class Rol(models.Model):
     """Entidad del dominio: rol de sistema que determina permisos (HU02, PRTCAD-35).
- 
+
     Antes `rol` era un simple choice-field embebido en `Usuario`. Ahora es
     una entidad propia para poder relacionarla con `Usuario` vía FK y, a
     futuro, adjuntarle permisos granulares.
     """
- 
+
     nombre = models.CharField(max_length=20, choices=ROLES, unique=True)
     descripcion = models.CharField(max_length=200, blank=True, default="")
- 
+
     class Meta:
         verbose_name = "Rol"
         verbose_name_plural = "Roles"
         ordering = ["nombre"]
- 
+
     def __str__(self):
         return self.get_nombre_display()
- 
+
 
 class Usuario(models.Model):
     """Entidad del dominio: usuario del sistema de préstamos.
@@ -50,14 +51,12 @@ class Usuario(models.Model):
     dni = models.CharField(max_length=8, unique=True)
     telefono = models.CharField(max_length=20, blank=True, default="")
     tipo = models.CharField(max_length=20, choices=TIPOS_USUARIO)
-    facultad = models.CharField(max_length=100, verbose_name="Facultad")
-    departamento_carrera = models.CharField(
-        max_length=100,
-        blank=True,
-        default="",
-        verbose_name="Departamento / Carrera",
+    rol = models.ForeignKey(
+        Rol,
+        on_delete=models.PROTECT,
+        related_name="usuarios",
+        default=rol_prestatario_por_defecto,
     )
-    rol = models.CharField(max_length=20, choices=ROLES, default="prestatario")
     estado = models.CharField(max_length=20, choices=ESTADOS_USUARIO, default="activo")
 
     reputacion_puntaje = models.IntegerField(

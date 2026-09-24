@@ -10,7 +10,10 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from apps.usuarios.models import Credencial, Usuario
-from apps.usuarios.middleware import ExpiracionSesionInactividadMiddleware
+from apps.usuarios.middleware import (
+    ExpiracionSesionInactividadMiddleware,
+    SesionAutenticadaMiddleware,
+)
 from apps.usuarios.serializers import ActualizarPerfilSerializer, PerfilUsuarioSerializer
 from apps.usuarios.services import (
     UsuariosError,
@@ -542,3 +545,48 @@ class ExpiracionSesionInactividadMiddlewareTestCase(TestCase):
         self.assertIsNone(request.session.session_key)
         self.assertNotIn(CLAVE_SESION_USUARIO_ID, request.session)
         self.assertNotIn(CLAVE_SESION_ULTIMA_ACTIVIDAD, request.session)
+
+
+class SesionAutenticadaMiddlewareTestCase(TestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.middleware = SesionAutenticadaMiddleware(lambda request: HttpResponse("ok"))
+        self.usuario = registrar_usuario(
+            nombre="Luis",
+            apellido="Ramos",
+            email="luis.ramos@unsa.edu.pe",
+            dni="11223344",
+            telefono="999888777",
+            tipo="alumno",
+            facultad="Ingeniería de Producción y Servicios",
+            departamento_carrera="Ingeniería de Sistemas",
+            password="ClaveSegura123",
+        )
+
+    def _crear_request(self, usuario_id=None):
+        request = self.factory.get("/")
+        SessionMiddleware(lambda req: None).process_request(request)
+        request.session.save()
+        if usuario_id is not None:
+            request.session[CLAVE_SESION_USUARIO_ID] = usuario_id
+        return request
+
+    def test_asigna_usuario_autenticado_si_la_sesion_es_valida(self):
+        request = self._crear_request(usuario_id=self.usuario.id)
+        self.middleware(request)
+
+        self.assertIsNotNone(request.usuario_autenticado)
+        self.assertEqual(request.usuario_autenticado.id, self.usuario.id)
+
+    def test_usuario_autenticado_es_none_si_no_hay_sesion(self):
+        request = self._crear_request()
+        self.middleware(request)
+
+        self.assertIsNone(request.usuario_autenticado)
+
+    def test_usuario_autenticado_es_none_si_usuario_no_existe(self):
+        request = self._crear_request(usuario_id=99999)
+        self.middleware(request)
+
+        self.assertIsNone(request.usuario_autenticado)
+

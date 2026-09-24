@@ -12,7 +12,7 @@ function Campo({ etiqueta, error, children }) {
   )
 }
 
-function Login({ onSubmit, cargando = false, errorGeneral = '' }) {
+function Login({ onSubmit, onLoginExitoso, cargando = false, errorGeneral = '' }) {
   const [datos, setDatos] = useState({ email: '', password: '' })
   const [errores, setErrores] = useState({})
 
@@ -43,6 +43,16 @@ function Login({ onSubmit, cargando = false, errorGeneral = '' }) {
       onSubmit({
         email: datos.email.trim(),
         password: datos.password,
+      })
+    } else if (onLoginExitoso) {
+      onLoginExitoso({
+        id: 1,
+        nombre: 'Usuario',
+        apellido: 'Demo',
+        email: datos.email.trim(),
+        rol: 'prestatario',
+        estado: 'activo',
+        reputacion_tier: 'estandar',
       })
     }
   }

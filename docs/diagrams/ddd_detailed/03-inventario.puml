@@ -49,15 +49,18 @@ class Material <<Aggregate Root>> {
   id : UUID
   nombre : String
   descripcion : String
-  codigoInventario : String
+  codigo_inventario : String
   __ Clasificacion __
   -tipo : TipoMaterial
   -estado : EstadoMaterial
-  esAltoValor : Boolean
+  es_alto_valor : Boolean
   __ Configuracion __
   -atributosRep : AtributosReputacion
+  __ Inventario __
+  stock : Integer
   __ Metadata __
-  fechaRegistro : DateTime
+  created_at : DateTime
+  updated_at : DateTime
   --
   +cambiarEstado(nuevo) : void
   +estaDisponible() : Boolean
@@ -84,22 +87,22 @@ class TipoMaterial <<Value Object>> {
 class FichaTecnica <<Value Object>> {
   marca : String
   modelo : String
-  numeroSerie : String
+  numero_serie : String
   color : String
-  estadoFisico : String
-  fotoUrl : String
+  estado_fisico : String
+  foto_url : String
 }
 
 class AtributosReputacion <<Value Object>> {
   __ Penalizaciones __
-  tierMinimoRequerido : Tier
-  bonificacionTiempo : Integer
-  deduccionTardanza : Integer
-  deduccionDanoParcial : Integer
-  deduccionDanoTotal : Integer
+  tier_minimo_requerido : Tier
+  bonificacion_tiempo : Integer
+  deduccion_tardanza : Integer
+  deduccion_dano_parcial : Integer
+  deduccion_dano_total : Integer
   __ Costos __
-  costoReparacion : Decimal
-  costoReposicion : Decimal
+  costo_reparacion : Decimal
+  costo_reposicion : Decimal
   --
   +calcularBonificacion() : Integer
   +calcularDeduccionTardanza(dias) : Integer
@@ -160,6 +163,21 @@ note right of EstadoMaterial
   <b>RF03 - Estados</b>
   El inventario gestiona
   el estado de cada material
+end note
+
+note bottom of Material
+  <b>Implementado en HU04 (T04.01/T04.02)</b>
+  ═══════════════════════════════
+  En el modelo Django los value objects
+  <b>FichaTecnica</b> y <b>AtributosReputacion</b>
+  se materializan como <b>columnas</b> de la
+  tabla <b>materiales</b> (id UUID, snake_case).
+  • <b>stock</b>: unidades registradas (HU04, crit. 5)
+  • <b>created_at/updated_at</b> en lugar de fechaRegistro
+  • <b>+cambiarEstado()</b> se expone como servicio
+    `cambiar_estado_material` + PATCH del endpoint
+  • Los <i>default</i> de reputación son configurables
+    en <b>settings.MATERIALES_REPUTACION_DEFAULTS</b>
 end note
 
 @enduml

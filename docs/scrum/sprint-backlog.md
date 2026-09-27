@@ -54,7 +54,7 @@ Reserva
 > El agregado `Material` sigue el modelo de dominio DDD
 > (`docs/diagrams/ddd_detailed/03-inventario.puml`): `tipo`, `estado`, la ficha
 > técnica y los parámetros de reputación son value objects que en Django se
-> materializan como columnas de la tabla `materiales` (HU04). `stock` agrega el
+> materializan como columnas de la tabla `inventario_material` (HU04). `stock` agrega el
 > conteo de unidades del criterio 5 de HU04.
 
 ---

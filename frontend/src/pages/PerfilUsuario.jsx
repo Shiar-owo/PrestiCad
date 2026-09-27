@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 
+import { api, ErrorApi } from '../api/client'
 import { validarNombre, validarTelefono } from '../validaciones'
 
 const ETIQUETAS_TIPO = {
@@ -24,7 +25,7 @@ function Campo({ etiqueta, error, children }) {
   )
 }
 
-function PerfilUsuario({ perfil, onGuardar, guardando = false }) {
+function FormularioPerfil({ perfil, onGuardar, guardando = false, mensajeExito }) {
   const [nombre, setNombre] = useState(perfil.nombre)
   const [telefono, setTelefono] = useState(perfil.telefono || '')
   const [errores, setErrores] = useState({})
@@ -93,6 +94,8 @@ function PerfilUsuario({ perfil, onGuardar, guardando = false }) {
       <form className="perfil__formulario" onSubmit={manejarEnvio} noValidate>
         <h3>Actualizar datos</h3>
 
+        {mensajeExito && <p className="exito" role="status">{mensajeExito}</p>}
+
         <Campo etiqueta="Nombre" error={errores.nombre}>
           <input
             type="text"
@@ -138,6 +141,112 @@ function PerfilUsuario({ perfil, onGuardar, guardando = false }) {
           </button>
         )}
       </form>
+    </section>
+  )
+}
+
+function mensajeErrorApi(error, mensajePredeterminado) {
+  if (!(error instanceof ErrorApi)) return mensajePredeterminado
+  if (error.status === 401) return 'Tu sesión venció. Inicia sesión nuevamente.'
+
+  const datos = error.datos
+  if (datos?.detail) return datos.detail
+
+  if (datos && typeof datos === 'object') {
+    const primerError = Object.values(datos).flat()[0]
+    if (typeof primerError === 'string') return primerError
+  }
+
+  if (error.status === 403) {
+    return 'No se pudo validar la solicitud. Recarga el perfil e inténtalo otra vez.'
+  }
+
+  return mensajePredeterminado
+}
+
+function PerfilUsuario({ onPerfilActualizado }) {
+  const [perfil, setPerfil] = useState(null)
+  const [cargando, setCargando] = useState(true)
+  const [guardando, setGuardando] = useState(false)
+  const [error, setError] = useState('')
+  const [mensajeExito, setMensajeExito] = useState('')
+  const [intentoCarga, setIntentoCarga] = useState(0)
+
+  useEffect(() => {
+    let activo = true
+    setCargando(true)
+    setError('')
+
+    api.get('/usuarios/perfil/')
+      .then((datos) => {
+        if (activo) {
+          setPerfil(datos)
+          onPerfilActualizado?.(datos)
+        }
+      })
+      .catch((fallo) => {
+        if (activo) setError(mensajeErrorApi(fallo, 'No se pudo cargar tu perfil.'))
+      })
+      .finally(() => {
+        if (activo) setCargando(false)
+      })
+
+    return () => {
+      activo = false
+    }
+  }, [intentoCarga])
+
+  async function guardarPerfil(datos) {
+    setGuardando(true)
+    setError('')
+    setMensajeExito('')
+
+    try {
+      const perfilActualizado = await api.put('/usuarios/perfil/', datos)
+      setPerfil(perfilActualizado)
+      onPerfilActualizado?.(perfilActualizado)
+      setMensajeExito('Los cambios se guardaron correctamente.')
+    } catch (fallo) {
+      setError(mensajeErrorApi(fallo, 'No se pudieron guardar los cambios.'))
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  if (cargando) {
+    return (
+      <section className="perfil">
+        <h2>Mi perfil</h2>
+        <p role="status">Cargando perfil…</p>
+      </section>
+    )
+  }
+
+  if (error && !perfil) {
+    return (
+      <section className="perfil">
+        <h2>Mi perfil</h2>
+        <div className="error-general" role="alert">{error}</div>
+        <button type="button" onClick={() => setIntentoCarga((actual) => actual + 1)}>
+          Volver a intentar
+        </button>
+      </section>
+    )
+  }
+
+  return (
+    <section>
+      {error && (
+        <div className="error-general" role="alert">
+          {error}
+        </div>
+      )}
+      <FormularioPerfil
+        perfil={perfil}
+        onGuardar={guardarPerfil}
+        guardando={guardando}
+        mensajeExito={mensajeExito}
+      />
     </section>
   )
 }

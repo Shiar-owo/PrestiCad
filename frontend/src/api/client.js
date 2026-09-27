@@ -16,6 +16,19 @@ function construirBody(datos) {
   return datos instanceof FormData ? datos : JSON.stringify(datos)
 }
 
+// Solo la vista de perfil está protegida con `csrf_protect`, y es el único
+// endpoint que necesita el token. El resto resuelve el usuario por su propia
+// clave de sesión, sin pasar por la autenticación de DRF, así que no lo exige.
+function obtenerTokenCSRF() {
+  if (typeof document === 'undefined') return null
+
+  const cookie = document.cookie
+    .split('; ')
+    .find((item) => item.startsWith('csrftoken='))
+
+  return cookie ? decodeURIComponent(cookie.slice('csrftoken='.length)) : null
+}
+
 async function peticion(ruta, opciones = {}) {
   const { headers, ...resto } = opciones
 
@@ -57,8 +70,18 @@ export const api = {
   get: (ruta) => peticion(ruta),
   post: (ruta, datos, opciones = {}) =>
     peticion(ruta, { ...opciones, method: 'POST', body: construirBody(datos) }),
-  put: (ruta, datos, opciones = {}) =>
-    peticion(ruta, { ...opciones, method: 'PUT', body: construirBody(datos) }),
+  put: (ruta, datos, opciones = {}) => {
+    const tokenCSRF = obtenerTokenCSRF()
+    return peticion(ruta, {
+      ...opciones,
+      headers: {
+        ...(opciones.headers || {}),
+        ...(tokenCSRF ? { 'X-CSRFToken': tokenCSRF } : {}),
+      },
+      method: 'PUT',
+      body: construirBody(datos),
+    })
+  },
   patch: (ruta, datos, opciones = {}) =>
     peticion(ruta, { ...opciones, method: 'PATCH', body: construirBody(datos) }),
 }

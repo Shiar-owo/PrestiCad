@@ -164,4 +164,46 @@ describe('api', () => {
       expect(cuerpoDeLaPeticion()).toBeUndefined()
     })
   })
+
+  // La vista de perfil (HU16) es el único endpoint con `csrf_protect`, así que
+  // el `put` tiene que mandar el token. En entorno de pruebas no hay `document`
+  // y `obtenerTokenCSRF` devuelve null, con lo cual esa rama nunca se probaba.
+  describe('token CSRF en el put', () => {
+    function conCookieCsrf(valor) {
+      globalThis.document = { cookie: `sessionid=abc; csrftoken=${valor}` }
+    }
+
+    afterEach(() => {
+      delete globalThis.document
+    })
+
+    it('manda el token que encuentra en la cookie', async () => {
+      conCookieCsrf('token123')
+
+      await api.put('/usuarios/perfil/', { nombre: 'Ana' })
+
+      expect(cabecerasDeLaPeticion()).toMatchObject({ 'X-CSRFToken': 'token123' })
+    })
+
+    it('con FormData manda el token y sigue sin poner Content-Type', async () => {
+      conCookieCsrf('token123')
+
+      const formulario = new FormData()
+      formulario.append('foto', new Blob(['x'], { type: 'image/png' }), 'foto.png')
+
+      await api.put('/materiales/3/', formulario)
+
+      expect(cabecerasDeLaPeticion()).toEqual({ 'X-CSRFToken': 'token123' })
+      expect(cuerpoDeLaPeticion()).toBe(formulario)
+    })
+
+    it('no manda el header si no hay cookie csrftoken', async () => {
+      globalThis.document = { cookie: 'sessionid=abc' }
+
+      await api.put('/usuarios/perfil/', { nombre: 'Ana' })
+
+      expect(cabecerasDeLaPeticion()).not.toHaveProperty('X-CSRFToken')
+      expect(cabecerasDeLaPeticion()).toEqual({ 'Content-Type': 'application/json' })
+    })
+  })
 })

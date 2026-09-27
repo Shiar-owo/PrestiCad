@@ -7,7 +7,7 @@ from django.test import RequestFactory
 from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 from rest_framework import status
-from rest_framework.test import APITestCase
+from rest_framework.test import APIClient, APITestCase
 
 from apps.usuarios.models import Credencial, Usuario
 from apps.usuarios.middleware import (
@@ -500,6 +500,111 @@ class PerfilUsuarioServiceTestCase(TestCase):
         self.assertIn("dni", serializer.errors)
 
 
+class PerfilUsuarioAPITestCase(APITestCase):
+    """Prueba los endpoints del perfil con la sesión real de HU03."""
+
+    URL = "/api/usuarios/perfil/"
+
+    def setUp(self):
+        self.usuario = registrar_usuario(
+            nombre="Ana",
+            apellido="García",
+            email="ana.garcia@unsa.edu.pe",
+            dni="12345678",
+            telefono="987654321",
+            tipo="alumno",
+            facultad="Ciencias de la Computación",
+            password="ClaveSegura123",
+        )
+        self.client = APIClient(enforce_csrf_checks=True)
+
+    def _iniciar_sesion(self):
+        return self.client.post(
+            "/api/auth/login/",
+            {"email": "ana.garcia@unsa.edu.pe", "password": "ClaveSegura123"},
+            format="json",
+        )
+
+    def _obtener_token_csrf(self):
+        self.client.get(self.URL)
+        return self.client.cookies["csrftoken"].value
+
+    def test_get_sin_sesion_devuelve_401(self):
+        respuesta = self.client.get(self.URL)
+
+        self.assertEqual(respuesta.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_get_autenticado_devuelve_perfil_y_cookie_csrf(self):
+        login = self._iniciar_sesion()
+        respuesta = self.client.get(self.URL)
+
+        self.assertEqual(login.status_code, status.HTTP_200_OK)
+        self.assertEqual(respuesta.status_code, status.HTTP_200_OK)
+        self.assertEqual(respuesta.json()["email"], self.usuario.email)
+        self.assertEqual(respuesta.json()["nombre"], "Ana")
+        self.assertIn("csrftoken", self.client.cookies)
+
+    def test_put_sin_token_csrf_devuelve_403(self):
+        self._iniciar_sesion()
+        self._obtener_token_csrf()
+
+        respuesta = self.client.put(
+            self.URL,
+            {"nombre": "Ana María", "telefono": "912345678"},
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_put_autenticado_actualiza_solo_nombre_y_telefono(self):
+        self._iniciar_sesion()
+        token_csrf = self._obtener_token_csrf()
+
+        respuesta = self.client.put(
+            self.URL,
+            {"nombre": "Ana María", "telefono": "912345678"},
+            format="json",
+            HTTP_X_CSRFTOKEN=token_csrf,
+        )
+        self.usuario.refresh_from_db()
+
+        self.assertEqual(respuesta.status_code, status.HTTP_200_OK)
+        self.assertEqual(respuesta.json()["nombre"], "Ana María")
+        self.assertEqual(respuesta.json()["telefono"], "912345678")
+        self.assertEqual(self.usuario.apellido, "García")
+        self.assertEqual(self.usuario.email, "ana.garcia@unsa.edu.pe")
+        self.assertEqual(self.usuario.dni, "12345678")
+
+    def test_put_rechaza_campos_protegidos_y_no_modifica_el_usuario(self):
+        self._iniciar_sesion()
+        token_csrf = self._obtener_token_csrf()
+
+        respuesta = self.client.put(
+            self.URL,
+            {"nombre": "Ana María", "email": "otra@unsa.edu.pe"},
+            format="json",
+            HTTP_X_CSRFTOKEN=token_csrf,
+        )
+        self.usuario.refresh_from_db()
+
+        self.assertEqual(respuesta.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("email", respuesta.json())
+        self.assertEqual(self.usuario.nombre, "Ana")
+        self.assertEqual(self.usuario.email, "ana.garcia@unsa.edu.pe")
+
+    def test_put_sin_sesion_devuelve_401_con_token_csrf_valido(self):
+        token_csrf = self._obtener_token_csrf()
+
+        respuesta = self.client.put(
+            self.URL,
+            {"nombre": "Ana María"},
+            format="json",
+            HTTP_X_CSRFTOKEN=token_csrf,
+        )
+
+        self.assertEqual(respuesta.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
 class ExpiracionSesionInactividadMiddlewareTestCase(TestCase):
     """Pruebas del middleware de expiración por inactividad (T03.03)."""
 
@@ -589,4 +694,3 @@ class SesionAutenticadaMiddlewareTestCase(TestCase):
         self.middleware(request)
 
         self.assertIsNone(request.usuario_autenticado)
-

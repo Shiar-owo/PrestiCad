@@ -1,4 +1,7 @@
+import { useState } from 'react'
+
 import Materiales from './Materiales'
+import PerfilUsuario from './PerfilUsuario'
 import RegistroUsuario from './RegistroUsuario'
 import UsuariosRoles from './UsuariosRoles'
 
@@ -14,21 +17,46 @@ const ETIQUETAS_TIER = {
   restringido: 'Restringido',
 }
 
-function PanelPrestatario({ usuario }) {
+function PanelPrestatario({ usuario, onPerfilActualizado }) {
+  const [mostrarPerfil, setMostrarPerfil] = useState(false)
+
   return (
     <div className="dashboard__panel">
-      <h3>Panel de Prestatario</h3>
-      <p>Bienvenido al catálogo de préstamos de la universidad.</p>
-      <div className="dashboard__tarjetas">
-        <div className="dashboard__tarjeta">
-          <h4>Nivel de Reputación</h4>
-          <p>{ETIQUETAS_TIER[usuario.reputacion_tier] || usuario.reputacion_tier}</p>
-        </div>
-        <div className="dashboard__tarjeta">
-          <h4>Estado de Cuenta</h4>
-          <p>{usuario.estado === 'activo' ? 'Activo' : usuario.estado}</p>
-        </div>
-      </div>
+      <nav aria-label="Opciones del prestatario" className="navegacion-auth">
+        <button
+          type="button"
+          className={!mostrarPerfil ? 'activo' : 'boton-secundario'}
+          onClick={() => setMostrarPerfil(false)}
+        >
+          Inicio
+        </button>
+        <button
+          type="button"
+          className={mostrarPerfil ? 'activo' : 'boton-secundario'}
+          onClick={() => setMostrarPerfil(true)}
+        >
+          Mi perfil
+        </button>
+      </nav>
+
+      {mostrarPerfil ? (
+        <PerfilUsuario onPerfilActualizado={onPerfilActualizado} />
+      ) : (
+        <>
+          <h3>Panel de Prestatario</h3>
+          <p>Bienvenido al catálogo de préstamos de la universidad.</p>
+          <div className="dashboard__tarjetas">
+            <div className="dashboard__tarjeta">
+              <h4>Nivel de Reputación</h4>
+              <p>{ETIQUETAS_TIER[usuario.reputacion_tier] || usuario.reputacion_tier}</p>
+            </div>
+            <div className="dashboard__tarjeta">
+              <h4>Estado de Cuenta</h4>
+              <p>{usuario.estado === 'activo' ? 'Activo' : usuario.estado}</p>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }
@@ -69,7 +97,7 @@ function PanelAdministrador() {
   )
 }
 
-function Dashboard({ usuario, onCerrarSesion }) {
+function Dashboard({ usuario, onCerrarSesion, onPerfilActualizado }) {
   const nombreRol = ETIQUETAS_ROL[usuario.rol] || usuario.rol
 
   return (
@@ -87,7 +115,9 @@ function Dashboard({ usuario, onCerrarSesion }) {
       </header>
 
       <main className="dashboard__contenido">
-        {usuario.rol === 'prestatario' && <PanelPrestatario usuario={usuario} />}
+        {usuario.rol === 'prestatario' && (
+          <PanelPrestatario usuario={usuario} onPerfilActualizado={onPerfilActualizado} />
+        )}
         {usuario.rol === 'gestor' && <PanelGestor />}
         {usuario.rol === 'administrador' && <PanelAdministrador />}
       </main>

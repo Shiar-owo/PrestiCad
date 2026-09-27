@@ -15,6 +15,10 @@ function App() {
     setUsuarioActual(usuario)
   }
 
+  function manejarPerfilActualizado(perfil) {
+    setUsuarioActual((usuario) => (usuario ? { ...usuario, ...perfil } : usuario))
+  }
+
   async function manejarCierreSesion() {
     try {
       await api.post('/auth/logout/')
@@ -30,7 +34,11 @@ function App() {
       <main>
         <h1>PrestiCad</h1>
         <p>Sistema de Préstamos Académicos</p>
-        <Dashboard usuario={usuarioActual} onCerrarSesion={manejarCierreSesion} />
+        <Dashboard
+          usuario={usuarioActual}
+          onCerrarSesion={manejarCierreSesion}
+          onPerfilActualizado={manejarPerfilActualizado}
+        />
       </main>
     )
   }

@@ -1,6 +1,7 @@
 from django.core.validators import RegexValidator
 from rest_framework import serializers
 
+from apps.compartido.serializers import RechazarCamposNoPermitidosMixin
 from apps.usuarios.constants import ESTADOS_USUARIO, ROLES, TIERS, TIPOS_USUARIO
 from apps.usuarios.models import Credencial, Rol, Usuario
 
@@ -13,21 +14,6 @@ MENSAJES_CAMPO_NOMBRE = {
     "required": "El nombre es obligatorio.",
     "blank": "El nombre es obligatorio.",
 }
-
-
-class RechazarCamposNoPermitidosMixin:
-    """Rechaza claves que no forman parte del contrato de entrada."""
-
-    def validate(self, attrs):
-        campos_no_permitidos = set(self.initial_data) - set(self.fields)
-        if campos_no_permitidos:
-            raise serializers.ValidationError(
-                {
-                    campo: "Este campo no está permitido."
-                    for campo in campos_no_permitidos
-                }
-            )
-        return super().validate(attrs)
 
 
 class UsuarioSerializer(serializers.ModelSerializer):

@@ -3,6 +3,11 @@ from django.conf import settings
 from django.test import SimpleTestCase, TestCase, override_settings
 
 from apps.inventario.models import Material
+from apps.inventario.serializers import (
+    MaterialActualizacionSerializer,
+    MaterialRegistroSerializer,
+    MaterialSerializer,
+)
 from apps.inventario.services import (
     InventarioError,
     MaterialNoEncontradoError,
@@ -310,3 +315,128 @@ class ParametrosReputacionPorDefectoTestCase(TestCase):
                 valor,
                 f"El default del modelo '{campo}' no coincide con la configuración.",
             )
+
+
+class MaterialSerializerContratoTestCase(SimpleTestCase):
+    """Tests de los contratos JSON del módulo inventario (T04.05)."""
+
+    def test_salida_incluye_unidades_disponibles(self):
+        data = MaterialSerializer(Material(stock=4)).data
+
+        self.assertEqual(data["unidades_disponibles"], 4)
+        for campo in ("id", "nombre", "codigo_inventario", "estado", "created_at"):
+            self.assertIn(campo, data)
+
+    def test_alta_rechaza_estado(self):
+        serializer = MaterialRegistroSerializer(
+            data={"nombre": "Cable", "codigo_inventario": "OBJ-1", "tipo": "objeto", "estado": "prestado"}
+        )
+
+        self.assertFalse(serializer.is_valid())
+        self.assertEqual(serializer.errors["estado"], ["Este campo no está permitido."])
+
+    def test_alta_exige_nombre_codigo_y_tipo(self):
+        serializer = MaterialRegistroSerializer(data={})
+
+        self.assertFalse(serializer.is_valid())
+        self.assertEqual(
+            sorted(serializer.errors), ["codigo_inventario", "nombre", "tipo"]
+        )
+
+    def test_alta_rechaza_stock_cero(self):
+        serializer = MaterialRegistroSerializer(
+            data={"nombre": "Cable", "codigo_inventario": "OBJ-1", "tipo": "objeto", "stock": 0}
+        )
+
+        self.assertFalse(serializer.is_valid())
+        self.assertEqual(serializer.errors["stock"], ["El stock debe ser al menos 1 unidad."])
+
+    def test_alta_rechaza_tipo_invalido(self):
+        serializer = MaterialRegistroSerializer(
+            data={"nombre": "Cable", "codigo_inventario": "OBJ-1", "tipo": "edificio"}
+        )
+
+        self.assertFalse(serializer.is_valid())
+        self.assertEqual(serializer.errors["tipo"], ["Tipo de material inválido."])
+
+    def test_alta_rechaza_tier_invalido(self):
+        serializer = MaterialRegistroSerializer(
+            data={
+                "nombre": "Cable",
+                "codigo_inventario": "OBJ-1",
+                "tipo": "objeto",
+                "tier_minimo_requerido": "basico",
+            }
+        )
+
+        self.assertFalse(serializer.is_valid())
+        self.assertEqual(serializer.errors["tier_minimo_requerido"], ["Tier mínimo inválido."])
+
+    def test_alta_rechaza_limite_de_puntos(self):
+        serializer = MaterialRegistroSerializer(
+            data={
+                "nombre": "Cable",
+                "codigo_inventario": "OBJ-1",
+                "tipo": "objeto",
+                "bonificacion_tiempo": 600,
+            }
+        )
+
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("bonificacion_tiempo", serializer.errors)
+
+    def test_alta_rechaza_campos_no_permitidos(self):
+        serializer = MaterialRegistroSerializer(
+            data={"nombre": "Cable", "codigo_inventario": "OBJ-1", "tipo": "objeto", "id": "1"}
+        )
+
+        self.assertFalse(serializer.is_valid())
+        self.assertEqual(serializer.errors["id"], ["Este campo no está permitido."])
+
+    def test_alta_admite_campos_opcionales(self):
+        serializer = MaterialRegistroSerializer(
+            data={
+                "nombre": "Cable",
+                "codigo_inventario": "OBJ-1",
+                "tipo": "objeto",
+                "stock": 3,
+                "bonificacion_tiempo": 20,
+                "costo_reparacion": None,
+            }
+        )
+
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        # el estado y las marcas de tiempo no viajan en la entrada
+        self.assertNotIn("estado", serializer.validated_data)
+        self.assertNotIn("unidades_disponibles", serializer.validated_data)
+
+    def test_edicion_acepta_estado(self):
+        serializer = MaterialActualizacionSerializer(data={"estado": "en_mantenimiento"})
+
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertEqual(serializer.validated_data["estado"], "en_mantenimiento")
+
+    def test_edicion_acepta_payload_parcial(self):
+        """Un PATCH puede cambiar solo el estado (HU04 criterio 8)."""
+        self.assertTrue(MaterialActualizacionSerializer(data={}).is_valid())
+        self.assertTrue(MaterialActualizacionSerializer(data={"stock": 5}).is_valid())
+
+    def test_edicion_rechaza_estado_invalido(self):
+        serializer = MaterialActualizacionSerializer(data={"estado": "perdido"})
+
+        self.assertFalse(serializer.is_valid())
+        self.assertEqual(serializer.errors["estado"], ["Estado de material inválido."])
+
+    def test_edicion_rechaza_campos_no_permitidos(self):
+        serializer = MaterialActualizacionSerializer(data={"created_at": "2026-01-01T00:00:00Z"})
+
+        self.assertFalse(serializer.is_valid())
+        self.assertEqual(serializer.errors["created_at"], ["Este campo no está permitido."])
+
+    def test_edicion_admite_limpiar_costos(self):
+        serializer = MaterialActualizacionSerializer(
+            data={"costo_reparacion": None, "costo_reposicion": None}
+        )
+
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertIsNone(serializer.validated_data["costo_reparacion"])

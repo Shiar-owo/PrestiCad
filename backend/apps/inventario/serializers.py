@@ -3,11 +3,13 @@
 Las validaciones de formato se declaran aquí; las reglas de negocio (código
 único, estado inicial, valores por defecto) se delegan a `services.py`.
 """
+from django.conf import settings
 from rest_framework import serializers
 
 from apps.compartido.serializers import RechazarCamposNoPermitidosMixin
 from apps.inventario.constants import ESTADOS_MATERIAL, TIPOS_MATERIAL
 from apps.inventario.models import Material
+from apps.inventario.validators import validar_foto
 from apps.usuarios.constants import TIERS
 
 MENSAJES_NOMBRE = {
@@ -34,7 +36,7 @@ CAMPOS_FICHA_Y_REPUTACION = (
     "numero_serie",
     "color",
     "estado_fisico",
-    "foto_url",
+    "foto",
     "tier_minimo_requerido",
     "bonificacion_tiempo",
     "deduccion_tardanza",
@@ -45,10 +47,36 @@ CAMPOS_FICHA_Y_REPUTACION = (
 )
 
 
+class FotoMaterial(serializers.ImageField):
+    """Devuelve la foto del material como una URL que el navegador pueda abrir.
+
+    El comportamiento por defecto de DRF no sirve: con contexto de petición usa
+    `request.build_absolute_uri()`, y en desarrollo el proxy de Vite reenvía el
+    Host del contenedor (`backend:8000`), que el navegador no resuelve. Sin
+    contexto devuelve una ruta relativa, que el SPA tampoco puede cargar
+    porque Vite no proxea `/media/`.
+
+    Aquí se antepone `MEDIA_URL_PUBLICA`. En producción no hace falta: el
+    storage de Cloudinary ya entrega una URL absoluta, que se devuelve tal
+    cual.
+    """
+
+    def to_representation(self, value):
+        if not value:
+            return ""
+
+        url = value.url
+        if url.startswith(("http://", "https://")):
+            return url
+
+        return f"{settings.MEDIA_URL_PUBLICA.rstrip('/')}/{url.lstrip('/')}"
+
+
 class MaterialSerializer(serializers.ModelSerializer):
     """Contrato de salida JSON del inventario."""
 
     unidades_disponibles = serializers.SerializerMethodField()
+    foto = FotoMaterial(read_only=True)
 
     class Meta:
         model = Material
@@ -101,6 +129,15 @@ class MaterialRegistroSerializer(RechazarCamposNoPermitidosMixin, serializers.Mo
         required=False,
         error_messages={"invalid_choice": "Tier mínimo inválido."},
     )
+    # `validators` es necesario porque DRF no ejecuta los validadores del
+    # modelo durante `is_valid()`. `allow_empty_file=False` evita que un
+    # `<input type="file">` sin elegir llegue como un archivo vacío.
+    foto = serializers.ImageField(
+        required=False,
+        allow_null=True,
+        allow_empty_file=False,
+        validators=[validar_foto],
+    )
 
     class Meta:
         model = Material
@@ -121,7 +158,6 @@ class MaterialRegistroSerializer(RechazarCamposNoPermitidosMixin, serializers.Mo
             "numero_serie": {"required": False, "allow_blank": True, "default": ""},
             "color": {"required": False, "allow_blank": True, "default": ""},
             "estado_fisico": {"required": False, "allow_blank": True, "default": ""},
-            "foto_url": {"required": False, "allow_blank": True, "default": ""},
             "bonificacion_tiempo": {"required": False},
             "deduccion_tardanza": {"required": False},
             "deduccion_dano_parcial": {"required": False},
@@ -150,6 +186,12 @@ class MaterialActualizacionSerializer(RechazarCamposNoPermitidosMixin, serialize
         choices=ESTADOS_MATERIAL, required=False, error_messages={"invalid_choice": "Estado de material inválido."}
     )
     stock = serializers.IntegerField(required=False, min_value=1, error_messages=MENSAJES_STOCK)
+    foto = serializers.ImageField(
+        required=False,
+        allow_null=True,
+        allow_empty_file=False,
+        validators=[validar_foto],
+    )
 
     class Meta:
         model = Material
@@ -170,7 +212,6 @@ class MaterialActualizacionSerializer(RechazarCamposNoPermitidosMixin, serialize
             "numero_serie": {"required": False, "allow_blank": True},
             "color": {"required": False, "allow_blank": True},
             "estado_fisico": {"required": False, "allow_blank": True},
-            "foto_url": {"required": False, "allow_blank": True},
             "es_alto_valor": {"required": False},
             "bonificacion_tiempo": {"required": False},
             "deduccion_tardanza": {"required": False},

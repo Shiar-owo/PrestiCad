@@ -1,9 +1,12 @@
 import uuid
+from pathlib import Path
 
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.utils import timezone
 
 from apps.inventario.constants import ESTADOS_MATERIAL, TIPOS_MATERIAL
+from apps.inventario.validators import validar_foto
 
 # La taxonomía de Tiers es la misma que usa el módulo usuarios (RN03): un
 # material declara el Tier mínimo que un usuario necesita para llevárselo.
@@ -24,6 +27,19 @@ DEFAULT_DEDUCCION_DANO_TOTAL = 60
 # rango de `Usuario.reputacion_puntaje` (-500 a 500).
 PUNTOS_MINIMO = 0
 PUNTOS_MAXIMO = 500
+
+
+def ruta_foto(instance, filename):
+    """Destino de la foto dentro del storage: `materiales/<año>/<mes>/<token>.<ext>`.
+
+    El token aleatorio evita que dos materiales con el mismo nombre de archivo
+    se pisen: conservar el nombre original haría que el segundo sobrescribiera
+    al primero. La fecha mantiene ordenadas las carpetas y no estorba, porque
+    `CloudinaryStorage.get_available_name` devuelve el nombre tal cual y no
+    deduplica.
+    """
+    extension = Path(filename).suffix.lower() or ".jpg"
+    return f"materiales/{timezone.now():%Y/%m}/{uuid.uuid4().hex[:12]}{extension}"
 
 
 class Material(models.Model):
@@ -73,7 +89,13 @@ class Material(models.Model):
         default="",
         verbose_name="Estado físico",
     )
-    foto_url = models.URLField(max_length=300, blank=True, default="")
+    foto = models.ImageField(
+        upload_to=ruta_foto,
+        blank=True,
+        validators=[validar_foto],
+        verbose_name="Foto del material",
+        help_text="Imagen del material: JPG, PNG o WEBP, hasta 5 MB.",
+    )
 
     # Parámetros de reputación por objeto (value object `AtributosReputacion`,
     # RN06). Las sanciones de la devolución se calculan con estos valores.

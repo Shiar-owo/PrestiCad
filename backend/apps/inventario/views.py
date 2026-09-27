@@ -4,6 +4,7 @@ Vistas delgadas: validan la petición y delegan la lógica a `services.py`.
 """
 from rest_framework import status
 from rest_framework.generics import ListCreateAPIView, RetrieveUpdateAPIView
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 
 from apps.inventario import services
@@ -15,6 +16,11 @@ from apps.inventario.serializers import (
     MaterialSerializer,
 )
 
+# La foto llega como archivo. El parser global sigue siendo JSON a propósito
+# para el resto de la API, así que el multipart se habilita solo en las vistas
+# que aceptan imágenes.
+PARSERS_CON_ARCHIVOS = [MultiPartParser, FormParser, JSONParser]
+
 
 class MaterialListCreateView(ListCreateAPIView):
     """Lista los materiales del inventario (GET) y registra uno (POST)."""
@@ -22,6 +28,7 @@ class MaterialListCreateView(ListCreateAPIView):
     queryset = Material.objects.all().order_by("nombre")
     serializer_class = MaterialSerializer
     permission_classes = [EsGestorOAdministrador]
+    parser_classes = PARSERS_CON_ARCHIVOS
 
     def get_serializer_class(self):
         if self.request.method == "POST":
@@ -56,6 +63,7 @@ class MaterialDetailView(RetrieveUpdateAPIView):
     queryset = Material.objects.all()
     serializer_class = MaterialSerializer
     permission_classes = [EsGestorOAdministrador]
+    parser_classes = PARSERS_CON_ARCHIVOS
 
     def get_serializer_class(self):
         if self.request.method in ("PUT", "PATCH"):

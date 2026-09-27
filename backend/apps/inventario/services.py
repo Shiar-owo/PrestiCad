@@ -3,11 +3,17 @@
 Las vistas son delgadas y delegan aquí. Los servicios NO acceden a tablas de
 otros módulos; se comunican con ellos solo a través de sus propios servicios.
 """
+import logging
+
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 
 from apps.inventario.constants import ESTADOS_MATERIAL
 from apps.inventario.models import Material
+from apps.inventario.validators import validar_foto
+
+logger = logging.getLogger(__name__)
 
 # Campos que un gestor puede modificar sobre un material existente. Los
 # identificadores y las marcas de tiempo quedan fuera a propósito: son
@@ -25,7 +31,7 @@ CAMPOS_EDITABLES = frozenset(
         "numero_serie",
         "color",
         "estado_fisico",
-        "foto_url",
+        "foto",
         "tier_minimo_requerido",
         "bonificacion_tiempo",
         "deduccion_tardanza",
@@ -37,7 +43,8 @@ CAMPOS_EDITABLES = frozenset(
     }
 )
 
-# Campos de texto donde se recortan espacios sobrantes al guardar.
+# Campos de texto donde se recortan espacios sobrantes al guardar. `foto` no
+# aparece porque es un archivo: no tiene `.strip()`.
 CAMPOS_TEXTO = (
     "descripcion",
     "marca",
@@ -45,7 +52,6 @@ CAMPOS_TEXTO = (
     "numero_serie",
     "color",
     "estado_fisico",
-    "foto_url",
 )
 
 CODIGO_DUPLICADO_MENSAJE = "El código de inventario ya está registrado."
@@ -110,7 +116,7 @@ def registrar_material(
     numero_serie="",
     color="",
     estado_fisico="",
-    foto_url="",
+    foto=None,
     tier_minimo_requerido=None,
     bonificacion_tiempo=None,
     deduccion_tardanza=None,
@@ -130,8 +136,11 @@ def registrar_material(
     - Se pueden registrar varias unidades del mismo material (criterio 5).
     - Los parámetros de reputación no informados se completan con los valores
       por defecto configurables (criterio 3, T04.04).
+    - La foto es opcional y se valida antes de guardar: hasta 5 MB y en JPG,
+      PNG o WEBP (criterio 1).
 
-    Eleva `InventarioError` si el código ya está registrado.
+    Eleva `InventarioError` si el código ya está registrado o `ValidationError`
+    si la foto no cumple las restricciones.
     """
     codigo = normalizar_codigo(codigo_inventario)
     _verificar_codigo_disponible(codigo)
@@ -141,6 +150,8 @@ def registrar_material(
         raise InventarioError("nombre", "El nombre del material es obligatorio.")
     if stock < 1:
         raise InventarioError("stock", "El stock debe ser al menos 1 unidad.")
+    if foto is not None:
+        validar_foto(foto)
 
     campos = {
         "nombre": nombre,
@@ -154,7 +165,7 @@ def registrar_material(
         "numero_serie": numero_serie.strip(),
         "color": color.strip(),
         "estado_fisico": estado_fisico.strip(),
-        "foto_url": foto_url.strip(),
+        "foto": foto,
     }
 
     reputacion = {
@@ -191,9 +202,10 @@ def actualizar_material(material_id, **campos):
     Solo se persisten los campos editables: los identificadores y las marcas
     de tiempo son invariantes del agregado.
 
-    Eleva `MaterialNoEncontradoError` si el material no existe e
-    `InventarioError` si el código está duplicado, el estado es inválido o
-    se intenta escribir un campo no editable.
+    Eleva `MaterialNoEncontradoError` si el material no existe,
+    `InventarioError` si el código está duplicado, el estado es inválido o se
+    intenta escribir un campo no editable, y `ValidationError` si la foto no
+    cumple las restricciones.
     """
     material = obtener_material(material_id)
 
@@ -220,6 +232,16 @@ def actualizar_material(material_id, **campos):
     if "stock" in campos and campos["stock"] < 1:
         raise InventarioError("stock", "El stock debe ser al menos 1 unidad.")
 
+    if campos.get("foto") is not None:
+        validar_foto(campos["foto"])
+
+    # La foto que se va a reemplazar se borra al final, después de confirmar
+    # la transacción: si el guardado falla, el material conserva su imagen.
+    # Se guardan el storage y el nombre, no el `FieldFile`, porque
+    # `FieldFile.delete()` hace `setattr(self.instance, campo, None)` sobre el
+    # material y dejaría la foto nueva en `None` en memoria.
+    foto_anterior = material.foto.name if "foto" in campos and material.foto else None
+
     for campo in CAMPOS_TEXTO:
         if campo in campos and isinstance(campos[campo], str):
             campos[campo] = campos[campo].strip()
@@ -228,6 +250,11 @@ def actualizar_material(material_id, **campos):
         setattr(material, campo, valor)
 
     material.save(update_fields=[*campos, "updated_at"])
+
+    if foto_anterior and foto_anterior != material.foto.name:
+        storage_foto = material.foto.storage
+        transaction.on_commit(lambda: _eliminar_foto(storage_foto, foto_anterior))
+
     return material
 
 
@@ -254,3 +281,26 @@ def _verificar_estado(estado):
     estados_validos = {clave for clave, _ in ESTADOS_MATERIAL}
     if estado not in estados_validos:
         raise InventarioError("estado", "El estado del material no es válido.")
+
+
+def _eliminar_foto(storage, nombre):
+    """Borra el archivo de la foto reemplazada.
+
+    Se borra por storage y nombre, no con `FieldFile.delete()`: aquel método
+    además de borrar deja el atributo del material en `None`, y como la foto
+    anterior y la nueva comparten instancia, se perdería la nueva.
+
+    El error se registra pero no se propaga: para cuando se llega aquí la
+    edición ya está confirmada, así que fallar la petición dejaría al cliente
+    con un error sobre un cambio que en realidad sí se aplicó. Queda un
+    archivo huérfano en el storage, que es preferible a perder la imagen
+    vigente.
+    """
+    try:
+        storage.delete(nombre)
+    except Exception:  # noqa: BLE001 - el storage puede fallar de muchas formas
+        logger.warning(
+            "No se pudo borrar la foto anterior %s; queda como archivo huérfano.",
+            nombre,
+            exc_info=True,
+        )

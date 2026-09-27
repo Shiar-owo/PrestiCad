@@ -1,15 +1,25 @@
 """Tests del módulo inventario."""
+import os
+import tempfile
+from io import BytesIO
+from pathlib import Path
+
 from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.utils import timezone
+from PIL import Image
 from rest_framework.test import APITestCase
 
 from apps.inventario.models import Material
 from apps.inventario.serializers import (
+    FotoMaterial,
     MaterialActualizacionSerializer,
     MaterialRegistroSerializer,
     MaterialSerializer,
 )
+from apps.inventario.validators import TAMANIO_MAXIMO, validar_foto
 from apps.usuarios.models import Rol
 from apps.usuarios.services import registrar_usuario
 from apps.usuarios.sesiones import CLAVE_SESION_ULTIMA_ACTIVIDAD, CLAVE_SESION_USUARIO_ID
@@ -24,6 +34,57 @@ from apps.inventario.services import (
     parametros_reputacion_por_defecto,
     registrar_material,
 )
+
+# Formatos que acepta la foto, con su `content_type` y su extensión.
+FORMATOS_FOTO = {
+    "JPEG": ("image/jpeg", ".jpg"),
+    "PNG": ("image/png", ".png"),
+    "WEBP": ("image/webp", ".webp"),
+    "GIF": ("image/gif", ".gif"),
+}
+
+
+def imagen_en_memoria(formato="JPEG", nombre=None):
+    """Crea un archivo de imagen real, como el que enviaría un formulario.
+
+    No sirve un archivo con bytes inventados: `ImageField` lo abre con Pillow
+    para confirmar que de verdad es una imagen.
+    """
+    content_type, extension = FORMATOS_FOTO[formato]
+    buffer = BytesIO()
+    Image.new("RGB", (20, 20), (200, 30, 30)).save(buffer, format=formato)
+    return SimpleUploadedFile(
+        nombre or f"foto{extension}", buffer.getvalue(), content_type=content_type
+    )
+
+
+def imagen_sobre_el_limite():
+    """Imagen que supera los 5 MB.
+
+    Se rellena de bytes aleatorios porque no comprimen: un PNG de 1400x1400
+    ocupa más de 5 MB y se genera en un instante.
+    """
+    lado = 1400
+    imagen = Image.frombytes("RGB", (lado, lado), os.urandom(lado * lado * 3))
+    buffer = BytesIO()
+    imagen.save(buffer, format="PNG")
+    return SimpleUploadedFile("enorme.png", buffer.getvalue(), content_type="image/png")
+
+
+class ConMediaTemporal(TestCase):
+    """Apunta `MEDIA_ROOT` a un directorio temporal.
+
+    Sin esto la suite escribiría en `backend/media/` y los archivos de una
+    prueba quedarían ahí para la siguiente.
+    """
+
+    def setUp(self):
+        super().setUp()
+        temporal = tempfile.TemporaryDirectory()
+        self.addCleanup(temporal.cleanup)
+        override = override_settings(MEDIA_ROOT=Path(temporal.name))
+        override.enable()
+        self.addCleanup(override.disable)
 
 
 class ModuloInventarioTestCase(SimpleTestCase):
@@ -456,8 +517,12 @@ class ModuloInventarioTestCase(SimpleTestCase):
         self.assertIn("api/", rutas)
 
 
-class MaterialesAPITestCase(APITestCase):
-    """Tests de los endpoints de materiales (T04.05, HU04)."""
+class EscenariosDeMaterialApi(ConMediaTemporal, APITestCase):
+    """Sesión de gestor y utilidades compartidas por los tests de la API.
+
+    Además de la sesión, mueve `MEDIA_ROOT` a un directorio temporal: los tests
+    que suben archivos no deben dejar rastro en `backend/media/`.
+    """
 
     LIST_URL = "/api/materiales/"
 
@@ -491,6 +556,10 @@ class MaterialesAPITestCase(APITestCase):
         datos = {"nombre": "Cable HDMI", "codigo_inventario": "OBJ-001", "tipo": "objeto"}
         datos.update(extra)
         return datos
+
+
+class MaterialesAPITestCase(EscenariosDeMaterialApi):
+    """Tests de los endpoints de materiales (T04.05, HU04)."""
 
     # --- Listado y consulta: públicos ---
 
@@ -675,3 +744,401 @@ class MaterialesAPITestCase(APITestCase):
         respuesta = self.client.patch(url_inexistente, {"stock": 2}, format="json")
 
         self.assertEqual(respuesta.status_code, 404)
+
+
+class FotoMaterialServiceTestCase(ConMediaTemporal):
+    """Tests de la foto en la capa de servicios (HU04, criterio 1)."""
+
+    def _ruta(self, nombre):
+        return Path(settings.MEDIA_ROOT) / nombre
+
+    def test_registra_material_con_foto(self):
+        material = registrar_material(
+            nombre="Proyector Epson",
+            codigo_inventario="INV-001",
+            tipo="equipo",
+            foto=imagen_en_memoria(),
+        )
+
+        self.assertTrue(material.foto)
+        self.assertTrue(self._ruta(material.foto.name).exists())
+
+    def test_la_foto_es_opcional(self):
+        material = registrar_material(
+            nombre="Cable HDMI", codigo_inventario="OBJ-001", tipo="objeto"
+        )
+
+        self.assertFalse(material.foto)
+
+    def test_la_foto_se_guarda_bajo_materiales_con_fecha_y_token(self):
+        material = registrar_material(
+            nombre="Cable HDMI",
+            codigo_inventario="OBJ-001",
+            tipo="objeto",
+            foto=imagen_en_memoria("JPEG", "proyector.jpg"),
+        )
+
+        partes = material.foto.name.split("/")
+        self.assertEqual(partes[0], "materiales")
+        self.assertRegex(partes[1], r"^\d{4}$")
+        self.assertRegex(partes[2], r"^\d{2}$")
+        self.assertTrue(partes[3].endswith(".jpg"), material.foto.name)
+        # El token reemplaza al nombre original del archivo.
+        self.assertNotIn("proyector", partes[3])
+
+    def test_el_nombre_del_archivo_no_depende_del_original(self):
+        """Dos materiales con el mismo archivo no pueden pisarse (criterio 9)."""
+        primero = registrar_material(
+            nombre="Cable",
+            codigo_inventario="OBJ-001",
+            tipo="objeto",
+            foto=imagen_en_memoria("JPEG", "foto.jpg"),
+        )
+        segundo = registrar_material(
+            nombre="Cable de repuesto",
+            codigo_inventario="OBJ-002",
+            tipo="objeto",
+            foto=imagen_en_memoria("JPEG", "foto.jpg"),
+        )
+
+        self.assertNotEqual(primero.foto.name, segundo.foto.name)
+        self.assertTrue(self._ruta(primero.foto.name).exists())
+        self.assertTrue(self._ruta(segundo.foto.name).exists())
+
+    def test_acepta_jpg_png_y_webp(self):
+        for indice, formato in enumerate(["JPEG", "PNG", "WEBP"], start=1):
+            with self.subTest(formato=formato):
+                material = registrar_material(
+                    nombre=f"Material {formato}",
+                    codigo_inventario=f"OBJ-{indice:03d}",
+                    tipo="objeto",
+                    foto=imagen_en_memoria(formato),
+                )
+                self.assertTrue(material.foto)
+
+    def test_rechaza_foto_sobre_el_limite(self):
+        with self.assertRaises(ValidationError) as contexto:
+            registrar_material(
+                nombre="Foto pesada",
+                codigo_inventario="OBJ-001",
+                tipo="objeto",
+                foto=imagen_sobre_el_limite(),
+            )
+
+        self.assertIn("5 MB", str(contexto.exception))
+        self.assertEqual(Material.objects.count(), 0)
+
+    def test_rechaza_formato_no_permitido(self):
+        with self.assertRaises(ValidationError) as contexto:
+            registrar_material(
+                nombre="Foto gif",
+                codigo_inventario="OBJ-001",
+                tipo="objeto",
+                foto=imagen_en_memoria("GIF"),
+            )
+
+        self.assertIn("JPG, PNG o WEBP", str(contexto.exception))
+        self.assertEqual(Material.objects.count(), 0)
+
+    def test_reemplazar_la_foto_borra_la_anterior(self):
+        material = registrar_material(
+            nombre="Proyector",
+            codigo_inventario="INV-001",
+            tipo="equipo",
+            foto=imagen_en_memoria(),
+        )
+        nombre_anterior = material.foto.name
+        ruta_anterior = self._ruta(nombre_anterior)
+        self.assertTrue(ruta_anterior.exists())
+
+        with self.captureOnCommitCallbacks(execute=True):
+            actualizado = actualizar_material(
+                material.id, foto=imagen_en_memoria("PNG", "nueva.png")
+            )
+
+        self.assertNotEqual(actualizado.foto.name, nombre_anterior)
+        self.assertFalse(ruta_anterior.exists(), "La foto reemplazada debe borrarse.")
+        self.assertTrue(self._ruta(actualizado.foto.name).exists())
+
+    def test_editar_sin_tocar_la_foto_no_la_borra(self):
+        material = registrar_material(
+            nombre="Proyector",
+            codigo_inventario="INV-001",
+            tipo="equipo",
+            foto=imagen_en_memoria(),
+        )
+        ruta = self._ruta(material.foto.name)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            actualizado = actualizar_material(material.id, nombre="Proyector 4K")
+
+        self.assertEqual(actualizado.foto.name, material.foto.name)
+        self.assertTrue(ruta.exists())
+
+    def test_quitar_la_foto_deja_el_material_sin_imagen(self):
+        material = registrar_material(
+            nombre="Proyector",
+            codigo_inventario="INV-001",
+            tipo="equipo",
+            foto=imagen_en_memoria(),
+        )
+        ruta = self._ruta(material.foto.name)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            actualizado = actualizar_material(material.id, foto=None)
+
+        self.assertFalse(actualizado.foto)
+        self.assertFalse(ruta.exists())
+
+
+class ValidarFotoTestCase(SimpleTestCase):
+    """Tests del validador de la foto, aislado del modelo."""
+
+    def test_acepta_un_archivo_dentro_de_los_limites(self):
+        validar_foto(imagen_en_memoria())
+
+    def test_el_limite_es_de_5_mb(self):
+        self.assertEqual(TAMANIO_MAXIMO, 5 * 1024 * 1024)
+
+    def test_rechaza_lo_que_pesa_mas(self):
+        with self.assertRaises(ValidationError):
+            validar_foto(imagen_sobre_el_limite())
+
+
+class FotoSerializadorTestCase(ConMediaTemporal):
+    """Tests de la URL de la foto que viaja en el JSON (HU04, criterio 2)."""
+
+    class FotoConUrlFija:
+        """Imita un `FieldFile` que ya devuelve una URL absoluta."""
+
+        def __init__(self, url):
+            self.url = url
+
+        def __bool__(self):
+            return True
+
+    def test_antepone_el_origen_publico_a_la_ruta_local(self):
+        material = registrar_material(
+            nombre="Proyector",
+            codigo_inventario="INV-001",
+            tipo="equipo",
+            foto=imagen_en_memoria(),
+        )
+
+        url = MaterialSerializer(material).data["foto"]
+
+        self.assertTrue(
+            url.startswith(f"{settings.MEDIA_URL_PUBLICA}/{settings.MEDIA_URL.lstrip('/')}"),
+            url,
+        )
+
+    def test_sin_foto_devuelve_cadena_vacia(self):
+        """El frontend distingue 'no hay foto' con una cadena, no con null."""
+        material = registrar_material(
+            nombre="Cable", codigo_inventario="OBJ-001", tipo="objeto"
+        )
+
+        self.assertEqual(MaterialSerializer(material).data["foto"], "")
+
+    def test_una_url_absoluta_se_devuelve_sin_anteponer_nada(self):
+        """En producción Cloudinary ya entrega una URL completa."""
+        url_cloudinary = (
+            "https://res.cloudinary.com/demo/image/upload/v1/materiales/2026/09/abc123.jpg"
+        )
+
+        self.assertEqual(
+            FotoMaterial().to_representation(self.FotoConUrlFija(url_cloudinary)),
+            url_cloudinary,
+        )
+
+
+class FotoContratoEntradaTestCase(SimpleTestCase):
+    """Tests de la validación de la foto en los contratos de entrada."""
+
+    def test_alta_admite_cada_formato_permitido(self):
+        for formato in ["JPEG", "PNG", "WEBP"]:
+            with self.subTest(formato=formato):
+                serializer = MaterialRegistroSerializer(
+                    data={
+                        "nombre": "Cable",
+                        "codigo_inventario": "OBJ-1",
+                        "tipo": "objeto",
+                        "foto": imagen_en_memoria(formato),
+                    }
+                )
+                self.assertTrue(serializer.is_valid(), serializer.errors)
+
+    def test_alta_rechaza_foto_sobre_el_limite(self):
+        serializer = MaterialRegistroSerializer(
+            data={
+                "nombre": "Cable",
+                "codigo_inventario": "OBJ-1",
+                "tipo": "objeto",
+                "foto": imagen_sobre_el_limite(),
+            }
+        )
+
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("5 MB", str(serializer.errors["foto"]))
+
+    def test_alta_rechaza_formato_no_permitido(self):
+        serializer = MaterialRegistroSerializer(
+            data={
+                "nombre": "Cable",
+                "codigo_inventario": "OBJ-1",
+                "tipo": "objeto",
+                "foto": imagen_en_memoria("GIF"),
+            }
+        )
+
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("JPG, PNG o WEBP", str(serializer.errors["foto"]))
+
+    def test_alta_rechaza_un_archivo_vacio(self):
+        serializer = MaterialRegistroSerializer(
+            data={
+                "nombre": "Cable",
+                "codigo_inventario": "OBJ-1",
+                "tipo": "objeto",
+                "foto": SimpleUploadedFile("vacio.jpg", b"", content_type="image/jpeg"),
+            }
+        )
+
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("foto", serializer.errors)
+
+    def test_alta_rechaza_un_archivo_que_no_es_imagen(self):
+        serializer = MaterialRegistroSerializer(
+            data={
+                "nombre": "Cable",
+                "codigo_inventario": "OBJ-1",
+                "tipo": "objeto",
+                "foto": SimpleUploadedFile(
+                    "falso.jpg", b"esto no es una imagen", content_type="image/jpeg"
+                ),
+            }
+        )
+
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("foto", serializer.errors)
+
+    def test_la_foto_no_es_obligatoria_en_el_alta(self):
+        serializer = MaterialRegistroSerializer(
+            data={"nombre": "Cable", "codigo_inventario": "OBJ-1", "tipo": "objeto"}
+        )
+
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertNotIn("foto", serializer.validated_data)
+
+    def test_la_edicion_tambien_valida_la_foto(self):
+        serializer = MaterialActualizacionSerializer(
+            data={"foto": imagen_en_memoria("GIF")}
+        )
+
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("JPG, PNG o WEBP", str(serializer.errors["foto"]))
+
+
+class MaterialesFotoApiTestCase(EscenariosDeMaterialApi):
+    """Tests de la subida de fotos por la API (HU04, criterios 1 y 2)."""
+
+    def test_registrar_con_foto_responde_201(self):
+        self._autenticar("gestor@unsa.edu.pe", "gestor")
+
+        respuesta = self.client.post(
+            self.LIST_URL,
+            self._payload_valido(foto=imagen_en_memoria()),
+            format="multipart",
+        )
+
+        self.assertEqual(respuesta.status_code, 201, respuesta.content)
+        self.assertTrue(respuesta.json()["foto"])
+        self.assertEqual(Material.objects.count(), 1)
+
+    def test_la_url_de_la_foto_apunta_al_archivo_guardado(self):
+        """La URL del JSON tiene que corresponder al archivo del disco.
+
+        No se pide la URL por HTTP: `django.views.static.serve` captura el
+        `MEDIA_ROOT` del momento en que se importa `config.urls`, así que
+        con el directorio temporal apuntaría al lugar equivocado. Lo que se
+        comprueba es el contrato: la URL pública y el archivo coinciden.
+        """
+        self._autenticar("gestor@unsa.edu.pe", "gestor")
+        self.client.post(
+            self.LIST_URL, self._payload_valido(foto=imagen_en_memoria()), format="multipart"
+        )
+
+        url_publica = self.client.get(self.LIST_URL).json()[0]["foto"]
+        # Se quita solo el origen: `MEDIA_URL` ya empieza por `/`.
+        ruta_relativa = url_publica.replace(settings.MEDIA_URL_PUBLICA, "", 1)
+
+        self.assertEqual(ruta_relativa, f"/media/{Material.objects.get().foto.name}")
+        self.assertTrue((Path(settings.MEDIA_ROOT) / Material.objects.get().foto.name).exists())
+
+    def test_registrar_sin_foto_sigue_funcionando(self):
+        self._autenticar("gestor@unsa.edu.pe", "gestor")
+
+        respuesta = self.client.post(self.LIST_URL, self._payload_valido(), format="multipart")
+
+        self.assertEqual(respuesta.status_code, 201, respuesta.content)
+        self.assertEqual(respuesta.json()["foto"], "")
+
+    def test_registrar_foto_sobre_el_limite_responde_400(self):
+        self._autenticar("gestor@unsa.edu.pe", "gestor")
+
+        respuesta = self.client.post(
+            self.LIST_URL,
+            self._payload_valido(foto=imagen_sobre_el_limite()),
+            format="multipart",
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn("foto", respuesta.json())
+        self.assertEqual(Material.objects.count(), 0)
+
+    def test_registrar_formato_no_permitido_responde_400(self):
+        self._autenticar("gestor@unsa.edu.pe", "gestor")
+
+        respuesta = self.client.post(
+            self.LIST_URL,
+            self._payload_valido(foto=imagen_en_memoria("GIF")),
+            format="multipart",
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn("foto", respuesta.json())
+        self.assertEqual(Material.objects.count(), 0)
+
+    def test_patch_reemplaza_la_foto(self):
+        material = registrar_material(
+            nombre="Proyector",
+            codigo_inventario="INV-001",
+            tipo="equipo",
+            foto=imagen_en_memoria(),
+        )
+        nombre_anterior = material.foto.name
+        self._autenticar("gestor@unsa.edu.pe", "gestor")
+
+        with self.captureOnCommitCallbacks(execute=True):
+            respuesta = self.client.patch(
+                self._url_detalle(material),
+                {"foto": imagen_en_memoria("PNG", "nueva.png")},
+                format="multipart",
+            )
+
+        self.assertEqual(respuesta.status_code, 200, respuesta.content)
+        material.refresh_from_db()
+        self.assertNotEqual(material.foto.name, nombre_anterior)
+        self.assertFalse((Path(settings.MEDIA_ROOT) / nombre_anterior).exists())
+
+    def test_el_json_ya_no_expone_foto_url(self):
+        self._autenticar("gestor@unsa.edu.pe", "gestor")
+        self.client.post(
+            self.LIST_URL, self._payload_valido(foto=imagen_en_memoria()), format="multipart"
+        )
+
+        cuerpo = self.client.get(self.LIST_URL).json()[0]
+
+        self.assertNotIn("foto_url", cuerpo)
+        self.assertIn("foto", cuerpo)
+

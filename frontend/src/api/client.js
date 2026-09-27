@@ -9,6 +9,13 @@ export class ErrorApi extends Error {
   }
 }
 
+// `fetch` solo acepta un BodyInit: string, FormData, Blob, URLSearchParams.
+// Si se le pasa un objeto plano lo convierte con String() y llega al backend
+// como "[object Object]", que la DRF rechaza con "JSON parse error".
+function construirBody(datos) {
+  return datos instanceof FormData ? datos : JSON.stringify(datos)
+}
+
 async function peticion(ruta, opciones = {}) {
   const { headers, ...resto } = opciones
 
@@ -49,8 +56,9 @@ async function peticion(ruta, opciones = {}) {
 export const api = {
   get: (ruta) => peticion(ruta),
   post: (ruta, datos, opciones = {}) =>
-    peticion(ruta, { ...opciones, method: 'POST', body: datos }),
-  put: (ruta, datos, opciones = {}) => peticion(ruta, { ...opciones, method: 'PUT', body: datos }),
+    peticion(ruta, { ...opciones, method: 'POST', body: construirBody(datos) }),
+  put: (ruta, datos, opciones = {}) =>
+    peticion(ruta, { ...opciones, method: 'PUT', body: construirBody(datos) }),
   patch: (ruta, datos, opciones = {}) =>
-    peticion(ruta, { ...opciones, method: 'PATCH', body: datos }),
+    peticion(ruta, { ...opciones, method: 'PATCH', body: construirBody(datos) }),
 }

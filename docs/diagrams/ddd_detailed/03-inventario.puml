@@ -90,7 +90,7 @@ class FichaTecnica <<Value Object>> {
   numero_serie : String
   color : String
   estado_fisico : String
-  foto_url : String
+  foto : Image
 }
 
 class AtributosReputacion <<Value Object>> {
@@ -178,6 +178,9 @@ note bottom of Material
     `cambiar_estado_material` + PATCH del endpoint
   • Los <i>default</i> de reputación son configurables
     en <b>settings.MATERIALES_REPUTACION_DEFAULTS</b>
+  • <b>foto</b>: <i>ImageField</i> opcional, no una URL. En
+    desarrollo va a <b>MEDIA_ROOT</b> y en producción a
+    Cloudinary; se aceptan JPEG, PNG y WEBP de hasta 5 MB
 end note
 
 @enduml

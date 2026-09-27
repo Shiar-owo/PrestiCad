@@ -29,7 +29,7 @@ Material                        Prestamo
 ├── ficha técnica (marca,       ├── garantia (nullable)
 │   modelo, numero_serie,       ├── checklist_inicial (JSON)
 │   color, estado_fisico,       ├── checklist_devolucion (JSON)
-│   foto_url)                   └── tipo (Normal/Excepción)
+│   foto (imagen))              └── tipo (Normal/Excepción)
 ├── tier_minimo_requerido
 ├── bonificacion_tiempo
 ├── deduccion_tardanza
@@ -56,6 +56,10 @@ Reserva
 > técnica y los parámetros de reputación son value objects que en Django se
 > materializan como columnas de la tabla `inventario_material` (HU04). `stock` agrega el
 > conteo de unidades del criterio 5 de HU04.
+>
+> La ficha técnica incluye `foto`, un `ImageField` opcional (no una URL escrita
+> a mano). En desarrollo se guarda en `MEDIA_ROOT` y en producción en
+> Cloudinary; los formatos admitidos son JPEG, PNG y WEBP de hasta 5 MB.
 
 ---
 

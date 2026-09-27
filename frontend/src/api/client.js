@@ -9,16 +9,43 @@ export class ErrorApi extends Error {
   }
 }
 
+// `fetch` solo acepta un BodyInit: string, FormData, Blob, URLSearchParams.
+// Si se le pasa un objeto plano lo convierte con String() y llega al backend
+// como "[object Object]", que la DRF rechaza con "JSON parse error".
+function construirBody(datos) {
+  return datos instanceof FormData ? datos : JSON.stringify(datos)
+}
+
+// Solo la vista de perfil está protegida con `csrf_protect`, y es el único
+// endpoint que necesita el token. El resto resuelve el usuario por su propia
+// clave de sesión, sin pasar por la autenticación de DRF, así que no lo exige.
+function obtenerTokenCSRF() {
+  if (typeof document === 'undefined') return null
+
+  const cookie = document.cookie
+    .split('; ')
+    .find((item) => item.startsWith('csrftoken='))
+
+  return cookie ? decodeURIComponent(cookie.slice('csrftoken='.length)) : null
+}
+
 async function peticion(ruta, opciones = {}) {
+  const { headers, ...resto } = opciones
+
+  // Con FormData no se fija `Content-Type`: el navegador tiene que añadirlo con
+  // el `boundary` del multipart. Si se manda `application/json` a mano, Django
+  // no logra a parsear la petición.
+  const cabeceras = {
+    ...(resto.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
+    ...(headers || {}),
+  }
+
   let respuesta
   try {
     respuesta = await fetch(`${API_URL}${ruta}`, {
-      ...opciones,
       credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(opciones.headers || {}),
-      },
+      headers: cabeceras,
+      ...resto,
     })
   } catch {
     // Error de red (servidor no disponible, CORS, etc.)
@@ -39,20 +66,10 @@ async function peticion(ruta, opciones = {}) {
   return datos
 }
 
-function obtenerTokenCSRF() {
-  if (typeof document === 'undefined') return null
-
-  const cookie = document.cookie
-    .split('; ')
-    .find((item) => item.startsWith('csrftoken='))
-
-  return cookie ? decodeURIComponent(cookie.slice('csrftoken='.length)) : null
-}
-
 export const api = {
   get: (ruta) => peticion(ruta),
   post: (ruta, datos, opciones = {}) =>
-    peticion(ruta, { ...opciones, method: 'POST', body: JSON.stringify(datos) }),
+    peticion(ruta, { ...opciones, method: 'POST', body: construirBody(datos) }),
   put: (ruta, datos, opciones = {}) => {
     const tokenCSRF = obtenerTokenCSRF()
     return peticion(ruta, {
@@ -62,9 +79,9 @@ export const api = {
         ...(tokenCSRF ? { 'X-CSRFToken': tokenCSRF } : {}),
       },
       method: 'PUT',
-      body: JSON.stringify(datos),
+      body: construirBody(datos),
     })
   },
   patch: (ruta, datos, opciones = {}) =>
-    peticion(ruta, { ...opciones, method: 'PATCH', body: JSON.stringify(datos) }),
+    peticion(ruta, { ...opciones, method: 'PATCH', body: construirBody(datos) }),
 }

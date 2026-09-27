@@ -88,3 +88,25 @@ export function validarPuntosReputacion(valor) {
   return ''
 }
 
+// Debe reflejar backend/apps/inventario/validators.py, incluidos los mensajes:
+// el backend los manda en el 400 y el frontend los muestra tal cual.
+export const TAMANIO_MAXIMO_FOTO = 5 * 1024 * 1024
+
+export const FORMATOS_FOTO = ['image/jpeg', 'image/png', 'image/webp']
+
+export function validarFoto(archivo) {
+  if (!archivo) {
+    return ''
+  }
+
+  if (archivo.size > TAMANIO_MAXIMO_FOTO) {
+    return 'La foto no debe pesar más de 5 MB.'
+  }
+
+  if (!FORMATOS_FOTO.includes(archivo.type)) {
+    return 'La foto debe estar en formato JPG, PNG o WEBP.'
+  }
+
+  return ''
+}
+

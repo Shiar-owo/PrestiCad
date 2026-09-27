@@ -136,6 +136,7 @@ function Materiales() {
             <tr>
               <th>Código</th>
               <th>Nombre</th>
+              <th>Foto</th>
               <th>Tipo</th>
               <th>Stock</th>
               <th>Unidades disponibles</th>
@@ -149,6 +150,26 @@ function Materiales() {
               <tr key={material.id}>
                 <td>{material.codigo_inventario}</td>
                 <td>{material.nombre}</td>
+                <td>
+                  {material.foto ? (
+                    <img
+                      className="material-miniatura"
+                      src={material.foto}
+                      alt={`Foto de ${material.nombre}`}
+                      width="40"
+                      height="40"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <span
+                      className="material-miniatura material-miniatura--vacia"
+                      role="img"
+                      aria-label={`${material.nombre} no tiene foto`}
+                    >
+                      —
+                    </span>
+                  )}
+                </td>
                 <td>{ETIQUETAS_TIPO[material.tipo] || material.tipo}</td>
                 <td>{material.stock}</td>
                 <td>{material.unidades_disponibles}</td>

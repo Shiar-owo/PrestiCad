@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { api, ErrorApi } from '../api/client'
 import {
   validarCodigoInventario,
+  validarFoto,
   validarNombre,
   validarPuntosReputacion,
   validarStock,
@@ -51,7 +52,9 @@ const DATOS_INICIALES = {
   numero_serie: '',
   color: '',
   estado_fisico: '',
-  foto_url: '',
+  // `foto` no vive aquí: es un archivo, no un valor de texto. Se maneja aparte
+  // con `archivoFoto` (lo nuevo que elige el gestor) y `vistaPrevia` (la
+  // imagen que se muestra, que al editar es la que ya tenía guardada).
   tier_minimo_requerido: '',
   bonificacion_tiempo: '',
   deduccion_tardanza: '',
@@ -62,7 +65,7 @@ const DATOS_INICIALES = {
   estado: 'disponible',
 }
 
-function validar(datos, esEdicion) {
+function validar(datos, esEdicion, archivoFoto) {
   const errores = {}
 
   const errorNombre = validarNombre(datos.nombre)
@@ -95,6 +98,11 @@ function validar(datos, esEdicion) {
     }
   }
 
+  const errorFoto = validarFoto(archivoFoto)
+  if (errorFoto) {
+    errores.foto = errorFoto
+  }
+
   return errores
 }
 
@@ -111,6 +119,8 @@ function Campo({ etiqueta, error, children }) {
 function MaterialForm({ material, onGuardado, onCancelar }) {
   const esEdicion = Boolean(material)
   const [datos, setDatos] = useState(DATOS_INICIALES)
+  const [archivoFoto, setArchivoFoto] = useState(null)
+  const [vistaPrevia, setVistaPrevia] = useState('')
   const [errores, setErrores] = useState({})
   const [enviando, setEnviando] = useState(false)
   const [mensajeExito, setMensajeExito] = useState('')
@@ -129,18 +139,41 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
         ),
       })
     }
+    setArchivoFoto(null)
+    setVistaPrevia(material?.foto || '')
     setErrores({})
     setMensajeExito('')
   }, [material])
+
+  // El cleanup corre con la URL anterior a la que `vistaPrevia` va a tomar, y
+  // también al desmontar. Solo se liberan las URLs temporales creadas con
+  // `createObjectURL`; las ya guardadas las administra el backend.
+  useEffect(
+    () => () => {
+      if (vistaPrevia.startsWith('blob:')) {
+        URL.revokeObjectURL(vistaPrevia)
+      }
+    },
+    [vistaPrevia],
+  )
 
   function actualizar(campo, valor) {
     setDatos((previos) => ({ ...previos, [campo]: valor }))
   }
 
+  function manejarArchivoFoto(evento) {
+    const archivo = evento.target.files?.[0] || null
+    setArchivoFoto(archivo)
+    // Sin archivo nuevo se vuelve a la foto guardada: al editar, quitar la
+    // selección no debe dejar la vista previa en blanco.
+    setVistaPrevia(archivo ? URL.createObjectURL(archivo) : material?.foto || '')
+    setErrores((previos) => ({ ...previos, foto: validarFoto(archivo) }))
+  }
+
   // Los parámetros en blanco no se envían: el backend los resuelve con los
   // valores por defecto configurados. Los costos vacíos se envían como null
   // para limpiarlos en la edición.
-  function construirDatosParaApi() {
+  function construirCampos() {
     const cuerpo = {
       nombre: datos.nombre.trim(),
       descripcion: datos.descripcion.trim(),
@@ -153,7 +186,6 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
       numero_serie: datos.numero_serie.trim(),
       color: datos.color.trim(),
       estado_fisico: datos.estado_fisico.trim(),
-      foto_url: datos.foto_url.trim(),
       costo_reparacion: datos.costo_reparacion === '' ? null : Number(datos.costo_reparacion),
       costo_reposicion: datos.costo_reposicion === '' ? null : Number(datos.costo_reposicion),
     }
@@ -175,6 +207,27 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
     return cuerpo
   }
 
+  // Sin foto nueva se manda el objeto de siempre (JSON). Con foto, todo tiene
+  // que viajar en el mismo multipart, así que se arma un FormData.
+  function construirCuerpo() {
+    const campos = construirCampos()
+
+    if (!archivoFoto) {
+      return campos
+    }
+
+    const formulario = new FormData()
+    for (const [campo, valor] of Object.entries(campos)) {
+      // Un `null` appendeado se convierte en la cadena "null" y el backend lo
+      // rechaza. La cadena vacía sí la DRF la traduce a null en los campos
+      // que admiten nulo, que es justo lo que limpia los costos.
+      formulario.append(campo, valor === null ? '' : valor)
+    }
+    formulario.append('foto', archivoFoto)
+
+    return formulario
+  }
+
   function mostrarErroresDelBackend(datosError) {
     const erroresApi = {}
     for (const campo of Object.keys(datosError)) {
@@ -192,7 +245,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
   async function manejarEnvio(evento) {
     evento.preventDefault()
 
-    const erroresFormulario = validar(datos, esEdicion)
+    const erroresFormulario = validar(datos, esEdicion, archivoFoto)
     setErrores(erroresFormulario)
     if (Object.keys(erroresFormulario).length > 0) {
       return
@@ -201,7 +254,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
     setEnviando(true)
     setMensajeExito('')
     try {
-      const cuerpo = construirDatosParaApi()
+      const cuerpo = construirCuerpo()
       if (esEdicion) {
         await api.put(`/materiales/${material.id}/`, cuerpo)
       } else {
@@ -212,6 +265,8 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
         esEdicion ? 'Material actualizado correctamente.' : 'Material registrado correctamente.',
       )
       setErrores({})
+      setArchivoFoto(null)
+      setVistaPrevia(material?.foto || '')
       if (!esEdicion) {
         setDatos(DATOS_INICIALES)
       }
@@ -359,13 +414,23 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
           />
         </Campo>
 
-        <Campo etiqueta="URL de la foto" error={errores.foto_url}>
+        <Campo etiqueta="Foto del material" error={errores.foto}>
           <input
-            type="url"
-            value={datos.foto_url}
-            aria-invalid={Boolean(errores.foto_url)}
-            onChange={(e) => actualizar('foto_url', e.target.value)}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            aria-invalid={Boolean(errores.foto)}
+            onChange={manejarArchivoFoto}
           />
+          <span className="material-form__ayuda">
+            JPG, PNG o WEBP, hasta 5 MB. Opcional.
+          </span>
+          {vistaPrevia ? (
+            <img className="material-form__previa" src={vistaPrevia} alt="Vista previa de la foto" />
+          ) : (
+            <span className="material-form__previa material-form__previa--vacia">
+              Sin foto
+            </span>
+          )}
         </Campo>
 
         <h4>Parámetros de reputación</h4>

@@ -2,10 +2,12 @@
 
 Vistas delgadas: validan la petición y delegan la lógica a `services.py`.
 """
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
 from rest_framework import status
 from rest_framework.generics import ListCreateAPIView, RetrieveUpdateAPIView
-from rest_framework.views import APIView
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from apps.usuarios import services
 from apps.usuarios.models import Usuario
@@ -16,6 +18,8 @@ from apps.usuarios.serializers import (
     UsuarioSerializer,
     UsuarioRegistroSerializer,
     CambioRolSerializer,
+    ActualizarPerfilSerializer,
+    PerfilUsuarioSerializer,
 )
 from apps.usuarios.sesiones import registrar_sesion_activa
 
@@ -127,3 +131,44 @@ class AuthLogoutView(APIView):
     def post(self, request, *args, **kwargs):
         request.session.flush()
         return Response({"mensaje": "Sesión cerrada correctamente."}, status=status.HTTP_200_OK)
+
+
+@method_decorator(csrf_protect, name="dispatch")
+@method_decorator(ensure_csrf_cookie, name="dispatch")
+class PerfilUsuarioView(APIView):
+    """Consulta y actualiza el perfil del usuario asociado a la sesión."""
+
+    authentication_classes = []
+    permission_classes = []
+
+    def _usuario_sesion(self, request):
+        usuario = getattr(request, "usuario_autenticado", None)
+        if usuario is None:
+            return None
+        return usuario
+
+    def get(self, request, *args, **kwargs):
+        usuario = self._usuario_sesion(request)
+        if usuario is None:
+            return Response(
+                {"detail": "Debes iniciar sesión para consultar tu perfil."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        perfil = services.obtener_perfil(usuario)
+        return Response(PerfilUsuarioSerializer(perfil).data, status=status.HTTP_200_OK)
+
+    def put(self, request, *args, **kwargs):
+        usuario = self._usuario_sesion(request)
+        if usuario is None:
+            return Response(
+                {"detail": "Debes iniciar sesión para actualizar tu perfil."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        serializer = ActualizarPerfilSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        actualizado = services.actualizar_perfil(usuario, **serializer.validated_data)
+        perfil = services.obtener_perfil(actualizado)
+        return Response(PerfilUsuarioSerializer(perfil).data, status=status.HTTP_200_OK)

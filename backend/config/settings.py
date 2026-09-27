@@ -98,6 +98,17 @@ CORS_ALLOWED_ORIGINS = [
 
 SESSION_IDLE_TIMEOUT_MINUTES = int(os.getenv("SESSION_IDLE_TIMEOUT_MINUTES", "30"))
 
+# Valores por defecto de los parámetros de reputación de cada material
+# (HU04 criterio 3, RN06). Se aplican cuando el gestor no los parametriza al
+# registrar el material; son configurables aquí sin tocar el código.
+MATERIALES_REPUTACION_DEFAULTS = {
+    "tier_minimo_requerido": "estandar",
+    "bonificacion_tiempo": 5,
+    "deduccion_tardanza": 10,
+    "deduccion_dano_parcial": 30,
+    "deduccion_dano_total": 60,
+}
+
 REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": [
         "rest_framework.renderers.JSONRenderer",

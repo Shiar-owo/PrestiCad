@@ -3,6 +3,7 @@
 Las vistas son delgadas y delegan aquí. Los servicios NO acceden a tablas de
 otros módulos; se comunican con ellos solo a través de sus propios servicios.
 """
+from django.conf import settings
 from django.db import IntegrityError, transaction
 
 from apps.inventario.constants import ESTADOS_MATERIAL
@@ -70,6 +71,16 @@ class MaterialNoEncontradoError(Exception):
 def normalizar_codigo(codigo):
     """Normaliza el código de inventario para que la unicidad no dependa de mayúsculas."""
     return codigo.strip().upper()
+
+
+def parametros_reputacion_por_defecto():
+    """Devuelve los valores por defecto de los parámetros de reputación (HU04 criterio 3).
+
+    Son los configurados en `settings.MATERIALES_REPUTACION_DEFAULTS`; se
+    devuelve una copia para que quien la reciba pueda modificarla sin alterar
+    la configuración global.
+    """
+    return dict(settings.MATERIALES_REPUTACION_DEFAULTS)
 
 
 def obtener_material(material_id):
@@ -155,7 +166,11 @@ def registrar_material(
         "costo_reparacion": costo_reparacion,
         "costo_reposicion": costo_reposicion,
     }
-    campos.update({campo: valor for campo, valor in reputacion.items() if valor is not None})
+    # Los parámetros no informados quedan con el valor por defecto configurable
+    # (criterio 3): lo que sí llega, gana.
+    defaults = parametros_reputacion_por_defecto()
+    defaults.update({campo: valor for campo, valor in reputacion.items() if valor is not None})
+    campos.update(defaults)
 
     try:
         material = Material.objects.create(**campos)

@@ -1,5 +1,6 @@
 """Tests del módulo inventario."""
-from django.test import SimpleTestCase, TestCase
+from django.conf import settings
+from django.test import SimpleTestCase, TestCase, override_settings
 
 from apps.inventario.models import Material
 from apps.inventario.services import (
@@ -10,6 +11,7 @@ from apps.inventario.services import (
     listar_materiales,
     normalizar_codigo,
     obtener_material,
+    parametros_reputacion_por_defecto,
     registrar_material,
 )
 
@@ -227,3 +229,84 @@ class ActualizarMaterialServiceTestCase(TestCase):
 
     def test_normalizar_codigo(self):
         self.assertEqual(normalizar_codigo("  inv-001  "), "INV-001")
+
+
+class ParametrosReputacionPorDefectoTestCase(TestCase):
+    """Tests de los valores por defecto configurables (T04.04, HU04 criterio 3)."""
+
+    def test_aplica_los_defaults_configurados(self):
+        material = registrar_material(
+            nombre="Cable HDMI", codigo_inventario="OBJ-001", tipo="objeto"
+        )
+
+        defaults = settings.MATERIALES_REPUTACION_DEFAULTS
+        self.assertEqual(material.tier_minimo_requerido, defaults["tier_minimo_requerido"])
+        self.assertEqual(material.bonificacion_tiempo, defaults["bonificacion_tiempo"])
+        self.assertEqual(material.deduccion_tardanza, defaults["deduccion_tardanza"])
+        self.assertEqual(material.deduccion_dano_parcial, defaults["deduccion_dano_parcial"])
+        self.assertEqual(material.deduccion_dano_total, defaults["deduccion_dano_total"])
+
+    @override_settings(
+        MATERIALES_REPUTACION_DEFAULTS={
+            "tier_minimo_requerido": "restringido",
+            "bonificacion_tiempo": 1,
+            "deduccion_tardanza": 2,
+            "deduccion_dano_parcial": 3,
+            "deduccion_dano_total": 4,
+        }
+    )
+    def test_los_defaults_son_configurables(self):
+        material = registrar_material(
+            nombre="Cable HDMI", codigo_inventario="OBJ-001", tipo="objeto"
+        )
+
+        self.assertEqual(material.tier_minimo_requerido, "restringido")
+        self.assertEqual(material.bonificacion_tiempo, 1)
+        self.assertEqual(material.deduccion_tardanza, 2)
+        self.assertEqual(material.deduccion_dano_parcial, 3)
+        self.assertEqual(material.deduccion_dano_total, 4)
+
+    def test_lo_parametrizado_gana_sobre_el_default(self):
+        material = registrar_material(
+            nombre="Microscopio",
+            codigo_inventario="EQ-002",
+            tipo="equipo",
+            bonificacion_tiempo=25,
+            deduccion_dano_total=90,
+        )
+
+        self.assertEqual(material.bonificacion_tiempo, 25)
+        self.assertEqual(material.deduccion_dano_total, 90)
+        # lo no parametrizado sigue con el default configurado
+        self.assertEqual(
+            material.deduccion_tardanza, settings.MATERIALES_REPUTACION_DEFAULTS["deduccion_tardanza"]
+        )
+
+    def test_los_costos_no_tienen_default(self):
+        material = registrar_material(
+            nombre="Cable HDMI", codigo_inventario="OBJ-001", tipo="objeto"
+        )
+
+        self.assertIsNone(material.costo_reparacion)
+        self.assertIsNone(material.costo_reposicion)
+
+    def test_parametros_por_defecto_devuelve_una_copia(self):
+        defaults = parametros_reputacion_por_defecto()
+        defaults["bonificacion_tiempo"] = 999
+
+        self.assertNotEqual(
+            settings.MATERIALES_REPUTACION_DEFAULTS["bonificacion_tiempo"],
+            999,
+        )
+
+    def test_los_defaults_del_modelo_coinciden_con_la_configuracion(self):
+        """Evita que la configuración y los `default` del modelo se desincronicen."""
+        defaults = settings.MATERIALES_REPUTACION_DEFAULTS
+
+        for campo, valor in defaults.items():
+            default_del_modelo = Material._meta.get_field(campo).get_default()
+            self.assertEqual(
+                default_del_modelo,
+                valor,
+                f"El default del modelo '{campo}' no coincide con la configuración.",
+            )

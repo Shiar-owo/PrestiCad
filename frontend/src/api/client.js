@@ -10,15 +10,22 @@ export class ErrorApi extends Error {
 }
 
 async function peticion(ruta, opciones = {}) {
+  const { headers, ...resto } = opciones
+
+  // Con FormData no se fija `Content-Type`: el navegador tiene que añadirlo con
+  // el `boundary` del multipart. Si se manda `application/json` a mano, Django
+  // no logra a parsear la petición.
+  const cabeceras = {
+    ...(resto.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
+    ...(headers || {}),
+  }
+
   let respuesta
   try {
     respuesta = await fetch(`${API_URL}${ruta}`, {
       credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(opciones.headers || {}),
-      },
-      ...opciones,
+      headers: cabeceras,
+      ...resto,
     })
   } catch {
     // Error de red (servidor no disponible, CORS, etc.)
@@ -42,9 +49,8 @@ async function peticion(ruta, opciones = {}) {
 export const api = {
   get: (ruta) => peticion(ruta),
   post: (ruta, datos, opciones = {}) =>
-    peticion(ruta, { ...opciones, method: 'POST', body: JSON.stringify(datos) }),
-  put: (ruta, datos, opciones = {}) =>
-    peticion(ruta, { ...opciones, method: 'PUT', body: JSON.stringify(datos)}),
+    peticion(ruta, { ...opciones, method: 'POST', body: datos }),
+  put: (ruta, datos, opciones = {}) => peticion(ruta, { ...opciones, method: 'PUT', body: datos }),
   patch: (ruta, datos, opciones = {}) =>
-    peticion(ruta, { ...opciones, method: 'PATCH', body: JSON.stringify(datos) }),
+    peticion(ruta, { ...opciones, method: 'PATCH', body: datos }),
 }

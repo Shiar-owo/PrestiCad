@@ -1,4 +1,10 @@
-"""Configuración central de Django.
+"""Configuración común a todos los entornos.
+
+Reúne lo que no cambia entre desarrollo y producción: aplicaciones,
+middlewares, base de datos, plantillas y el contrato de la API. Cada entorno
+importa este módulo con `from .base import *` y solo redefine lo propio, de
+modo que un ajuste agregado aquí lo heredan todos sin tener que recordarlo en
+dos archivos.
 
 Este módulo solo orquesta la aplicación (settings, urls, arranque);
 NO contiene lógica de negocio. La lógica vive en cada módulo de `apps/`.
@@ -8,15 +14,13 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+# Este archivo vive tres niveles por debajo de la raíz del backend
+# (`config` > `settings` > `base.py`), así que el proyecto es `parents[2]`.
+# Antes de mover el settings a este paquete, `parent.parent` apuntaba a
+# `backend/config/` y el `.env` dejaba de cargarse sin ningún aviso.
+BASE_DIR = Path(__file__).resolve().parents[2]
 
 load_dotenv(BASE_DIR / ".env")
-
-SECRET_KEY = os.getenv("SECRET_KEY", "clave-insegura-de-desarrollo")
-DEBUG = os.getenv("DEBUG", "True") == "True"
-ALLOWED_HOSTS = [
-    h for h in os.getenv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h
-]
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -91,10 +95,6 @@ USE_TZ = True
 STATIC_URL = "static/"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
-
-CORS_ALLOWED_ORIGINS = [
-    o for o in os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:5173").split(",") if o
-]
 
 SESSION_IDLE_TIMEOUT_MINUTES = int(os.getenv("SESSION_IDLE_TIMEOUT_MINUTES", "30"))
 

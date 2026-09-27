@@ -1,6 +1,8 @@
 """Tests del módulo inventario."""
 from django.conf import settings
 from django.test import SimpleTestCase, TestCase, override_settings
+from django.utils import timezone
+from rest_framework.test import APITestCase
 
 from apps.inventario.models import Material
 from apps.inventario.serializers import (
@@ -8,6 +10,9 @@ from apps.inventario.serializers import (
     MaterialRegistroSerializer,
     MaterialSerializer,
 )
+from apps.usuarios.models import Rol
+from apps.usuarios.services import registrar_usuario
+from apps.usuarios.sesiones import CLAVE_SESION_ULTIMA_ACTIVIDAD, CLAVE_SESION_USUARIO_ID
 from apps.inventario.services import (
     InventarioError,
     MaterialNoEncontradoError,
@@ -440,3 +445,233 @@ class MaterialSerializerContratoTestCase(SimpleTestCase):
 
         self.assertTrue(serializer.is_valid(), serializer.errors)
         self.assertIsNone(serializer.validated_data["costo_reparacion"])
+
+
+class ModuloInventarioTestCase(SimpleTestCase):
+    def test_urls_montadas_en_api(self):
+        """Las urls del módulo están incluidas bajo /api/materiales/."""
+        from config.urls import urlpatterns
+
+        rutas = {str(p.pattern) for p in urlpatterns}
+        self.assertIn("api/", rutas)
+
+
+class MaterialesAPITestCase(APITestCase):
+    """Tests de los endpoints de materiales (T04.05, HU04)."""
+
+    LIST_URL = "/api/materiales/"
+
+    def _crear_usuario(self, email, rol):
+        usuario = registrar_usuario(
+            nombre="Ana",
+            apellido="Torres",
+            email=email,
+            dni=email.split("@")[0][-8:],
+            tipo="docente",
+            facultad="Ingeniería de Producción y Servicios",
+            password="ClaveSegura123",
+        )
+        usuario.rol = Rol.objects.get(nombre=rol)
+        usuario.save()
+        return usuario
+
+    def _autenticar(self, email, rol):
+        """Deja una sesión activa con el usuario indicado."""
+        usuario = self._crear_usuario(email, rol)
+        sesion = self.client.session
+        sesion[CLAVE_SESION_USUARIO_ID] = usuario.id
+        sesion[CLAVE_SESION_ULTIMA_ACTIVIDAD] = timezone.now().isoformat()
+        sesion.save()
+        return usuario
+
+    def _url_detalle(self, material):
+        return f"{self.LIST_URL}{material.id}/"
+
+    def _payload_valido(self, **extra):
+        datos = {"nombre": "Cable HDMI", "codigo_inventario": "OBJ-001", "tipo": "objeto"}
+        datos.update(extra)
+        return datos
+
+    # --- Listado y consulta: públicos ---
+
+    def test_listar_materiales_es_publico(self):
+        registrar_material(nombre="Cable HDMI", codigo_inventario="OBJ-001", tipo="objeto")
+
+        respuesta = self.client.get(self.LIST_URL)
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(len(respuesta.json()), 1)
+        self.assertEqual(respuesta.json()[0]["codigo_inventario"], "OBJ-001")
+
+    def test_consultar_material_es_publico(self):
+        material = registrar_material(
+            nombre="Cable HDMI", codigo_inventario="OBJ-001", tipo="objeto", stock=3
+        )
+
+        respuesta = self.client.get(self._url_detalle(material))
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.json()["unidades_disponibles"], 3)
+
+    # --- Registro: requiere gestor o administrador ---
+
+    def test_registrar_sin_sesion_responde_403(self):
+        respuesta = self.client.post(self.LIST_URL, self._payload_valido(), format="json")
+
+        self.assertEqual(respuesta.status_code, 403)
+        self.assertEqual(
+            respuesta.json()["detail"], "Inicia sesión para gestionar el inventario."
+        )
+        self.assertEqual(Material.objects.count(), 0)
+
+    def test_registrar_como_prestatario_responde_403(self):
+        """El rol `prestatario` no gestiona el inventario (criterio 5)."""
+        self._autenticar("prestatario@unsa.edu.pe", "prestatario")
+
+        respuesta = self.client.post(self.LIST_URL, self._payload_valido(), format="json")
+
+        self.assertEqual(respuesta.status_code, 403)
+        self.assertEqual(
+            respuesta.json()["detail"],
+            "Solo un gestor o un administrador puede gestionar el inventario.",
+        )
+        self.assertEqual(Material.objects.count(), 0)
+
+    def test_registrar_como_gestor_responde_201(self):
+        self._autenticar("gestor@unsa.edu.pe", "gestor")
+
+        respuesta = self.client.post(self.LIST_URL, self._payload_valido(), format="json")
+
+        self.assertEqual(respuesta.status_code, 201, respuesta.content)
+        cuerpo = respuesta.json()
+        self.assertEqual(cuerpo["estado"], "disponible")
+        self.assertEqual(cuerpo["unidades_disponibles"], 1)
+        self.assertEqual(cuerpo["bonificacion_tiempo"], 5)
+        self.assertEqual(Material.objects.count(), 1)
+
+    def test_registrar_como_administrador_responde_201(self):
+        self._autenticar("admin@unsa.edu.pe", "administrador")
+
+        respuesta = self.client.post(self.LIST_URL, self._payload_valido(), format="json")
+
+        self.assertEqual(respuesta.status_code, 201, respuesta.content)
+
+    def test_registrar_con_codigo_duplicado_responde_409(self):
+        self._autenticar("gestor@unsa.edu.pe", "gestor")
+        registrar_material(nombre="Otro", codigo_inventario="OBJ-001", tipo="objeto")
+
+        respuesta = self.client.post(self.LIST_URL, self._payload_valido(), format="json")
+
+        self.assertEqual(respuesta.status_code, 409)
+        self.assertEqual(Material.objects.count(), 1)
+
+    def test_registrar_con_datos_invalidos_responde_400(self):
+        self._autenticar("gestor@unsa.edu.pe", "gestor")
+
+        respuesta = self.client.post(
+            self.LIST_URL, {"nombre": "", "codigo_inventario": "", "tipo": "x"}, format="json"
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn("tipo", respuesta.json())
+        self.assertEqual(Material.objects.count(), 0)
+
+    def test_registrar_con_estado_responde_400(self):
+        """`estado` no forma parte del contrato de alta (criterio 6)."""
+        self._autenticar("gestor@unsa.edu.pe", "gestor")
+
+        respuesta = self.client.post(
+            self.LIST_URL, self._payload_valido(estado="prestado"), format="json"
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(Material.objects.count(), 0)
+
+    # --- Edición: requiere gestor o administrador ---
+
+    def test_editar_sin_sesion_responde_403(self):
+        material = registrar_material(
+            nombre="Cable HDMI", codigo_inventario="OBJ-001", tipo="objeto"
+        )
+
+        respuesta = self.client.patch(
+            self._url_detalle(material), {"nombre": "Otro"}, format="json"
+        )
+
+        self.assertEqual(respuesta.status_code, 403)
+        material.refresh_from_db()
+        self.assertEqual(material.nombre, "Cable HDMI")
+
+    def test_patch_cambia_estado_a_en_mantenimiento(self):
+        material = registrar_material(
+            nombre="Cable HDMI", codigo_inventario="OBJ-001", tipo="objeto"
+        )
+        self._autenticar("gestor@unsa.edu.pe", "gestor")
+
+        respuesta = self.client.patch(
+            self._url_detalle(material), {"estado": "en_mantenimiento"}, format="json"
+        )
+
+        self.assertEqual(respuesta.status_code, 200, respuesta.content)
+        material.refresh_from_db()
+        self.assertEqual(material.estado, "en_mantenimiento")
+
+    def test_put_actualiza_los_campos_enviados(self):
+        material = registrar_material(
+            nombre="Cable HDMI", codigo_inventario="OBJ-001", tipo="objeto", stock=1
+        )
+        self._autenticar("gestor@unsa.edu.pe", "gestor")
+
+        respuesta = self.client.put(
+            self._url_detalle(material),
+            {
+                "nombre": "Cable HDMI 2m",
+                "codigo_inventario": "OBJ-002",
+                "tipo": "objeto",
+                "stock": 5,
+            },
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, 200, respuesta.content)
+        material.refresh_from_db()
+        self.assertEqual(material.nombre, "Cable HDMI 2m")
+        self.assertEqual(material.codigo_inventario, "OBJ-002")
+        self.assertEqual(material.stock, 5)
+        self.assertEqual(respuesta.json()["unidades_disponibles"], 5)
+
+    def test_editar_con_codigo_duplicado_responde_409(self):
+        registrar_material(nombre="Libro", codigo_inventario="LIB-001", tipo="libro")
+        material = registrar_material(
+            nombre="Cable", codigo_inventario="OBJ-001", tipo="objeto"
+        )
+        self._autenticar("gestor@unsa.edu.pe", "gestor")
+
+        respuesta = self.client.patch(
+            self._url_detalle(material), {"codigo_inventario": "LIB-001"}, format="json"
+        )
+
+        self.assertEqual(respuesta.status_code, 409)
+        material.refresh_from_db()
+        self.assertEqual(material.codigo_inventario, "OBJ-001")
+
+    def test_editar_con_stock_cero_responde_400(self):
+        material = registrar_material(
+            nombre="Cable", codigo_inventario="OBJ-001", tipo="objeto"
+        )
+        self._autenticar("gestor@unsa.edu.pe", "gestor")
+
+        respuesta = self.client.patch(
+            self._url_detalle(material), {"stock": 0}, format="json"
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn("stock", respuesta.json())
+
+    def test_editar_material_inexistente_responde_404(self):
+        self._autenticar("gestor@unsa.edu.pe", "gestor")
+        url_inexistente = f"{self.LIST_URL}11111111-1111-1111-1111-111111111111/"
+
+        respuesta = self.client.patch(url_inexistente, {"stock": 2}, format="json")
+
+        self.assertEqual(respuesta.status_code, 404)

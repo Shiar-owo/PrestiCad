@@ -38,3 +38,53 @@ export function validarPassword(password) {
   return ''
 }
 
+// --- Inventario (HU04) ---
+
+export function validarCodigoInventario(codigo) {
+  if (!codigo.trim()) {
+    return 'El código de inventario es obligatorio.'
+  }
+
+  if (codigo.trim().length > 30) {
+    return 'El código admite máximo 30 caracteres.'
+  }
+
+  return ''
+}
+
+export function validarStock(stock) {
+  const valor = Number(stock)
+
+  if (stock === '' || stock === null || stock === undefined) {
+    return ''
+  }
+
+  if (!Number.isInteger(valor)) {
+    return 'El stock debe ser un número entero.'
+  }
+
+  if (valor < 1) {
+    return 'El stock debe ser al menos 1 unidad.'
+  }
+
+  return ''
+}
+
+export function validarPuntosReputacion(valor) {
+  if (valor === '' || valor === null || valor === undefined) {
+    return ''
+  }
+
+  const numero = Number(valor)
+
+  if (!Number.isInteger(numero)) {
+    return 'Ingresa un número entero.'
+  }
+
+  if (numero < 0 || numero > 500) {
+    return 'Ingresa un valor entre 0 y 500 puntos.'
+  }
+
+  return ''
+}
+

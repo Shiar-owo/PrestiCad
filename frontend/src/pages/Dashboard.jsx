@@ -1,3 +1,4 @@
+import Materiales from './Materiales'
 import RegistroUsuario from './RegistroUsuario'
 import UsuariosRoles from './UsuariosRoles'
 
@@ -47,6 +48,8 @@ function PanelGestor() {
           <p>Revisión de solicitudes y entregas en curso.</p>
         </div>
       </div>
+      <hr style={{ margin: '2rem 0' }} />
+      <Materiales />
     </div>
   )
 }
@@ -56,6 +59,9 @@ function PanelAdministrador() {
     <div className="dashboard__panel">
       <h3>Panel de Administrador</h3>
       <p>Gestión global de usuarios, asignación de roles y permisos del sistema.</p>
+      <hr style={{ margin: '2rem 0' }} />
+      <Materiales />
+      <hr style={{ margin: '2rem 0' }} />
       <UsuariosRoles />
       <hr style={{ margin: '2rem 0' }} />
       <RegistroUsuario />

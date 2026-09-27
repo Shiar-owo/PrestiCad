@@ -29,6 +29,7 @@ INSTALLED_APPS = [
     "rest_framework",
     # Módulos del dominio (monolito modular)
     "apps.usuarios",
+    "apps.inventario",
 ]
 
 MIDDLEWARE = [

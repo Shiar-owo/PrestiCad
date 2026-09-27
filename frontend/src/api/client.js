@@ -41,8 +41,10 @@ async function peticion(ruta, opciones = {}) {
 
 export const api = {
   get: (ruta) => peticion(ruta),
-  post: (ruta, datos) =>
-    peticion(ruta, { method: 'POST', body: JSON.stringify(datos) }),
+  post: (ruta, datos, opciones = {}) =>
+    peticion(ruta, { ...opciones, method: 'POST', body: JSON.stringify(datos) }),
   put: (ruta, datos, opciones = {}) =>
     peticion(ruta, { ...opciones, method: 'PUT', body: JSON.stringify(datos)}),
+  patch: (ruta, datos, opciones = {}) =>
+    peticion(ruta, { ...opciones, method: 'PATCH', body: JSON.stringify(datos) }),
 }

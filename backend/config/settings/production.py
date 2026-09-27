@@ -48,3 +48,33 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 # cuando exista un certificado.
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
+
+# En producción las imágenes no tocan el disco del contenedor: van a
+# Cloudinary, que a su vez las sirve por CDN.
+CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME")
+CLOUDINARY_API_KEY = os.getenv("CLOUDINARY_API_KEY")
+CLOUDINARY_API_SECRET = os.getenv("CLOUDINARY_API_SECRET")
+if not all([CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET]):
+    raise ImproperlyConfigured(
+        "Define CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY y "
+        "CLOUDINARY_API_SECRET en el entorno de producción."
+    )
+
+CLOUDINARY_STORAGE = {
+    "CLOUD_NAME": CLOUDINARY_CLOUD_NAME,
+    "API_KEY": CLOUDINARY_API_KEY,
+    "API_SECRET": CLOUDINARY_API_SECRET,
+    "SECURE": True,
+    # El paquete usa MEDIA_URL como prefijo del nombre remoto si no se indica
+    # otra cosa, y dejaría la ruta local horneada en el nombre del asset.
+    "PREFIX": "",
+}
+
+STORAGES = {
+    "default": {
+        "BACKEND": "cloudinary_storage.storage.MediaCloudinaryStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+    },
+}

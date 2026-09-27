@@ -24,3 +24,23 @@ ALLOWED_HOSTS = [
 CORS_ALLOWED_ORIGINS = [
     o for o in os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:5173").split(",") if o
 ]
+
+# Las imágenes se guardan en disco dentro del contenedor. El volumen montado
+# (`./backend:/app`) las conserva entre reinicios; no se versionan porque
+# `.gitignore` excluye `backend/media/`.
+MEDIA_URL = "media/"
+MEDIA_ROOT = BASE_DIR / "media"
+
+# En desarrollo el backend está publicado en el puerto 8000, así que el
+# navegador pide las imágenes directamente a Django. El SPA corre en 5173,
+# pero a una etiqueta `<img>` no le afecta CORS.
+MEDIA_URL_PUBLICA = os.getenv("MEDIA_URL_PUBLICA", "http://localhost:8000")
+
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+    },
+}

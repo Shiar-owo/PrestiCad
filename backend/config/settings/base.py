@@ -94,6 +94,13 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 
+# Origen público con el que el navegador resuelve los archivos servidos por
+# Django. Solo interviene cuando el storage devuelve una ruta relativa: en
+# producción Cloudinary ya devuelve una URL absoluta y este valor se ignora.
+# Hace falta porque `request.build_absolute_uri()` usaría el Host que le
+# reenvía el proxy de Vite (`backend:8000`), que el navegador no puede resolver.
+MEDIA_URL_PUBLICA = os.getenv("MEDIA_URL_PUBLICA", "")
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 SESSION_IDLE_TIMEOUT_MINUTES = int(os.getenv("SESSION_IDLE_TIMEOUT_MINUTES", "30"))

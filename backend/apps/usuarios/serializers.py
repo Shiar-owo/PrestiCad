@@ -42,6 +42,16 @@ class UsuarioSerializer(serializers.ModelSerializer):
         fields = "__all__"
         read_only_fields = ("id", "created_at", "updated_at")
 
+class UsuarioListaSerializer(serializers.ModelSerializer):
+    """Datos mínimos para la lista administrativa y la sesión actual."""
+
+    rol = serializers.SlugRelatedField(slug_field="nombre", read_only=True)
+
+    class Meta:
+        model = Usuario
+        fields = ("id", "nombre", "apellido", "email", "tipo", "rol", "estado")
+
+
 class CambioRolSerializer(serializers.ModelSerializer):
     """Contrato de entrada/salida para el endpoint de cambio de rol.
  

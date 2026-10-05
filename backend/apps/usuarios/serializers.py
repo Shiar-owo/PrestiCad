@@ -1,8 +1,9 @@
 from django.core.validators import RegexValidator
 from rest_framework import serializers
 
-from apps.usuarios.constants import TIPOS_USUARIO
-from apps.usuarios.models import Credencial, Usuario, Rol
+from apps.compartido.serializers import RechazarCamposNoPermitidosMixin
+from apps.usuarios.constants import ESTADOS_USUARIO, ROLES, TIERS, TIPOS_USUARIO
+from apps.usuarios.models import Credencial, Rol, Usuario
 
 DNI_VALIDATOR = RegexValidator(
     r"^\d{8}$",
@@ -13,21 +14,6 @@ MENSAJES_CAMPO_NOMBRE = {
     "required": "El nombre es obligatorio.",
     "blank": "El nombre es obligatorio.",
 }
-
-
-class RechazarCamposNoPermitidosMixin:
-    """Rechaza claves que no forman parte del contrato de entrada."""
-
-    def validate(self, attrs):
-        campos_no_permitidos = set(self.initial_data) - set(self.fields)
-        if campos_no_permitidos:
-            raise serializers.ValidationError(
-                {
-                    campo: "Este campo no está permitido."
-                    for campo in campos_no_permitidos
-                }
-            )
-        return super().validate(attrs)
 
 
 class UsuarioSerializer(serializers.ModelSerializer):
@@ -154,3 +140,34 @@ class CredencialSerializer(serializers.ModelSerializer):
         model = Credencial
         fields = "__all__"
         read_only_fields = ("id", "failed_attempts", "locked_until")
+
+
+class LoginSerializer(serializers.Serializer):
+    """Valida las credenciales de inicio de sesión."""
+
+    email = serializers.EmailField(
+        error_messages={
+            "required": "El email es obligatorio.",
+            "invalid": "Ingresa un correo electrónico válido.",
+        },
+    )
+    password = serializers.CharField(
+        write_only=True,
+        min_length=8,
+        error_messages={
+            "min_length": "La contraseña debe tener al menos 8 caracteres.",
+            "required": "La contraseña es obligatoria.",
+        },
+    )
+
+
+class SesionUsuarioSerializer(serializers.Serializer):
+    """Datos del usuario devueltos al iniciar sesión."""
+
+    id = serializers.IntegerField()
+    nombre = serializers.CharField()
+    apellido = serializers.CharField()
+    email = serializers.EmailField()
+    rol = serializers.ChoiceField(choices=ROLES)
+    estado = serializers.ChoiceField(choices=ESTADOS_USUARIO)
+    reputacion_tier = serializers.ChoiceField(choices=TIERS)

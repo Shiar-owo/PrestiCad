@@ -5,8 +5,15 @@ from django.contrib.auth.hashers import check_password, make_password
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
+from apps.usuarios.models import Credencial, Rol, Usuario
+
+INTENTOS_FALLIDOS_MAXIMOS = 5
+MINUTOS_BLOQUEO_CUENTA = 15
+
 
 class UsuariosError(Exception):
+    """Error de negocio con campo y mensaje aptos para la API."""
+
     def __init__(self, campo, mensaje):
         self.campo = campo
         self.mensaje = mensaje
@@ -21,28 +28,62 @@ class UsuarioNoEncontradoError(Exception):
     """No existe un usuario con el id indicado."""
 
 
-class CredencialesInvalidasError(Exception):
-    """Las credenciales no son válidas o la cuenta está bloqueada."""
-
-
 def obtener_usuario_por_id(usuario_id):
-    from apps.usuarios.models import Usuario
-
     try:
         return Usuario.objects.select_related("rol").get(pk=usuario_id)
     except Usuario.DoesNotExist:
         return None
 
 
-def listar_usuarios_con_rol():
-    from apps.usuarios.models import Usuario
+def obtener_credencial_por_email(email):
+    email_normalizado = email.strip().lower()
+    return Credencial.objects.select_related("usuario", "usuario__rol").filter(
+        email__iexact=email_normalizado
+    ).first()
 
+
+def _bloqueo_expirado(credencial):
+    return bool(credencial.locked_until and credencial.locked_until <= timezone.now())
+
+
+def _reiniciar_intentos_autenticacion(credencial):
+    credencial.failed_attempts = 0
+    credencial.locked_until = None
+    credencial.save(update_fields=["failed_attempts", "locked_until"])
+
+
+def _registrar_fallo_autenticacion(credencial):
+    credencial.failed_attempts += 1
+    if credencial.failed_attempts >= INTENTOS_FALLIDOS_MAXIMOS:
+        credencial.locked_until = timezone.now() + timedelta(minutes=MINUTOS_BLOQUEO_CUENTA)
+    credencial.save(update_fields=["failed_attempts", "locked_until"])
+
+
+def autenticar_usuario(*, email, password):
+    """Autentica por email, controla intentos y devuelve al usuario activo."""
+    credencial = obtener_credencial_por_email(email)
+    if credencial is None:
+        raise UsuariosError("email", "El email o la contraseña son incorrectos.")
+
+    if credencial.locked_until and not _bloqueo_expirado(credencial):
+        raise UsuariosError("email", "La cuenta está bloqueada temporalmente.")
+
+    if not check_password(password, credencial.password_hash):
+        _registrar_fallo_autenticacion(credencial)
+        raise UsuariosError("password", "El email o la contraseña son incorrectos.")
+
+    if credencial.usuario.estado != "activo":
+        raise UsuariosError("email", "El email o la contraseña son incorrectos.")
+
+    _reiniciar_intentos_autenticacion(credencial)
+    return credencial.usuario
+
+
+def listar_usuarios_con_rol():
     return Usuario.objects.select_related("rol").all()
 
 
 def cambiar_rol_usuario(usuario_id, nuevo_rol):
-    from apps.usuarios.models import Rol
-
     usuario = obtener_usuario_por_id(usuario_id)
     if usuario is None:
         raise UsuarioNoEncontradoError(f"No existe un usuario con id={usuario_id}")
@@ -60,24 +101,32 @@ def cambiar_rol_usuario(usuario_id, nuevo_rol):
     return usuario
 
 
-def registrar_usuario(**datos):
-    from apps.usuarios.models import Credencial, Usuario
-
-    email = datos.pop("email").strip().lower()
-    dni = datos.get("dni", "").strip()
+def registrar_usuario(*, nombre, apellido, email, dni, telefono="", tipo, facultad,
+                      departamento_carrera="", password):
+    """Crea usuario y credencial en una transacción, con contraseña hasheada."""
+    email = email.strip().lower()
+    dni = dni.strip()
     if Usuario.objects.filter(email__iexact=email).exists():
         raise UsuariosError("email", "El email ya está registrado.")
     if Usuario.objects.filter(dni=dni).exists():
         raise UsuariosError("dni", "El DNI ya está registrado.")
 
-    contrasena = datos.pop("password")
     try:
         with transaction.atomic():
-            usuario = Usuario.objects.create(email=email, **datos)
+            usuario = Usuario.objects.create(
+                email=email,
+                nombre=nombre,
+                apellido=apellido,
+                dni=dni,
+                telefono=telefono,
+                tipo=tipo,
+                facultad=facultad,
+                departamento_carrera=departamento_carrera,
+            )
             Credencial.objects.create(
                 usuario=usuario,
                 email=email,
-                password_hash=make_password(contrasena),
+                password_hash=make_password(password),
             )
     except IntegrityError as exc:
         if Usuario.objects.filter(email__iexact=email).exists():
@@ -86,43 +135,11 @@ def registrar_usuario(**datos):
     return usuario
 
 
-def autenticar_usuario(email, contrasena):
-    from apps.usuarios.models import Credencial
-
-    credencial = (
-        Credencial.objects.select_related("usuario", "usuario__rol")
-        .filter(email__iexact=email.strip())
-        .first()
-    )
-    ahora = timezone.now()
-    if credencial is None:
-        raise CredencialesInvalidasError
-    if credencial.locked_until and credencial.locked_until > ahora:
-        raise CredencialesInvalidasError
-
-    if not check_password(contrasena, credencial.password_hash):
-        credencial.failed_attempts += 1
-        if credencial.failed_attempts >= 5:
-            credencial.failed_attempts = 0
-            credencial.locked_until = ahora + timedelta(minutes=30)
-        credencial.save(update_fields=["failed_attempts", "locked_until"])
-        raise CredencialesInvalidasError
-
-    usuario = credencial.usuario
-    if usuario.estado != "activo":
-        raise CredencialesInvalidasError
-
-    credencial.failed_attempts = 0
-    credencial.locked_until = None
-    credencial.save(update_fields=["failed_attempts", "locked_until"])
-    return usuario
-
-
 def usuario_tiene_prestamos_activos(usuario_id):
-    """Falla de forma segura mientras el módulo de préstamos no esté disponible."""
+    """Impide borrados hasta disponer del servicio dueño de los préstamos."""
     try:
         from apps.prestamos.services import tiene_prestamos_activos
-    except (ImportError, ModuleNotFoundError):
+    except ImportError:
         return True
     return tiene_prestamos_activos(usuario_id)
 
@@ -140,9 +157,11 @@ def obtener_perfil(usuario):
     }
 
 
-def actualizar_perfil(usuario, nombre, telefono=None):
+def actualizar_perfil(usuario, *, nombre, telefono=None):
     usuario.nombre = nombre.strip()
+    campos_actualizados = ["nombre", "updated_at"]
     if telefono is not None:
         usuario.telefono = telefono.strip()
-    usuario.save(update_fields=["nombre", "telefono", "updated_at"])
+        campos_actualizados.append("telefono")
+    usuario.save(update_fields=campos_actualizados)
     return usuario

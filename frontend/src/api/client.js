@@ -9,30 +9,38 @@ export class ErrorApi extends Error {
   }
 }
 
-function obtenerTokenCsrf() {
-  const cookie = document.cookie
-    .split('; ')
-    .find((parte) => parte.startsWith('csrftoken='))
-  return cookie ? decodeURIComponent(cookie.slice('csrftoken='.length)) : ''
+function esFormulario(datos) {
+  return typeof FormData !== 'undefined' && datos instanceof FormData
+}
+
+function construirBody(datos) {
+  return esFormulario(datos) ? datos : JSON.stringify(datos)
+}
+
+function obtenerTokenCSRF() {
+  if (typeof document === 'undefined') return null
+  const cookie = document.cookie.split('; ').find((item) => item.startsWith('csrftoken='))
+  return cookie ? decodeURIComponent(cookie.slice('csrftoken='.length)) : null
 }
 
 async function peticion(ruta, opciones = {}) {
-  let respuesta
-  const metodo = (opciones.method || 'GET').toUpperCase()
-  const encabezados = {
-    'Content-Type': 'application/json',
-    ...(opciones.headers || {}),
-  }
-  if (!['GET', 'HEAD', 'OPTIONS', 'TRACE'].includes(metodo)) {
-    const tokenCsrf = obtenerTokenCsrf()
-    if (tokenCsrf) encabezados['X-CSRFToken'] = tokenCsrf
+  const { headers = {}, ...resto } = opciones
+  const metodo = (resto.method || 'GET').toUpperCase()
+  const tokenCSRF = obtenerTokenCSRF()
+  const cabeceras = {
+    ...(esFormulario(resto.body) ? {} : { 'Content-Type': 'application/json' }),
+    ...headers,
+    ...(!['GET', 'HEAD', 'OPTIONS', 'TRACE'].includes(metodo) && tokenCSRF
+      ? { 'X-CSRFToken': tokenCSRF }
+      : {}),
   }
 
+  let respuesta
   try {
     respuesta = await fetch(`${API_URL}${ruta}`, {
-      ...opciones,
-      credentials: 'same-origin',
-      headers: encabezados,
+      ...resto,
+      credentials: 'include',
+      headers: cabeceras,
     })
   } catch {
     throw new ErrorApi(0, null)
@@ -44,15 +52,25 @@ async function peticion(ruta, opciones = {}) {
   } catch {
     datos = null
   }
-
   if (!respuesta.ok) throw new ErrorApi(respuesta.status, datos)
   return datos
 }
 
 export const api = {
   get: (ruta) => peticion(ruta),
-  post: (ruta, datos, opciones = {}) =>
-    peticion(ruta, { ...opciones, method: 'POST', body: JSON.stringify(datos) }),
-  put: (ruta, datos, opciones = {}) =>
-    peticion(ruta, { ...opciones, method: 'PUT', body: JSON.stringify(datos) }),
+  post: (ruta, datos, opciones = {}) => peticion(ruta, {
+    ...opciones,
+    method: 'POST',
+    body: construirBody(datos),
+  }),
+  put: (ruta, datos, opciones = {}) => peticion(ruta, {
+    ...opciones,
+    method: 'PUT',
+    body: construirBody(datos),
+  }),
+  patch: (ruta, datos, opciones = {}) => peticion(ruta, {
+    ...opciones,
+    method: 'PATCH',
+    body: construirBody(datos),
+  }),
 }

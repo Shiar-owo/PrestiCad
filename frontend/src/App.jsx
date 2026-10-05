@@ -1,86 +1,95 @@
 import { useEffect, useState } from 'react'
 
-import './estilos.css'
 import { api } from './api/client'
-import IniciarSesion from './pages/IniciarSesion'
+import './estilos.css'
+import Dashboard from './pages/Dashboard'
+import Login from './pages/Login'
 import RegistroUsuario from './pages/RegistroUsuario'
 import UsuariosRoles from './pages/UsuariosRoles'
 
 function App() {
-  const [pagina, setPagina] = useState(window.location.pathname)
-  const [usuario, setUsuario] = useState(null)
+  const [usuarioActual, setUsuarioActual] = useState(null)
+  const [vista, setVista] = useState('login')
   const [cargandoSesion, setCargandoSesion] = useState(true)
 
   useEffect(() => {
-    const actualizarRuta = () => setPagina(window.location.pathname)
-    window.addEventListener('popstate', actualizarRuta)
     api.get('/auth/me/')
-      .then(setUsuario)
-      .catch(() => setUsuario(null))
+      .then(setUsuarioActual)
+      .catch(() => setUsuarioActual(null))
       .finally(() => setCargandoSesion(false))
-    return () => window.removeEventListener('popstate', actualizarRuta)
   }, [])
 
-  function navegar(ruta) {
-    window.history.pushState({}, '', ruta)
-    setPagina(ruta)
+  function manejarLoginExitoso(usuario) {
+    setUsuarioActual(usuario)
+    setVista('dashboard')
   }
 
-  async function cerrarSesion() {
+  function manejarPerfilActualizado(perfil) {
+    setUsuarioActual((usuario) => (usuario ? { ...usuario, ...perfil } : usuario))
+  }
+
+  async function manejarCierreSesion() {
     try {
-      await api.get('/auth/csrf/')
       await api.post('/auth/logout/', {})
-    } finally {
-      setUsuario(null)
-      navegar('/')
+    } catch {
+      // Se limpia la vista local aunque falle la conexión.
     }
+    setUsuarioActual(null)
+    setVista('login')
   }
 
-  const ruta = pagina.replace(/\/$/, '') || '/'
+  if (cargandoSesion) {
+    return <main><h1>PrestiCad</h1><p>Comprobando sesión…</p></main>
+  }
 
   return (
     <main>
-      <header>
-        <h1>PrestiCad</h1>
-        <p>Sistema de Préstamos Académicos</p>
-        <nav aria-label="Navegación principal">
-          <a href="/" onClick={(evento) => { evento.preventDefault(); navegar('/') }}>Inicio</a>{' · '}
-          <a href="/registro" onClick={(evento) => { evento.preventDefault(); navegar('/registro') }}>Registro</a>{' · '}
-          {usuario ? (
-            <>
-              <span>Sesión: {usuario.nombre} {usuario.apellido}</span>
-              {usuario.rol === 'administrador' && (
-                <> · <a href="/usuarios/roles" onClick={(evento) => { evento.preventDefault(); navegar('/usuarios/roles') }}>Gestionar roles</a></>
-              )}
-              {' · '}
-              <button type="button" onClick={cerrarSesion}>Cerrar sesión</button>
-            </>
-          ) : (
-            <a href="/login" onClick={(evento) => { evento.preventDefault(); navegar('/login') }}>Iniciar sesión</a>
-          )}
-        </nav>
-      </header>
-
-      {cargandoSesion ? <p>Comprobando sesión…</p> : (
+      <h1>PrestiCad</h1>
+      <p>Sistema de Préstamos Académicos</p>
+      {usuarioActual ? (
         <>
-          {ruta === '/registro' && <RegistroUsuario />}
-          {ruta === '/login' && (
-            <IniciarSesion onIniciarSesion={(sesion) => {
-              setUsuario(sesion)
-              navegar(sesion.rol === 'administrador' ? '/usuarios/roles' : '/')
-            }} />
+          <nav className="navegacion-auth" aria-label="Navegación principal">
+            <button
+              type="button"
+              className={vista === 'dashboard' ? 'activo' : 'boton-secundario'}
+              onClick={() => setVista('dashboard')}
+            >Panel principal</button>
+            {usuarioActual.rol === 'administrador' && (
+              <button
+                type="button"
+                className={vista === 'roles' ? 'activo' : 'boton-secundario'}
+                onClick={() => setVista('roles')}
+              >Gestionar roles</button>
+            )}
+            <button type="button" className="boton-secundario" onClick={manejarCierreSesion}>
+              Cerrar sesión
+            </button>
+          </nav>
+          {vista === 'roles' && usuarioActual.rol === 'administrador' ? (
+            <UsuariosRoles />
+          ) : (
+            <Dashboard
+              usuario={usuarioActual}
+              onPerfilActualizado={manejarPerfilActualizado}
+            />
           )}
-          {ruta === '/usuarios/roles' && (
-            usuario?.rol === 'administrador'
-              ? <UsuariosRoles />
-              : <p role="alert">Debes iniciar sesión como administrador para gestionar roles.</p>
-          )}
-          {ruta === '/' && (
-            <section>
-              <h2>Bienvenido a PrestiCad</h2>
-              <p>Registra una cuenta o inicia sesión para continuar.</p>
-            </section>
-          )}
+        </>
+      ) : (
+        <>
+          <nav className="navegacion-auth" aria-label="Acceso">
+            <button
+              type="button"
+              className={vista === 'login' ? 'activo' : 'boton-secundario'}
+              onClick={() => setVista('login')}
+            >Iniciar sesión</button>
+            <button
+              type="button"
+              className={vista === 'registro' ? 'activo' : 'boton-secundario'}
+              onClick={() => setVista('registro')}
+            >Registrarse</button>
+          </nav>
+          {vista === 'login' && <Login onLoginExitoso={manejarLoginExitoso} />}
+          {vista === 'registro' && <RegistroUsuario />}
         </>
       )}
     </main>

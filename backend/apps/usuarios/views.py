@@ -1,9 +1,10 @@
-"""Endpoints del módulo usuarios y autenticación por sesión."""
+"""Endpoints del módulo usuarios."""
 import json
 
 from django.http import JsonResponse
+from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
-from django.views.decorators.http import require_GET, require_POST
+from django.views.decorators.http import require_GET
 from rest_framework import status
 from rest_framework.generics import ListCreateAPIView, RetrieveUpdateAPIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -15,11 +16,16 @@ from apps.usuarios.authentication import AutenticacionSesionUsuario
 from apps.usuarios.models import Usuario
 from apps.usuarios.permissions import EsAdministrador
 from apps.usuarios.serializers import (
+    ActualizarPerfilSerializer,
     CambioRolSerializer,
+    LoginSerializer,
+    PerfilUsuarioSerializer,
+    SesionUsuarioSerializer,
     UsuarioListaSerializer,
     UsuarioRegistroSerializer,
     UsuarioSerializer,
 )
+from apps.usuarios.sesiones import registrar_sesion_activa
 
 
 @ensure_csrf_cookie
@@ -28,48 +34,64 @@ def csrf_token(request):
     return JsonResponse({"detalle": "Token CSRF preparado."})
 
 
-@csrf_protect
-@require_POST
-def iniciar_sesion(request):
-    try:
-        datos = json.loads(request.body or "{}")
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        return JsonResponse({"detail": "La solicitud no contiene JSON válido."}, status=400)
-
-    email = datos.get("email", "")
-    contrasena = datos.get("password", "")
-    if not isinstance(email, str) or not isinstance(contrasena, str) or not email or not contrasena:
-        return JsonResponse({"detail": "El email y la contraseña son obligatorios."}, status=400)
-
-    try:
-        usuario = services.autenticar_usuario(email, contrasena)
-    except services.CredencialesInvalidasError:
-        return JsonResponse({"detail": "Email o contraseña incorrectos."}, status=400)
-
-    request.session.cycle_key()
-    request.session["usuario_id"] = usuario.pk
-    request.session.set_expiry(1800)
-    return JsonResponse({"usuario": UsuarioListaSerializer(usuario).data})
-
-
-@csrf_protect
-@require_POST
-def cerrar_sesion(request):
-    request.session.flush()
-    return JsonResponse({"detalle": "Sesión cerrada correctamente."})
-
-
 class SesionActualView(APIView):
     authentication_classes = [AutenticacionSesionUsuario]
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        return Response(UsuarioListaSerializer(request.user).data)
+        usuario = request.user
+        return Response(SesionUsuarioSerializer({
+            "id": usuario.id,
+            "nombre": usuario.nombre,
+            "apellido": usuario.apellido,
+            "email": usuario.email,
+            "rol": usuario.rol.nombre,
+            "estado": usuario.estado,
+            "reputacion_tier": usuario.reputacion_tier,
+        }).data)
+
+
+@method_decorator(ensure_csrf_cookie, name="dispatch")
+class AuthLoginView(APIView):
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        serializer = LoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            usuario = services.autenticar_usuario(**serializer.validated_data)
+        except services.UsuariosError as error:
+            if error.mensaje == "La cuenta está bloqueada temporalmente.":
+                return Response({"detail": error.mensaje}, status=status.HTTP_423_LOCKED)
+            return Response(
+                {"detail": "Email o contraseña incorrectos"},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        request.session.cycle_key()
+        registrar_sesion_activa(request.session, usuario.id)
+        return Response({
+            "mensaje": "Sesión iniciada correctamente.",
+            "usuario": SesionUsuarioSerializer({
+                "id": usuario.id,
+                "nombre": usuario.nombre,
+                "apellido": usuario.apellido,
+                "email": usuario.email,
+                "rol": usuario.rol.nombre,
+                "estado": usuario.estado,
+                "reputacion_tier": usuario.reputacion_tier,
+            }).data,
+        }, status=status.HTTP_200_OK)
+
+
+class AuthLogoutView(APIView):
+    def post(self, request, *args, **kwargs):
+        request.session.flush()
+        return Response({"mensaje": "Sesión cerrada correctamente."}, status=status.HTTP_200_OK)
 
 
 class UsuarioListCreateView(ListCreateAPIView):
-    """Lista usuarios para administradores y permite el registro público."""
-
     queryset = Usuario.objects.select_related("rol").all()
 
     def get_serializer_class(self):
@@ -88,10 +110,7 @@ class UsuarioListCreateView(ListCreateAPIView):
         try:
             usuario = services.registrar_usuario(**serializer.validated_data)
         except services.UsuariosError as error:
-            return Response(
-                {error.campo: [error.mensaje]},
-                status=status.HTTP_409_CONFLICT,
-            )
+            return Response({error.campo: [error.mensaje]}, status=status.HTTP_409_CONFLICT)
         return Response(UsuarioSerializer(usuario).data, status=status.HTTP_201_CREATED)
 
 
@@ -105,14 +124,16 @@ class UsuarioRolView(RetrieveUpdateAPIView):
         usuario = self.get_object()
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        nuevo_rol = serializer.validated_data["rol"].nombre
         try:
-            usuario_actualizado = services.cambiar_rol_usuario(usuario.id, nuevo_rol)
-        except services.RolInvalidoError as exc:
-            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-        except services.UsuarioNoEncontradoError as exc:
-            return Response({"detail": str(exc)}, status=status.HTTP_404_NOT_FOUND)
-        return Response(self.get_serializer(usuario_actualizado).data)
+            actualizado = services.cambiar_rol_usuario(
+                usuario.id,
+                serializer.validated_data["rol"].nombre,
+            )
+        except services.RolInvalidoError as error:
+            return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+        except services.UsuarioNoEncontradoError as error:
+            return Response({"detail": str(error)}, status=status.HTTP_404_NOT_FOUND)
+        return Response(self.get_serializer(actualizado).data, status=status.HTTP_200_OK)
 
 
 class UsuarioEliminarView(APIView):
@@ -122,7 +143,7 @@ class UsuarioEliminarView(APIView):
     def delete(self, request, pk):
         usuario = services.obtener_usuario_por_id(pk)
         if usuario is None:
-            return Response({"detail": "No existe el usuario solicitado."}, status=404)
+            return Response({"detail": "No existe el usuario solicitado."}, status=status.HTTP_404_NOT_FOUND)
         if services.usuario_tiene_prestamos_activos(usuario.pk):
             return Response(
                 {"detail": "No se puede eliminar un usuario con préstamos activos."},
@@ -130,3 +151,28 @@ class UsuarioEliminarView(APIView):
             )
         usuario.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@method_decorator(csrf_protect, name="dispatch")
+@method_decorator(ensure_csrf_cookie, name="dispatch")
+class PerfilUsuarioView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def _usuario_sesion(self, request):
+        return getattr(request, "usuario_autenticado", None)
+
+    def get(self, request, *args, **kwargs):
+        usuario = self._usuario_sesion(request)
+        if usuario is None:
+            return Response({"detail": "Debes iniciar sesión para consultar tu perfil."}, status=401)
+        return Response(PerfilUsuarioSerializer(services.obtener_perfil(usuario)).data)
+
+    def put(self, request, *args, **kwargs):
+        usuario = self._usuario_sesion(request)
+        if usuario is None:
+            return Response({"detail": "Debes iniciar sesión para actualizar tu perfil."}, status=401)
+        serializer = ActualizarPerfilSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        actualizado = services.actualizar_perfil(usuario, **serializer.validated_data)
+        return Response(PerfilUsuarioSerializer(services.obtener_perfil(actualizado)).data)

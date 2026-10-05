@@ -21,7 +21,7 @@ def eliminar_roles(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("usuarios", "0001_initial"),
+        ("usuarios", "0002_usuario_departamento_carrera_usuario_facultad"),
     ]
 
     operations = [

@@ -83,6 +83,10 @@ class Usuario(models.Model):
         verbose_name_plural = "Usuarios"
         ordering = ["apellido", "nombre"]
 
+    @property
+    def is_authenticated(self):
+        return True
+
     def __str__(self):
         return f"{self.nombre} {self.apellido}"
 

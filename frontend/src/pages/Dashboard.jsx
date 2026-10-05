@@ -2,8 +2,6 @@ import { useState } from 'react'
 
 import Materiales from './Materiales'
 import PerfilUsuario from './PerfilUsuario'
-import RegistroUsuario from './RegistroUsuario'
-import UsuariosRoles from './UsuariosRoles'
 
 const ETIQUETAS_ROL = {
   prestatario: 'Prestatario',
@@ -89,15 +87,11 @@ function PanelAdministrador() {
       <p>Gestión global de usuarios, asignación de roles y permisos del sistema.</p>
       <hr style={{ margin: '2rem 0' }} />
       <Materiales />
-      <hr style={{ margin: '2rem 0' }} />
-      <UsuariosRoles />
-      <hr style={{ margin: '2rem 0' }} />
-      <RegistroUsuario />
     </div>
   )
 }
 
-function Dashboard({ usuario, onCerrarSesion, onPerfilActualizado }) {
+function Dashboard({ usuario, onPerfilActualizado }) {
   const nombreRol = ETIQUETAS_ROL[usuario.rol] || usuario.rol
 
   return (
@@ -109,9 +103,6 @@ function Dashboard({ usuario, onCerrarSesion, onPerfilActualizado }) {
             Sesión iniciada como <strong>{nombreRol}</strong> ({usuario.email})
           </p>
         </div>
-        <button type="button" onClick={onCerrarSesion} className="boton-secundario">
-          Cerrar sesión
-        </button>
       </header>
 
       <main className="dashboard__contenido">

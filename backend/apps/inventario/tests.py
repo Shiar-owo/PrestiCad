@@ -1141,4 +1141,3 @@ class MaterialesFotoApiTestCase(EscenariosDeMaterialApi):
 
         self.assertNotIn("foto_url", cuerpo)
         self.assertIn("foto", cuerpo)
-

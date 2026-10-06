@@ -283,3 +283,41 @@ button:disabled {
   background: #1565c0;
   color: #fff;
 }
+
+/* Barra de búsqueda con filtros (HU05, T05.04) */
+.barra-busqueda {
+  max-width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: flex-end;
+  padding: 1.25rem;
+  background: #f8f9fa;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  margin: 1.5rem 0;
+}
+
+.barra-busqueda__campo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 180px;
+  flex: 1;
+}
+
+.barra-busqueda__campo--texto {
+  flex: 2;
+  min-width: 240px;
+}
+
+.barra-busqueda__campo label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #444;
+}
+
+.barra-busqueda__acciones {
+  display: flex;
+  gap: 0.5rem;
+}

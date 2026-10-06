@@ -206,4 +206,14 @@ describe('api', () => {
       expect(cabecerasDeLaPeticion()).toEqual({ 'Content-Type': 'application/json' })
     })
   })
+
+  describe('búsqueda de materiales', () => {
+    it('construye la petición GET al endpoint con los filtros en query params', async () => {
+      await api.get('/materiales/buscar/?q=laptop&categoria=equipo&estado=disponible')
+
+      expect(ultimaPeticion()[0]).toBe('/api/materiales/buscar/?q=laptop&categoria=equipo&estado=disponible')
+      expect(ultimaPeticion()[1].credentials).toBe('include')
+    })
+  })
 })
+

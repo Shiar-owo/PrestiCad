@@ -34,6 +34,7 @@ from apps.inventario.services import (
     obtener_material,
     parametros_reputacion_por_defecto,
     registrar_material,
+    resolver_tier_usuario,
 )
 
 # Formatos que acepta la foto, con su `content_type` y su extensión.
@@ -385,7 +386,7 @@ class ParametrosReputacionPorDefectoTestCase(TestCase):
 
 
 class BuscarMaterialesServiceTestCase(TestCase):
-    """Tests del servicio de búsqueda con filtros (T05.01, HU05 criterios 1, 2, 3)."""
+    """Tests del servicio de búsqueda con filtros y Tier (T05.01, T05.02, HU05 criterios 1, 2, 3, 6)."""
 
     def setUp(self):
         self.mat_laptop = Material.objects.create(
@@ -393,6 +394,7 @@ class BuscarMaterialesServiceTestCase(TestCase):
             codigo_inventario="EQ-001",
             tipo="equipo",
             estado="disponible",
+            tier_minimo_requerido="avanzado",
             stock=5,
         )
         self.mat_libro = Material.objects.create(
@@ -400,6 +402,7 @@ class BuscarMaterialesServiceTestCase(TestCase):
             codigo_inventario="LIB-001",
             tipo="libro",
             estado="disponible",
+            tier_minimo_requerido="restringido",
             stock=3,
         )
         self.mat_cable = Material.objects.create(
@@ -407,6 +410,7 @@ class BuscarMaterialesServiceTestCase(TestCase):
             codigo_inventario="OBJ-001",
             tipo="objeto",
             estado="en_mantenimiento",
+            tier_minimo_requerido="restringido",
             stock=2,
         )
         self.mat_proyector = Material.objects.create(
@@ -414,6 +418,7 @@ class BuscarMaterialesServiceTestCase(TestCase):
             codigo_inventario="EQ-002",
             tipo="equipo",
             estado="prestado",
+            tier_minimo_requerido="estandar",
             stock=1,
         )
 
@@ -487,6 +492,67 @@ class BuscarMaterialesServiceTestCase(TestCase):
 
     def test_buscar_con_q_vacio_o_espacios_no_filtra(self):
         self.assertEqual(buscar_materiales(q="   ").count(), 4)
+
+    def test_filtrado_por_tier_restringido_solo_ve_materiales_basicos(self):
+        # Criterio 6, RN03: Un usuario en Tier Restringido solo ve materiales básicos/restringidos
+        resultados = list(buscar_materiales(tier_usuario="restringido"))
+        self.assertEqual(len(resultados), 2)
+        nombres = [m.nombre for m in resultados]
+        self.assertEqual(nombres, ["Cable HDMI 2.0", "Libro Cálculo Thomas"])
+        self.assertTrue(all(m.tier_minimo_requerido == "restringido" for m in resultados))
+
+    def test_filtrado_por_tier_estandar_ve_basicos_y_estandar(self):
+        # RN03: Tier Estándar accede a restringidos y estándar, pero no a avanzados
+        resultados = list(buscar_materiales(tier_usuario="estandar"))
+        self.assertEqual(len(resultados), 3)
+        nombres = [m.nombre for m in resultados]
+        self.assertIn("Cable HDMI 2.0", nombres)
+        self.assertIn("Libro Cálculo Thomas", nombres)
+        self.assertIn("Proyector Epson", nombres)
+        self.assertNotIn("Laptop Dell Inspiron", nombres)
+
+    def test_filtrado_por_tier_avanzado_ve_todo(self):
+        # RN03: Tier Avanzado accede a todo el inventario
+        resultados = list(buscar_materiales(tier_usuario="avanzado"))
+        self.assertEqual(len(resultados), 4)
+
+    def test_filtrado_por_usuario_autenticado_resuelve_tier(self):
+        class UsuarioMock:
+            reputacion_tier = "restringido"
+            rol = "prestatario"
+
+        resultados = list(buscar_materiales(usuario=UsuarioMock()))
+        self.assertEqual(len(resultados), 2)
+        self.assertEqual([m.nombre for m in resultados], ["Cable HDMI 2.0", "Libro Cálculo Thomas"])
+
+    def test_gestor_y_administrador_ven_todo_sin_restriccion_de_tier(self):
+        class GestorMock:
+            reputacion_tier = "restringido"
+            rol = "gestor"
+
+        class AdminMock:
+            reputacion_tier = "restringido"
+            rol = "administrador"
+
+        self.assertEqual(buscar_materiales(usuario=GestorMock()).count(), 4)
+        self.assertEqual(buscar_materiales(usuario=AdminMock()).count(), 4)
+
+    def test_tier_invalido_devuelve_vacio(self):
+        self.assertEqual(buscar_materiales(tier_usuario="desconocido").count(), 0)
+
+    def test_resolver_tier_usuario(self):
+        self.assertIsNone(resolver_tier_usuario(None))
+
+        class UsuarioPrestatario:
+            reputacion_tier = "Estandar"
+            rol = "prestatario"
+
+        class UsuarioGestor:
+            reputacion_tier = "restringido"
+            rol = "gestor"
+
+        self.assertEqual(resolver_tier_usuario(UsuarioPrestatario()), "estandar")
+        self.assertIsNone(resolver_tier_usuario(UsuarioGestor()))
 
 
 class MaterialSerializerContratoTestCase(SimpleTestCase):

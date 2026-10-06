@@ -27,6 +27,7 @@ from apps.inventario.services import (
     InventarioError,
     MaterialNoEncontradoError,
     actualizar_material,
+    buscar_materiales,
     cambiar_estado_material,
     listar_materiales,
     normalizar_codigo,
@@ -381,6 +382,111 @@ class ParametrosReputacionPorDefectoTestCase(TestCase):
                 valor,
                 f"El default del modelo '{campo}' no coincide con la configuración.",
             )
+
+
+class BuscarMaterialesServiceTestCase(TestCase):
+    """Tests del servicio de búsqueda con filtros (T05.01, HU05 criterios 1, 2, 3)."""
+
+    def setUp(self):
+        self.mat_laptop = Material.objects.create(
+            nombre="Laptop Dell Inspiron",
+            codigo_inventario="EQ-001",
+            tipo="equipo",
+            estado="disponible",
+            stock=5,
+        )
+        self.mat_libro = Material.objects.create(
+            nombre="Libro Cálculo Thomas",
+            codigo_inventario="LIB-001",
+            tipo="libro",
+            estado="disponible",
+            stock=3,
+        )
+        self.mat_cable = Material.objects.create(
+            nombre="Cable HDMI 2.0",
+            codigo_inventario="OBJ-001",
+            tipo="objeto",
+            estado="en_mantenimiento",
+            stock=2,
+        )
+        self.mat_proyector = Material.objects.create(
+            nombre="Proyector Epson",
+            codigo_inventario="EQ-002",
+            tipo="equipo",
+            estado="prestado",
+            stock=1,
+        )
+
+    def test_buscar_sin_filtros_devuelve_todos_ordenados_por_nombre(self):
+        resultados = list(buscar_materiales())
+        nombres = [m.nombre for m in resultados]
+        self.assertEqual(
+            nombres,
+            [
+                "Cable HDMI 2.0",
+                "Laptop Dell Inspiron",
+                "Libro Cálculo Thomas",
+                "Proyector Epson",
+            ],
+        )
+
+    def test_buscar_por_nombre_parcial_e_insensible_a_mayusculas(self):
+        # Criterio 1: Se puede buscar por nombre (búsqueda parcial, case-insensitive)
+        resultados_mayusc = list(buscar_materiales(q="DELL"))
+        self.assertEqual(len(resultados_mayusc), 1)
+        self.assertEqual(resultados_mayusc[0].nombre, "Laptop Dell Inspiron")
+
+        resultados_parcial = list(buscar_materiales(q="cálculo"))
+        self.assertEqual(len(resultados_parcial), 1)
+        self.assertEqual(resultados_parcial[0].nombre, "Libro Cálculo Thomas")
+
+        resultados_comun = list(buscar_materiales(q="e"))  # coincide con Dell, Cable, Proyector
+        self.assertEqual(len(resultados_comun), 3)
+
+    def test_buscar_por_categoria(self):
+        # Criterio 2: Se puede filtrar por categoría (Equipo/Libro/Objeto)
+        equipos = list(buscar_materiales(categoria="equipo"))
+        self.assertEqual(len(equipos), 2)
+        self.assertTrue(all(m.tipo == "equipo" for m in equipos))
+
+        libros = list(buscar_materiales(categoria="libro"))
+        self.assertEqual(len(libros), 1)
+        self.assertEqual(libros[0].nombre, "Libro Cálculo Thomas")
+
+        # También acepta alias 'tipo'
+        objetos = list(buscar_materiales(tipo="objeto"))
+        self.assertEqual(len(objetos), 1)
+        self.assertEqual(objetos[0].nombre, "Cable HDMI 2.0")
+
+    def test_buscar_por_estado(self):
+        # Criterio 3: Se puede filtrar por estado (Disponible/Prestado/Reservado/En Mantenimiento)
+        disponibles = list(buscar_materiales(estado="disponible"))
+        self.assertEqual(len(disponibles), 2)
+        self.assertTrue(all(m.estado == "disponible" for m in disponibles))
+
+        mantenimiento = list(buscar_materiales(estado="en_mantenimiento"))
+        self.assertEqual(len(mantenimiento), 1)
+        self.assertEqual(mantenimiento[0].nombre, "Cable HDMI 2.0")
+
+        prestados = list(buscar_materiales(estado="prestado"))
+        self.assertEqual(len(prestados), 1)
+        self.assertEqual(prestados[0].nombre, "Proyector Epson")
+
+    def test_buscar_combinando_filtros(self):
+        resultados = list(buscar_materiales(q="proyector", categoria="equipo", estado="prestado"))
+        self.assertEqual(len(resultados), 1)
+        self.assertEqual(resultados[0].nombre, "Proyector Epson")
+
+        vacio = list(buscar_materiales(q="proyector", categoria="equipo", estado="disponible"))
+        self.assertEqual(len(vacio), 0)
+
+    def test_buscar_con_espacios_en_blanco_limpia_parametros(self):
+        resultados = list(buscar_materiales(q="  dell  ", categoria=" equipo ", estado=" disponible "))
+        self.assertEqual(len(resultados), 1)
+        self.assertEqual(resultados[0].nombre, "Laptop Dell Inspiron")
+
+    def test_buscar_con_q_vacio_o_espacios_no_filtra(self):
+        self.assertEqual(buscar_materiales(q="   ").count(), 4)
 
 
 class MaterialSerializerContratoTestCase(SimpleTestCase):

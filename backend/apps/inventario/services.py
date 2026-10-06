@@ -102,6 +102,42 @@ def listar_materiales():
     return Material.objects.all()
 
 
+def buscar_materiales(
+    q=None,
+    *,
+    categoria=None,
+    tipo=None,
+    estado=None,
+):
+    """Busca y filtra materiales del inventario según criterios de consulta (HU05, T05.01).
+
+    - `q`: Búsqueda parcial e insensible a mayúsculas sobre el nombre del material (criterio 1).
+    - `categoria` (o `tipo`): Filtra por tipo/categoría de material ('equipo', 'libro', 'objeto') (criterio 2).
+    - `estado`: Filtra por estado ('disponible', 'prestado', 'reservado', 'en_mantenimiento') (criterio 3).
+
+    Devuelve un `QuerySet` de `Material` ordenado alfabéticamente por nombre.
+    """
+    queryset = Material.objects.all().order_by("nombre")
+
+    if q:
+        q_limpio = q.strip()
+        if q_limpio:
+            queryset = queryset.filter(nombre__icontains=q_limpio)
+
+    filtro_tipo = categoria or tipo
+    if filtro_tipo:
+        filtro_tipo_limpio = filtro_tipo.strip().lower()
+        if filtro_tipo_limpio:
+            queryset = queryset.filter(tipo=filtro_tipo_limpio)
+
+    if estado:
+        estado_limpio = estado.strip().lower()
+        if estado_limpio:
+            queryset = queryset.filter(estado=estado_limpio)
+
+    return queryset
+
+
 @transaction.atomic
 def registrar_material(
     *,

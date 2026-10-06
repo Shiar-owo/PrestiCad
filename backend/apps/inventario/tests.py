@@ -918,6 +918,136 @@ class MaterialesAPITestCase(EscenariosDeMaterialApi):
         self.assertEqual(respuesta.status_code, 404)
 
 
+class MaterialBuscarAPITestCase(EscenariosDeMaterialApi):
+    """Tests del endpoint GET /api/materiales/buscar (T05.03, HU05)."""
+
+    BUSCAR_URL = "/api/materiales/buscar/"
+
+    def setUp(self):
+        super().setUp()
+        self.mat_laptop = Material.objects.create(
+            nombre="Laptop Dell XPS",
+            codigo_inventario="EQ-001",
+            tipo="equipo",
+            estado="disponible",
+            tier_minimo_requerido="avanzado",
+            stock=4,
+        )
+        self.mat_libro = Material.objects.create(
+            nombre="Libro Redes de Computadoras Tanenbaum",
+            codigo_inventario="LIB-001",
+            tipo="libro",
+            estado="disponible",
+            tier_minimo_requerido="restringido",
+            stock=2,
+        )
+        self.mat_cable = Material.objects.create(
+            nombre="Cable Red UTP Cat6",
+            codigo_inventario="OBJ-001",
+            tipo="objeto",
+            estado="en_mantenimiento",
+            tier_minimo_requerido="restringido",
+            stock=10,
+        )
+        self.mat_osciloscopio = Material.objects.create(
+            nombre="Osciloscopio Digital",
+            codigo_inventario="EQ-002",
+            tipo="equipo",
+            estado="prestado",
+            tier_minimo_requerido="estandar",
+            stock=1,
+        )
+
+    def test_buscar_es_publico_y_responde_200(self):
+        respuesta = self.client.get(self.BUSCAR_URL)
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(len(respuesta.json()), 4)
+
+    def test_buscar_sin_barra_final_responde_200(self):
+        respuesta = self.client.get("/api/materiales/buscar")
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(len(respuesta.json()), 4)
+
+    def test_buscar_filtro_q_coincidencia_parcial(self):
+        # Criterio 1: Búsqueda por nombre parcial case-insensitive
+        respuesta = self.client.get(self.BUSCAR_URL, {"q": "dell"})
+        self.assertEqual(respuesta.status_code, 200)
+        datos = respuesta.json()
+        self.assertEqual(len(datos), 1)
+        self.assertEqual(datos[0]["nombre"], "Laptop Dell XPS")
+
+    def test_buscar_filtro_categoria(self):
+        # Criterio 2: Filtrar por categoría
+        respuesta = self.client.get(self.BUSCAR_URL, {"categoria": "equipo"})
+        self.assertEqual(respuesta.status_code, 200)
+        datos = respuesta.json()
+        self.assertEqual(len(datos), 2)
+        nombres = [item["nombre"] for item in datos]
+        self.assertIn("Laptop Dell XPS", nombres)
+        self.assertIn("Osciloscopio Digital", nombres)
+
+    def test_buscar_filtro_estado(self):
+        # Criterio 3: Filtrar por estado
+        respuesta = self.client.get(self.BUSCAR_URL, {"estado": "disponible"})
+        self.assertEqual(respuesta.status_code, 200)
+        datos = respuesta.json()
+        self.assertEqual(len(datos), 2)
+        estados = [item["estado"] for item in datos]
+        self.assertTrue(all(e == "disponible" for e in estados))
+
+    def test_buscar_estructura_de_resultados_incluye_campos_esperados(self):
+        # Criterio 4: nombre, categoría (tipo), estado, disponibilidad (unidades_disponibles)
+        respuesta = self.client.get(self.BUSCAR_URL, {"q": "Tanenbaum"})
+        self.assertEqual(respuesta.status_code, 200)
+        item = respuesta.json()[0]
+        self.assertEqual(item["nombre"], "Libro Redes de Computadoras Tanenbaum")
+        self.assertEqual(item["tipo"], "libro")
+        self.assertEqual(item["estado"], "disponible")
+        self.assertEqual(item["unidades_disponibles"], 2)
+        self.assertIn("codigo_inventario", item)
+
+    def test_buscar_con_usuario_restringido_filtra_por_tier(self):
+        # Criterio 6, RN03: Prestatario restringido solo ve materiales básicos
+        usuario = self._autenticar("alumno@unsa.edu.pe", "prestatario")
+        usuario.reputacion_tier = "restringido"
+        usuario.save()
+
+        respuesta = self.client.get(self.BUSCAR_URL)
+        self.assertEqual(respuesta.status_code, 200)
+        datos = respuesta.json()
+        self.assertEqual(len(datos), 2)
+        nombres = [item["nombre"] for item in datos]
+        self.assertEqual(
+            nombres,
+            ["Cable Red UTP Cat6", "Libro Redes de Computadoras Tanenbaum"],
+        )
+
+    def test_buscar_con_usuario_estandar_filtra_por_tier(self):
+        usuario = self._autenticar("alumno2@unsa.edu.pe", "prestatario")
+        usuario.reputacion_tier = "estandar"
+        usuario.save()
+
+        respuesta = self.client.get(self.BUSCAR_URL)
+        self.assertEqual(respuesta.status_code, 200)
+        datos = respuesta.json()
+        self.assertEqual(len(datos), 3)
+        nombres = [item["nombre"] for item in datos]
+        self.assertNotIn("Laptop Dell XPS", nombres)
+
+    def test_buscar_con_gestor_ve_todo(self):
+        self._autenticar("gestor@unsa.edu.pe", "gestor")
+
+        respuesta = self.client.get(self.BUSCAR_URL)
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(len(respuesta.json()), 4)
+
+    def test_buscar_con_parametro_tier_explicito(self):
+        respuesta = self.client.get(self.BUSCAR_URL, {"tier": "restringido"})
+        self.assertEqual(respuesta.status_code, 200)
+        datos = respuesta.json()
+        self.assertEqual(len(datos), 2)
+
+
 class FotoMaterialServiceTestCase(ConMediaTemporal):
     """Tests de la foto en la capa de servicios (HU04, criterio 1)."""
 

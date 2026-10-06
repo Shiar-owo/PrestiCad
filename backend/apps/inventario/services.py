@@ -9,7 +9,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 
-from apps.inventario.constants import ESTADOS_MATERIAL
+from apps.inventario.constants import ESTADOS_MATERIAL, TIERS_ACCESIBLES
 from apps.inventario.models import Material
 from apps.inventario.validators import validar_foto
 
@@ -100,6 +100,84 @@ def obtener_material(material_id):
 def listar_materiales():
     """Devuelve todos los materiales del inventario ordenados por nombre."""
     return Material.objects.all()
+
+
+def resolver_tier_usuario(usuario):
+    """Determina el tier aplicable de un usuario para filtros de consulta (RN03).
+
+    Administradores y gestores tienen acceso irrestricto al inventario,
+    por lo que no se restringen por reputación. Para prestatarios,
+    devuelve su `reputacion_tier`.
+    """
+    if not usuario:
+        return None
+
+    rol = getattr(usuario, "rol", None)
+    rol_nombre = ""
+    if isinstance(rol, str):
+        rol_nombre = rol.lower()
+    elif hasattr(rol, "nombre"):
+        rol_nombre = getattr(rol, "nombre", "").lower()
+
+    if rol_nombre in ("gestor", "administrador"):
+        return None
+
+    tier = getattr(usuario, "reputacion_tier", None)
+    if isinstance(tier, str):
+        return tier.strip().lower()
+
+    return None
+
+
+def buscar_materiales(
+    q=None,
+    *,
+    categoria=None,
+    tipo=None,
+    estado=None,
+    tier_usuario=None,
+    usuario=None,
+):
+    """Busca y filtra materiales del inventario según criterios de consulta (HU05, T05.01, T05.02).
+
+    - `q`: Búsqueda parcial e insensible a mayúsculas sobre el nombre del material (criterio 1).
+    - `categoria` (o `tipo`): Filtra por tipo/categoría de material ('equipo', 'libro', 'objeto') (criterio 2).
+    - `estado`: Filtra por estado ('disponible', 'prestado', 'reservado', 'en_mantenimiento') (criterio 3).
+    - `tier_usuario`: Tier específico para filtrar acceso según reputación (RN03, criterio 6).
+    - `usuario`: Instancia de usuario autenticado; si no se especifica `tier_usuario`, se resuelve
+      automáticamente según su rol y `reputacion_tier` (RN03).
+
+    Devuelve un `QuerySet` de `Material` ordenado alfabéticamente por nombre.
+    """
+    queryset = Material.objects.all().order_by("nombre")
+
+    if q:
+        q_limpio = q.strip()
+        if q_limpio:
+            queryset = queryset.filter(nombre__icontains=q_limpio)
+
+    filtro_tipo = categoria or tipo
+    if filtro_tipo:
+        filtro_tipo_limpio = filtro_tipo.strip().lower()
+        if filtro_tipo_limpio:
+            queryset = queryset.filter(tipo=filtro_tipo_limpio)
+
+    if estado:
+        estado_limpio = estado.strip().lower()
+        if estado_limpio:
+            queryset = queryset.filter(estado=estado_limpio)
+
+    if tier_usuario is None and usuario is not None:
+        tier_usuario = resolver_tier_usuario(usuario)
+
+    if tier_usuario:
+        tier_limpio = tier_usuario.strip().lower()
+        if tier_limpio in TIERS_ACCESIBLES:
+            queryset = queryset.filter(tier_minimo_requerido__in=TIERS_ACCESIBLES[tier_limpio])
+        else:
+            queryset = queryset.none()
+
+    return queryset
 
 
 @transaction.atomic

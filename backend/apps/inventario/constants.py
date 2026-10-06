@@ -12,3 +12,10 @@ ESTADOS_MATERIAL = [
     ("reservado", "Reservado"),
     ("prestado", "Prestado"),
 ]
+
+# Mapeo de Tiers de materiales accesibles según el Tier de reputación del usuario (RN03, HU05)
+TIERS_ACCESIBLES = {
+    "restringido": ("restringido",),
+    "estandar": ("restringido", "estandar"),
+    "avanzado": ("restringido", "estandar", "avanzado"),
+}

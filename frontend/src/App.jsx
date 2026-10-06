@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 
 import { api } from './api/client'
 import './estilos.css'
+import CatalogoMateriales from './pages/CatalogoMateriales'
 import Dashboard from './pages/Dashboard'
 import Login from './pages/Login'
 import RegistroUsuario from './pages/RegistroUsuario'
@@ -54,6 +55,11 @@ function App() {
               className={vista === 'dashboard' ? 'activo' : 'boton-secundario'}
               onClick={() => setVista('dashboard')}
             >Panel principal</button>
+            <button
+              type="button"
+              className={vista === 'catalogo' ? 'activo' : 'boton-secundario'}
+              onClick={() => setVista('catalogo')}
+            >Catálogo</button>
             {usuarioActual.rol === 'administrador' && (
               <button
                 type="button"
@@ -67,6 +73,8 @@ function App() {
           </nav>
           {vista === 'roles' && usuarioActual.rol === 'administrador' ? (
             <UsuariosRoles />
+          ) : vista === 'catalogo' ? (
+            <CatalogoMateriales />
           ) : (
             <Dashboard
               usuario={usuarioActual}
@@ -79,6 +87,11 @@ function App() {
           <nav className="navegacion-auth" aria-label="Acceso">
             <button
               type="button"
+              className={vista === 'catalogo' ? 'activo' : 'boton-secundario'}
+              onClick={() => setVista('catalogo')}
+            >Catálogo</button>
+            <button
+              type="button"
               className={vista === 'login' ? 'activo' : 'boton-secundario'}
               onClick={() => setVista('login')}
             >Iniciar sesión</button>
@@ -88,6 +101,7 @@ function App() {
               onClick={() => setVista('registro')}
             >Registrarse</button>
           </nav>
+          {vista === 'catalogo' && <CatalogoMateriales />}
           {vista === 'login' && <Login onLoginExitoso={manejarLoginExitoso} />}
           {vista === 'registro' && <RegistroUsuario />}
         </>

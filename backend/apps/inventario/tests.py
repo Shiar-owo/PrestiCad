@@ -27,12 +27,14 @@ from apps.inventario.services import (
     InventarioError,
     MaterialNoEncontradoError,
     actualizar_material,
+    buscar_materiales,
     cambiar_estado_material,
     listar_materiales,
     normalizar_codigo,
     obtener_material,
     parametros_reputacion_por_defecto,
     registrar_material,
+    resolver_tier_usuario,
 )
 
 # Formatos que acepta la foto, con su `content_type` y su extensión.
@@ -381,6 +383,176 @@ class ParametrosReputacionPorDefectoTestCase(TestCase):
                 valor,
                 f"El default del modelo '{campo}' no coincide con la configuración.",
             )
+
+
+class BuscarMaterialesServiceTestCase(TestCase):
+    """Tests del servicio de búsqueda con filtros y Tier (T05.01, T05.02, HU05 criterios 1, 2, 3, 6)."""
+
+    def setUp(self):
+        self.mat_laptop = Material.objects.create(
+            nombre="Laptop Dell Inspiron",
+            codigo_inventario="EQ-001",
+            tipo="equipo",
+            estado="disponible",
+            tier_minimo_requerido="avanzado",
+            stock=5,
+        )
+        self.mat_libro = Material.objects.create(
+            nombre="Libro Cálculo Thomas",
+            codigo_inventario="LIB-001",
+            tipo="libro",
+            estado="disponible",
+            tier_minimo_requerido="restringido",
+            stock=3,
+        )
+        self.mat_cable = Material.objects.create(
+            nombre="Cable HDMI 2.0",
+            codigo_inventario="OBJ-001",
+            tipo="objeto",
+            estado="en_mantenimiento",
+            tier_minimo_requerido="restringido",
+            stock=2,
+        )
+        self.mat_proyector = Material.objects.create(
+            nombre="Proyector Epson",
+            codigo_inventario="EQ-002",
+            tipo="equipo",
+            estado="prestado",
+            tier_minimo_requerido="estandar",
+            stock=1,
+        )
+
+    def test_buscar_sin_filtros_devuelve_todos_ordenados_por_nombre(self):
+        resultados = list(buscar_materiales())
+        nombres = [m.nombre for m in resultados]
+        self.assertEqual(
+            nombres,
+            [
+                "Cable HDMI 2.0",
+                "Laptop Dell Inspiron",
+                "Libro Cálculo Thomas",
+                "Proyector Epson",
+            ],
+        )
+
+    def test_buscar_por_nombre_parcial_e_insensible_a_mayusculas(self):
+        # Criterio 1: Se puede buscar por nombre (búsqueda parcial, case-insensitive)
+        resultados_mayusc = list(buscar_materiales(q="DELL"))
+        self.assertEqual(len(resultados_mayusc), 1)
+        self.assertEqual(resultados_mayusc[0].nombre, "Laptop Dell Inspiron")
+
+        resultados_parcial = list(buscar_materiales(q="cálculo"))
+        self.assertEqual(len(resultados_parcial), 1)
+        self.assertEqual(resultados_parcial[0].nombre, "Libro Cálculo Thomas")
+
+        resultados_comun = list(buscar_materiales(q="e"))  # coincide con Dell, Cable, Proyector
+        self.assertEqual(len(resultados_comun), 3)
+
+    def test_buscar_por_categoria(self):
+        # Criterio 2: Se puede filtrar por categoría (Equipo/Libro/Objeto)
+        equipos = list(buscar_materiales(categoria="equipo"))
+        self.assertEqual(len(equipos), 2)
+        self.assertTrue(all(m.tipo == "equipo" for m in equipos))
+
+        libros = list(buscar_materiales(categoria="libro"))
+        self.assertEqual(len(libros), 1)
+        self.assertEqual(libros[0].nombre, "Libro Cálculo Thomas")
+
+        # También acepta alias 'tipo'
+        objetos = list(buscar_materiales(tipo="objeto"))
+        self.assertEqual(len(objetos), 1)
+        self.assertEqual(objetos[0].nombre, "Cable HDMI 2.0")
+
+    def test_buscar_por_estado(self):
+        # Criterio 3: Se puede filtrar por estado (Disponible/Prestado/Reservado/En Mantenimiento)
+        disponibles = list(buscar_materiales(estado="disponible"))
+        self.assertEqual(len(disponibles), 2)
+        self.assertTrue(all(m.estado == "disponible" for m in disponibles))
+
+        mantenimiento = list(buscar_materiales(estado="en_mantenimiento"))
+        self.assertEqual(len(mantenimiento), 1)
+        self.assertEqual(mantenimiento[0].nombre, "Cable HDMI 2.0")
+
+        prestados = list(buscar_materiales(estado="prestado"))
+        self.assertEqual(len(prestados), 1)
+        self.assertEqual(prestados[0].nombre, "Proyector Epson")
+
+    def test_buscar_combinando_filtros(self):
+        resultados = list(buscar_materiales(q="proyector", categoria="equipo", estado="prestado"))
+        self.assertEqual(len(resultados), 1)
+        self.assertEqual(resultados[0].nombre, "Proyector Epson")
+
+        vacio = list(buscar_materiales(q="proyector", categoria="equipo", estado="disponible"))
+        self.assertEqual(len(vacio), 0)
+
+    def test_buscar_con_espacios_en_blanco_limpia_parametros(self):
+        resultados = list(buscar_materiales(q="  dell  ", categoria=" equipo ", estado=" disponible "))
+        self.assertEqual(len(resultados), 1)
+        self.assertEqual(resultados[0].nombre, "Laptop Dell Inspiron")
+
+    def test_buscar_con_q_vacio_o_espacios_no_filtra(self):
+        self.assertEqual(buscar_materiales(q="   ").count(), 4)
+
+    def test_filtrado_por_tier_restringido_solo_ve_materiales_basicos(self):
+        # Criterio 6, RN03: Un usuario en Tier Restringido solo ve materiales básicos/restringidos
+        resultados = list(buscar_materiales(tier_usuario="restringido"))
+        self.assertEqual(len(resultados), 2)
+        nombres = [m.nombre for m in resultados]
+        self.assertEqual(nombres, ["Cable HDMI 2.0", "Libro Cálculo Thomas"])
+        self.assertTrue(all(m.tier_minimo_requerido == "restringido" for m in resultados))
+
+    def test_filtrado_por_tier_estandar_ve_basicos_y_estandar(self):
+        # RN03: Tier Estándar accede a restringidos y estándar, pero no a avanzados
+        resultados = list(buscar_materiales(tier_usuario="estandar"))
+        self.assertEqual(len(resultados), 3)
+        nombres = [m.nombre for m in resultados]
+        self.assertIn("Cable HDMI 2.0", nombres)
+        self.assertIn("Libro Cálculo Thomas", nombres)
+        self.assertIn("Proyector Epson", nombres)
+        self.assertNotIn("Laptop Dell Inspiron", nombres)
+
+    def test_filtrado_por_tier_avanzado_ve_todo(self):
+        # RN03: Tier Avanzado accede a todo el inventario
+        resultados = list(buscar_materiales(tier_usuario="avanzado"))
+        self.assertEqual(len(resultados), 4)
+
+    def test_filtrado_por_usuario_autenticado_resuelve_tier(self):
+        class UsuarioMock:
+            reputacion_tier = "restringido"
+            rol = "prestatario"
+
+        resultados = list(buscar_materiales(usuario=UsuarioMock()))
+        self.assertEqual(len(resultados), 2)
+        self.assertEqual([m.nombre for m in resultados], ["Cable HDMI 2.0", "Libro Cálculo Thomas"])
+
+    def test_gestor_y_administrador_ven_todo_sin_restriccion_de_tier(self):
+        class GestorMock:
+            reputacion_tier = "restringido"
+            rol = "gestor"
+
+        class AdminMock:
+            reputacion_tier = "restringido"
+            rol = "administrador"
+
+        self.assertEqual(buscar_materiales(usuario=GestorMock()).count(), 4)
+        self.assertEqual(buscar_materiales(usuario=AdminMock()).count(), 4)
+
+    def test_tier_invalido_devuelve_vacio(self):
+        self.assertEqual(buscar_materiales(tier_usuario="desconocido").count(), 0)
+
+    def test_resolver_tier_usuario(self):
+        self.assertIsNone(resolver_tier_usuario(None))
+
+        class UsuarioPrestatario:
+            reputacion_tier = "Estandar"
+            rol = "prestatario"
+
+        class UsuarioGestor:
+            reputacion_tier = "restringido"
+            rol = "gestor"
+
+        self.assertEqual(resolver_tier_usuario(UsuarioPrestatario()), "estandar")
+        self.assertIsNone(resolver_tier_usuario(UsuarioGestor()))
 
 
 class MaterialSerializerContratoTestCase(SimpleTestCase):
@@ -744,6 +916,136 @@ class MaterialesAPITestCase(EscenariosDeMaterialApi):
         respuesta = self.client.patch(url_inexistente, {"stock": 2}, format="json")
 
         self.assertEqual(respuesta.status_code, 404)
+
+
+class MaterialBuscarAPITestCase(EscenariosDeMaterialApi):
+    """Tests del endpoint GET /api/materiales/buscar (T05.03, HU05)."""
+
+    BUSCAR_URL = "/api/materiales/buscar/"
+
+    def setUp(self):
+        super().setUp()
+        self.mat_laptop = Material.objects.create(
+            nombre="Laptop Dell XPS",
+            codigo_inventario="EQ-001",
+            tipo="equipo",
+            estado="disponible",
+            tier_minimo_requerido="avanzado",
+            stock=4,
+        )
+        self.mat_libro = Material.objects.create(
+            nombre="Libro Redes de Computadoras Tanenbaum",
+            codigo_inventario="LIB-001",
+            tipo="libro",
+            estado="disponible",
+            tier_minimo_requerido="restringido",
+            stock=2,
+        )
+        self.mat_cable = Material.objects.create(
+            nombre="Cable Red UTP Cat6",
+            codigo_inventario="OBJ-001",
+            tipo="objeto",
+            estado="en_mantenimiento",
+            tier_minimo_requerido="restringido",
+            stock=10,
+        )
+        self.mat_osciloscopio = Material.objects.create(
+            nombre="Osciloscopio Digital",
+            codigo_inventario="EQ-002",
+            tipo="equipo",
+            estado="prestado",
+            tier_minimo_requerido="estandar",
+            stock=1,
+        )
+
+    def test_buscar_es_publico_y_responde_200(self):
+        respuesta = self.client.get(self.BUSCAR_URL)
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(len(respuesta.json()), 4)
+
+    def test_buscar_sin_barra_final_responde_200(self):
+        respuesta = self.client.get("/api/materiales/buscar")
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(len(respuesta.json()), 4)
+
+    def test_buscar_filtro_q_coincidencia_parcial(self):
+        # Criterio 1: Búsqueda por nombre parcial case-insensitive
+        respuesta = self.client.get(self.BUSCAR_URL, {"q": "dell"})
+        self.assertEqual(respuesta.status_code, 200)
+        datos = respuesta.json()
+        self.assertEqual(len(datos), 1)
+        self.assertEqual(datos[0]["nombre"], "Laptop Dell XPS")
+
+    def test_buscar_filtro_categoria(self):
+        # Criterio 2: Filtrar por categoría
+        respuesta = self.client.get(self.BUSCAR_URL, {"categoria": "equipo"})
+        self.assertEqual(respuesta.status_code, 200)
+        datos = respuesta.json()
+        self.assertEqual(len(datos), 2)
+        nombres = [item["nombre"] for item in datos]
+        self.assertIn("Laptop Dell XPS", nombres)
+        self.assertIn("Osciloscopio Digital", nombres)
+
+    def test_buscar_filtro_estado(self):
+        # Criterio 3: Filtrar por estado
+        respuesta = self.client.get(self.BUSCAR_URL, {"estado": "disponible"})
+        self.assertEqual(respuesta.status_code, 200)
+        datos = respuesta.json()
+        self.assertEqual(len(datos), 2)
+        estados = [item["estado"] for item in datos]
+        self.assertTrue(all(e == "disponible" for e in estados))
+
+    def test_buscar_estructura_de_resultados_incluye_campos_esperados(self):
+        # Criterio 4: nombre, categoría (tipo), estado, disponibilidad (unidades_disponibles)
+        respuesta = self.client.get(self.BUSCAR_URL, {"q": "Tanenbaum"})
+        self.assertEqual(respuesta.status_code, 200)
+        item = respuesta.json()[0]
+        self.assertEqual(item["nombre"], "Libro Redes de Computadoras Tanenbaum")
+        self.assertEqual(item["tipo"], "libro")
+        self.assertEqual(item["estado"], "disponible")
+        self.assertEqual(item["unidades_disponibles"], 2)
+        self.assertIn("codigo_inventario", item)
+
+    def test_buscar_con_usuario_restringido_filtra_por_tier(self):
+        # Criterio 6, RN03: Prestatario restringido solo ve materiales básicos
+        usuario = self._autenticar("alumno@unsa.edu.pe", "prestatario")
+        usuario.reputacion_tier = "restringido"
+        usuario.save()
+
+        respuesta = self.client.get(self.BUSCAR_URL)
+        self.assertEqual(respuesta.status_code, 200)
+        datos = respuesta.json()
+        self.assertEqual(len(datos), 2)
+        nombres = [item["nombre"] for item in datos]
+        self.assertEqual(
+            nombres,
+            ["Cable Red UTP Cat6", "Libro Redes de Computadoras Tanenbaum"],
+        )
+
+    def test_buscar_con_usuario_estandar_filtra_por_tier(self):
+        usuario = self._autenticar("alumno2@unsa.edu.pe", "prestatario")
+        usuario.reputacion_tier = "estandar"
+        usuario.save()
+
+        respuesta = self.client.get(self.BUSCAR_URL)
+        self.assertEqual(respuesta.status_code, 200)
+        datos = respuesta.json()
+        self.assertEqual(len(datos), 3)
+        nombres = [item["nombre"] for item in datos]
+        self.assertNotIn("Laptop Dell XPS", nombres)
+
+    def test_buscar_con_gestor_ve_todo(self):
+        self._autenticar("gestor@unsa.edu.pe", "gestor")
+
+        respuesta = self.client.get(self.BUSCAR_URL)
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(len(respuesta.json()), 4)
+
+    def test_buscar_con_parametro_tier_explicito(self):
+        respuesta = self.client.get(self.BUSCAR_URL, {"tier": "restringido"})
+        self.assertEqual(respuesta.status_code, 200)
+        datos = respuesta.json()
+        self.assertEqual(len(datos), 2)
 
 
 class FotoMaterialServiceTestCase(ConMediaTemporal):

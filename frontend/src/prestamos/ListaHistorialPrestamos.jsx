@@ -2,7 +2,6 @@ import { useState } from 'react'
 
 import { presentarEstadoPrestamo } from './estadoPrestamo'
 import DetallePrestamo from '../components/prestamos/DetallePrestamo'
-import '../components/prestamos/prestamos.css'
 
 export default function ListaHistorialPrestamos({ prestamos }) {
   const [seleccionado, setSeleccionado] = useState(null)

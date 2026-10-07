@@ -8,7 +8,6 @@ import {
   validarRespuestaHistorial,
 } from './historialPrestamos'
 import ListaHistorialPrestamos from './ListaHistorialPrestamos'
-import './historialPrestamos.css'
 
 const CONSULTA_INICIAL = { cargando: true, error: '', datos: null }
 

@@ -3,8 +3,9 @@
    ---------------------------------------------------------------------
    Estructura:
      1. Importación de Tailwind y variante de modo oscuro.
-     2. Tokens de marca (verde), acento (azul) y semánticos.
-     3. Variables de superficie/texto que cambian con .dark.
+     2. Tokens de marca (verde) y acento (azul).
+     3. Variables de superficie/texto (tonos azul navy, sin negro)
+        que cambian con .dark.
      4. Estilos base (body y jerarquía de encabezados).
      5. CSS heredado consolidado dentro de @layer components
         (vigente hasta la migración por vista; reglas sin capa
@@ -52,20 +53,20 @@
 
 :root {
   --color-fondo: #ffffff;
-  --color-superficie: #fafafa;
-  --color-superficie-alta: #f8f9fa;
-  --color-borde: #e5e7eb;
-  --color-texto: #0f172a;
-  --color-texto-suave: #4b5563;
+  --color-superficie: #f2f7fd;
+  --color-superficie-alta: #e8f1fa;
+  --color-borde: #cfdceb;
+  --color-texto: #16304a;
+  --color-texto-suave: #5b6f80;
 }
 
 .dark {
-  --color-fondo: #020617;
-  --color-superficie: #0f172a;
-  --color-superficie-alta: #1e293b;
-  --color-borde: #334155;
-  --color-texto: #e2e8f0;
-  --color-texto-suave: #94a3b8;
+  --color-fondo: #0b1f33;
+  --color-superficie: #122c45;
+  --color-superficie-alta: #1a3a58;
+  --color-borde: #27456a;
+  --color-texto: #e2eaf3;
+  --color-texto-suave: #9fb3c7;
 }
 
 @theme inline {

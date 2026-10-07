@@ -10,16 +10,26 @@ function mostrarFecha(fecha) {
   }).format(valor)
 }
 
-export default function DetallePrestamo({ prestamo, onVolver }) {
+export default function DetallePrestamo({
+  prestamo,
+  onVolver,
+  etiquetaVolver = 'Volver a mis préstamos',
+}) {
   const estado = presentarEstadoPrestamo(prestamo.estado_visible ?? prestamo.estado)
 
   return (
     <section className="prestamo-detalle" aria-labelledby="prestamo-detalle-titulo">
       <button className="prestamo-detalle__volver" onClick={onVolver} type="button">
-        Volver a mis préstamos
+        {etiquetaVolver}
       </button>
       <h3 id="prestamo-detalle-titulo">Detalle del préstamo</h3>
       <dl className="prestamo-detalle__campos">
+        {prestamo.prestatario_nombre && (
+          <div>
+            <dt>Prestatario</dt>
+            <dd>{prestamo.prestatario_nombre}</dd>
+          </div>
+        )}
         <div>
           <dt>Material</dt>
           <dd>{prestamo.material_nombre}</dd>

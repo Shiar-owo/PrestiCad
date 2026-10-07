@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-import '../../prestamos/prestamos.css'
+import './prestamos.css'
 import { ordenarPrestamos, presentarEstadoPrestamo } from '../../prestamos/estadoPrestamo'
 import { filtrarPrestamos } from '../../prestamos/filtroPrestamos'
 import DetallePrestamo from './DetallePrestamo'

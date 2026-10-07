@@ -9,7 +9,11 @@ from apps.inventario.models import Material
 from apps.inventario.serializers import MaterialSerializer
 from apps.inventario.services import registrar_material
 from apps.prestamos.models import Prestamo
-from apps.prestamos.services import PrestamoError, registrar_prestamo
+from apps.prestamos.services import (
+    PrestamoError,
+    consultar_prestamos_usuario,
+    registrar_prestamo,
+)
 from apps.usuarios.models import Rol
 from apps.usuarios.services import registrar_usuario, usuario_tiene_prestamos_activos
 from apps.usuarios.sesiones import (
@@ -206,6 +210,60 @@ class RegistrarPrestamoServiceTestCase(TestCase):
         prestamo.save(update_fields=["estado"])
 
         self.assertFalse(usuario_tiene_prestamos_activos(self.prestatario.id))
+
+
+class ConsultarPrestamosServiceTestCase(TestCase):
+    def setUp(self):
+        self.gestor = crear_usuario("gestor-consulta@unsa.edu.pe", "10000101", rol="gestor")
+        self.prestatario = crear_usuario("consulta@unsa.edu.pe", "10000102")
+        self.otro_prestatario = crear_usuario("otro-consulta@unsa.edu.pe", "10000103")
+
+    def _registrar(self, prestatario, codigo):
+        material = crear_material(codigo_inventario=codigo)
+        return registrar_prestamo(
+            dni_prestatario=prestatario.dni,
+            material_id=material.id,
+            tiempo_prestamo_dias=7,
+            checklist_inicial=CHECKLIST,
+            registrado_por=self.gestor,
+        )
+
+    def test_lista_vacia_y_aisla_por_usuario(self):
+        self.assertEqual(list(consultar_prestamos_usuario(self.prestatario.id)), [])
+        propio = self._registrar(self.prestatario, "CONS-001")
+        self._registrar(self.otro_prestatario, "CONS-002")
+
+        resultado = list(consultar_prestamos_usuario(self.prestatario.id))
+
+        self.assertEqual([prestamo.id for prestamo in resultado], [propio.id])
+
+    def test_deriva_vencido_sin_mutar_estado_y_ordena_vencidos_primero(self):
+        ahora = timezone.now()
+        vencido_antiguo = self._registrar(self.prestatario, "CONS-011")
+        vencido_reciente = self._registrar(self.prestatario, "CONS-012")
+        activo = self._registrar(self.prestatario, "CONS-013")
+        vencido_antiguo.fecha_entrega = ahora - timedelta(days=30)
+        vencido_antiguo.fecha_limite = ahora - timedelta(days=23)
+        vencido_antiguo.save(update_fields=["fecha_entrega", "fecha_limite"])
+        vencido_reciente.fecha_entrega = ahora - timedelta(days=10)
+        vencido_reciente.fecha_limite = ahora - timedelta(days=3)
+        vencido_reciente.save(update_fields=["fecha_entrega", "fecha_limite"])
+        activo.fecha_entrega = ahora - timedelta(days=1)
+        activo.fecha_limite = ahora + timedelta(days=6)
+        activo.save(update_fields=["fecha_entrega", "fecha_limite"])
+
+        resultado = list(consultar_prestamos_usuario(self.prestatario.id, ahora=ahora))
+
+        self.assertEqual(
+            [prestamo.id for prestamo in resultado],
+            [vencido_antiguo.id, vencido_reciente.id, activo.id],
+        )
+        self.assertEqual(
+            [prestamo.estado_consulta for prestamo in resultado],
+            ["vencido", "vencido", "activo"],
+        )
+        vencido_antiguo.refresh_from_db()
+        self.assertEqual(vencido_antiguo.estado, "activo")
 
 
 class RegistrarPrestamoAPITestCase(APITestCase):

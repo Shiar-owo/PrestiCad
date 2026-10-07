@@ -1,6 +1,6 @@
 from datetime import timedelta
 
-from django.db.models import Count
+from django.db.models import Case, CharField, Count, DateTimeField, F, IntegerField, Value, When
 from django.db import transaction
 from django.utils import timezone
 
@@ -49,6 +49,60 @@ def tiene_prestamos_activos(usuario_id):
         usuario_id=usuario_id,
         estado__in=ESTADOS_QUE_OCUPAN_UNIDAD,
     ).exists()
+
+
+def consultar_prestamos_usuario(usuario_id, ahora=None):
+    """Lista préstamos propios, deriva vencidos en lectura y prioriza su vencimiento."""
+    ahora = ahora or timezone.now()
+    condicion_vencido = When(
+        estado="activo",
+        fecha_limite__lt=ahora,
+        then=Value("vencido"),
+    )
+    condicion_estado_vencido = When(estado="vencido", then=Value(0))
+    condicion_activo_vencido = When(
+        estado="activo",
+        fecha_limite__lt=ahora,
+        then=Value(0),
+    )
+    return (
+        Prestamo.objects.filter(usuario_id=usuario_id)
+        .select_related("material")
+        .annotate(
+            estado_consulta=Case(
+                condicion_vencido,
+                default=F("estado"),
+                output_field=CharField(),
+            ),
+            _prioridad_vencido=Case(
+                condicion_estado_vencido,
+                condicion_activo_vencido,
+                default=Value(1),
+                output_field=IntegerField(),
+            ),
+            _fecha_vencido_orden=Case(
+                When(estado="vencido", then=F("fecha_limite")),
+                When(estado="activo", fecha_limite__lt=ahora, then=F("fecha_limite")),
+                output_field=DateTimeField(),
+            ),
+            _fecha_entrega_orden=Case(
+                When(estado="vencido", then=Value(None)),
+                When(
+                    estado="activo",
+                    fecha_limite__lt=ahora,
+                    then=Value(None),
+                ),
+                default=F("fecha_entrega"),
+                output_field=DateTimeField(),
+            ),
+        )
+        .order_by(
+            "_prioridad_vencido",
+            "_fecha_vencido_orden",
+            "-_fecha_entrega_orden",
+            "-id",
+        )
+    )
 
 
 def _obtener_prestatario_bloqueado(dni):

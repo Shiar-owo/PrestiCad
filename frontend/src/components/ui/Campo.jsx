@@ -52,6 +52,20 @@ function Campo({
             </option>
           ))}
         </select>
+      ) : tipo === 'area' ? (
+        <textarea
+          id={identificador}
+          name={nombre}
+          rows={rest.rows ?? 3}
+          value={valor}
+          placeholder={placeholder}
+          disabled={deshabilitado}
+          aria-invalid={hayError}
+          aria-describedby={etiquetaAyuda ? `${identificador}-ayuda` : undefined}
+          className={`${clasesControl} resize-y`}
+          onChange={onCambio}
+          {...rest}
+        />
       ) : (
         <input
           id={identificador}

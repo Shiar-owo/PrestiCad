@@ -14,7 +14,7 @@ function Boton({
     'inline-flex items-center justify-center gap-2 rounded-lg font-semibold transition-colors cursor-pointer disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-acento-600'
 
   const variantes = {
-    primario: 'bg-marca-600 text-white hover:bg-marca-700 disabled:bg-neutro',
+    primario: 'bg-marca-700 text-white hover:bg-marca-800 disabled:bg-neutro',
     secundario:
       'border border-borde bg-white text-texto hover:bg-superficie-alta disabled:text-texto-suave',
     peligro: 'bg-error text-white hover:bg-red-700 disabled:bg-red-300',

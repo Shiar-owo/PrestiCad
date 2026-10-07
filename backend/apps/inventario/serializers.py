@@ -72,6 +72,23 @@ class FotoMaterial(serializers.ImageField):
         return f"{settings.MEDIA_URL_PUBLICA.rstrip('/')}/{url.lstrip('/')}"
 
 
+class MaterialListSerializer(serializers.ListSerializer):
+    """Resuelve en lote la disponibilidad informada por el módulo préstamos."""
+
+    def to_representation(self, data):
+        materiales = list(data.all() if hasattr(data, "all") else data)
+        from apps.prestamos.services import contar_unidades_prestadas_por_material
+
+        conteos = contar_unidades_prestadas_por_material(
+            material.pk for material in materiales
+        )
+        self._context = {
+            **self._context,
+            "unidades_prestadas_por_material": conteos,
+        }
+        return super().to_representation(materiales)
+
+
 class MaterialSerializer(serializers.ModelSerializer):
     """Contrato de salida JSON del inventario."""
 
@@ -80,6 +97,7 @@ class MaterialSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Material
+        list_serializer_class = MaterialListSerializer
         fields = (
             "id",
             "nombre",
@@ -99,11 +117,20 @@ class MaterialSerializer(serializers.ModelSerializer):
     def get_unidades_disponibles(self, material):
         """Unidades libres de un material.
 
-        Hoy coincide con `stock`: las loans y reservas (HU09/HU06) aún no
-        existen. Cuando existan, se descontarán aquí los préstamos activos y
-        las reservas vigentes.
+        El stock es el total registrado. Los préstamos activos consumen una
+        unidad cada uno; HU06 deberá extender este cálculo con las reservas
+        vigentes cuando ese módulo se integre.
         """
-        return material.stock
+        if material._state.adding:
+            return material.stock
+
+        prestamos_por_material = self.context.get("unidades_prestadas_por_material")
+        if prestamos_por_material is None:
+            from apps.prestamos.services import contar_unidades_prestadas_por_material
+
+            prestamos_por_material = contar_unidades_prestadas_por_material([material.pk])
+        prestamos_activos = prestamos_por_material.get(material.pk, 0)
+        return max(material.stock - prestamos_activos, 0)
 
 
 class MaterialRegistroSerializer(RechazarCamposNoPermitidosMixin, serializers.ModelSerializer):

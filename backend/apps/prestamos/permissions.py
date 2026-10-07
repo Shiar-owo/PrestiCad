@@ -15,3 +15,18 @@ class EsGestorDeAlmacen(BasePermission):
         if usuario.rol.nombre != "gestor":
             raise PermissionDenied(detail=self.message_rol)
         return True
+
+
+class EsPrestatarioAutenticado(BasePermission):
+    """Permite consultar préstamos propios solo al prestatario de la sesión."""
+
+    message_sin_sesion = "Inicia sesión como prestatario para consultar tus préstamos."
+    message_rol = "Solo un prestatario puede consultar sus préstamos."
+
+    def has_permission(self, request, view):
+        usuario = getattr(request, "usuario_autenticado", None)
+        if usuario is None:
+            raise PermissionDenied(detail=self.message_sin_sesion)
+        if usuario.rol.nombre != "prestatario":
+            raise PermissionDenied(detail=self.message_rol)
+        return True

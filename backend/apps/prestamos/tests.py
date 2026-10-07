@@ -266,6 +266,94 @@ class ConsultarPrestamosServiceTestCase(TestCase):
         self.assertEqual(vencido_antiguo.estado, "activo")
 
 
+class MisPrestamosAPITestCase(APITestCase):
+    URL = "/api/prestamos/mis-prestamos/"
+    CAMPOS_PUBLICOS = {
+        "id",
+        "material_id",
+        "material_nombre",
+        "material_codigo",
+        "fecha_entrega",
+        "fecha_limite",
+        "tiempo_prestamo_dias",
+        "estado",
+    }
+
+    def setUp(self):
+        self.prestatario = crear_usuario("mis-prestamos@unsa.edu.pe", "20000101")
+        self.otro_prestatario = crear_usuario("otro-mis-prestamos@unsa.edu.pe", "20000102")
+        self.gestor = crear_usuario("gestor-mis-prestamos@unsa.edu.pe", "20000103", rol="gestor")
+        self.administrador = crear_usuario(
+            "admin-mis-prestamos@unsa.edu.pe",
+            "20000104",
+            rol="administrador",
+        )
+        self.registrado_por = self.gestor
+
+    def _iniciar_sesion(self, usuario):
+        sesion = self.client.session
+        sesion[CLAVE_SESION_USUARIO_ID] = usuario.id
+        sesion[CLAVE_SESION_ULTIMA_ACTIVIDAD] = timezone.now().isoformat()
+        sesion.save()
+
+    def _crear_prestamo(self, usuario, codigo):
+        material = crear_material(codigo_inventario=codigo)
+        return registrar_prestamo(
+            dni_prestatario=usuario.dni,
+            material_id=material.id,
+            tiempo_prestamo_dias=5,
+            checklist_inicial=CHECKLIST,
+            registrado_por=self.registrado_por,
+        )
+
+    def test_get_sin_sesion_responde_403(self):
+        respuesta = self.client.get(self.URL)
+
+        self.assertEqual(respuesta.status_code, 403)
+
+    def test_get_solo_permite_rol_prestatario(self):
+        for usuario in (self.gestor, self.administrador):
+            with self.subTest(rol=usuario.rol.nombre):
+                self._iniciar_sesion(usuario)
+                respuesta = self.client.get(self.URL)
+                self.assertEqual(respuesta.status_code, 403)
+
+    def test_get_devuelve_solo_prestamos_propios_y_campos_publicos(self):
+        self._crear_prestamo(self.prestatario, "MIS-001")
+        self._crear_prestamo(self.otro_prestatario, "MIS-002")
+        self._iniciar_sesion(self.prestatario)
+
+        respuesta = self.client.get(self.URL)
+
+        self.assertEqual(respuesta.status_code, 200)
+        datos = respuesta.json()
+        self.assertEqual(len(datos), 1)
+        self.assertEqual(set(datos[0]), self.CAMPOS_PUBLICOS)
+        self.assertEqual(datos[0]["material_codigo"], "MIS-001")
+        self.assertEqual(datos[0]["estado"], "activo")
+
+    def test_get_sin_prestamos_devuelve_lista_vacia(self):
+        self._iniciar_sesion(self.prestatario)
+
+        respuesta = self.client.get(self.URL)
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.json(), [])
+
+    def test_get_expone_vencido_derivado_sin_mutar_estado(self):
+        prestamo = self._crear_prestamo(self.prestatario, "MIS-003")
+        prestamo.fecha_limite = timezone.now() - timedelta(days=1)
+        prestamo.save(update_fields=["fecha_limite"])
+        self._iniciar_sesion(self.prestatario)
+
+        respuesta = self.client.get(self.URL)
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.json()[0]["estado"], "vencido")
+        prestamo.refresh_from_db()
+        self.assertEqual(prestamo.estado, "activo")
+
+
 class RegistrarPrestamoAPITestCase(APITestCase):
     URL = "/api/prestamos/"
 

@@ -3,12 +3,23 @@ import { useState } from 'react'
 import '../../prestamos/prestamos.css'
 import { ordenarPrestamos, presentarEstadoPrestamo } from '../../prestamos/estadoPrestamo'
 import { filtrarPrestamos } from '../../prestamos/filtroPrestamos'
+import DetallePrestamo from './DetallePrestamo'
 import FiltroPrestamos from './FiltroPrestamos'
 
 export default function ListaPrestamos({ prestamos, onSeleccionar }) {
   const [filtro, setFiltro] = useState('todos')
+  const [seleccionado, setSeleccionado] = useState(null)
   const ordenados = ordenarPrestamos(prestamos)
   const visibles = filtrarPrestamos(ordenados, filtro)
+
+  if (seleccionado) {
+    return (
+      <DetallePrestamo
+        onVolver={() => setSeleccionado(null)}
+        prestamo={seleccionado}
+      />
+    )
+  }
 
   return (
     <section className="prestamos-lista" aria-label="Mis préstamos">
@@ -28,7 +39,10 @@ export default function ListaPrestamos({ prestamos, onSeleccionar }) {
               <li className="prestamos-lista__item" key={prestamo.id}>
                 <button
                   className="prestamos-lista__seleccion"
-                  onClick={() => onSeleccionar?.(prestamo)}
+                  onClick={() => {
+                    setSeleccionado(prestamo)
+                    onSeleccionar?.(prestamo)
+                  }}
                   type="button"
                 >
                   <span className="prestamos-lista__material">

@@ -36,17 +36,15 @@ function CatalogoMateriales({ onSeleccionarMaterial }) {
   }
 
   return (
-    <section className="catalogo-materiales">
-      <header className="catalogo-materiales__cabecera">
-        <h2>Catálogo de Materiales</h2>
-        <p>Busca y consulta los materiales disponibles para préstamo y reserva.</p>
+    <div className="mx-auto w-full max-w-6xl px-4 py-8">
+      <header className="mb-6">
+        <h2 className="text-xl font-bold text-texto">Catálogo de Materiales</h2>
+        <p className="mt-1 text-sm text-texto-suave">
+          Busca y consulta los materiales disponibles para préstamo y reserva.
+        </p>
       </header>
 
-      <BarraBusqueda
-        cargando={cargando}
-        valoresIniciales={filtros}
-        onBuscar={buscarMateriales}
-      />
+      <BarraBusqueda cargando={cargando} valoresIniciales={filtros} onBuscar={buscarMateriales} />
 
       <ResultadosMateriales
         materiales={materiales}
@@ -54,7 +52,7 @@ function CatalogoMateriales({ onSeleccionarMaterial }) {
         error={error}
         onSeleccionarMaterial={onSeleccionarMaterial}
       />
-    </section>
+    </div>
   )
 }
 

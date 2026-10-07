@@ -3,6 +3,7 @@ import { useState } from 'react'
 import CatalogoMateriales from './CatalogoMateriales'
 import Materiales from './Materiales'
 import PerfilUsuario from './PerfilUsuario'
+import RegistrarPrestamo from './RegistrarPrestamo'
 
 const ETIQUETAS_ROL = {
   prestatario: 'Prestatario',
@@ -84,9 +85,22 @@ function PanelGestor() {
         >
           Vista catálogo (búsqueda)
         </button>
+        <button
+          type="button"
+          className={seccion === 'prestamo' ? 'activo' : 'boton-secundario'}
+          onClick={() => setSeccion('prestamo')}
+        >
+          Registrar entrega
+        </button>
       </nav>
       <hr style={{ margin: '1.5rem 0' }} />
-      {seccion === 'gestion' ? <Materiales /> : <CatalogoMateriales />}
+      {seccion === 'gestion' ? (
+        <Materiales />
+      ) : seccion === 'catalogo' ? (
+        <CatalogoMateriales />
+      ) : (
+        <RegistrarPrestamo />
+      )}
     </div>
   )
 }

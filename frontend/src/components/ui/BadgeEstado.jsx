@@ -27,7 +27,7 @@ const ESTILOS = {
   aviso:
     'bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:ring-amber-700/60',
   error: 'bg-red-50 text-red-700 ring-red-200 dark:bg-red-500/15 dark:text-red-300 dark:ring-red-700/60',
-  neutro: 'bg-slate-100 text-texto-suave ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700',
+  neutro: 'bg-acento-50 text-acento-700 ring-acento-200 dark:bg-acento-500/15 dark:text-acento-300 dark:ring-acento-700/60',
 }
 
 function BadgeEstado({ estado, texto = '' }) {

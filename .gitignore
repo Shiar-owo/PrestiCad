@@ -16,5 +16,8 @@ dist/
 # Bases de datos / volumenes
 pgdata/
 
+# Imagenes subidas en desarrollo (backend/media/)
+backend/media/
+
 # Sistema
 .DS_Store

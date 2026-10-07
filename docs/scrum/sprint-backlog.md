@@ -13,22 +13,32 @@ Credencial                      Usuario
 ├── email (para login)          ├── email (para contacto)
 ├── password_hash               ├── nombre, apellido
 ├── failed_attempts             ├── dni, telefono
+                                ├── facultad, departamento_carrera
 └── locked_until                ├── tipo, rol, estado
                                 ├── reputacion_puntaje (-500 a 500)
                                 ├── reputacion_tier (Avanzado/Estándar/Restringido)
                                 └── created_at, updated_at
 
 Material                        Prestamo
-├── id                          ├── id
+├── id (UUID)                   ├── id
 ├── nombre, descripcion         ├── usuario_id (FK)
-├── categoria                   ├── material_id (FK)
-├── estado                      ├── fecha_entrega, fecha_limite
-├── codigo_unico                ├── tiempo_prestamo_dias
-├── tier_minimo_requerido       ├── estado (Activo/Devuelto/Vencido)
-├── bonificacion_tiempo         ├── garantia (nullable)
-├── deduccion_tardanza          ├── checklist_inicial (JSON)
-├── deduccion_dano_parcial      ├── checklist_devolucion (JSON)
-└── deduccion_dano_total        └── tipo (Normal/Excepción)
+├── codigo_inventario (único)   ├── material_id (FK)
+├── tipo (Equipo/Libro/Objeto)  ├── fecha_entrega, fecha_limite
+├── estado                      ├── tiempo_prestamo_dias
+├── es_alto_valor               ├── estado (Activo/Devuelto/Vencido)
+├── ficha técnica (marca,       ├── garantia (nullable)
+│   modelo, numero_serie,       ├── checklist_inicial (JSON)
+│   color, estado_fisico,       ├── checklist_devolucion (JSON)
+│   foto (imagen))              └── tipo (Normal/Excepción)
+├── tier_minimo_requerido
+├── bonificacion_tiempo
+├── deduccion_tardanza
+├── deduccion_dano_parcial
+├── deduccion_dano_total
+├── costo_reparacion,
+│   costo_reposicion
+├── stock (unidades)
+└── created_at, updated_at
 
 Reserva
 ├── id
@@ -40,6 +50,16 @@ Reserva
 ├── fecha_solicitud
 └── fecha_limite_recojo
 ```
+
+> El agregado `Material` sigue el modelo de dominio DDD
+> (`docs/diagrams/ddd_detailed/03-inventario.puml`): `tipo`, `estado`, la ficha
+> técnica y los parámetros de reputación son value objects que en Django se
+> materializan como columnas de la tabla `inventario_material` (HU04). `stock` agrega el
+> conteo de unidades del criterio 5 de HU04.
+>
+> La ficha técnica incluye `foto`, un `ImageField` opcional (no una URL escrita
+> a mano). En desarrollo se guarda en `MEDIA_ROOT` y en producción en
+> Cloudinary; los formatos admitidos son JPEG, PNG y WEBP de hasta 5 MB.
 
 ---
 

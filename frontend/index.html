@@ -3,7 +3,25 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="PrestiCad — Sistema de préstamos académicos de la universidad. Consulta el catálogo, reserva materiales y gestiona tus préstamos."
+    />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#020617" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>PrestiCad</title>
+    <script>
+      (function () {
+        try {
+          var guardado = localStorage.getItem('tema')
+          var oscuro =
+            guardado === 'oscuro' ||
+            (!guardado && window.matchMedia('(prefers-color-scheme: dark)').matches)
+          document.documentElement.classList.toggle('dark', oscuro)
+        } catch (e) {}
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

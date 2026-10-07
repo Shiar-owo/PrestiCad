@@ -5,6 +5,7 @@ import Materiales from './Materiales'
 import PerfilUsuario from './PerfilUsuario'
 import RegistrarPrestamo from './RegistrarPrestamo'
 import MisPrestamos from '../prestamos/MisPrestamos'
+import HistorialPrestamos from '../prestamos/HistorialPrestamos'
 
 const ETIQUETAS_ROL = {
   prestatario: 'Prestatario',
@@ -102,12 +103,21 @@ function PanelGestor() {
         >
           Registrar entrega
         </button>
+        <button
+          type="button"
+          className={seccion === 'historial' ? 'activo' : 'boton-secundario'}
+          onClick={() => setSeccion('historial')}
+        >
+          Historial de préstamos
+        </button>
       </nav>
       <hr style={{ margin: '1.5rem 0' }} />
       {seccion === 'gestion' ? (
         <Materiales />
       ) : seccion === 'catalogo' ? (
         <CatalogoMateriales />
+      ) : seccion === 'historial' ? (
+        <HistorialPrestamos />
       ) : (
         <RegistrarPrestamo />
       )}
@@ -137,9 +147,22 @@ function PanelAdministrador() {
         >
           Vista catálogo (búsqueda)
         </button>
+        <button
+          type="button"
+          className={seccion === 'historial' ? 'activo' : 'boton-secundario'}
+          onClick={() => setSeccion('historial')}
+        >
+          Historial de préstamos
+        </button>
       </nav>
       <hr style={{ margin: '1.5rem 0' }} />
-      {seccion === 'gestion' ? <Materiales /> : <CatalogoMateriales />}
+      {seccion === 'gestion' ? (
+        <Materiales />
+      ) : seccion === 'catalogo' ? (
+        <CatalogoMateriales />
+      ) : (
+        <HistorialPrestamos />
+      )}
     </div>
   )
 }

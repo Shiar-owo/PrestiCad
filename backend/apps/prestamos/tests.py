@@ -11,6 +11,7 @@ from apps.inventario.services import registrar_material
 from apps.prestamos.models import Prestamo
 from apps.prestamos.services import (
     PrestamoError,
+    consultar_historial_prestamos,
     consultar_prestamos_usuario,
     registrar_prestamo,
 )
@@ -266,6 +267,67 @@ class ConsultarPrestamosServiceTestCase(TestCase):
         self.assertEqual(vencido_antiguo.estado, "activo")
 
 
+class HistorialPrestamosServiceTestCase(TestCase):
+    def setUp(self):
+        self.gestor = crear_usuario("gestor-historial@unsa.edu.pe", "10000201", rol="gestor")
+        self.prestatario = crear_usuario("historial@unsa.edu.pe", "10000202")
+        self.otro_prestatario = crear_usuario("otro-historial@unsa.edu.pe", "10000203")
+
+    def _registrar(self, prestatario, codigo):
+        material = crear_material(codigo_inventario=codigo)
+        return registrar_prestamo(
+            dni_prestatario=prestatario.dni,
+            material_id=material.id,
+            tiempo_prestamo_dias=7,
+            checklist_inicial=CHECKLIST,
+            registrado_por=self.gestor,
+        )
+
+    def test_lista_vacia_y_consulta_prestamos_de_todos_los_usuarios(self):
+        self.assertEqual(list(consultar_historial_prestamos()), [])
+        primero = self._registrar(self.prestatario, "HIST-001")
+        segundo = self._registrar(self.otro_prestatario, "HIST-002")
+
+        resultado = list(consultar_historial_prestamos())
+
+        self.assertCountEqual(
+            [(prestamo.id, prestamo.usuario_id) for prestamo in resultado],
+            [(primero.id, self.prestatario.id), (segundo.id, self.otro_prestatario.id)],
+        )
+
+    def test_deriva_vencido_y_ordena_sin_mutar_estado_persistido(self):
+        ahora = timezone.now()
+        vencido_antiguo = self._registrar(self.prestatario, "HIST-011")
+        vencido_reciente = self._registrar(self.otro_prestatario, "HIST-012")
+        activo = self._registrar(self.prestatario, "HIST-013")
+        devuelto = self._registrar(self.otro_prestatario, "HIST-014")
+        vencido_antiguo.fecha_entrega = ahora - timedelta(days=30)
+        vencido_antiguo.fecha_limite = ahora - timedelta(days=23)
+        vencido_antiguo.save(update_fields=["fecha_entrega", "fecha_limite"])
+        vencido_reciente.fecha_entrega = ahora - timedelta(days=10)
+        vencido_reciente.fecha_limite = ahora - timedelta(days=3)
+        vencido_reciente.save(update_fields=["fecha_entrega", "fecha_limite"])
+        activo.fecha_entrega = ahora - timedelta(days=1)
+        activo.fecha_limite = ahora + timedelta(days=6)
+        activo.save(update_fields=["fecha_entrega", "fecha_limite"])
+        devuelto.estado = "devuelto"
+        devuelto.fecha_entrega = ahora - timedelta(days=5)
+        devuelto.save(update_fields=["estado", "fecha_entrega"])
+
+        resultado = list(consultar_historial_prestamos(ahora=ahora))
+
+        self.assertEqual(
+            [prestamo.id for prestamo in resultado],
+            [vencido_antiguo.id, vencido_reciente.id, activo.id, devuelto.id],
+        )
+        self.assertEqual(
+            [prestamo.estado_consulta for prestamo in resultado],
+            ["vencido", "vencido", "activo", "devuelto"],
+        )
+        vencido_antiguo.refresh_from_db()
+        self.assertEqual(vencido_antiguo.estado, "activo")
+
+
 class MisPrestamosAPITestCase(APITestCase):
     URL = "/api/prestamos/mis-prestamos/"
     CAMPOS_PUBLICOS = {
@@ -352,6 +414,110 @@ class MisPrestamosAPITestCase(APITestCase):
         self.assertEqual(respuesta.json()[0]["estado"], "vencido")
         prestamo.refresh_from_db()
         self.assertEqual(prestamo.estado, "activo")
+
+
+class HistorialPrestamosAPITestCase(APITestCase):
+    URL = "/api/prestamos/historial/"
+    CAMPOS_HISTORIAL = {
+        "id",
+        "prestatario_nombre",
+        "material_id",
+        "material_nombre",
+        "material_codigo",
+        "fecha_entrega",
+        "fecha_limite",
+        "tiempo_prestamo_dias",
+        "estado",
+    }
+
+    def setUp(self):
+        self.gestor = crear_usuario("gestor-historial-api@unsa.edu.pe", "20000201", rol="gestor")
+        self.administrador = crear_usuario(
+            "admin-historial-api@unsa.edu.pe", "20000202", rol="administrador"
+        )
+        self.prestatario = crear_usuario("prestatario-historial-api@unsa.edu.pe", "20000203")
+        self.otro_prestatario = crear_usuario("otro-historial-api@unsa.edu.pe", "20000204")
+
+    def _iniciar_sesion(self, usuario):
+        sesion = self.client.session
+        sesion[CLAVE_SESION_USUARIO_ID] = usuario.id
+        sesion[CLAVE_SESION_ULTIMA_ACTIVIDAD] = timezone.now().isoformat()
+        sesion.save()
+
+    def _crear_prestamo(self, usuario, codigo):
+        material = crear_material(codigo_inventario=codigo)
+        return registrar_prestamo(
+            dni_prestatario=usuario.dni,
+            material_id=material.id,
+            tiempo_prestamo_dias=5,
+            checklist_inicial=CHECKLIST,
+            registrado_por=self.gestor,
+        )
+
+    def test_get_sin_sesion_responde_403(self):
+        respuesta = self.client.get(self.URL)
+
+        self.assertEqual(respuesta.status_code, 403)
+
+    def test_get_solo_permite_administrador_y_gestor(self):
+        for usuario in (self.gestor, self.administrador):
+            with self.subTest(rol=usuario.rol.nombre):
+                self._iniciar_sesion(usuario)
+                respuesta = self.client.get(self.URL)
+                self.assertEqual(respuesta.status_code, 200)
+
+        for usuario in (self.prestatario, self.otro_prestatario):
+            with self.subTest(rol=usuario.rol.nombre):
+                self._iniciar_sesion(usuario)
+                respuesta = self.client.get(self.URL)
+                self.assertEqual(respuesta.status_code, 403)
+
+    def test_get_lista_global_paginada_y_sin_datos_privados(self):
+        self._crear_prestamo(self.prestatario, "HIST-API-001")
+        self._crear_prestamo(self.otro_prestatario, "HIST-API-002")
+        self._iniciar_sesion(self.gestor)
+
+        respuesta = self.client.get(self.URL, {"page_size": 1})
+
+        self.assertEqual(respuesta.status_code, 200)
+        datos = respuesta.json()
+        self.assertEqual(datos["count"], 2)
+        self.assertIsNotNone(datos["next"])
+        self.assertEqual(len(datos["results"]), 1)
+        prestamo = datos["results"][0]
+        self.assertEqual(set(prestamo), self.CAMPOS_HISTORIAL)
+        self.assertIn(prestamo["prestatario_nombre"], {
+            f"{self.prestatario.nombre} {self.prestatario.apellido}",
+            f"{self.otro_prestatario.nombre} {self.otro_prestatario.apellido}",
+        })
+        self.assertNotIn("dni", prestamo)
+        self.assertNotIn("email", prestamo)
+        self.assertNotIn("checklist_inicial", prestamo)
+
+        segunda_pagina = self.client.get(self.URL, {"page_size": 1, "page": 2})
+        self.assertEqual(segunda_pagina.status_code, 200)
+        self.assertNotEqual(
+            prestamo["id"],
+            segunda_pagina.json()["results"][0]["id"],
+        )
+
+    def test_get_filtra_estado_visible_y_rechaza_estado_invalido(self):
+        vencido = self._crear_prestamo(self.prestatario, "HIST-API-011")
+        self._crear_prestamo(self.otro_prestatario, "HIST-API-012")
+        vencido.fecha_limite = timezone.now() - timedelta(days=1)
+        vencido.save(update_fields=["fecha_limite"])
+        self._iniciar_sesion(self.administrador)
+
+        respuesta = self.client.get(self.URL, {"estado": "vencido"})
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.json()["count"], 1)
+        self.assertEqual(respuesta.json()["results"][0]["estado"], "vencido")
+        vencido.refresh_from_db()
+        self.assertEqual(vencido.estado, "activo")
+
+        invalida = self.client.get(self.URL, {"estado": "inexistente"})
+        self.assertEqual(invalida.status_code, 400)
 
 
 class RegistrarPrestamoAPITestCase(APITestCase):

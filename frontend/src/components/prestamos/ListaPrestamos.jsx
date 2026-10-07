@@ -1,17 +1,28 @@
+import { useState } from 'react'
+
 import '../../prestamos/prestamos.css'
 import { ordenarPrestamos, presentarEstadoPrestamo } from '../../prestamos/estadoPrestamo'
+import { filtrarPrestamos } from '../../prestamos/filtroPrestamos'
+import FiltroPrestamos from './FiltroPrestamos'
 
 export default function ListaPrestamos({ prestamos, onSeleccionar }) {
+  const [filtro, setFiltro] = useState('todos')
   const ordenados = ordenarPrestamos(prestamos)
+  const visibles = filtrarPrestamos(ordenados, filtro)
 
   return (
     <section className="prestamos-lista" aria-label="Mis préstamos">
       <h3>Mis préstamos</h3>
-      {ordenados.length === 0 ? (
-        <p className="prestamos-lista__vacio">Aún no tienes préstamos registrados.</p>
+      <FiltroPrestamos estado={filtro} onCambiar={setFiltro} />
+      {visibles.length === 0 ? (
+        <p className="prestamos-lista__vacio">
+          {ordenados.length === 0
+            ? 'Aún no tienes préstamos registrados.'
+            : 'No hay préstamos con este estado.'}
+        </p>
       ) : (
         <ul className="prestamos-lista__items">
-          {ordenados.map((prestamo) => {
+          {visibles.map((prestamo) => {
             const estado = presentarEstadoPrestamo(prestamo.estado_visible)
             return (
               <li className="prestamos-lista__item" key={prestamo.id}>

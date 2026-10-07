@@ -2,6 +2,25 @@
   margin-top: 1.5rem;
 }
 
+.prestamos-filtro {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.prestamos-filtro label {
+  font-weight: 600;
+}
+
+.prestamos-filtro select {
+  background: #fff;
+  border: 1px solid #9ca3af;
+  border-radius: 0.35rem;
+  font: inherit;
+  padding: 0.4rem 0.65rem;
+}
+
 .prestamos-lista__items {
   display: grid;
   gap: 0.75rem;

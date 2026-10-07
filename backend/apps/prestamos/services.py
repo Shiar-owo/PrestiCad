@@ -51,8 +51,8 @@ def tiene_prestamos_activos(usuario_id):
     ).exists()
 
 
-def consultar_prestamos_usuario(usuario_id, ahora=None):
-    """Lista préstamos propios, deriva vencidos en lectura y prioriza su vencimiento."""
+def _consultar_prestamos_con_estado(ahora=None):
+    """Prepara préstamos con estado visible y orden de consulta determinista."""
     ahora = ahora or timezone.now()
     condicion_vencido = When(
         estado="activo",
@@ -66,8 +66,7 @@ def consultar_prestamos_usuario(usuario_id, ahora=None):
         then=Value(0),
     )
     return (
-        Prestamo.objects.filter(usuario_id=usuario_id)
-        .select_related("material")
+        Prestamo.objects.select_related("material")
         .annotate(
             estado_consulta=Case(
                 condicion_vencido,
@@ -103,6 +102,16 @@ def consultar_prestamos_usuario(usuario_id, ahora=None):
             "-id",
         )
     )
+
+
+def consultar_prestamos_usuario(usuario_id, ahora=None):
+    """Lista préstamos propios, deriva vencidos en lectura y prioriza su vencimiento."""
+    return _consultar_prestamos_con_estado(ahora=ahora).filter(usuario_id=usuario_id)
+
+
+def consultar_historial_prestamos(ahora=None):
+    """Lista global de préstamos para consulta histórica de gestión."""
+    return _consultar_prestamos_con_estado(ahora=ahora).select_related("usuario")
 
 
 def _obtener_prestatario_bloqueado(dni):

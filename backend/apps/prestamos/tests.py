@@ -11,6 +11,7 @@ from apps.inventario.services import registrar_material
 from apps.prestamos.models import Prestamo
 from apps.prestamos.services import (
     PrestamoError,
+    consultar_historial_prestamos,
     consultar_prestamos_usuario,
     registrar_prestamo,
 )
@@ -261,6 +262,67 @@ class ConsultarPrestamosServiceTestCase(TestCase):
         self.assertEqual(
             [prestamo.estado_consulta for prestamo in resultado],
             ["vencido", "vencido", "activo"],
+        )
+        vencido_antiguo.refresh_from_db()
+        self.assertEqual(vencido_antiguo.estado, "activo")
+
+
+class HistorialPrestamosServiceTestCase(TestCase):
+    def setUp(self):
+        self.gestor = crear_usuario("gestor-historial@unsa.edu.pe", "10000201", rol="gestor")
+        self.prestatario = crear_usuario("historial@unsa.edu.pe", "10000202")
+        self.otro_prestatario = crear_usuario("otro-historial@unsa.edu.pe", "10000203")
+
+    def _registrar(self, prestatario, codigo):
+        material = crear_material(codigo_inventario=codigo)
+        return registrar_prestamo(
+            dni_prestatario=prestatario.dni,
+            material_id=material.id,
+            tiempo_prestamo_dias=7,
+            checklist_inicial=CHECKLIST,
+            registrado_por=self.gestor,
+        )
+
+    def test_lista_vacia_y_consulta_prestamos_de_todos_los_usuarios(self):
+        self.assertEqual(list(consultar_historial_prestamos()), [])
+        primero = self._registrar(self.prestatario, "HIST-001")
+        segundo = self._registrar(self.otro_prestatario, "HIST-002")
+
+        resultado = list(consultar_historial_prestamos())
+
+        self.assertCountEqual(
+            [(prestamo.id, prestamo.usuario_id) for prestamo in resultado],
+            [(primero.id, self.prestatario.id), (segundo.id, self.otro_prestatario.id)],
+        )
+
+    def test_deriva_vencido_y_ordena_sin_mutar_estado_persistido(self):
+        ahora = timezone.now()
+        vencido_antiguo = self._registrar(self.prestatario, "HIST-011")
+        vencido_reciente = self._registrar(self.otro_prestatario, "HIST-012")
+        activo = self._registrar(self.prestatario, "HIST-013")
+        devuelto = self._registrar(self.otro_prestatario, "HIST-014")
+        vencido_antiguo.fecha_entrega = ahora - timedelta(days=30)
+        vencido_antiguo.fecha_limite = ahora - timedelta(days=23)
+        vencido_antiguo.save(update_fields=["fecha_entrega", "fecha_limite"])
+        vencido_reciente.fecha_entrega = ahora - timedelta(days=10)
+        vencido_reciente.fecha_limite = ahora - timedelta(days=3)
+        vencido_reciente.save(update_fields=["fecha_entrega", "fecha_limite"])
+        activo.fecha_entrega = ahora - timedelta(days=1)
+        activo.fecha_limite = ahora + timedelta(days=6)
+        activo.save(update_fields=["fecha_entrega", "fecha_limite"])
+        devuelto.estado = "devuelto"
+        devuelto.fecha_entrega = ahora - timedelta(days=5)
+        devuelto.save(update_fields=["estado", "fecha_entrega"])
+
+        resultado = list(consultar_historial_prestamos(ahora=ahora))
+
+        self.assertEqual(
+            [prestamo.id for prestamo in resultado],
+            [vencido_antiguo.id, vencido_reciente.id, activo.id, devuelto.id],
+        )
+        self.assertEqual(
+            [prestamo.estado_consulta for prestamo in resultado],
+            ["vencido", "vencido", "activo", "devuelto"],
         )
         vencido_antiguo.refresh_from_db()
         self.assertEqual(vencido_antiguo.estado, "activo")

@@ -2,12 +2,17 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.prestamos.permissions import EsGestorDeAlmacen
+from apps.prestamos.consultar_serializers import PrestamoConsultaSerializer
+from apps.prestamos.permissions import EsGestorDeAlmacen, EsPrestatarioAutenticado
 from apps.prestamos.serializers import (
     PrestamoRegistroSerializer,
     RegistrarPrestamoSerializer,
 )
-from apps.prestamos.services import PrestamoError, registrar_prestamo
+from apps.prestamos.services import (
+    PrestamoError,
+    consultar_prestamos_usuario,
+    registrar_prestamo,
+)
 
 
 class RegistrarPrestamoView(APIView):
@@ -34,3 +39,13 @@ class RegistrarPrestamoView(APIView):
             PrestamoRegistroSerializer(prestamo).data,
             status=status.HTTP_201_CREATED,
         )
+
+
+class MisPrestamosView(APIView):
+    """Devuelve exclusivamente los préstamos del prestatario en sesión."""
+
+    permission_classes = [EsPrestatarioAutenticado]
+
+    def get(self, request):
+        prestamos = consultar_prestamos_usuario(request.usuario_autenticado.id)
+        return Response(PrestamoConsultaSerializer(prestamos, many=True).data)

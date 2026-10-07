@@ -4,6 +4,7 @@ import CatalogoMateriales from './CatalogoMateriales'
 import Materiales from './Materiales'
 import PerfilUsuario from './PerfilUsuario'
 import RegistrarPrestamo from './RegistrarPrestamo'
+import MisPrestamos from '../prestamos/MisPrestamos'
 
 const ETIQUETAS_ROL = {
   prestatario: 'Prestatario',
@@ -18,29 +19,38 @@ const ETIQUETAS_TIER = {
 }
 
 function PanelPrestatario({ usuario, onPerfilActualizado }) {
-  const [mostrarPerfil, setMostrarPerfil] = useState(false)
+  const [seccion, setSeccion] = useState('inicio')
 
   return (
     <div className="dashboard__panel">
       <nav aria-label="Opciones del prestatario" className="navegacion-auth">
         <button
           type="button"
-          className={!mostrarPerfil ? 'activo' : 'boton-secundario'}
-          onClick={() => setMostrarPerfil(false)}
+          className={seccion === 'inicio' ? 'activo' : 'boton-secundario'}
+          onClick={() => setSeccion('inicio')}
         >
           Inicio
         </button>
         <button
           type="button"
-          className={mostrarPerfil ? 'activo' : 'boton-secundario'}
-          onClick={() => setMostrarPerfil(true)}
+          className={seccion === 'prestamos' ? 'activo' : 'boton-secundario'}
+          onClick={() => setSeccion('prestamos')}
+        >
+          Mis préstamos
+        </button>
+        <button
+          type="button"
+          className={seccion === 'perfil' ? 'activo' : 'boton-secundario'}
+          onClick={() => setSeccion('perfil')}
         >
           Mi perfil
         </button>
       </nav>
 
-      {mostrarPerfil ? (
+      {seccion === 'perfil' ? (
         <PerfilUsuario onPerfilActualizado={onPerfilActualizado} />
+      ) : seccion === 'prestamos' ? (
+        <MisPrestamos />
       ) : (
         <>
           <h3>Panel de Prestatario</h3>

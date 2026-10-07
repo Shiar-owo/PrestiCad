@@ -109,9 +109,12 @@ def consultar_prestamos_usuario(usuario_id, ahora=None):
     return _consultar_prestamos_con_estado(ahora=ahora).filter(usuario_id=usuario_id)
 
 
-def consultar_historial_prestamos(ahora=None):
+def consultar_historial_prestamos(ahora=None, estado=None):
     """Lista global de préstamos para consulta histórica de gestión."""
-    return _consultar_prestamos_con_estado(ahora=ahora).select_related("usuario")
+    prestamos = _consultar_prestamos_con_estado(ahora=ahora).select_related("usuario")
+    if estado is not None:
+        prestamos = prestamos.filter(estado_consulta=estado)
+    return prestamos
 
 
 def _obtener_prestatario_bloqueado(dni):

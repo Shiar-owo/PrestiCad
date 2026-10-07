@@ -416,6 +416,110 @@ class MisPrestamosAPITestCase(APITestCase):
         self.assertEqual(prestamo.estado, "activo")
 
 
+class HistorialPrestamosAPITestCase(APITestCase):
+    URL = "/api/prestamos/historial/"
+    CAMPOS_HISTORIAL = {
+        "id",
+        "prestatario_nombre",
+        "material_id",
+        "material_nombre",
+        "material_codigo",
+        "fecha_entrega",
+        "fecha_limite",
+        "tiempo_prestamo_dias",
+        "estado",
+    }
+
+    def setUp(self):
+        self.gestor = crear_usuario("gestor-historial-api@unsa.edu.pe", "20000201", rol="gestor")
+        self.administrador = crear_usuario(
+            "admin-historial-api@unsa.edu.pe", "20000202", rol="administrador"
+        )
+        self.prestatario = crear_usuario("prestatario-historial-api@unsa.edu.pe", "20000203")
+        self.otro_prestatario = crear_usuario("otro-historial-api@unsa.edu.pe", "20000204")
+
+    def _iniciar_sesion(self, usuario):
+        sesion = self.client.session
+        sesion[CLAVE_SESION_USUARIO_ID] = usuario.id
+        sesion[CLAVE_SESION_ULTIMA_ACTIVIDAD] = timezone.now().isoformat()
+        sesion.save()
+
+    def _crear_prestamo(self, usuario, codigo):
+        material = crear_material(codigo_inventario=codigo)
+        return registrar_prestamo(
+            dni_prestatario=usuario.dni,
+            material_id=material.id,
+            tiempo_prestamo_dias=5,
+            checklist_inicial=CHECKLIST,
+            registrado_por=self.gestor,
+        )
+
+    def test_get_sin_sesion_responde_403(self):
+        respuesta = self.client.get(self.URL)
+
+        self.assertEqual(respuesta.status_code, 403)
+
+    def test_get_solo_permite_administrador_y_gestor(self):
+        for usuario in (self.gestor, self.administrador):
+            with self.subTest(rol=usuario.rol.nombre):
+                self._iniciar_sesion(usuario)
+                respuesta = self.client.get(self.URL)
+                self.assertEqual(respuesta.status_code, 200)
+
+        for usuario in (self.prestatario, self.otro_prestatario):
+            with self.subTest(rol=usuario.rol.nombre):
+                self._iniciar_sesion(usuario)
+                respuesta = self.client.get(self.URL)
+                self.assertEqual(respuesta.status_code, 403)
+
+    def test_get_lista_global_paginada_y_sin_datos_privados(self):
+        self._crear_prestamo(self.prestatario, "HIST-API-001")
+        self._crear_prestamo(self.otro_prestatario, "HIST-API-002")
+        self._iniciar_sesion(self.gestor)
+
+        respuesta = self.client.get(self.URL, {"page_size": 1})
+
+        self.assertEqual(respuesta.status_code, 200)
+        datos = respuesta.json()
+        self.assertEqual(datos["count"], 2)
+        self.assertIsNotNone(datos["next"])
+        self.assertEqual(len(datos["results"]), 1)
+        prestamo = datos["results"][0]
+        self.assertEqual(set(prestamo), self.CAMPOS_HISTORIAL)
+        self.assertIn(prestamo["prestatario_nombre"], {
+            f"{self.prestatario.nombre} {self.prestatario.apellido}",
+            f"{self.otro_prestatario.nombre} {self.otro_prestatario.apellido}",
+        })
+        self.assertNotIn("dni", prestamo)
+        self.assertNotIn("email", prestamo)
+        self.assertNotIn("checklist_inicial", prestamo)
+
+        segunda_pagina = self.client.get(self.URL, {"page_size": 1, "page": 2})
+        self.assertEqual(segunda_pagina.status_code, 200)
+        self.assertNotEqual(
+            prestamo["id"],
+            segunda_pagina.json()["results"][0]["id"],
+        )
+
+    def test_get_filtra_estado_visible_y_rechaza_estado_invalido(self):
+        vencido = self._crear_prestamo(self.prestatario, "HIST-API-011")
+        self._crear_prestamo(self.otro_prestatario, "HIST-API-012")
+        vencido.fecha_limite = timezone.now() - timedelta(days=1)
+        vencido.save(update_fields=["fecha_limite"])
+        self._iniciar_sesion(self.administrador)
+
+        respuesta = self.client.get(self.URL, {"estado": "vencido"})
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.json()["count"], 1)
+        self.assertEqual(respuesta.json()["results"][0]["estado"], "vencido")
+        vencido.refresh_from_db()
+        self.assertEqual(vencido.estado, "activo")
+
+        invalida = self.client.get(self.URL, {"estado": "inexistente"})
+        self.assertEqual(invalida.status_code, 400)
+
+
 class RegistrarPrestamoAPITestCase(APITestCase):
     URL = "/api/prestamos/"
 

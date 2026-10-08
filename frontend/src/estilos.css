@@ -49,10 +49,10 @@
 }
 
 :root {
-  /* Light — fondo y superficies en blanco; texto azul profundo (contraste alto) */
-  --color-fondo: #ffffff;
+  /* Light — fondo blanco-azulado suave; superficies/cards en blanco para diferenciar */
+  --color-fondo: #f1f6fb;
   --color-superficie: #ffffff;
-  --color-superficie-alta: #f2f6fb;
+  --color-superficie-alta: #e3edf7;
   --color-borde: #c2d2e4;
   --color-texto: #123a63;
   --color-texto-suave: #2f5578;

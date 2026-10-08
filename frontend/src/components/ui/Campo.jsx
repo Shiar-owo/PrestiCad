@@ -20,7 +20,7 @@ function Campo({
   const etiquetaAyuda = hayError ? error : ayuda
 
   const clasesControl =
-    'w-full rounded-lg border px-3 py-2 text-sm text-texto placeholder:text-texto-suave ' +
+    'w-full rounded-lg border px-3 py-2 text-sm text-texto bg-white dark:bg-superficie placeholder:text-texto-suave ' +
     (hayError
       ? 'border-error focus:outline-error'
       : 'border-borde focus:outline-acento-600')
@@ -47,7 +47,11 @@ function Campo({
           {...rest}
         >
           {opciones.map((opcion) => (
-            <option key={opcion.valor} value={opcion.valor}>
+            <option
+              key={opcion.valor}
+              value={opcion.valor}
+              className="bg-white text-texto dark:bg-superficie"
+            >
               {opcion.etiqueta}
             </option>
           ))}

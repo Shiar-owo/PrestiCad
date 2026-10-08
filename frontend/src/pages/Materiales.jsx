@@ -203,7 +203,11 @@ function Materiales() {
                         className="rounded-lg border border-borde bg-white px-2 py-1.5 text-sm text-texto dark:bg-superficie"
                       >
                         {OPCIONES_ESTADO.map((opcion) => (
-                          <option key={opcion.valor} value={opcion.valor}>
+                          <option
+                            key={opcion.valor}
+                            value={opcion.valor}
+                            className="bg-white text-texto dark:bg-superficie"
+                          >
                             {opcion.etiqueta}
                           </option>
                         ))}

@@ -1,6 +1,7 @@
 from datetime import timedelta
 import math
 
+from django.core.files.base import ContentFile
 from django.db.models import Case, CharField, Count, DateTimeField, F, IntegerField, Value, When
 from django.db import transaction
 from django.utils import timezone
@@ -13,6 +14,7 @@ from apps.prestamos.constants import (
     VALORES_ESTADOS_CHECKLIST_DEVOLUCION,
 )
 from apps.prestamos.models import Devolucion, Prestamo
+from apps.prestamos.reportes import generar_reporte_dano
 from apps.usuarios.models import Usuario
 from apps.usuarios.services import (
     actualizar_reputacion,
@@ -423,6 +425,13 @@ def estimar_devolucion(*, prestamo_id, checklist_devolucion, fecha_devolucion=No
     return _calcular_resultado(prestamo, checklist, fecha_devolucion)
 
 
+def _generar_reporte_de_dano(devolucion):
+    """Persiste el PDF obligatorio de RN10 dentro de la transacción (si falla, nada)."""
+    nombre = f"reporte-dano-prestamo-{devolucion.prestamo_id}.pdf"
+    contenido = ContentFile(generar_reporte_dano(devolucion))
+    devolucion.reporte.save(nombre, contenido, save=True)
+
+
 @transaction.atomic
 def registrar_devolucion(
     *,
@@ -456,10 +465,13 @@ def registrar_devolucion(
         material.estado = "disponible"
         material.save(update_fields=("estado", "updated_at"))
 
-    return Devolucion.objects.create(
+    devolucion = Devolucion.objects.create(
         prestamo=prestamo,
         realizado_por=realizado_por,
         fecha_devolucion=fecha_devolucion,
         checklist_devolucion=checklist,
         resultado=resultado,
     )
+    if resultado["hay_dano"]:
+        _generar_reporte_de_dano(devolucion)
+    return devolucion

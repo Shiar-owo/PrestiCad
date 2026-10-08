@@ -969,3 +969,47 @@ class RegistrarDevolucionServiceTestCase(DevolucionBaseTestCase):
             )
 
         self.assertEqual(contexto.exception.status_code, 404)
+
+
+class ReporteDevolucionTestCase(DevolucionBaseTestCase):
+    """RN10: la devolución con daño siempre deja un PDF persistido."""
+
+    def _contenido_reporte(self, devolucion):
+        with devolucion.reporte.open("rb") as archivo:
+            return archivo.read()
+
+    def test_dano_parcial_genera_reporte_pdf_persistido(self):
+        checklist = [
+            {"elemento": "Carcasa", "estado": "dano_parcial", "observacion": "Rasguño"},
+        ]
+
+        devolucion = self._devolver(
+            fecha_devolucion=self.prestamo.fecha_limite,
+            checklist=checklist,
+        )
+
+        self.assertTrue(devolucion.reporte)
+        self.assertTrue(devolucion.reporte.name.startswith("devoluciones/"))
+        contenido = self._contenido_reporte(devolucion)
+        self.assertEqual(contenido[:4], b"%PDF")
+        self.assertGreater(len(contenido), 1000)
+
+    def test_dano_total_genera_reporte_pdf_persistido(self):
+        checklist = [
+            {"elemento": "Carcasa", "estado": "dano_total", "observacion": "Roto"},
+        ]
+
+        devolucion = self._devolver(
+            fecha_devolucion=self.prestamo.fecha_limite,
+            checklist=checklist,
+        )
+
+        self.assertTrue(devolucion.reporte)
+        with devolucion.reporte.open("rb") as archivo:
+            self.assertEqual(archivo.read(4), b"%PDF")
+
+    def test_sin_dano_no_genera_reporte(self):
+        devolucion = self._devolver(fecha_devolucion=self.prestamo.fecha_limite)
+
+        self.assertFalse(devolucion.reporte)
+        self.assertEqual(Devolucion.objects.count(), 1)

@@ -131,6 +131,23 @@ def consultar_historial_prestamos(ahora=None, estado=None):
     return prestamos
 
 
+def consultar_prestamo_para_devolucion(prestamo_id):
+    """Detalle para el formulario de devolución con el estado visible (vencido
+    derivado en lectura) y los datos del prestatario."""
+    try:
+        return (
+            _consultar_prestamos_con_estado()
+            .select_related("usuario", "usuario__rol")
+            .get(pk=prestamo_id)
+        )
+    except (Prestamo.DoesNotExist, ValueError, TypeError) as error:
+        raise PrestamoError(
+            "prestamo_id",
+            "No existe el préstamo indicado.",
+            status_code=404,
+        ) from error
+
+
 def _obtener_prestatario_bloqueado(dni):
     try:
         return Usuario.objects.select_for_update().select_related("rol").get(dni=dni)

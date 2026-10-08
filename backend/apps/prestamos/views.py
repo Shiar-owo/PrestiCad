@@ -1,3 +1,4 @@
+from django.http import FileResponse
 from rest_framework import status
 from rest_framework.generics import GenericAPIView
 from rest_framework.pagination import PageNumberPagination
@@ -6,22 +7,30 @@ from rest_framework.views import APIView
 
 from apps.prestamos.constants import ESTADOS_PRESTAMO
 from apps.prestamos.consultar_serializers import (
+    PrestamoDevolucionDetalleSerializer,
     PrestamoConsultaSerializer,
     PrestamoHistorialSerializer,
 )
+from apps.prestamos.models import Devolucion
 from apps.prestamos.permissions import (
     EsGestorDeAlmacen,
     EsGestorOAdministrador,
     EsPrestatarioAutenticado,
 )
 from apps.prestamos.serializers import (
+    DevolucionIngresoSerializer,
+    DevolucionResultadoSerializer,
     PrestamoRegistroSerializer,
     RegistrarPrestamoSerializer,
+    url_reporte_publica,
 )
 from apps.prestamos.services import (
     PrestamoError,
     consultar_historial_prestamos,
+    consultar_prestamo_para_devolucion,
     consultar_prestamos_usuario,
+    estimar_devolucion,
+    registrar_devolucion,
     registrar_prestamo,
 )
 
@@ -88,3 +97,109 @@ class HistorialPrestamosView(GenericAPIView):
         pagina = self.paginate_queryset(prestamos)
         serializer = self.get_serializer(pagina, many=True)
         return self.get_paginated_response(serializer.data)
+
+
+def _respuesta_error(error):
+    return Response(
+        {error.campo: [error.mensaje]},
+        status=error.status_code,
+    )
+
+
+def _respuesta_resultado(resultado, prestamo_id, devolucion=None, http_status=200):
+    datos = {
+        **resultado,
+        "prestamo_id": prestamo_id,
+    }
+    if devolucion is not None:
+        datos["devolucion_id"] = devolucion.id
+        datos["reporte_url"] = url_reporte_publica(devolucion)
+    return Response(
+        DevolucionResultadoSerializer(datos).data,
+        status=http_status,
+    )
+
+
+class DetallePrestamoParaDevolucionView(APIView):
+    """GET /api/prestamos/{id}/ — datos para el formulario de devolución (HU11)."""
+
+    permission_classes = [EsGestorDeAlmacen]
+
+    def get(self, request, prestamo_id):
+        try:
+            prestamo = consultar_prestamo_para_devolucion(prestamo_id)
+        except PrestamoError as error:
+            return _respuesta_error(error)
+        return Response(PrestamoDevolucionDetalleSerializer(prestamo).data)
+
+
+class EstimarDevolucionView(APIView):
+    """POST /api/prestamos/{id}/devolucion/estimar/ — resumen sin persistir (HU11)."""
+
+    permission_classes = [EsGestorDeAlmacen]
+
+    def post(self, request, prestamo_id):
+        serializer = DevolucionIngresoSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            resultado = estimar_devolucion(
+                prestamo_id=prestamo_id,
+                checklist_devolucion=serializer.validated_data["checklist"],
+            )
+        except PrestamoError as error:
+            return _respuesta_error(error)
+
+        return _respuesta_resultado(resultado, prestamo_id)
+
+
+class RegistrarDevolucionView(APIView):
+    """POST /api/prestamos/{id}/devolucion/ — registra y calcula sanciones (HU11)."""
+
+    permission_classes = [EsGestorDeAlmacen]
+
+    def post(self, request, prestamo_id):
+        serializer = DevolucionIngresoSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            devolucion = registrar_devolucion(
+                prestamo_id=prestamo_id,
+                checklist_devolucion=serializer.validated_data["checklist"],
+                realizado_por=request.usuario_autenticado,
+            )
+        except PrestamoError as error:
+            return _respuesta_error(error)
+
+        return _respuesta_resultado(
+            devolucion.resultado,
+            prestamo_id,
+            devolucion=devolucion,
+            http_status=status.HTTP_201_CREATED,
+        )
+
+
+class ReporteDevolucionView(APIView):
+    """GET /api/prestamos/devoluciones/{id}/reporte/ — descarga el PDF (RN10)."""
+
+    permission_classes = [EsGestorDeAlmacen]
+
+    def get(self, request, devolucion_id):
+        devolucion = Devolucion.objects.filter(pk=devolucion_id).first()
+        if devolucion is None:
+            return Response(
+                {"devolucion_id": ["No existe la devolución indicada."]},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        if not devolucion.reporte:
+            return Response(
+                {"reporte": ["Esta devolución no tiene reporte de daños."]},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        archivo = devolucion.reporte.open("rb")
+        respuesta = FileResponse(archivo, content_type="application/pdf")
+        respuesta["Content-Disposition"] = (
+            f'attachment; filename="reporte-dano-prestamo-{devolucion.prestamo_id}.pdf"'
+        )
+        return respuesta

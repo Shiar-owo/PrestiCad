@@ -1013,3 +1013,201 @@ class ReporteDevolucionTestCase(DevolucionBaseTestCase):
 
         self.assertFalse(devolucion.reporte)
         self.assertEqual(Devolucion.objects.count(), 1)
+
+
+class DevolucionAPITestCase(DevolucionBaseTestCase):
+    """Endpoints HU11: detalle, estimación, registro y descarga del reporte."""
+
+    def setUp(self):
+        super().setUp()
+        self.client = APIClient()
+        self.administrador = crear_usuario(
+            "admin-dev@unsa.edu.pe", "10000024", rol="administrador"
+        )
+        self.url = f"/api/prestamos/{self.prestamo.id}/devolucion/"
+        self.url_detalle = f"/api/prestamos/{self.prestamo.id}/"
+
+    def _iniciar_sesion(self, usuario):
+        sesion = self.client.session
+        sesion[CLAVE_SESION_USUARIO_ID] = usuario.id
+        sesion[CLAVE_SESION_ULTIMA_ACTIVIDAD] = timezone.now().isoformat()
+        sesion.save()
+
+    def _payload(self, **cambios):
+        datos = {
+            "checklist": [
+                {
+                    "elemento": "Carcasa",
+                    "estado": "dano_parcial",
+                    "observacion": "Rasguño",
+                },
+                {"elemento": "Cable", "estado": "sin_cambios", "observacion": ""},
+            ]
+        }
+        datos.update(cambios)
+        return datos
+
+    def test_get_detalle_sin_sesion_responde_403(self):
+        respuesta = self.client.get(self.url_detalle)
+
+        self.assertEqual(respuesta.status_code, 403)
+
+    def test_get_detalle_como_gestor_devuelve_checklist_y_parametros(self):
+        self._iniciar_sesion(self.gestor)
+
+        respuesta = self.client.get(self.url_detalle)
+
+        self.assertEqual(respuesta.status_code, 200, respuesta.content)
+        datos = respuesta.json()
+        self.assertEqual(datos["id"], self.prestamo.id)
+        self.assertEqual(datos["estado"], "activo")
+        self.assertEqual(datos["checklist_inicial"], CHECKLIST)
+        self.assertEqual(datos["prestatario_dni"], self.prestatario.dni)
+        self.assertEqual(datos["bonificacion_tiempo"], 5)
+        self.assertEqual(datos["deduccion_dano_total"], 60)
+        self.assertEqual(datos["costo_reposicion"], "200.00")
+
+    def test_get_detalle_inexistente_responde_404(self):
+        self._iniciar_sesion(self.gestor)
+
+        respuesta = self.client.get("/api/prestamos/99999/")
+
+        self.assertEqual(respuesta.status_code, 404)
+
+    def test_estimar_como_gestor_devuelve_resultado_sin_persistir(self):
+        self._iniciar_sesion(self.gestor)
+
+        respuesta = self.client.post(
+            f"{self.url}estimar/",
+            self._payload(),
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, 200, respuesta.content)
+        datos = respuesta.json()
+        self.assertEqual(datos["prestamo_id"], self.prestamo.id)
+        self.assertEqual(datos["dano"], "dano_parcial")
+        self.assertEqual(datos["hay_dano"], True)
+        self.assertEqual(datos["cobro_economico"], "40.00")
+        self.assertNotIn("devolucion_id", datos)
+        self.assertEqual(Devolucion.objects.count(), 0)
+
+    def test_estimar_con_body_invalido_responde_400(self):
+        self._iniciar_sesion(self.gestor)
+
+        respuesta = self.client.post(f"{self.url}estimar/", {}, format="json")
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(Devolucion.objects.count(), 0)
+
+    def test_post_devolucion_sin_sesion_responde_403(self):
+        respuesta = self.client.post(self.url, self._payload(), format="json")
+
+        self.assertEqual(respuesta.status_code, 403)
+        self.assertEqual(Devolucion.objects.count(), 0)
+
+    def test_post_devolucion_como_prestatario_responde_403(self):
+        self._iniciar_sesion(self.prestatario)
+
+        respuesta = self.client.post(self.url, self._payload(), format="json")
+
+        self.assertEqual(respuesta.status_code, 403)
+        self.assertEqual(Devolucion.objects.count(), 0)
+
+    def test_post_devolucion_como_administrador_responde_403(self):
+        self._iniciar_sesion(self.administrador)
+
+        respuesta = self.client.post(self.url, self._payload(), format="json")
+
+        self.assertEqual(respuesta.status_code, 403)
+        self.assertEqual(Devolucion.objects.count(), 0)
+
+    def test_post_devolucion_con_dano_devuelve_201_con_reporte(self):
+        self._iniciar_sesion(self.gestor)
+
+        respuesta = self.client.post(self.url, self._payload(), format="json")
+
+        self.assertEqual(respuesta.status_code, 201, respuesta.content)
+        datos = respuesta.json()
+        self.assertEqual(datos["prestamo_id"], self.prestamo.id)
+        self.assertIsNotNone(datos["devolucion_id"])
+        self.assertEqual(datos["hay_dano"], True)
+        self.assertIn("devoluciones/", datos["reporte_url"])
+        self.assertEqual(Devolucion.objects.count(), 1)
+        self.prestamo.refresh_from_db()
+        self.assertEqual(self.prestamo.estado, "devuelto")
+
+    def test_post_devolucion_sin_dano_devuelve_201_sin_reporte(self):
+        self._iniciar_sesion(self.gestor)
+        payload = {
+            "checklist": [
+                {"elemento": "Carcasa", "estado": "sin_cambios", "observacion": ""},
+                {"elemento": "Cable", "estado": "sin_cambios", "observacion": ""},
+            ]
+        }
+
+        respuesta = self.client.post(self.url, payload, format="json")
+
+        self.assertEqual(respuesta.status_code, 201, respuesta.content)
+        datos = respuesta.json()
+        self.assertEqual(datos["hay_dano"], False)
+        self.assertEqual(datos["reporte_url"], "")
+
+    def test_post_segunda_devolucion_responde_409(self):
+        self._iniciar_sesion(self.gestor)
+        self.client.post(self.url, self._payload(), format="json")
+
+        respuesta = self.client.post(self.url, self._payload(), format="json")
+
+        self.assertEqual(respuesta.status_code, 409)
+        self.assertEqual(Devolucion.objects.count(), 1)
+
+    def test_get_reporte_devuelve_pdf_para_descarga(self):
+        self._iniciar_sesion(self.gestor)
+        creacion = self.client.post(self.url, self._payload(), format="json")
+        devolucion_id = creacion.json()["devolucion_id"]
+
+        respuesta = self.client.get(f"/api/prestamos/devoluciones/{devolucion_id}/reporte/")
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta["Content-Type"], "application/pdf")
+        self.assertIn(
+            f'reporte-dano-prestamo-{self.prestamo.id}.pdf',
+            respuesta["Content-Disposition"],
+        )
+        contenido = b"".join(respuesta.streaming_content)
+        self.assertEqual(contenido[:4], b"%PDF")
+
+    def test_get_reporte_de_devolucion_sin_dano_responde_404(self):
+        self._iniciar_sesion(self.gestor)
+        creacion = self.client.post(
+            self.url,
+            {
+                "checklist": [
+                    {"elemento": "Carcasa", "estado": "sin_cambios", "observacion": ""},
+                ]
+            },
+            format="json",
+        )
+        devolucion_id = creacion.json()["devolucion_id"]
+
+        respuesta = self.client.get(f"/api/prestamos/devoluciones/{devolucion_id}/reporte/")
+
+        self.assertEqual(respuesta.status_code, 404)
+
+    def test_get_reporte_inexistente_responde_404(self):
+        self._iniciar_sesion(self.gestor)
+
+        respuesta = self.client.get("/api/prestamos/devoluciones/99999/reporte/")
+
+        self.assertEqual(respuesta.status_code, 404)
+
+    def test_get_reporte_como_administrador_responde_403(self):
+        self._iniciar_sesion(self.gestor)
+        creacion = self.client.post(self.url, self._payload(), format="json")
+        devolucion_id = creacion.json()["devolucion_id"]
+        self._iniciar_sesion(self.administrador)
+
+        respuesta = self.client.get(f"/api/prestamos/devoluciones/{devolucion_id}/reporte/")
+
+        self.assertEqual(respuesta.status_code, 403)

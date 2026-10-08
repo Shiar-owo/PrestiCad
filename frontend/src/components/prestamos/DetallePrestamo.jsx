@@ -1,4 +1,4 @@
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, RotateCcw } from 'lucide-react'
 
 import BadgeEstado from '../ui/BadgeEstado'
 import Boton from '../ui/Boton'
@@ -29,6 +29,7 @@ export default function DetallePrestamo({
   prestamo,
   onVolver,
   etiquetaVolver = 'Volver a mis préstamos',
+  onDevolucion = null,
 }) {
   const estado = prestamo.estado_visible ?? prestamo.estado
 
@@ -59,6 +60,16 @@ export default function DetallePrestamo({
           <BadgeEstado estado={estado} />
         </CampoDetalle>
       </dl>
+      {onDevolucion && (
+        <Boton
+          tipo="button"
+          icono={RotateCcw}
+          className="mt-4"
+          onClick={onDevolucion}
+        >
+          Registrar devolución
+        </Boton>
+      )}
     </Tarjeta>
   )
 }

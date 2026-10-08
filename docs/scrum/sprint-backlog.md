@@ -215,13 +215,13 @@ Reserva
 
 | ID | Historia | SP | Tareas |
 |----|----------|-----|--------|
-| HU11 | Registrar devolución con cálculo de sanciones | 8 | 10 |
+| HU11 | Registrar devolución con cálculo de sanciones | 8 | 15 |
 | HU10 | Consultar estado de mis préstamos | 3 | 6 |
-| | **Total** | **11 SP** | **16 tareas** |
+| | **Total** | **11 SP** | **21 tareas** |
 
 ### Tareas detalladas
 
-**HU11 — Registrar devolución con cálculo de sanciones (10 tareas)**
+**HU11 — Registrar devolución con cálculo de sanciones (15 tareas)**
 
 | # | Tarea | Tipo |
 |---|-------|------|
@@ -235,6 +235,11 @@ Reserva
 | T11.08 | Crear formulario de devolución con checklist de comparación | Frontend |
 | T11.09 | Mostrar resumen de sanciones/bonificaciones antes de confirmar | Frontend |
 | T11.10 | Integrar formulario con endpoint | Integración |
+| T11.11 | Generar y persistir el reporte PDF de daños (RN10) | Backend |
+| T11.12 | Crear endpoint de descarga del reporte | Backend |
+| T11.13 | Mostrar descarga del reporte en la confirmación de devolución | Frontend |
+| T11.14 | Crear endpoint GET /api/prestamos/devoluciones/reportes/ con filtros | Backend |
+| T11.15 | Crear vista de listado de reportes de daños con filtros y descarga | Frontend |
 
 **HU10 — Consultar estado de mis préstamos (6 tareas)**
 
@@ -453,9 +458,9 @@ FASE 1: MVP
 M1  ██████████████░░░░  14 SP   30 tareas  (Usuarios + Auth + Roles + Perfil)
 M2  ████████░░░░░░░░░░   8 SP   14 tareas  (Inventario + Búsqueda)
 M3  ████████░░░░░░░░░░   8 SP   10 tareas  (Préstamos)
-M4  ███████████░░░░░░░  11 SP   16 tareas  (Devoluciones + Ver préstamos)
+M4  ███████████░░░░░░░  11 SP   21 tareas  (Devoluciones + Ver préstamos)
     ─────────────────────────────────────────
-    MVP TOTAL:          41 SP   70 tareas
+    MVP TOTAL:          41 SP   75 tareas
 
 FASE 2: FULL PRODUCT
 S5  ████████░░░░░░░░░░   8 SP    5 tareas  (Reputación + Tiers)
@@ -464,10 +469,10 @@ S7  ██████████░░░░░░░░  10 SP   14 tareas  (
 S8  ██████████░░░░░░░░  10 SP   15 tareas  (Prórrogas + Excepciones)
 S9  ███████████░░░░░░░  11 SP   15 tareas  (Historial + Reportes)
     ─────────────────────────────────────────
-    FULL TOTAL:         49 SP   63 tareas
+    FULL TOTAL:         49 SP   66 tareas
 
     ═══════════════════════════════════════════
-    GRAND TOTAL:        90 SP  133 tareas  |  9 sprints  |  18 HU
+    GRAND TOTAL:        90 SP  138 tareas  |  9 sprints  |  18 HU
 ```
 
 ## Resumen por tipo de tarea
@@ -477,13 +482,13 @@ S9  ███████████░░░░░░░  11 SP   15 tareas  (
 | M1 | 17 | 9 | 4 | 30 |
 | M2 | 8 | 4 | 2 | 14 |
 | M3 | 7 | 2 | 1 | 10 |
-| M4 | 9 | 5 | 2 | 16 |
+| M4 | 12 | 7 | 2 | 21 |
 | S5 | 4 | 1 | 0 | 5 |
 | S6 | 10 | 2 | 2 | 14 |
 | S7 | 9 | 4 | 1 | 14 |
 | S8 | 9 | 4 | 2 | 15 |
 | S9 | 8 | 5 | 2 | 15 |
-| **Total** | **81** | **36** | **16** | **133** |
+| **Total** | **84** | **38** | **16** | **138** |
 
 ## Flujo de desarrollo
 

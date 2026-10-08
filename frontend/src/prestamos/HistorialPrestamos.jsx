@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useContext, useEffect, useState } from 'react'
+import { useNavigate } from 'react-router'
 
 import { api } from '../api/client'
+import SesionContext from '../contextos/SesionContext'
 import useTituloPagina from '../hooks/useTituloPagina'
 import FiltroPrestamos from '../components/prestamos/FiltroPrestamos'
 import {
@@ -18,6 +20,8 @@ const CONSULTA_INICIAL = { cargando: true, error: '', datos: null }
 
 export default function HistorialPrestamos() {
   useTituloPagina('Historial de préstamos')
+  const { usuario } = useContext(SesionContext)
+  const navigate = useNavigate()
   const [estado, setEstado] = useState('todos')
   const [pagina, setPagina] = useState(1)
   const [intento, setIntento] = useState(0)
@@ -108,6 +112,11 @@ export default function HistorialPrestamos() {
         <ListaHistorialPrestamos
           key={`${estado}-${pagina}`}
           prestamos={results}
+          onDevolucion={
+            usuario?.rol === 'gestor'
+              ? (prestamoId) => navigate(`/panel/devolucion/${prestamoId}`)
+              : null
+          }
         />
       )}
 

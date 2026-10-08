@@ -12,6 +12,7 @@ import MisPrestamos from '../prestamos/MisPrestamos'
 import HistorialPrestamos from '../prestamos/HistorialPrestamos'
 import Materiales from '../pages/Materiales'
 import RegistrarPrestamo from '../pages/RegistrarPrestamo'
+import DevolucionPrestamo from '../pages/DevolucionPrestamo'
 import PerfilUsuario from '../pages/PerfilUsuario'
 import UsuariosRoles from '../pages/UsuariosRoles'
 import Pagina404 from '../pages/Pagina404'
@@ -89,6 +90,14 @@ function Rutas() {
           element={
             <RequerirRol roles={['gestor']}>
               <RegistrarPrestamo />
+            </RequerirRol>
+          }
+        />
+        <Route
+          path="devolucion/:prestamoId"
+          element={
+            <RequerirRol roles={['gestor']}>
+              <DevolucionPrestamo />
             </RequerirRol>
           }
         />

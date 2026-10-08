@@ -1,22 +1,11 @@
 import { useState } from 'react'
 
+import {
+  OPCIONES_FILTRO_CATEGORIA,
+  OPCIONES_FILTRO_ESTADO,
+} from '../constantes/catalogo'
 import Campo from './ui/Campo'
 import Boton from './ui/Boton'
-
-export const OPCIONES_CATEGORIA = [
-  { valor: '', etiqueta: 'Todas las categorías' },
-  { valor: 'equipo', etiqueta: 'Equipo' },
-  { valor: 'libro', etiqueta: 'Libro' },
-  { valor: 'objeto', etiqueta: 'Objeto' },
-]
-
-export const OPCIONES_ESTADO = [
-  { valor: '', etiqueta: 'Todos los estados' },
-  { valor: 'disponible', etiqueta: 'Disponible' },
-  { valor: 'prestado', etiqueta: 'Prestado' },
-  { valor: 'reservado', etiqueta: 'Reservado' },
-  { valor: 'en_mantenimiento', etiqueta: 'En Mantenimiento' },
-]
 
 function BarraBusqueda({ onBuscar, cargando = false, valoresIniciales = {} }) {
   const [q, setQ] = useState(valoresIniciales.q || '')
@@ -66,14 +55,14 @@ function BarraBusqueda({ onBuscar, cargando = false, valoresIniciales = {} }) {
         />
         <Campo
           etiqueta="Categoría"
-          opciones={OPCIONES_CATEGORIA}
+          opciones={OPCIONES_FILTRO_CATEGORIA}
           valor={categoria}
           onCambio={(evento) => setCategoria(evento.target.value)}
           deshabilitado={cargando}
         />
         <Campo
           etiqueta="Estado"
-          opciones={OPCIONES_ESTADO}
+          opciones={OPCIONES_FILTRO_ESTADO}
           valor={estado}
           onCambio={(evento) => setEstado(evento.target.value)}
           deshabilitado={cargando}

@@ -8,32 +8,11 @@ import {
   validarPuntosReputacion,
   validarStock,
 } from '../validaciones'
+import { OPCIONES_ESTADO, OPCIONES_TIER, OPCIONES_TIPO } from '../constantes/catalogo'
 import Campo from './ui/Campo'
 import Boton from './ui/Boton'
 import Tarjeta from './ui/Tarjeta'
 import ErrorAlerta from './ui/ErrorAlerta'
-
-// Debe reflejar las mismas taxonomías que
-// backend/apps/inventario/constants.py
-const OPCIONES_TIPO = [
-  { valor: 'equipo', etiqueta: 'Equipo' },
-  { valor: 'libro', etiqueta: 'Libro' },
-  { valor: 'objeto', etiqueta: 'Objeto' },
-]
-
-const OPCIONES_ESTADO = [
-  { valor: 'disponible', etiqueta: 'Disponible' },
-  { valor: 'en_mantenimiento', etiqueta: 'En Mantenimiento' },
-  { valor: 'reservado', etiqueta: 'Reservado' },
-  { valor: 'prestado', etiqueta: 'Prestado' },
-]
-
-// Debe reflejar apps/usuarios/constants.py (TIERS)
-const OPCIONES_TIER = [
-  { valor: 'estandar', etiqueta: 'Estándar' },
-  { valor: 'avanzado', etiqueta: 'Avanzado' },
-  { valor: 'restringido', etiqueta: 'Restringido' },
-]
 
 // Parámetros de reputación en puntos: si se blanks, el backend aplica los
 // valores por defecto configurados (HU04 criterio 3).

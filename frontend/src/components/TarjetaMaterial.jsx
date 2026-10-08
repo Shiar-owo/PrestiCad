@@ -1,27 +1,9 @@
-import { BadgeCheck } from 'lucide-react'
+import { Box } from 'lucide-react'
 
+import { ETIQUETAS_TIER, ETIQUETAS_TIPO } from '../constantes/catalogo'
 import Boton from './ui/Boton'
 import Tarjeta from './ui/Tarjeta'
 import BadgeEstado from './ui/BadgeEstado'
-
-export const ETIQUETAS_TIPO = {
-  equipo: 'Equipo',
-  libro: 'Libro',
-  objeto: 'Objeto',
-}
-
-export const ETIQUETAS_ESTADO = {
-  disponible: 'Disponible',
-  en_mantenimiento: 'En Mantenimiento',
-  reservado: 'Reservado',
-  prestado: 'Prestado',
-}
-
-export const ETIQUETAS_TIER = {
-  avanzado: 'Avanzado',
-  estandar: 'Estándar',
-  restringido: 'Restringido',
-}
 
 function TarjetaMaterial({ material, onSeleccionar }) {
   const tipoLegible = ETIQUETAS_TIPO[material.tipo] || material.tipo
@@ -41,7 +23,7 @@ function TarjetaMaterial({ material, onSeleccionar }) {
             loading="lazy"
           />
         ) : (
-          <BadgeCheck aria-hidden="true" className="size-12 text-texto-suave" />
+          <Box aria-hidden="true" className="size-12 text-texto-suave" />
         )}
         {material.estado && (
           <span className="absolute right-2 top-2">

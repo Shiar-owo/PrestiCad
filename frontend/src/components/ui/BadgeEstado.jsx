@@ -25,7 +25,7 @@ const ESTILOS = {
     'bg-marca-50 text-marca-700 ring-marca-200 dark:bg-marca-500/15 dark:text-marca-300 dark:ring-marca-700/60',
   info: 'bg-acento-50 text-acento-700 ring-acento-200 dark:bg-acento-500/15 dark:text-acento-300 dark:ring-acento-700/60',
   aviso:
-    'bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:ring-amber-700/60',
+    'bg-acento-100 text-acento-900 ring-acento-300 dark:bg-acento-500/25 dark:text-acento-200 dark:ring-acento-600/60',
   error: 'bg-red-50 text-red-700 ring-red-200 dark:bg-red-500/15 dark:text-red-300 dark:ring-red-700/60',
   neutro: 'bg-acento-50 text-acento-700 ring-acento-200 dark:bg-acento-500/15 dark:text-acento-300 dark:ring-acento-700/60',
 }

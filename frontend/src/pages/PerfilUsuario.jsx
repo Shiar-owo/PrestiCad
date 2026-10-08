@@ -2,6 +2,11 @@ import { useEffect, useState } from 'react'
 
 import { api, ErrorApi } from '../api/client'
 import { validarNombre, validarTelefono } from '../validaciones'
+import Campo from '../components/ui/Campo'
+import Boton from '../components/ui/Boton'
+import Tarjeta from '../components/ui/Tarjeta'
+import Skeleton from '../components/ui/Skeleton'
+import ErrorAlerta from '../components/ui/ErrorAlerta'
 
 const ETIQUETAS_TIPO = {
   alumno: 'Alumno',
@@ -15,13 +20,12 @@ const ETIQUETAS_TIER = {
   restringido: 'Restringido',
 }
 
-function Campo({ etiqueta, error, children }) {
+function Dato({ etiqueta, valor }) {
   return (
-    <label>
-      <span>{etiqueta}</span>
-      {children}
-      {error && <span className="error">{error}</span>}
-    </label>
+    <div className="rounded-xl border border-borde bg-superficie p-4">
+      <dt className="text-xs font-semibold uppercase tracking-wide text-texto-suave">{etiqueta}</dt>
+      <dd className="mt-1 break-words text-sm font-semibold text-texto">{valor}</dd>
+    </div>
   )
 }
 
@@ -53,94 +57,77 @@ function FormularioPerfil({ perfil, onGuardar, guardando = false, mensajeExito }
   }
 
   return (
-    <section className="perfil">
-      <h2>Mi perfil</h2>
+    <section className="grid gap-6">
+      <div>
+        <h2 className="mb-3 text-xl font-bold text-texto">Mi perfil</h2>
+        <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Dato etiqueta="Nombre" valor={perfil.nombre} />
+          <Dato etiqueta="Apellido" valor={perfil.apellido} />
+          <Dato etiqueta="Email" valor={perfil.email} />
+          <Dato etiqueta="DNI" valor={perfil.dni} />
+          <Dato etiqueta="Teléfono" valor={perfil.telefono || 'Sin teléfono registrado'} />
+          <Dato etiqueta="Tipo de usuario" valor={ETIQUETAS_TIPO[perfil.tipo] || perfil.tipo} />
+          <Dato etiqueta="Puntaje de reputación" valor={perfil.reputacion_puntaje} />
+          <Dato etiqueta="Tier" valor={ETIQUETAS_TIER[perfil.reputacion_tier] || perfil.reputacion_tier} />
+        </dl>
+      </div>
 
-      <dl className="perfil__datos">
-        <div>
-          <dt>Nombre</dt>
-          <dd>{perfil.nombre}</dd>
-        </div>
-        <div>
-          <dt>Apellido</dt>
-          <dd>{perfil.apellido}</dd>
-        </div>
-        <div>
-          <dt>Email</dt>
-          <dd>{perfil.email}</dd>
-        </div>
-        <div>
-          <dt>DNI</dt>
-          <dd>{perfil.dni}</dd>
-        </div>
-        <div>
-          <dt>Teléfono</dt>
-          <dd>{perfil.telefono || 'Sin teléfono registrado'}</dd>
-        </div>
-        <div>
-          <dt>Tipo de usuario</dt>
-          <dd>{ETIQUETAS_TIPO[perfil.tipo] || perfil.tipo}</dd>
-        </div>
-        <div>
-          <dt>Puntaje de reputación</dt>
-          <dd>{perfil.reputacion_puntaje}</dd>
-        </div>
-        <div>
-          <dt>Tier</dt>
-          <dd>{ETIQUETAS_TIER[perfil.reputacion_tier] || perfil.reputacion_tier}</dd>
-        </div>
-      </dl>
+      <Tarjeta className="p-6">
+        <form onSubmit={manejarEnvio} noValidate className="grid gap-4">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-lg font-bold text-texto">Actualizar datos</h3>
+            {mensajeExito && (
+              <p className="text-sm font-semibold text-marca-700 dark:text-marca-300" role="status">
+                {mensajeExito}
+              </p>
+            )}
+          </div>
 
-      <form className="perfil__formulario" onSubmit={manejarEnvio} noValidate>
-        <h3>Actualizar datos</h3>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Campo
+              etiqueta="Nombre"
+              valor={nombre}
+              onCambio={(evento) => setNombre(evento.target.value)}
+              error={errores.nombre}
+            />
+            <Campo
+              etiqueta="Apellido (solo lectura)"
+              valor={perfil.apellido}
+              readOnly
+            />
+            <Campo
+              etiqueta="Email (solo lectura)"
+              tipo="email"
+              valor={perfil.email}
+              readOnly
+            />
+            <Campo
+              etiqueta="DNI (solo lectura)"
+              valor={perfil.dni}
+              readOnly
+            />
+            <Campo
+              etiqueta="Tipo de usuario (solo lectura)"
+              valor={ETIQUETAS_TIPO[perfil.tipo] || perfil.tipo}
+              readOnly
+            />
+            <Campo
+              etiqueta="Teléfono (opcional)"
+              tipo="tel"
+              valor={telefono}
+              onCambio={(evento) => setTelefono(evento.target.value)}
+              error={errores.telefono}
+              maxLength={20}
+            />
+          </div>
 
-        {mensajeExito && <p className="exito" role="status">{mensajeExito}</p>}
-
-        <Campo etiqueta="Nombre" error={errores.nombre}>
-          <input
-            type="text"
-            value={nombre}
-            aria-invalid={Boolean(errores.nombre)}
-            onChange={(evento) => setNombre(evento.target.value)}
-          />
-        </Campo>
-
-        <Campo etiqueta="Apellido (solo lectura)">
-          <input type="text" value={perfil.apellido} readOnly />
-        </Campo>
-
-        <Campo etiqueta="Email (solo lectura)">
-          <input type="email" value={perfil.email} readOnly />
-        </Campo>
-
-        <Campo etiqueta="DNI (solo lectura)">
-          <input type="text" value={perfil.dni} readOnly />
-        </Campo>
-
-        <Campo etiqueta="Tipo de usuario (solo lectura)">
-          <input
-            type="text"
-            value={ETIQUETAS_TIPO[perfil.tipo] || perfil.tipo}
-            readOnly
-          />
-        </Campo>
-
-        <Campo etiqueta="Teléfono (opcional)" error={errores.telefono}>
-          <input
-            type="tel"
-            maxLength={20}
-            value={telefono}
-            aria-invalid={Boolean(errores.telefono)}
-            onChange={(evento) => setTelefono(evento.target.value)}
-          />
-        </Campo>
-
-        {onGuardar && (
-          <button type="submit" disabled={guardando}>
-            {guardando ? 'Guardando…' : 'Guardar cambios'}
-          </button>
-        )}
-      </form>
+          {onGuardar && (
+            <Boton tipo="submit" cargando={guardando} className="w-full sm:w-auto">
+              Guardar cambios
+            </Boton>
+          )}
+        </form>
+      </Tarjeta>
     </section>
   )
 }
@@ -215,39 +202,39 @@ function PerfilUsuario({ onPerfilActualizado }) {
 
   if (cargando) {
     return (
-      <section className="perfil">
-        <h2>Mi perfil</h2>
-        <p role="status">Cargando perfil…</p>
-      </section>
+      <div className="space-y-3" role="status" aria-live="polite">
+        <Skeleton className="h-7 w-40" />
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {Array.from({ length: 8 }).map((_, indice) => (
+            <Skeleton key={indice} className="h-20 rounded-xl" />
+          ))}
+        </div>
+      </div>
     )
   }
 
   if (error && !perfil) {
     return (
-      <section className="perfil">
-        <h2>Mi perfil</h2>
-        <div className="error-general" role="alert">{error}</div>
-        <button type="button" onClick={() => setIntentoCarga((actual) => actual + 1)}>
+      <div className="grid gap-4">
+        <h2 className="text-xl font-bold text-texto">Mi perfil</h2>
+        <ErrorAlerta mensaje={error} />
+        <Boton tipo="button" className="w-full sm:w-auto" onClick={() => setIntentoCarga((actual) => actual + 1)}>
           Volver a intentar
-        </button>
-      </section>
+        </Boton>
+      </div>
     )
   }
 
   return (
-    <section>
-      {error && (
-        <div className="error-general" role="alert">
-          {error}
-        </div>
-      )}
+    <>
+      {error && <ErrorAlerta mensaje={error} className="mb-6" />}
       <FormularioPerfil
         perfil={perfil}
         onGuardar={guardarPerfil}
         guardando={guardando}
         mensajeExito={mensajeExito}
       />
-    </section>
+    </>
   )
 }
 

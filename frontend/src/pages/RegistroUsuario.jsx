@@ -2,6 +2,11 @@ import { useState } from 'react'
 
 import { api, ErrorApi } from '../api/client'
 import { validarNombre, validarTelefono } from '../validaciones'
+import useTituloPagina from '../hooks/useTituloPagina'
+import Tarjeta from '../components/ui/Tarjeta'
+import Campo from '../components/ui/Campo'
+import Boton from '../components/ui/Boton'
+import ErrorAlerta from '../components/ui/ErrorAlerta'
 
 const TIPOS_USUARIO = [
   { valor: 'alumno', etiqueta: 'Alumno' },
@@ -68,17 +73,8 @@ function validar(datos) {
   return errores
 }
 
-function Campo({ etiqueta, error, children }) {
-  return (
-    <label>
-      <span>{etiqueta}</span>
-      {children}
-      {error && <span className="error">{error}</span>}
-    </label>
-  )
-}
-
 function RegistroUsuario() {
+  useTituloPagina('Crear cuenta')
   const [datos, setDatos] = useState(DATOS_INICIALES)
   const [errores, setErrores] = useState({})
   const [enviando, setEnviando] = useState(false)
@@ -142,112 +138,101 @@ function RegistroUsuario() {
   }
 
   return (
-    <section>
-      <h2>Registrar usuario</h2>
-      <form onSubmit={manejarEnvio} noValidate>
-        {mensajeExito && <p className="exito">{mensajeExito}</p>}
-        {errores.formulario && <p className="error">{errores.formulario}</p>}
+    <div className="mx-auto w-full max-w-2xl px-4 py-12">
+      <header className="mb-5">
+        <h2 className="text-xl font-bold text-texto">Registrar usuario</h2>
+        <p className="mt-1 text-sm text-texto-suave">
+          Crea tu cuenta de prestatario con tu correo institucional.
+        </p>
+      </header>
 
-        <Campo etiqueta="Nombre" error={errores.nombre}>
-          <input
-            type="text"
-            value={datos.nombre}
-            aria-invalid={Boolean(errores.nombre)}
-            onChange={(e) => actualizar('nombre', e.target.value)}
-          />
-        </Campo>
+      {mensajeExito && (
+        <p className="mb-4 text-sm font-semibold text-marca-700 dark:text-marca-300" role="status">
+          {mensajeExito}
+        </p>
+      )}
 
-        <Campo etiqueta="Apellido" error={errores.apellido}>
-          <input
-            type="text"
-            value={datos.apellido}
-            aria-invalid={Boolean(errores.apellido)}
-            onChange={(e) => actualizar('apellido', e.target.value)}
-          />
-        </Campo>
+      <Tarjeta className="p-6">
+        <form onSubmit={manejarEnvio} noValidate className="grid gap-4">
+          {errores.formulario && <ErrorAlerta mensaje={errores.formulario} />}
 
-        <Campo etiqueta="Email institucional" error={errores.email}>
-          <input
-            type="email"
-            value={datos.email}
-            aria-invalid={Boolean(errores.email)}
-            onChange={(e) => actualizar('email', e.target.value)}
-          />
-        </Campo>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Campo
+              etiqueta="Nombre"
+              valor={datos.nombre}
+              onCambio={(evento) => actualizar('nombre', evento.target.value)}
+              error={errores.nombre}
+            />
+            <Campo
+              etiqueta="Apellido"
+              valor={datos.apellido}
+              onCambio={(evento) => actualizar('apellido', evento.target.value)}
+              error={errores.apellido}
+            />
+            <Campo
+              etiqueta="Email institucional"
+              tipo="email"
+              valor={datos.email}
+              onCambio={(evento) => actualizar('email', evento.target.value)}
+              error={errores.email}
+              placeholder="ejemplo@unsa.edu.pe"
+            />
+            <Campo
+              etiqueta="DNI"
+              valor={datos.dni}
+              onCambio={(evento) => actualizar('dni', evento.target.value)}
+              error={errores.dni}
+              maxLength={8}
+              inputMode="numeric"
+            />
+            <Campo
+              etiqueta="Teléfono (opcional)"
+              tipo="tel"
+              valor={datos.telefono}
+              onCambio={(evento) => actualizar('telefono', evento.target.value)}
+              error={errores.telefono}
+            />
+            <Campo
+              etiqueta="Tipo de usuario"
+              opciones={TIPOS_USUARIO}
+              valor={datos.tipo}
+              onCambio={(evento) => actualizar('tipo', evento.target.value)}
+            />
+            <Campo
+              etiqueta="Facultad"
+              valor={datos.facultad}
+              onCambio={(evento) => actualizar('facultad', evento.target.value)}
+              error={errores.facultad}
+            />
+            <Campo
+              etiqueta="Departamento / Carrera"
+              valor={datos.departamentoCarrera}
+              onCambio={(evento) => actualizar('departamentoCarrera', evento.target.value)}
+              error={errores.departamentoCarrera}
+            />
+            <Campo
+              etiqueta="Contraseña inicial"
+              tipo="password"
+              valor={datos.password}
+              onCambio={(evento) => actualizar('password', evento.target.value)}
+              error={errores.password}
+              ayuda="Mínimo 8 caracteres."
+            />
+            <Campo
+              etiqueta="Confirmar contraseña"
+              tipo="password"
+              valor={datos.confirmarPassword}
+              onCambio={(evento) => actualizar('confirmarPassword', evento.target.value)}
+              error={errores.confirmarPassword}
+            />
+          </div>
 
-        <Campo etiqueta="DNI" error={errores.dni}>
-          <input
-            type="text"
-            maxLength={8}
-            value={datos.dni}
-            aria-invalid={Boolean(errores.dni)}
-            onChange={(e) => actualizar('dni', e.target.value)}
-          />
-        </Campo>
-
-        <Campo etiqueta="Teléfono (opcional)" error={errores.telefono}>
-          <input
-            type="tel"
-            value={datos.telefono}
-            aria-invalid={Boolean(errores.telefono)}
-            onChange={(e) => actualizar('telefono', e.target.value)}
-          />
-        </Campo>
-
-        <Campo etiqueta="Tipo de usuario">
-          <select
-            value={datos.tipo}
-            onChange={(e) => actualizar('tipo', e.target.value)}
-          >
-            {TIPOS_USUARIO.map((tipo) => (
-              <option key={tipo.valor} value={tipo.valor}>
-                {tipo.etiqueta}
-              </option>
-            ))}
-          </select>
-        </Campo>
-
-        <Campo etiqueta="Facultad" error={errores.facultad}>
-          <input
-            type="text"
-            value={datos.facultad}
-            aria-invalid={Boolean(errores.facultad)}
-            onChange={(e) => actualizar('facultad', e.target.value)}
-          />
-        </Campo>
-
-        <Campo etiqueta="Departamento / Carrera" error={errores.departamentoCarrera}>
-          <input
-            type="text"
-            value={datos.departamentoCarrera}
-            aria-invalid={Boolean(errores.departamentoCarrera)}
-            onChange={(e) => actualizar('departamentoCarrera', e.target.value)}
-          />
-        </Campo>
-
-        <Campo etiqueta="Contraseña inicial" error={errores.password}>
-          <input
-            type="password"
-            value={datos.password}
-            aria-invalid={Boolean(errores.password)}
-            onChange={(e) => actualizar('password', e.target.value)}
-          />
-        </Campo>
-
-        <Campo etiqueta="Confirmar contraseña" error={errores.confirmarPassword}>
-          <input
-            type="password"
-            value={datos.confirmarPassword}
-            aria-invalid={Boolean(errores.confirmarPassword)}
-            onChange={(e) => actualizar('confirmarPassword', e.target.value)}
-          />
-        </Campo>
-
-        <button type="submit" disabled={enviando}>
-          {enviando ? 'Registrando…' : 'Registrar'}
-        </button>
-      </form>
-    </section>
+          <Boton tipo="submit" cargando={enviando} className="w-full">
+            Registrar
+          </Boton>
+        </form>
+      </Tarjeta>
+    </div>
   )
 }
 

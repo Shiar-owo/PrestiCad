@@ -1,24 +1,21 @@
-const ESTADOS = [
-  ['todos', 'Todos'],
-  ['activo', 'Activo'],
-  ['reservado', 'Reservado'],
-  ['vencido', 'Vencido'],
-  ['devuelto', 'Devuelto'],
+import Campo from '../ui/Campo'
+
+const OPCIONES = [
+  { valor: 'todos', etiqueta: 'Todos' },
+  { valor: 'activo', etiqueta: 'Activo' },
+  { valor: 'reservado', etiqueta: 'Reservado' },
+  { valor: 'vencido', etiqueta: 'Vencido' },
+  { valor: 'devuelto', etiqueta: 'Devuelto' },
 ]
 
 export default function FiltroPrestamos({ estado, onCambiar }) {
   return (
-    <div className="prestamos-filtro">
-      <label htmlFor="filtro-estado-prestamo">Filtrar por estado</label>
-      <select
-        id="filtro-estado-prestamo"
-        onChange={(evento) => onCambiar(evento.target.value)}
-        value={estado}
-      >
-        {ESTADOS.map(([valor, etiqueta]) => (
-          <option key={valor} value={valor}>{etiqueta}</option>
-        ))}
-      </select>
-    </div>
+    <Campo
+      etiqueta="Filtrar por estado"
+      opciones={OPCIONES}
+      valor={estado}
+      onCambio={(evento) => onCambiar(evento.target.value)}
+      className="w-full sm:w-60"
+    />
   )
 }

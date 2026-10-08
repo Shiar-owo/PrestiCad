@@ -1,13 +1,18 @@
 import { useEffect, useReducer, useState } from 'react'
 
 import { api } from '../api/client'
+import useTituloPagina from '../hooks/useTituloPagina'
 import ListaPrestamos from '../components/prestamos/ListaPrestamos'
+import Boton from '../components/ui/Boton'
+import Skeleton from '../components/ui/Skeleton'
+import ErrorAlerta from '../components/ui/ErrorAlerta'
 import {
   ESTADO_CONSULTA_INICIAL,
   reducirConsultaPrestamos,
 } from './consultaPrestamos'
 
 export default function MisPrestamos() {
+  useTituloPagina('Mis préstamos')
   const [consulta, dispatch] = useReducer(
     reducirConsultaPrestamos,
     ESTADO_CONSULTA_INICIAL,
@@ -40,20 +45,23 @@ export default function MisPrestamos() {
   }, [intento])
 
   if (consulta.cargando) {
-    return <p aria-live="polite">Cargando tus préstamos…</p>
+    return (
+      <div className="space-y-3" role="status" aria-live="polite">
+        <p className="text-sm text-texto-suave">Cargando tus préstamos…</p>
+        <Skeleton className="h-20 rounded-xl" />
+        <Skeleton className="h-20 rounded-xl" />
+        <Skeleton className="h-20 rounded-xl" />
+      </div>
+    )
   }
 
   if (consulta.error) {
     return (
-      <section aria-label="Consulta de préstamos">
-        <p className="error" role="alert">{consulta.error}</p>
-        <button
-          className="boton-secundario"
-          onClick={() => setIntento((valor) => valor + 1)}
-          type="button"
-        >
+      <section aria-label="Consulta de préstamos" className="grid gap-4">
+        <ErrorAlerta mensaje={consulta.error} />
+        <Boton variante="secundario" className="w-full sm:w-auto" onClick={() => setIntento((valor) => valor + 1)}>
           Reintentar
-        </button>
+        </Boton>
       </section>
     )
   }

@@ -8,28 +8,11 @@ import {
   validarPuntosReputacion,
   validarStock,
 } from '../validaciones'
-
-// Debe reflejar las mismas taxonomías que
-// backend/apps/inventario/constants.py
-const OPCIONES_TIPO = [
-  { valor: 'equipo', etiqueta: 'Equipo' },
-  { valor: 'libro', etiqueta: 'Libro' },
-  { valor: 'objeto', etiqueta: 'Objeto' },
-]
-
-const OPCIONES_ESTADO = [
-  { valor: 'disponible', etiqueta: 'Disponible' },
-  { valor: 'en_mantenimiento', etiqueta: 'En Mantenimiento' },
-  { valor: 'reservado', etiqueta: 'Reservado' },
-  { valor: 'prestado', etiqueta: 'Prestado' },
-]
-
-// Debe reflejar apps/usuarios/constants.py (TIERS)
-const OPCIONES_TIER = [
-  { valor: 'estandar', etiqueta: 'Estándar' },
-  { valor: 'avanzado', etiqueta: 'Avanzado' },
-  { valor: 'restringido', etiqueta: 'Restringido' },
-]
+import { OPCIONES_ESTADO, OPCIONES_TIER, OPCIONES_TIPO } from '../constantes/catalogo'
+import Campo from './ui/Campo'
+import Boton from './ui/Boton'
+import Tarjeta from './ui/Tarjeta'
+import ErrorAlerta from './ui/ErrorAlerta'
 
 // Parámetros de reputación en puntos: si se blanks, el backend aplica los
 // valores por defecto configurados (HU04 criterio 3).
@@ -106,13 +89,11 @@ function validar(datos, esEdicion, archivoFoto) {
   return errores
 }
 
-function Campo({ etiqueta, error, children }) {
+function EncabezadoSeccion({ children }) {
   return (
-    <label>
-      <span>{etiqueta}</span>
+    <h4 className="mt-2 border-b border-borde pb-2 text-sm font-bold uppercase tracking-wide text-texto-suave">
       {children}
-      {error && <span className="error">{error}</span>}
-    </label>
+    </h4>
   )
 }
 
@@ -287,229 +268,206 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
   }
 
   return (
-    <section className="material-form">
-      <h3>{esEdicion ? `Editar material: ${material.nombre}` : 'Registrar material'}</h3>
+    <section>
+      <header className="mb-5">
+        <h3 className="text-lg font-bold text-texto">
+          {esEdicion ? `Editar material: ${material.nombre}` : 'Registrar material'}
+        </h3>
+      </header>
 
-      <form onSubmit={manejarEnvio} noValidate>
-        {mensajeExito && <p className="exito">{mensajeExito}</p>}
-        {errores.formulario && <p className="error">{errores.formulario}</p>}
-
-        <Campo etiqueta="Nombre" error={errores.nombre}>
-          <input
-            type="text"
-            maxLength={150}
-            value={datos.nombre}
-            aria-invalid={Boolean(errores.nombre)}
-            onChange={(e) => actualizar('nombre', e.target.value)}
-          />
-        </Campo>
-
-        <Campo etiqueta="Código de inventario" error={errores.codigo_inventario}>
-          <input
-            type="text"
-            maxLength={30}
-            value={datos.codigo_inventario}
-            aria-invalid={Boolean(errores.codigo_inventario)}
-            onChange={(e) => actualizar('codigo_inventario', e.target.value)}
-          />
-        </Campo>
-
-        <Campo etiqueta="Descripción">
-          <textarea
-            rows={2}
-            value={datos.descripcion}
-            onChange={(e) => actualizar('descripcion', e.target.value)}
-          />
-        </Campo>
-
-        <Campo etiqueta="Tipo">
-          <select value={datos.tipo} onChange={(e) => actualizar('tipo', e.target.value)}>
-            {OPCIONES_TIPO.map((opcion) => (
-              <option key={opcion.valor} value={opcion.valor}>
-                {opcion.etiqueta}
-              </option>
-            ))}
-          </select>
-        </Campo>
-
-        {esEdicion && (
-          <Campo etiqueta="Estado" error={errores.estado}>
-            <select
-              value={datos.estado}
-              onChange={(e) => actualizar('estado', e.target.value)}
-            >
-              {OPCIONES_ESTADO.map((opcion) => (
-                <option key={opcion.valor} value={opcion.valor}>
-                  {opcion.etiqueta}
-                </option>
-              ))}
-            </select>
-          </Campo>
-        )}
-
-        <Campo etiqueta="Stock (unidades)" error={errores.stock}>
-          <input
-            type="number"
-            min="1"
-            step="1"
-            value={datos.stock}
-            aria-invalid={Boolean(errores.stock)}
-            onChange={(e) => actualizar('stock', e.target.value)}
-          />
-        </Campo>
-
-        <label>
-          <span>¿Es de alto valor?</span>
-          <input
-            type="checkbox"
-            checked={datos.es_alto_valor}
-            onChange={(e) => actualizar('es_alto_valor', e.target.checked)}
-          />
-        </label>
-
-        <h4>Ficha técnica</h4>
-
-        <Campo etiqueta="Marca">
-          <input
-            type="text"
-            maxLength={60}
-            value={datos.marca}
-            onChange={(e) => actualizar('marca', e.target.value)}
-          />
-        </Campo>
-
-        <Campo etiqueta="Modelo">
-          <input
-            type="text"
-            maxLength={60}
-            value={datos.modelo}
-            onChange={(e) => actualizar('modelo', e.target.value)}
-          />
-        </Campo>
-
-        <Campo etiqueta="Número de serie">
-          <input
-            type="text"
-            maxLength={60}
-            value={datos.numero_serie}
-            onChange={(e) => actualizar('numero_serie', e.target.value)}
-          />
-        </Campo>
-
-        <Campo etiqueta="Color">
-          <input
-            type="text"
-            maxLength={30}
-            value={datos.color}
-            onChange={(e) => actualizar('color', e.target.value)}
-          />
-        </Campo>
-
-        <Campo etiqueta="Estado físico">
-          <input
-            type="text"
-            maxLength={120}
-            value={datos.estado_fisico}
-            onChange={(e) => actualizar('estado_fisico', e.target.value)}
-          />
-        </Campo>
-
-        <Campo etiqueta="Foto del material" error={errores.foto}>
-          <input
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            aria-invalid={Boolean(errores.foto)}
-            onChange={manejarArchivoFoto}
-          />
-          <span className="material-form__ayuda">
-            JPG, PNG o WEBP, hasta 5 MB. Opcional.
-          </span>
-          {vistaPrevia ? (
-            <img className="material-form__previa" src={vistaPrevia} alt="Vista previa de la foto" />
-          ) : (
-            <span className="material-form__previa material-form__previa--vacia">
-              Sin foto
-            </span>
-          )}
-        </Campo>
-
-        <h4>Parámetros de reputación</h4>
-        <p>
-          Los parámetros en blanco usan los valores por defecto del sistema. Los puntos
-          van de 0 a 500.
+      {mensajeExito && (
+        <p className="mb-4 text-sm font-semibold text-marca-700 dark:text-marca-300" role="status">
+          {mensajeExito}
         </p>
+      )}
 
-        <Campo etiqueta="Tier mínimo requerido">
-          <select
-            value={datos.tier_minimo_requerido}
-            onChange={(e) => actualizar('tier_minimo_requerido', e.target.value)}
-          >
-            <option value="">Sin especificar</option>
-            {OPCIONES_TIER.map((opcion) => (
-              <option key={opcion.valor} value={opcion.valor}>
-                {opcion.etiqueta}
-              </option>
-            ))}
-          </select>
-        </Campo>
+      <Tarjeta className="p-6">
+        <form onSubmit={manejarEnvio} noValidate className="grid gap-4">
+          {errores.formulario && <ErrorAlerta mensaje={errores.formulario} />}
 
-        {CAMPOS_PUNTOS.map(({ campo, etiqueta }) => (
-          <Campo key={campo} etiqueta={etiqueta} error={errores[campo]}>
-            <input
-              type="number"
-              min="0"
-              max="500"
-              step="1"
-              value={datos[campo]}
-              aria-invalid={Boolean(errores[campo])}
-              onChange={(e) => actualizar(campo, e.target.value)}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Campo
+              etiqueta="Nombre"
+              valor={datos.nombre}
+              onCambio={(evento) => actualizar('nombre', evento.target.value)}
+              error={errores.nombre}
+              maxLength={150}
             />
-          </Campo>
-        ))}
+            <Campo
+              etiqueta="Código de inventario"
+              valor={datos.codigo_inventario}
+              onCambio={(evento) => actualizar('codigo_inventario', evento.target.value)}
+              error={errores.codigo_inventario}
+              maxLength={30}
+            />
+            <Campo
+              etiqueta="Descripción"
+              tipo="area"
+              valor={datos.descripcion}
+              onCambio={(evento) => actualizar('descripcion', evento.target.value)}
+              rows={2}
+              className="sm:col-span-2"
+            />
+            <Campo
+              etiqueta="Tipo"
+              opciones={OPCIONES_TIPO}
+              valor={datos.tipo}
+              onCambio={(evento) => actualizar('tipo', evento.target.value)}
+            />
+            {esEdicion && (
+              <Campo
+                etiqueta="Estado"
+                opciones={OPCIONES_ESTADO}
+                valor={datos.estado}
+                onCambio={(evento) => actualizar('estado', evento.target.value)}
+                error={errores.estado}
+              />
+            )}
+            <Campo
+              etiqueta="Stock (unidades)"
+              tipo="number"
+              min="1"
+              step="1"
+              valor={datos.stock}
+              onCambio={(evento) => actualizar('stock', evento.target.value)}
+              error={errores.stock}
+            />
+          </div>
 
-        <Campo etiqueta="Costo de reparación (opcional)" error={errores.costo_reparacion}>
-          <input
-            type="number"
-            min="0"
-            step="0.01"
-            value={datos.costo_reparacion}
-            aria-invalid={Boolean(errores.costo_reparacion)}
-            onChange={(e) => actualizar('costo_reparacion', e.target.value)}
-          />
-        </Campo>
+          <label className="flex items-center gap-2 text-sm font-semibold text-texto">
+            <input
+              type="checkbox"
+              checked={datos.es_alto_valor}
+              onChange={(evento) => actualizar('es_alto_valor', evento.target.checked)}
+              className="size-4 rounded border-borde accent-marca-600"
+            />
+            ¿Es de alto valor?
+          </label>
 
-        <Campo etiqueta="Costo de reposición (opcional)" error={errores.costo_reposicion}>
-          <input
-            type="number"
-            min="0"
-            step="0.01"
-            value={datos.costo_reposicion}
-            aria-invalid={Boolean(errores.costo_reposicion)}
-            onChange={(e) => actualizar('costo_reposicion', e.target.value)}
-          />
-        </Campo>
+          <EncabezadoSeccion>Ficha técnica</EncabezadoSeccion>
 
-        <div className="material-form__acciones">
-          <button type="submit" disabled={enviando}>
-            {enviando
-              ? 'Guardando…'
-              : esEdicion
-                ? 'Guardar cambios'
-                : 'Registrar material'}
-          </button>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Campo
+              etiqueta="Marca"
+              valor={datos.marca}
+              onCambio={(evento) => actualizar('marca', evento.target.value)}
+              maxLength={60}
+            />
+            <Campo
+              etiqueta="Modelo"
+              valor={datos.modelo}
+              onCambio={(evento) => actualizar('modelo', evento.target.value)}
+              maxLength={60}
+            />
+            <Campo
+              etiqueta="Número de serie"
+              valor={datos.numero_serie}
+              onCambio={(evento) => actualizar('numero_serie', evento.target.value)}
+              maxLength={60}
+            />
+            <Campo
+              etiqueta="Color"
+              valor={datos.color}
+              onCambio={(evento) => actualizar('color', evento.target.value)}
+              maxLength={30}
+            />
+            <Campo
+              etiqueta="Estado físico"
+              valor={datos.estado_fisico}
+              onCambio={(evento) => actualizar('estado_fisico', evento.target.value)}
+              maxLength={120}
+            />
+          </div>
 
-          {onCancelar && (
-            <button
-              type="button"
-              className="boton-secundario"
-              onClick={onCancelar}
-              disabled={enviando}
-            >
-              Cancelar
-            </button>
-          )}
-        </div>
-      </form>
+          <div className="grid gap-1">
+            <span className="text-sm font-semibold text-texto">Foto del material</span>
+            {errores.foto ? (
+              <p className="text-xs text-error">{errores.foto}</p>
+            ) : (
+              <p className="text-xs text-texto-suave">JPG, PNG o WEBP, hasta 5 MB. Opcional.</p>
+            )}
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              aria-invalid={Boolean(errores.foto)}
+              onChange={manejarArchivoFoto}
+              className="block w-full text-sm text-texto file:mr-3 file:rounded-lg file:border-0 file:bg-superficie-alta file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-texto hover:file:bg-acento-50"
+            />
+            {vistaPrevia ? (
+              <img
+                className="mt-2 h-32 w-32 rounded-lg border border-borde object-cover"
+                src={vistaPrevia}
+                alt="Vista previa de la foto"
+              />
+            ) : (
+              <span className="mt-2 flex h-32 w-32 items-center justify-center rounded-lg border border-dashed border-borde text-xs text-texto-suave">
+                Sin foto
+              </span>
+            )}
+          </div>
+
+          <EncabezadoSeccion>Parámetros de reputación</EncabezadoSeccion>
+
+          <p className="text-xs text-texto-suave">
+            Los parámetros en blanco usan los valores por defecto del sistema. Los puntos
+            van de 0 a 500.
+          </p>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Campo
+              etiqueta="Tier mínimo requerido"
+              opciones={[
+                { valor: '', etiqueta: 'Sin especificar' },
+                ...OPCIONES_TIER,
+              ]}
+              valor={datos.tier_minimo_requerido}
+              onCambio={(evento) => actualizar('tier_minimo_requerido', evento.target.value)}
+            />
+            {CAMPOS_PUNTOS.map(({ campo, etiqueta }) => (
+              <Campo
+                key={campo}
+                etiqueta={etiqueta}
+                tipo="number"
+                min="0"
+                max="500"
+                step="1"
+                valor={datos[campo]}
+                onCambio={(evento) => actualizar(campo, evento.target.value)}
+                error={errores[campo]}
+              />
+            ))}
+            <Campo
+              etiqueta="Costo de reparación (opcional)"
+              tipo="number"
+              min="0"
+              step="0.01"
+              valor={datos.costo_reparacion}
+              onCambio={(evento) => actualizar('costo_reparacion', evento.target.value)}
+              error={errores.costo_reparacion}
+            />
+            <Campo
+              etiqueta="Costo de reposición (opcional)"
+              tipo="number"
+              min="0"
+              step="0.01"
+              valor={datos.costo_reposicion}
+              onCambio={(evento) => actualizar('costo_reposicion', evento.target.value)}
+              error={errores.costo_reposicion}
+            />
+          </div>
+
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Boton tipo="submit" cargando={enviando}>
+              {esEdicion ? 'Guardar cambios' : 'Registrar material'}
+            </Boton>
+            {onCancelar && (
+              <Boton variante="secundario" tipo="button" deshabilitado={enviando} onClick={onCancelar}>
+                Cancelar
+              </Boton>
+            )}
+          </div>
+        </form>
+      </Tarjeta>
     </section>
   )
 }

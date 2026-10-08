@@ -1,4 +1,8 @@
-import { presentarEstadoPrestamo } from '../../prestamos/estadoPrestamo'
+import { ArrowLeft } from 'lucide-react'
+
+import BadgeEstado from '../ui/BadgeEstado'
+import Boton from '../ui/Boton'
+import Tarjeta from '../ui/Tarjeta'
 
 function mostrarFecha(fecha) {
   const valor = new Date(fecha)
@@ -10,55 +14,51 @@ function mostrarFecha(fecha) {
   }).format(valor)
 }
 
+function CampoDetalle({ etiqueta, children }) {
+  return (
+    <div className="rounded-xl border border-borde bg-superficie p-4">
+      <dt className="text-xs font-semibold uppercase tracking-wide text-texto-suave">
+        {etiqueta}
+      </dt>
+      <dd className="mt-1 break-words text-sm font-medium text-texto">{children}</dd>
+    </div>
+  )
+}
+
 export default function DetallePrestamo({
   prestamo,
   onVolver,
   etiquetaVolver = 'Volver a mis préstamos',
 }) {
-  const estado = presentarEstadoPrestamo(prestamo.estado_visible ?? prestamo.estado)
+  const estado = prestamo.estado_visible ?? prestamo.estado
 
   return (
-    <section className="prestamo-detalle" aria-labelledby="prestamo-detalle-titulo">
-      <button className="prestamo-detalle__volver" onClick={onVolver} type="button">
+    <Tarjeta className="p-6" aria-labelledby="prestamo-detalle-titulo">
+      <Boton
+        variante="fantasma"
+        tamanio="pequeno"
+        tipo="button"
+        icono={ArrowLeft}
+        onClick={onVolver}
+      >
         {etiquetaVolver}
-      </button>
-      <h3 id="prestamo-detalle-titulo">Detalle del préstamo</h3>
-      <dl className="prestamo-detalle__campos">
+      </Boton>
+      <h3 id="prestamo-detalle-titulo" className="mt-4 text-lg font-bold text-texto">
+        Detalle del préstamo
+      </h3>
+      <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {prestamo.prestatario_nombre && (
-          <div>
-            <dt>Prestatario</dt>
-            <dd>{prestamo.prestatario_nombre}</dd>
-          </div>
+          <CampoDetalle etiqueta="Prestatario">{prestamo.prestatario_nombre}</CampoDetalle>
         )}
-        <div>
-          <dt>Material</dt>
-          <dd>{prestamo.material_nombre}</dd>
-        </div>
-        <div>
-          <dt>Código de inventario</dt>
-          <dd>{prestamo.material_codigo}</dd>
-        </div>
-        <div>
-          <dt>Fecha de entrega</dt>
-          <dd>{mostrarFecha(prestamo.fecha_entrega)}</dd>
-        </div>
-        <div>
-          <dt>Fecha límite</dt>
-          <dd>{mostrarFecha(prestamo.fecha_limite)}</dd>
-        </div>
-        <div>
-          <dt>Duración</dt>
-          <dd>{prestamo.tiempo_prestamo_dias} días</dd>
-        </div>
-        <div>
-          <dt>Estado</dt>
-          <dd>
-            <span className={`prestamo-estado ${estado.clase}`}>
-              {estado.texto}
-            </span>
-          </dd>
-        </div>
+        <CampoDetalle etiqueta="Material">{prestamo.material_nombre}</CampoDetalle>
+        <CampoDetalle etiqueta="Código de inventario">{prestamo.material_codigo}</CampoDetalle>
+        <CampoDetalle etiqueta="Fecha de entrega">{mostrarFecha(prestamo.fecha_entrega)}</CampoDetalle>
+        <CampoDetalle etiqueta="Fecha límite">{mostrarFecha(prestamo.fecha_limite)}</CampoDetalle>
+        <CampoDetalle etiqueta="Duración">{prestamo.tiempo_prestamo_dias} días</CampoDetalle>
+        <CampoDetalle etiqueta="Estado">
+          <BadgeEstado estado={estado} />
+        </CampoDetalle>
       </dl>
-    </section>
+    </Tarjeta>
   )
 }

@@ -2,18 +2,14 @@ import { useState } from 'react'
 
 import { api, ErrorApi } from '../api/client'
 import { validarEmail, validarPassword } from '../validaciones'
-
-function Campo({ etiqueta, error, children }) {
-  return (
-    <label>
-      <span>{etiqueta}</span>
-      {children}
-      {error && <span className="error">{error}</span>}
-    </label>
-  )
-}
+import useTituloPagina from '../hooks/useTituloPagina'
+import Tarjeta from '../components/ui/Tarjeta'
+import Campo from '../components/ui/Campo'
+import Boton from '../components/ui/Boton'
+import ErrorAlerta from '../components/ui/ErrorAlerta'
 
 function Login({ onLoginExitoso }) {
+  useTituloPagina('Iniciar sesión')
   const [datos, setDatos] = useState({ email: '', password: '' })
   const [errores, setErrores] = useState({})
   const [cargando, setCargando] = useState(false)
@@ -77,45 +73,41 @@ function Login({ onLoginExitoso }) {
   }
 
   return (
-    <section className="login">
-      <h2>Iniciar sesión</h2>
+    <div className="mx-auto w-full max-w-md px-4 py-12">
+      <Tarjeta className="p-6">
+        <h2 className="text-xl font-bold text-texto">Iniciar sesión</h2>
+        <p className="mt-1 text-sm text-texto-suave">Accede con tu correo institucional.</p>
 
-      {errorGeneral && (
-        <div className="error-general" role="alert">
-          {errorGeneral}
-        </div>
-      )}
+        {errorGeneral && <ErrorAlerta mensaje={errorGeneral} className="mt-4" />}
 
-      <form onSubmit={manejarEnvio} noValidate>
-        <Campo etiqueta="Correo electrónico" error={errores.email}>
-          <input
-            type="email"
-            value={datos.email}
-            onChange={(e) => actualizar('email', e.target.value)}
+        <form onSubmit={manejarEnvio} noValidate className="mt-5 grid gap-4">
+          <Campo
+            etiqueta="Correo electrónico"
+            tipo="email"
+            valor={datos.email}
+            onCambio={(evento) => actualizar('email', evento.target.value)}
+            error={errores.email}
             placeholder="ejemplo@unsa.edu.pe"
-            aria-invalid={Boolean(errores.email)}
-            disabled={cargando}
+            deshabilitado={cargando}
             autoComplete="email"
           />
-        </Campo>
-
-        <Campo etiqueta="Contraseña" error={errores.password}>
-          <input
-            type="password"
-            value={datos.password}
-            onChange={(e) => actualizar('password', e.target.value)}
+          <Campo
+            etiqueta="Contraseña"
+            tipo="password"
+            valor={datos.password}
+            onCambio={(evento) => actualizar('password', evento.target.value)}
+            error={errores.password}
             placeholder="Mínimo 8 caracteres"
-            aria-invalid={Boolean(errores.password)}
-            disabled={cargando}
+            deshabilitado={cargando}
             autoComplete="current-password"
           />
-        </Campo>
 
-        <button type="submit" disabled={cargando}>
-          {cargando ? 'Iniciando sesión...' : 'Iniciar sesión'}
-        </button>
-      </form>
-    </section>
+          <Boton tipo="submit" cargando={cargando} className="w-full">
+            Iniciar sesión
+          </Boton>
+        </form>
+      </Tarjeta>
+    </div>
   )
 }
 

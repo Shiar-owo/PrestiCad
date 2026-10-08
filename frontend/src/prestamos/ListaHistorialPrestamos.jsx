@@ -1,8 +1,7 @@
 import { useState } from 'react'
 
-import { presentarEstadoPrestamo } from './estadoPrestamo'
+import BadgeEstado from '../components/ui/BadgeEstado'
 import DetallePrestamo from '../components/prestamos/DetallePrestamo'
-import '../components/prestamos/prestamos.css'
 
 export default function ListaHistorialPrestamos({ prestamos }) {
   const [seleccionado, setSeleccionado] = useState(null)
@@ -18,30 +17,24 @@ export default function ListaHistorialPrestamos({ prestamos }) {
   }
 
   return (
-    <ul className="prestamos-lista__items">
-      {prestamos.map((prestamo) => {
-        const estado = presentarEstadoPrestamo(prestamo.estado)
-        return (
-          <li className="prestamos-lista__item" key={prestamo.id}>
-            <button
-              className="prestamos-lista__seleccion"
-              onClick={() => setSeleccionado(prestamo)}
-              type="button"
-            >
-              <span className="prestamos-lista__prestatario">
-                Prestatario: {prestamo.prestatario_nombre}
-              </span>
-              <span className="prestamos-lista__material">{prestamo.material_nombre}</span>
-              <span className="prestamos-lista__codigo">
-                Código: {prestamo.material_codigo}
-              </span>
-              <span className={`prestamo-estado ${estado.clase}`}>
-                {estado.texto}
-              </span>
-            </button>
-          </li>
-        )
-      })}
+    <ul className="mt-4 grid gap-3">
+      {prestamos.map((prestamo) => (
+        <li key={prestamo.id}>
+          <button
+            type="button"
+            className="w-full rounded-xl border border-borde bg-white p-4 text-left transition-colors hover:border-acento-400 hover:bg-superficie-alta dark:bg-superficie"
+            onClick={() => setSeleccionado(prestamo)}
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="font-bold text-texto">{prestamo.material_nombre}</span>
+              <BadgeEstado estado={prestamo.estado} />
+            </div>
+            <p className="mt-1 text-sm text-texto-suave">
+              Prestatario: {prestamo.prestatario_nombre} · Código: {prestamo.material_codigo}
+            </p>
+          </button>
+        </li>
+      ))}
     </ul>
   )
 }

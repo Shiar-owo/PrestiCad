@@ -5,6 +5,13 @@ import {
   calcularFechaLimiteEstimada,
   validarFormularioPrestamo,
 } from '../validacionesPrestamo'
+import useTituloPagina from '../hooks/useTituloPagina'
+import Campo from '../components/ui/Campo'
+import Boton from '../components/ui/Boton'
+import Tarjeta from '../components/ui/Tarjeta'
+import Skeleton from '../components/ui/Skeleton'
+import ErrorAlerta from '../components/ui/ErrorAlerta'
+import EstadoVacio from '../components/ui/EstadoVacio'
 
 const FORMULARIO_INICIAL = {
   dni: '',
@@ -33,7 +40,16 @@ function fechaLegible(valor) {
   }).format(new Date(valor))
 }
 
+const OPCIONES_MATERIAL = (materiales) => [
+  { valor: '', etiqueta: 'Selecciona un material' },
+  ...materiales.map((material) => ({
+    valor: String(material.id),
+    etiqueta: `${material.nombre} — ${material.codigo_inventario} (${material.unidades_disponibles} disponibles)`,
+  })),
+]
+
 function RegistrarPrestamo() {
+  useTituloPagina('Registrar entrega')
   const [materiales, setMateriales] = useState([])
   const [formulario, setFormulario] = useState(FORMULARIO_INICIAL)
   const [cargando, setCargando] = useState(true)
@@ -62,7 +78,7 @@ function RegistrarPrestamo() {
   }
 
   const materialSeleccionado = materiales.find(
-    (material) => material.id === formulario.materialId,
+    (material) => String(material.id) === String(formulario.materialId),
   )
   const fechaLimiteEstimada = useMemo(
     () => calcularFechaLimiteEstimada(formulario.dias),
@@ -149,165 +165,184 @@ function RegistrarPrestamo() {
   }
 
   return (
-    <section className="prestamo-registro" aria-labelledby="titulo-registro-prestamo">
-      <h3 id="titulo-registro-prestamo">Registrar entrega de préstamo</h3>
-      <p>
-        Confirma la identidad y elegibilidad del prestatario antes de entregar el material.
-      </p>
+    <section aria-labelledby="titulo-registro-prestamo">
+      <header className="mb-5">
+        <h2 id="titulo-registro-prestamo" className="text-xl font-bold text-texto">
+          Registrar entrega de préstamo
+        </h2>
+        <p className="mt-1 text-sm text-texto-suave">
+          Confirma la identidad y elegibilidad del prestatario antes de entregar el material.
+        </p>
+      </header>
 
-      {error && <p className="error-general" role="alert">{error}</p>}
+      {error && <ErrorAlerta mensaje={error} className="mb-4" />}
+
       {prestamoCreado && (
-        <div className="exito" role="status">
-          <p>Préstamo registrado como activo para {prestamoCreado.usuario_nombre}.</p>
-          <p>Fecha límite de devolución: <strong>{fechaLegible(prestamoCreado.fecha_limite)}</strong></p>
+        <div
+          className="mb-4 rounded-xl border border-marca-200 bg-marca-50 p-4 text-sm text-marca-800 dark:border-marca-700/60 dark:bg-marca-500/15 dark:text-marca-300"
+          role="status"
+        >
+          <p className="font-semibold">
+            Préstamo registrado como activo para {prestamoCreado.usuario_nombre}.
+          </p>
+          <p className="mt-1">
+            Fecha límite de devolución:{' '}
+            <strong>{fechaLegible(prestamoCreado.fecha_limite)}</strong>
+          </p>
         </div>
       )}
-      {cargando && <p>Cargando materiales disponibles…</p>}
+
+      {cargando && (
+        <div className="space-y-3" role="status" aria-live="polite">
+          <p className="text-sm text-texto-suave">Cargando materiales disponibles…</p>
+          <Skeleton className="h-24 rounded-xl" />
+          <Skeleton className="h-24 rounded-xl" />
+        </div>
+      )}
+
       {!cargando && materiales.length === 0 && (
-        <p>No hay unidades disponibles para prestar en este momento.</p>
+        <EstadoVacio
+          titulo="No hay unidades disponibles"
+          mensaje="No hay materiales disponibles para prestar en este momento."
+        />
       )}
 
       {!cargando && materiales.length > 0 && (
-        <form className="prestamo-registro__formulario" onSubmit={registrar} noValidate>
-          <label>
-            <span>DNI del prestatario</span>
-            <input
+        <Tarjeta className="p-6">
+          <form onSubmit={registrar} noValidate className="grid gap-5">
+            <Campo
+              etiqueta="DNI del prestatario"
+              valor={formulario.dni}
+              onCambio={(evento) => actualizar('dni', evento.target.value)}
+              error={errores.dni}
+              ayuda="El sistema verificará que el usuario esté activo y cumpla el Tier requerido."
               inputMode="numeric"
               autoComplete="off"
               maxLength={8}
-              value={formulario.dni}
-              aria-invalid={Boolean(errores.dni)}
-              onChange={(evento) => actualizar('dni', evento.target.value)}
-              required
+              requerido
             />
-            {errores.dni && <small className="error">{errores.dni}</small>}
-            <small>El sistema verificará que el usuario esté activo y cumpla el Tier requerido.</small>
-          </label>
-
-          <label>
-            <span>Material disponible</span>
-            <select
-              value={formulario.materialId}
-              aria-invalid={Boolean(errores.material)}
-              onChange={(evento) => actualizar('materialId', evento.target.value)}
-              required
-            >
-              <option value="">Selecciona un material</option>
-              {materiales.map((material) => (
-                <option key={material.id} value={material.id}>
-                  {material.nombre} — {material.codigo_inventario} ({material.unidades_disponibles} disponibles)
-                </option>
-              ))}
-            </select>
-            {errores.material && <small className="error">{errores.material}</small>}
-          </label>
-
-          <label>
-            <span>Duración del préstamo (días)</span>
-            <input
-              type="number"
+            <Campo
+              etiqueta="Material disponible"
+              opciones={OPCIONES_MATERIAL(materiales)}
+              valor={formulario.materialId}
+              onCambio={(evento) => actualizar('materialId', evento.target.value)}
+              error={errores.material}
+              requerido
+            />
+            <Campo
+              etiqueta="Duración del préstamo (días)"
+              tipo="number"
               min="1"
               step="1"
-              value={formulario.dias}
-              aria-invalid={Boolean(errores.dias)}
-              onChange={(evento) => actualizar('dias', evento.target.value)}
-              required
+              valor={formulario.dias}
+              onCambio={(evento) => actualizar('dias', evento.target.value)}
+              error={errores.dias}
+              requerido
             />
-            {errores.dias && <small className="error">{errores.dias}</small>}
-          </label>
-          {fechaLimiteEstimada && (
-            <p className="prestamo-registro__fecha">
-              Fecha límite estimada: <strong>{fechaLegible(fechaLimiteEstimada)}</strong>
-              <small> La fecha confirmada por el servidor aparecerá al registrar.</small>
-            </p>
-          )}
-
-          <fieldset className="prestamo-registro__checklist">
-            <legend>Checklist del estado inicial</legend>
-            {formulario.checklist.map((item, indice) => (
-              <div className="prestamo-registro__fila" key={`checklist-${indice}`}>
-                <label>
-                  <span>Elemento</span>
-                  <input
-                    value={item.elemento}
-                    maxLength={100}
-                    onChange={(evento) => actualizarChecklist(indice, 'elemento', evento.target.value)}
-                    required
-                  />
-                </label>
-                <label>
-                  <span>Condición</span>
-                  <input
-                    value={item.condicion}
-                    maxLength={500}
-                    onChange={(evento) => actualizarChecklist(indice, 'condicion', evento.target.value)}
-                    required
-                  />
-                </label>
-                <label>
-                  <span>Observación (opcional)</span>
-                  <input
-                    value={item.observacion}
-                    maxLength={500}
-                    onChange={(evento) => actualizarChecklist(indice, 'observacion', evento.target.value)}
-                  />
-                </label>
-                {formulario.checklist.length > 1 && (
-                  <button
-                    className="boton-secundario"
-                    type="button"
-                    onClick={() => quitarElementoChecklist(indice)}
-                  >Quitar elemento</button>
-                )}
-              </div>
-            ))}
-            {errores.checklist && <small className="error">{errores.checklist}</small>}
-            <button className="boton-secundario" type="button" onClick={agregarElementoChecklist}>
-              Agregar elemento
-            </button>
-          </fieldset>
-
-          {materialSeleccionado?.es_alto_valor && (
-            <fieldset className="prestamo-registro__garantia">
-              <legend>Garantía obligatoria para material de alto valor</legend>
-              <p>
-                Verifica presencialmente los documentos. El sistema guarda constancia de recepción,
-                no copias de documentos personales.
+            {fechaLimiteEstimada && (
+              <p className="text-sm text-texto-suave">
+                Fecha límite estimada:{' '}
+                <strong className="text-texto">{fechaLegible(fechaLimiteEstimada)}</strong>
+                <small className="block">La fecha confirmada por el servidor aparecerá al registrar.</small>
               </p>
-              <label className="prestamo-registro__opcion">
-                <input
-                  type="checkbox"
-                  checked={formulario.documentoIdentidadRecibido}
-                  onChange={(evento) => actualizar('documentoIdentidadRecibido', evento.target.checked)}
-                />
-                <span>Documento de identidad recibido y revisado</span>
-              </label>
-              {errores.garantia_documento_identidad_recibido && (
-                <small className="error">{errores.garantia_documento_identidad_recibido}</small>
-              )}
-              <label className="prestamo-registro__opcion">
-                <input
-                  type="checkbox"
-                  checked={formulario.compromisoFirmadoRecibido}
-                  onChange={(evento) => actualizar('compromisoFirmadoRecibido', evento.target.checked)}
-                />
-                <span>Compromiso de responsabilidad firmado y recibido</span>
-              </label>
-              {errores.garantia_compromiso_firmado_recibido && (
-                <small className="error">{errores.garantia_compromiso_firmado_recibido}</small>
-              )}
-            </fieldset>
-          )}
+            )}
 
-          <div className="prestamo-registro__acciones">
-            <button type="submit" disabled={guardando}>
-              {guardando ? 'Registrando…' : 'Confirmar entrega'}
-            </button>
-            <button className="boton-secundario" type="button" onClick={cargarMateriales} disabled={guardando}>
-              Actualizar disponibilidad
-            </button>
-          </div>
-        </form>
+            <fieldset className="grid gap-4 rounded-xl border border-borde p-4">
+              <legend className="px-2 text-sm font-bold text-texto">
+                Checklist del estado inicial
+              </legend>
+              {formulario.checklist.map((item, indice) => (
+                <div key={`checklist-${indice}`} className="relative grid gap-4 rounded-lg border border-borde p-4 sm:grid-cols-3">
+                  <Campo
+                    etiqueta="Elemento"
+                    valor={item.elemento}
+                    onCambio={(evento) => actualizarChecklist(indice, 'elemento', evento.target.value)}
+                    maxLength={100}
+                    requerido
+                  />
+                  <Campo
+                    etiqueta="Condición"
+                    valor={item.condicion}
+                    onCambio={(evento) => actualizarChecklist(indice, 'condicion', evento.target.value)}
+                    maxLength={500}
+                    requerido
+                  />
+                  <Campo
+                    etiqueta="Observación (opcional)"
+                    valor={item.observacion}
+                    onCambio={(evento) => actualizarChecklist(indice, 'observacion', evento.target.value)}
+                    maxLength={500}
+                  />
+                  {formulario.checklist.length > 1 && (
+                    <Boton
+                      variante="secundario"
+                      tamanio="pequeno"
+                      tipo="button"
+                      className="sm:absolute sm:right-3 sm:top-3"
+                      onClick={() => quitarElementoChecklist(indice)}
+                    >
+                      Quitar elemento
+                    </Boton>
+                  )}
+                </div>
+              ))}
+              {errores.checklist && <ErrorAlerta mensaje={errores.checklist} />}
+              <Boton variante="secundario" tipo="button" onClick={agregarElementoChecklist}>
+                Agregar elemento
+              </Boton>
+            </fieldset>
+
+            {materialSeleccionado?.es_alto_valor && (
+              <fieldset className="grid gap-3 rounded-xl border border-acento-300 bg-acento-50/50 p-4 dark:border-acento-700/60 dark:bg-acento-500/10">
+                <legend className="px-2 text-sm font-bold text-acento-800 dark:text-acento-300">
+                  Garantía obligatoria para material de alto valor
+                </legend>
+                <p className="text-xs text-texto-suave">
+                  Verifica presencialmente los documentos. El sistema guarda constancia de recepción,
+                  no copias de documentos personales.
+                </p>
+                <label className="flex items-start gap-2 text-sm text-texto">
+                  <input
+                    type="checkbox"
+                    checked={formulario.documentoIdentidadRecibido}
+                    onChange={(evento) => actualizar('documentoIdentidadRecibido', evento.target.checked)}
+                    className="mt-0.5 size-4 accent-marca-600"
+                  />
+                  Documento de identidad recibido y revisado
+                </label>
+                {errores.garantia_documento_identidad_recibido && (
+                  <ErrorAlerta mensaje={errores.garantia_documento_identidad_recibido} />
+                )}
+                <label className="flex items-start gap-2 text-sm text-texto">
+                  <input
+                    type="checkbox"
+                    checked={formulario.compromisoFirmadoRecibido}
+                    onChange={(evento) => actualizar('compromisoFirmadoRecibido', evento.target.checked)}
+                    className="mt-0.5 size-4 accent-marca-600"
+                  />
+                  Compromiso de responsabilidad firmado y recibido
+                </label>
+                {errores.garantia_compromiso_firmado_recibido && (
+                  <ErrorAlerta mensaje={errores.garantia_compromiso_firmado_recibido} />
+                )}
+              </fieldset>
+            )}
+
+            <div className="flex flex-wrap gap-2">
+              <Boton tipo="submit" cargando={guardando}>
+                Confirmar entrega
+              </Boton>
+              <Boton
+                variante="secundario"
+                tipo="button"
+                deshabilitado={guardando}
+                onClick={cargarMateriales}
+              >
+                Actualizar disponibilidad
+              </Boton>
+            </div>
+          </form>
+        </Tarjeta>
       )}
     </section>
   )

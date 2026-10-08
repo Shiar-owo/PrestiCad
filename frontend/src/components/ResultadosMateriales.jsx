@@ -1,3 +1,6 @@
+import Skeleton from './ui/Skeleton'
+import ErrorAlerta from './ui/ErrorAlerta'
+import EstadoVacio from './ui/EstadoVacio'
 import TarjetaMaterial from './TarjetaMaterial'
 
 function ResultadosMateriales({
@@ -8,39 +11,37 @@ function ResultadosMateriales({
 }) {
   if (cargando) {
     return (
-      <div className="material-resultados__estado" role="status">
-        <p>Buscando materiales…</p>
+      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3" role="status" aria-live="polite">
+        {Array.from({ length: 6 }).map((_, indice) => (
+          <Skeleton key={indice} className="h-72 rounded-xl" />
+        ))}
       </div>
     )
   }
 
   if (error) {
-    return (
-      <div className="material-resultados__estado error-general" role="alert">
-        <p>{error}</p>
-      </div>
-    )
+    return <ErrorAlerta mensaje={error} className="mt-6" />
   }
 
   if (materiales.length === 0) {
     return (
-      <div className="material-resultados__vacio" role="status">
-        <p>No se encontraron materiales que coincidan con la búsqueda.</p>
-        <small>Prueba ajustando los términos de búsqueda o los filtros de categoría y estado.</small>
+      <div className="mt-6">
+        <EstadoVacio
+          titulo="No se encontraron materiales"
+          mensaje="Prueba ajustando los términos de búsqueda o los filtros de categoría y estado."
+        />
       </div>
     )
   }
 
   return (
-    <section className="material-resultados" aria-label="Resultados de materiales">
-      <div className="material-resultados__conteo">
-        <p>
-          Mostrando <strong>{materiales.length}</strong>{' '}
-          {materiales.length === 1 ? 'material encontrado' : 'materiales encontrados'}
-        </p>
-      </div>
+    <section className="mt-6" aria-label="Resultados de materiales">
+      <p className="mb-4 text-sm text-texto-suave">
+        Mostrando <strong className="text-texto">{materiales.length}</strong>{' '}
+        {materiales.length === 1 ? 'material encontrado' : 'materiales encontrados'}
+      </p>
 
-      <div className="material-tarjetas-grid">
+      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
         {materiales.map((material) => (
           <TarjetaMaterial
             key={material.id}

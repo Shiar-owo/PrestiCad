@@ -13,6 +13,7 @@ import HistorialPrestamos from '../prestamos/HistorialPrestamos'
 import Materiales from '../pages/Materiales'
 import RegistrarPrestamo from '../pages/RegistrarPrestamo'
 import DevolucionPrestamo from '../pages/DevolucionPrestamo'
+import ReportesDanos from '../pages/ReportesDanos'
 import PerfilUsuario from '../pages/PerfilUsuario'
 import UsuariosRoles from '../pages/UsuariosRoles'
 import Pagina404 from '../pages/Pagina404'
@@ -106,6 +107,14 @@ function Rutas() {
           element={
             <RequerirRol roles={['gestor', 'administrador']}>
               <HistorialPrestamos />
+            </RequerirRol>
+          }
+        />
+        <Route
+          path="reportes"
+          element={
+            <RequerirRol roles={['gestor', 'administrador']}>
+              <ReportesDanos />
             </RequerirRol>
           }
         />

@@ -148,6 +148,38 @@ def consultar_prestamo_para_devolucion(prestamo_id):
         ) from error
 
 
+def consultar_reportes_devolucion(
+    dano=None,
+    fecha_desde=None,
+    fecha_hasta=None,
+    gestor_id=None,
+):
+    """Listado de devoluciones con reporte de daños para su consulta (RN10).
+
+    Solo las devoluciones que generaron PDF (daño parcial o total); los
+    filtros son opcionales y acumulativos.
+    """
+    reportes = (
+        Devolucion.objects.exclude(reporte="")
+        .select_related(
+            "prestamo",
+            "prestamo__material",
+            "prestamo__usuario",
+            "realizado_por",
+        )
+        .order_by("-fecha_devolucion", "-id")
+    )
+    if dano is not None:
+        reportes = reportes.filter(resultado__dano=dano)
+    if fecha_desde is not None:
+        reportes = reportes.filter(fecha_devolucion__date__gte=fecha_desde)
+    if fecha_hasta is not None:
+        reportes = reportes.filter(fecha_devolucion__date__lte=fecha_hasta)
+    if gestor_id is not None:
+        reportes = reportes.filter(realizado_por_id=gestor_id)
+    return reportes
+
+
 def _obtener_prestatario_bloqueado(dni):
     try:
         return Usuario.objects.select_for_update().select_related("rol").get(dni=dni)

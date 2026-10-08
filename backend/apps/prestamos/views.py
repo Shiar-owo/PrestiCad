@@ -18,10 +18,12 @@ from apps.prestamos.permissions import (
     EsPrestatarioAutenticado,
 )
 from apps.prestamos.serializers import (
+    ConsultaReportesSerializer,
     DevolucionIngresoSerializer,
     DevolucionResultadoSerializer,
     PrestamoRegistroSerializer,
     RegistrarPrestamoSerializer,
+    ReporteDevolucionSerializer,
     url_reporte_publica,
 )
 from apps.prestamos.services import (
@@ -29,6 +31,7 @@ from apps.prestamos.services import (
     consultar_historial_prestamos,
     consultar_prestamo_para_devolucion,
     consultar_prestamos_usuario,
+    consultar_reportes_devolucion,
     estimar_devolucion,
     registrar_devolucion,
     registrar_prestamo,
@@ -203,3 +206,31 @@ class ReporteDevolucionView(APIView):
             f'attachment; filename="reporte-dano-prestamo-{devolucion.prestamo_id}.pdf"'
         )
         return respuesta
+
+
+class PaginacionReportesDevolucion(PageNumberPagination):
+    page_size = 25
+    page_size_query_param = "page_size"
+    max_page_size = 100
+
+
+class ListarReportesDevolucionView(GenericAPIView):
+    """GET /api/prestamos/devoluciones/reportes/ — consulta paginada (RN10)."""
+
+    permission_classes = [EsGestorOAdministrador]
+    serializer_class = ReporteDevolucionSerializer
+    pagination_class = PaginacionReportesDevolucion
+
+    def get(self, request):
+        parametros = {
+            clave: valor
+            for clave, valor in request.query_params.items()
+            if clave not in ("page", "page_size")
+        }
+        consulta = ConsultaReportesSerializer(data=parametros)
+        consulta.is_valid(raise_exception=True)
+
+        reportes = consultar_reportes_devolucion(**consulta.validated_data)
+        pagina = self.paginate_queryset(reportes)
+        serializer = self.get_serializer(pagina, many=True)
+        return self.get_paginated_response(serializer.data)

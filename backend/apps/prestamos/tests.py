@@ -1211,3 +1211,174 @@ class DevolucionAPITestCase(DevolucionBaseTestCase):
         respuesta = self.client.get(f"/api/prestamos/devoluciones/{devolucion_id}/reporte/")
 
         self.assertEqual(respuesta.status_code, 403)
+
+
+class ReportesDevolucionAPITestCase(DevolucionBaseTestCase):
+    """Listado paginado de reportes de daños para su consulta (RN10, T11.14)."""
+
+    def setUp(self):
+        super().setUp()
+        self.client = APIClient()
+        self.administrador = crear_usuario(
+            "admin-reportes@unsa.edu.pe", "10000025", rol="administrador"
+        )
+        self.otro_gestor = crear_usuario(
+            "gestor-reportes@unsa.edu.pe", "10000026", rol="gestor"
+        )
+        self.url = "/api/prestamos/devoluciones/reportes/"
+        self.checklist_dano = [
+            {
+                "elemento": "Carcasa",
+                "estado": "dano_parcial",
+                "observacion": "Rasguño",
+            },
+            {"elemento": "Cable", "estado": "sin_cambios", "observacion": ""},
+        ]
+        self.devolucion = self._devolver(checklist=self.checklist_dano)
+
+    def _iniciar_sesion(self, usuario):
+        sesion = self.client.session
+        sesion[CLAVE_SESION_USUARIO_ID] = usuario.id
+        sesion[CLAVE_SESION_ULTIMA_ACTIVIDAD] = timezone.now().isoformat()
+        sesion.save()
+
+    def _devolver_otro_prestamo(self):
+        prestamo = registrar_prestamo(
+            dni_prestatario=self.prestatario.dni,
+            material_id=self.material.id,
+            tiempo_prestamo_dias=7,
+            checklist_inicial=CHECKLIST,
+            registrado_por=self.gestor,
+        )
+        return registrar_devolucion(
+            prestamo_id=prestamo.id,
+            checklist_devolucion=self.checklist_ok,
+            realizado_por=self.gestor,
+        )
+
+    def test_listado_sin_sesion_responde_403(self):
+        respuesta = self.client.get(self.url)
+
+        self.assertEqual(respuesta.status_code, 403)
+
+    def test_listado_como_prestatario_responde_403(self):
+        self._iniciar_sesion(self.prestatario)
+
+        respuesta = self.client.get(self.url)
+
+        self.assertEqual(respuesta.status_code, 403)
+
+    def test_listado_como_gestor_devuelve_formato_paginado(self):
+        self._iniciar_sesion(self.gestor)
+
+        respuesta = self.client.get(f"{self.url}?page=1&page_size=10")
+
+        self.assertEqual(respuesta.status_code, 200, respuesta.content)
+        datos = respuesta.json()
+        self.assertEqual(datos["count"], 1)
+        self.assertIsNone(datos["next"])
+        self.assertIsNone(datos["previous"])
+        fila = datos["results"][0]
+        self.assertEqual(fila["devolucion_id"], self.devolucion.id)
+        self.assertEqual(fila["prestamo_id"], self.prestamo.id)
+        self.assertEqual(fila["material_codigo"], self.material.codigo_inventario)
+        self.assertEqual(fila["prestatario_nombre"], "Ana Torres")
+        self.assertEqual(fila["gestor_nombre"], "Ana Torres")
+        self.assertEqual(fila["dano"], "dano_parcial")
+        self.assertEqual(fila["deduccion_dano"], 30)
+        self.assertEqual(fila["cobro_economico"], "40.00")
+        self.assertIn("reporte_url", fila)
+        self.assertTrue(fila["reporte_url"].endswith(".pdf"))
+
+    def test_listado_como_administrador_devuelve_200(self):
+        self._iniciar_sesion(self.administrador)
+
+        respuesta = self.client.get(self.url)
+
+        self.assertEqual(respuesta.status_code, 200, respuesta.content)
+        self.assertEqual(respuesta.json()["count"], 1)
+
+    def test_listado_excluye_devoluciones_sin_reporte(self):
+        self._devolver_otro_prestamo()
+        self._iniciar_sesion(self.gestor)
+
+        respuesta = self.client.get(self.url)
+
+        datos = respuesta.json()
+        self.assertEqual(datos["count"], 1)
+        self.assertEqual(datos["results"][0]["prestamo_id"], self.prestamo.id)
+
+    def test_filtro_por_dano(self):
+        self._iniciar_sesion(self.gestor)
+
+        parcial = self.client.get(f"{self.url}?dano=dano_parcial")
+        total = self.client.get(f"{self.url}?dano=dano_total")
+
+        self.assertEqual(parcial.json()["count"], 1)
+        self.assertEqual(total.json()["count"], 0)
+
+    def test_filtro_por_rango_de_fechas(self):
+        self._iniciar_sesion(self.gestor)
+        hoy = timezone.localdate().isoformat()
+        manana = (timezone.localdate() + timedelta(days=1)).isoformat()
+
+        desde_hoy = self.client.get(f"{self.url}?fecha_desde={hoy}")
+        desde_manana = self.client.get(f"{self.url}?fecha_desde={manana}")
+        hasta_hoy = self.client.get(f"{self.url}?fecha_hasta={hoy}")
+
+        self.assertEqual(desde_hoy.json()["count"], 1)
+        self.assertEqual(desde_manana.json()["count"], 0)
+        self.assertEqual(hasta_hoy.json()["count"], 1)
+
+    def test_filtro_por_gestor(self):
+        self._iniciar_sesion(self.gestor)
+
+        propio = self.client.get(f"{self.url}?gestor_id={self.gestor.id}")
+        ajeno = self.client.get(f"{self.url}?gestor_id={self.otro_gestor.id}")
+
+        self.assertEqual(propio.json()["count"], 1)
+        self.assertEqual(ajeno.json()["count"], 0)
+
+    def test_dano_invalido_responde_400(self):
+        self._iniciar_sesion(self.gestor)
+
+        respuesta = self.client.get(f"{self.url}?dano=algo_invalido")
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn("dano", respuesta.json())
+
+    def test_fecha_invalida_responde_400(self):
+        self._iniciar_sesion(self.gestor)
+
+        respuesta = self.client.get(f"{self.url}?fecha_desde=ayer")
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn("fecha_desde", respuesta.json())
+
+    def test_rango_de_fechas_invertido_responde_400(self):
+        self._iniciar_sesion(self.gestor)
+        hoy = timezone.localdate().isoformat()
+        manana = (timezone.localdate() + timedelta(days=1)).isoformat()
+
+        respuesta = self.client.get(
+            f"{self.url}?fecha_desde={manana}&fecha_hasta={hoy}"
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn("fecha_desde", respuesta.json())
+
+    def test_gestor_id_no_entero_responde_400(self):
+        self._iniciar_sesion(self.gestor)
+
+        respuesta = self.client.get(f"{self.url}?gestor_id=abc")
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn("gestor_id", respuesta.json())
+
+    def test_parametro_desconocido_responde_400(self):
+        self._iniciar_sesion(self.gestor)
+
+        respuesta = self.client.get(f"{self.url}?ordenar=fecha")
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn("ordenar", respuesta.json())

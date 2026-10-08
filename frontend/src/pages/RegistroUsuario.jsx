@@ -2,6 +2,7 @@ import { useState } from 'react'
 
 import { api, ErrorApi } from '../api/client'
 import { validarNombre, validarTelefono } from '../validaciones'
+import useTituloPagina from '../hooks/useTituloPagina'
 import Tarjeta from '../components/ui/Tarjeta'
 import Campo from '../components/ui/Campo'
 import Boton from '../components/ui/Boton'
@@ -73,6 +74,7 @@ function validar(datos) {
 }
 
 function RegistroUsuario() {
+  useTituloPagina('Crear cuenta')
   const [datos, setDatos] = useState(DATOS_INICIALES)
   const [errores, setErrores] = useState({})
   const [enviando, setEnviando] = useState(false)

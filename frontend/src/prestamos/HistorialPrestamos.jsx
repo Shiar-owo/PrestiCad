@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import { api } from '../api/client'
+import useTituloPagina from '../hooks/useTituloPagina'
 import FiltroPrestamos from '../components/prestamos/FiltroPrestamos'
 import {
   construirRutaHistorial,
@@ -16,6 +17,7 @@ import EstadoVacio from '../components/ui/EstadoVacio'
 const CONSULTA_INICIAL = { cargando: true, error: '', datos: null }
 
 export default function HistorialPrestamos() {
+  useTituloPagina('Historial de préstamos')
   const [estado, setEstado] = useState('todos')
   const [pagina, setPagina] = useState(1)
   const [intento, setIntento] = useState(0)

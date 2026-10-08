@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 
 import { api, ErrorApi } from '../api/client'
 import { validarNombre, validarTelefono } from '../validaciones'
+import useTituloPagina from '../hooks/useTituloPagina'
 import Campo from '../components/ui/Campo'
 import Boton from '../components/ui/Boton'
 import Tarjeta from '../components/ui/Tarjeta'
@@ -152,6 +153,7 @@ function mensajeErrorApi(error, mensajePredeterminado) {
 }
 
 function PerfilUsuario({ onPerfilActualizado }) {
+  useTituloPagina('Mi perfil')
   const [perfil, setPerfil] = useState(null)
   const [cargando, setCargando] = useState(true)
   const [guardando, setGuardando] = useState(false)

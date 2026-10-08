@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import { api } from '../api/client'
+import useTituloPagina from '../hooks/useTituloPagina'
 import Campo from '../components/ui/Campo'
 import Tarjeta from '../components/ui/Tarjeta'
 import Skeleton from '../components/ui/Skeleton'
@@ -15,6 +16,7 @@ const OPCIONES_ROL = [
 ]
 
 function UsuariosRoles() {
+  useTituloPagina('Gestionar roles')
   const [usuarios, setUsuarios] = useState([])
   const [cargando, setCargando] = useState(true)
   const [guardandoId, setGuardandoId] = useState(null)

@@ -1,8 +1,10 @@
 import { Link } from 'react-router'
 
+import useTituloPagina from '../hooks/useTituloPagina'
 import Contenido from '../components/layout/Contenido'
 
 function Pagina404() {
+  useTituloPagina('Página no encontrada')
   return (
     <Contenido>
       <div className="flex flex-col items-center justify-center gap-4 py-16 text-center">
@@ -11,7 +13,7 @@ function Pagina404() {
         <p className="text-texto-suave">La dirección que buscas no existe o fue movida.</p>
         <Link
           to="/"
-          className="rounded-lg bg-marca-700 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-marca-800"
+          className="rounded-lg bg-marca-700 px-4 py-2 text-sm font-semibold text-white transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-acento-600 hover:bg-marca-800"
         >
           Volver al inicio
         </Link>

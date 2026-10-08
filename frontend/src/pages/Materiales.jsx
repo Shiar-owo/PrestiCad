@@ -1,6 +1,13 @@
 import { useEffect, useState } from 'react'
 
 import { api, ErrorApi } from '../api/client'
+import useTituloPagina from '../hooks/useTituloPagina'
+import {
+  ETIQUETAS_ESTADO,
+  ETIQUETAS_TIER,
+  ETIQUETAS_TIPO,
+  OPCIONES_ESTADO,
+} from '../constantes/catalogo'
 import MaterialForm from '../components/MaterialForm'
 import Boton from '../components/ui/Boton'
 import Tarjeta from '../components/ui/Tarjeta'
@@ -8,33 +15,8 @@ import Skeleton from '../components/ui/Skeleton'
 import ErrorAlerta from '../components/ui/ErrorAlerta'
 import EstadoVacio from '../components/ui/EstadoVacio'
 
-// Debe reflejar backend/apps/inventario/constants.py
-const ETIQUETAS_TIPO = {
-  equipo: 'Equipo',
-  libro: 'Libro',
-  objeto: 'Objeto',
-}
-
-const ETIQUETAS_ESTADO = {
-  disponible: 'Disponible',
-  en_mantenimiento: 'En Mantenimiento',
-  reservado: 'Reservado',
-  prestado: 'Prestado',
-}
-
-// Debe reflejar apps/usuarios/constants.py (TIERS)
-const ETIQUETAS_TIER = {
-  avanzado: 'Avanzado',
-  estandar: 'Estándar',
-  restringido: 'Restringido',
-}
-
-const OPCIONES_ESTADO = Object.keys(ETIQUETAS_ESTADO).map((valor) => ({
-  valor,
-  etiqueta: ETIQUETAS_ESTADO[valor],
-}))
-
 function Materiales() {
+  useTituloPagina('Inventario')
   const [materiales, setMateriales] = useState([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')

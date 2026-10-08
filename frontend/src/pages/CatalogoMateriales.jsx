@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 
 import { api } from '../api/client'
+import useTituloPagina from '../hooks/useTituloPagina'
 import BarraBusqueda from '../components/BarraBusqueda'
 import ResultadosMateriales from '../components/ResultadosMateriales'
 
 function CatalogoMateriales({ onSeleccionarMaterial }) {
+  useTituloPagina('Catálogo')
   const [materiales, setMateriales] = useState([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')

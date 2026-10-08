@@ -5,6 +5,7 @@ import {
   calcularFechaLimiteEstimada,
   validarFormularioPrestamo,
 } from '../validacionesPrestamo'
+import useTituloPagina from '../hooks/useTituloPagina'
 import Campo from '../components/ui/Campo'
 import Boton from '../components/ui/Boton'
 import Tarjeta from '../components/ui/Tarjeta'
@@ -48,6 +49,7 @@ const OPCIONES_MATERIAL = (materiales) => [
 ]
 
 function RegistrarPrestamo() {
+  useTituloPagina('Registrar entrega')
   const [materiales, setMateriales] = useState([])
   const [formulario, setFormulario] = useState(FORMULARIO_INICIAL)
   const [cargando, setCargando] = useState(true)

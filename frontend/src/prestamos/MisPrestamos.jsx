@@ -1,6 +1,7 @@
 import { useEffect, useReducer, useState } from 'react'
 
 import { api } from '../api/client'
+import useTituloPagina from '../hooks/useTituloPagina'
 import ListaPrestamos from '../components/prestamos/ListaPrestamos'
 import Boton from '../components/ui/Boton'
 import Skeleton from '../components/ui/Skeleton'
@@ -11,6 +12,7 @@ import {
 } from './consultaPrestamos'
 
 export default function MisPrestamos() {
+  useTituloPagina('Mis préstamos')
   const [consulta, dispatch] = useReducer(
     reducirConsultaPrestamos,
     ESTADO_CONSULTA_INICIAL,

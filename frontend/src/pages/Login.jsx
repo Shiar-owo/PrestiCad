@@ -2,12 +2,14 @@ import { useState } from 'react'
 
 import { api, ErrorApi } from '../api/client'
 import { validarEmail, validarPassword } from '../validaciones'
+import useTituloPagina from '../hooks/useTituloPagina'
 import Tarjeta from '../components/ui/Tarjeta'
 import Campo from '../components/ui/Campo'
 import Boton from '../components/ui/Boton'
 import ErrorAlerta from '../components/ui/ErrorAlerta'
 
 function Login({ onLoginExitoso }) {
+  useTituloPagina('Iniciar sesión')
   const [datos, setDatos] = useState({ email: '', password: '' })
   const [errores, setErrores] = useState({})
   const [cargando, setCargando] = useState(false)

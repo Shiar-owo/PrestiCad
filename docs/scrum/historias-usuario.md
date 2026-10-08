@@ -240,6 +240,7 @@
 | 11 | El estado del material cambia a "Disponible" |
 | 12 | Se registra el historial completo de la operación |
 | 13 | Ante daño parcial o total se genera un reporte en PDF con los datos del préstamo, el prestatario, el gestor, los elementos dañados y la sanción aplicada |
+| 14 | El gestor y el administrador pueden consultar el listado de reportes de daños con filtros (tipo de daño y rango de fechas) y descargar cada PDF |
 
 **Reglas de negocio:** RN06, RN09, RN10
 

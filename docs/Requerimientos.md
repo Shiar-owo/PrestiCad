@@ -113,7 +113,7 @@ Se identifican a continuación los stakeholders y actores que interactúan direc
 
 * RF05: El sistema debe permitir registrar un préstamo, asociando el material, el usuario, la fecha de entrega y el tiempo de préstamo establecido.
 
-* RF06: El sistema debe permitir registrar la devolución de un material, actualizar el estado del préstamo y generar un reporte en PDF cuando la devolución detecte daño parcial o total.
+* RF06: El sistema debe permitir registrar la devolución de un material, actualizar el estado del préstamo y generar un reporte en PDF cuando la devolución detecte daño parcial o total; además, debe permitir consultar y descargar posteriormente el listado de reportes de daños (Gestor de Almacén y Administrador).
 
 * RF07: El sistema debe mostrar el estado de cada préstamo (reservado, activo, devuelto, vencido).
 
@@ -306,7 +306,7 @@ Los siguientes diagramas se desarrollarán como parte del modelado del sistema, 
 | RF03 | Gestionar inventario y parametrización de atributos de reputación por objeto | Funcional | Alta |
 | RF04 | Reservar material disponible ingresando prioridad (Alta, Media, Baja) y descripción/justificación | Funcional | Alta |
 | RF05 | Registrar préstamo por parte del Gestor de Almacén | Funcional | Alta |
-| RF06 | Registrar devolución y generar reporte de daños en PDF por parte del Gestor de Almacén | Funcional | Alta |
+| RF06 | Registrar devolución, generar y consultar/descargar reportes de daños en PDF (Gestor y Administrador) | Funcional | Alta |
 | RF07 | Consultar estado del préstamo | Funcional | Media |
 | RF08 | Gestionar puntaje de reputación (-500 a 500), suspensiones y cobros solo por daño | Funcional | Alta |
 | RF09 | Registrar garantía recibida antes de activar préstamo de alto valor o por excepción académica | Funcional | Media |

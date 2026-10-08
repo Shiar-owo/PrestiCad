@@ -23,7 +23,7 @@ function useTema() {
 
     const meta = document.querySelector('meta[name="theme-color"]')
     if (meta) {
-      meta.setAttribute('content', esOscuro ? '#0b1f33' : '#ffffff')
+      meta.setAttribute('content', esOscuro ? '#0b1f33' : '#f1f6fb')
     }
   }, [tema])
 

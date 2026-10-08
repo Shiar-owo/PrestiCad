@@ -6,7 +6,7 @@ import SesionContext from '../../contextos/SesionContext'
 import MenuUsuario from './MenuUsuario'
 
 function claseEnlace({ isActive }) {
-  return `inline-flex items-center rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
+  return `inline-flex items-center rounded-lg px-3 py-2 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-acento-600 ${
     isActive
       ? 'bg-marca-600/15 text-marca-800 dark:bg-marca-500/15 dark:text-marca-300'
       : 'text-texto hover:bg-superficie-alta'
@@ -17,7 +17,7 @@ function EnlaceMovil({ to, activo, children }) {
   return (
     <Link
       to={to}
-      className={`rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
+      className={`rounded-lg px-3 py-2 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-acento-600 ${
         activo
           ? 'bg-marca-600/15 text-marca-800 dark:bg-marca-500/15 dark:text-marca-300'
           : 'text-texto hover:bg-superficie-alta'
@@ -38,13 +38,13 @@ function Encabezado({ tema, onAlternarTema }) {
   }, [pathname])
 
   const claseBotonIcono =
-    'flex size-9 items-center justify-center rounded-lg text-texto transition-colors hover:bg-superficie-alta'
+    'flex size-9 items-center justify-center rounded-lg text-texto transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-acento-600 hover:bg-superficie-alta'
 
   return (
     <header className="sticky top-0 z-40 border-b border-borde bg-fondo/95 backdrop-blur dark:bg-fondo/95">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-4">
         <Link to="/" className="flex items-center gap-2.5">
-          <img src="/favicon.svg" alt="Icono de PrestiCad" className="size-8" />
+          <img src="/favicon.png" alt="Logo de PrestiCad" className="size-8" />
           <span className="text-lg font-bold text-texto">PrestiCad</span>
         </Link>
 
@@ -87,13 +87,13 @@ function Encabezado({ tema, onAlternarTema }) {
             <div className="hidden items-center gap-2 md:flex">
               <Link
                 to="/login"
-                className="rounded-lg border border-borde px-3 py-2 text-sm font-semibold text-texto transition-colors hover:bg-superficie-alta"
+                className="rounded-lg border border-borde px-3 py-2 text-sm font-semibold text-texto transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-acento-600 hover:bg-superficie-alta"
               >
                 Iniciar sesión
               </Link>
               <Link
                 to="/registro"
-                className="rounded-lg bg-marca-700 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-marca-800"
+                className="rounded-lg bg-marca-700 px-3 py-2 text-sm font-semibold text-white transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-acento-600 hover:bg-marca-800"
               >
                 Registrarse
               </Link>

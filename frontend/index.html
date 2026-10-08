@@ -7,14 +7,14 @@
       name="description"
       content="PrestiCad — Sistema de préstamos académicos de la universidad. Consulta el catálogo, reserva materiales y gestiona tus préstamos."
     />
-    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f1f6fb" />
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0b1f33" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
     <title>PrestiCad</title>
     <script>
       (function () {
         try {
-          var guardado = localStorage.getItem('tema')
+          var guardado = localStorage.getItem('presticad-tema')
           var oscuro =
             guardado === 'oscuro' ||
             (!guardado && window.matchMedia('(prefers-color-scheme: dark)').matches)

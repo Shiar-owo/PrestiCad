@@ -113,7 +113,7 @@ Se identifican a continuación los stakeholders y actores que interactúan direc
 
 * RF05: El sistema debe permitir registrar un préstamo, asociando el material, el usuario, la fecha de entrega y el tiempo de préstamo establecido.
 
-* RF06: El sistema debe permitir registrar la devolución de un material y actualizar el estado del préstamo.
+* RF06: El sistema debe permitir registrar la devolución de un material, actualizar el estado del préstamo y generar un reporte en PDF cuando la devolución detecte daño parcial o total.
 
 * RF07: El sistema debe mostrar el estado de cada préstamo (reservado, activo, devuelto, vencido).
 
@@ -156,6 +156,8 @@ Se identifican a continuación los stakeholders y actores que interactúan direc
 * RN08: Control de Concurrencia en Reservas: El procesamiento de reservas simultáneas para un mismo objeto se realiza mediante transacciones atómicas a nivel de base de datos para prevenir situaciones de condición de carrera (race conditions) sobre la última unidad disponible.
 
 * RN09: Inspección y Checklist de Estado Inicial: En el registro de entrega de un préstamo (CU03) es obligatorio completar un checklist digital del estado inicial del bien, el cual se contrasta durante la devolución (CU04) para garantizar que las sanciones por daño apliquen únicamente a desperfectos nuevos.
+
+* RN10: Reporte Obligatorio de Daños: Toda devolución que detecte daño parcial o total genera obligatoriamente un reporte en PDF con los datos del préstamo, el prestatario, el gestor que registró la devolución, el tipo de daño (parcial o total), el detalle de los elementos dañados contrastando el estado inicial con el estado devuelto, y la sanción aplicada. El reporte se almacena de forma permanente para su consulta y descarga posterior.
 
 # 7\. Casos de uso
 
@@ -304,7 +306,7 @@ Los siguientes diagramas se desarrollarán como parte del modelado del sistema, 
 | RF03 | Gestionar inventario y parametrización de atributos de reputación por objeto | Funcional | Alta |
 | RF04 | Reservar material disponible ingresando prioridad (Alta, Media, Baja) y descripción/justificación | Funcional | Alta |
 | RF05 | Registrar préstamo por parte del Gestor de Almacén | Funcional | Alta |
-| RF06 | Registrar devolución por parte del Gestor de Almacén | Funcional | Alta |
+| RF06 | Registrar devolución y generar reporte de daños en PDF por parte del Gestor de Almacén | Funcional | Alta |
 | RF07 | Consultar estado del préstamo | Funcional | Media |
 | RF08 | Gestionar puntaje de reputación (-500 a 500), suspensiones y cobros solo por daño | Funcional | Alta |
 | RF09 | Registrar garantía recibida antes de activar préstamo de alto valor o por excepción académica | Funcional | Media |
@@ -324,4 +326,5 @@ Los siguientes diagramas se desarrollarán como parte del modelado del sistema, 
 | RN07 | Prórrogas y priorización de reservas evaluadas por el Gestor según prioridad, justificación y Tier de reputación | Regla de negocio | Alta |
 | RN08 | Control de concurrencia atómico en reservas y evaluación del Gestor por prioridad y justificación en solicitudes simultáneas | Regla de negocio | Alta |
 | RN09 | Inspección y checklist digital de estado inicial y de devolución | Regla de negocio | Alta |
+| RN10 | Reporte obligatorio en PDF ante devolución con daño parcial o total | Regla de negocio | Alta |
 

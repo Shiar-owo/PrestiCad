@@ -223,7 +223,7 @@
 
 **Como** Gestor de Almacén, **quiero** registrar la devolución de un material comparando con el checklist inicial, **para que** el sistema calcule automáticamente bonificaciones o sanciones.
 
-**Requisitos asociados:** RF06, RF08, RN06, RN09
+**Requisitos asociados:** RF06, RF08, RN06, RN09, RN10
 
 | # | Criterio de aceptación |
 |---|------------------------|
@@ -239,8 +239,9 @@
 | 10 | El estado del préstamo cambia a "Devuelto" |
 | 11 | El estado del material cambia a "Disponible" |
 | 12 | Se registra el historial completo de la operación |
+| 13 | Ante daño parcial o total se genera un reporte en PDF con los datos del préstamo, el prestatario, el gestor, los elementos dañados y la sanción aplicada |
 
-**Reglas de negocio:** RN06, RN09
+**Reglas de negocio:** RN06, RN09, RN10
 
 ---
 

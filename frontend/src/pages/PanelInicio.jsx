@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 
 import SesionContext from '../contextos/SesionContext'
+import useTituloPagina from '../hooks/useTituloPagina'
 import { ETIQUETAS_ROL, ETIQUETAS_TIER } from '../constantes/roles'
 import Tarjeta from '../components/ui/Tarjeta'
 
@@ -91,6 +92,7 @@ const ACCESOS = {
 }
 
 function PanelInicio() {
+  useTituloPagina('Inicio')
   const { usuario } = useContext(SesionContext)
 
   if (!usuario) {
@@ -143,7 +145,7 @@ function PanelInicio() {
             <Link
               key={a}
               to={a}
-              className="group flex items-start justify-between gap-3 rounded-xl border border-borde bg-superficie p-4 transition-colors hover:border-acento-400 hover:bg-superficie-alta"
+              className="group flex items-start justify-between gap-3 rounded-xl border border-borde bg-superficie p-4 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-acento-600 hover:border-acento-400 hover:bg-superficie-alta"
             >
               <span className="flex items-start gap-3">
                 <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-marca-600/15 text-marca-700 dark:bg-marca-500/15 dark:text-marca-300">

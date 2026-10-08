@@ -47,7 +47,7 @@ function MenuUsuario() {
         aria-haspopup="menu"
         aria-expanded={abierto}
         onClick={() => setAbierto((actual) => !actual)}
-        className="flex items-center gap-2 rounded-lg border border-borde bg-superficie px-2 py-1.5 text-sm font-semibold text-texto transition-colors hover:bg-superficie-alta"
+        className="flex items-center gap-2 rounded-lg border border-borde bg-superficie px-2 py-1.5 text-sm font-semibold text-texto transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-acento-600 hover:bg-superficie-alta"
       >
         <span className="flex size-7 items-center justify-center rounded-full bg-marca-600 text-xs font-bold text-white">
           {iniciales}
@@ -74,7 +74,7 @@ function MenuUsuario() {
             role="menuitem"
             to="/panel/perfil"
             onClick={() => setAbierto(false)}
-            className="flex items-center gap-2 px-4 py-2.5 text-sm text-texto transition-colors hover:bg-superficie-alta"
+            className="flex items-center gap-2 px-4 py-2.5 text-sm text-texto transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-acento-600 hover:bg-superficie-alta"
           >
             <UserCircle aria-hidden="true" className="size-4 text-texto-suave" />
             Mi perfil
@@ -83,7 +83,7 @@ function MenuUsuario() {
             role="menuitem"
             type="button"
             onClick={manejarCierreSesion}
-            className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-texto transition-colors hover:bg-superficie-alta"
+            className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-texto transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-acento-600 hover:bg-superficie-alta"
           >
             <LogOut aria-hidden="true" className="size-4 text-texto-suave" />
             Cerrar sesión

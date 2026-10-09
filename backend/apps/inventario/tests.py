@@ -1443,3 +1443,132 @@ class MaterialesFotoApiTestCase(EscenariosDeMaterialApi):
 
         self.assertNotIn("foto_url", cuerpo)
         self.assertIn("foto", cuerpo)
+
+
+class InstanciaMaterialModelTestCase(TestCase):
+    """Pruebas del modelo InstanciaMaterial y generación automática."""
+
+    def test_registrar_material_crea_instancias_automaticas(self):
+        mat = registrar_material(
+            nombre="Libro CLRS",
+            codigo_inventario="LIB-CLRS",
+            tipo="libro",
+            stock=3,
+        )
+        self.assertEqual(mat.instancias.count(), 3)
+        codigos = list(mat.instancias.values_list("codigo_ejemplar", flat=True))
+        self.assertEqual(codigos, ["LIB-CLRS-01", "LIB-CLRS-02", "LIB-CLRS-03"])
+        for inst in mat.instancias.all():
+            self.assertEqual(inst.estado, "disponible")
+            self.assertEqual(inst.estado_fisico, "Operativo")
+
+    def test_resumen_estados_de_material(self):
+        mat = registrar_material(
+            nombre="Arduino Mega",
+            codigo_inventario="EQ-ARD",
+            tipo="equipo",
+            stock=3,
+        )
+        instancias = list(mat.instancias.all())
+        instancias[0].estado = "prestado"
+        instancias[0].save()
+        instancias[1].estado = "en_mantenimiento"
+        instancias[1].save()
+
+        resumen = mat.resumen_estados
+        self.assertEqual(resumen["total"], 3)
+        self.assertEqual(resumen["disponible"], 1)
+        self.assertEqual(resumen["prestado"], 1)
+        self.assertEqual(resumen["en_mantenimiento"], 1)
+        self.assertEqual(resumen["reservado"], 0)
+
+
+class InstanciaMaterialAPITestCase(APITestCase):
+    """Pruebas de endpoints para gestión y consulta de instancias físicas."""
+
+    def setUp(self):
+        Rol.objects.get_or_create(nombre="administrador")
+        Rol.objects.get_or_create(nombre="gestor")
+        Rol.objects.get_or_create(nombre="prestatario")
+
+        self.material = registrar_material(
+            nombre="Osciloscopio Digital",
+            codigo_inventario="EQ-OSC-01",
+            tipo="equipo",
+            stock=2,
+        )
+
+    def _autenticar(self, email, rol):
+        usuario = registrar_usuario(
+            nombre="Gestor",
+            apellido="Inventario",
+            email=email,
+            dni="12345678",
+            tipo="docente",
+            facultad="Ingeniería de Producción y Servicios",
+            password="Password123!",
+        )
+        usuario.rol = Rol.objects.get(nombre=rol)
+        usuario.save()
+        session = self.client.session
+        session[CLAVE_SESION_USUARIO_ID] = str(usuario.id)
+        session[CLAVE_SESION_ULTIMA_ACTIVIDAD] = timezone.now().isoformat()
+        session.save()
+        return usuario
+
+    def test_listar_instancias_de_un_material(self):
+        url = f"/api/materiales/{self.material.id}/instancias/"
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        datos = resp.json()
+        self.assertEqual(len(datos), 2)
+        self.assertEqual(datos[0]["codigo_ejemplar"], "EQ-OSC-01-01")
+        self.assertEqual(datos[1]["codigo_ejemplar"], "EQ-OSC-01-02")
+
+    def test_crear_instancia_manual(self):
+        self._autenticar("gestor.inst@unsa.edu.pe", "gestor")
+        url = f"/api/materiales/{self.material.id}/instancias/"
+        resp = self.client.post(
+            url,
+            {
+                "codigo_ejemplar": "EQ-OSC-01-03",
+                "numero_serie": "SN-998877",
+                "estado": "disponible",
+                "estado_fisico": "Excelente",
+                "observaciones": "Donación con cables de prueba",
+                "ubicacion": "Estante B-4",
+            },
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 201)
+        self.material.refresh_from_db()
+        self.assertEqual(self.material.stock, 3)
+
+    def test_actualizar_estado_de_instancia(self):
+        self._autenticar("gestor.inst@unsa.edu.pe", "gestor")
+        instancia = self.material.instancias.first()
+        url = f"/api/instancias/{instancia.id}/"
+        resp = self.client.patch(
+            url,
+            {
+                "estado": "en_mantenimiento",
+                "observaciones": "Punta de prueba dañada",
+            },
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        instancia.refresh_from_db()
+        self.assertEqual(instancia.estado, "en_mantenimiento")
+        self.assertEqual(instancia.observaciones, "Punta de prueba dañada")
+
+    def test_busqueda_materiales_incluye_instancias_y_resumen(self):
+        resp = self.client.get("/api/materiales/buscar/?q=Osciloscopio")
+        self.assertEqual(resp.status_code, 200)
+        resultados = resp.json()
+        self.assertEqual(len(resultados), 1)
+        item = resultados[0]
+        self.assertIn("instancias", item)
+        self.assertIn("resumen_instancias", item)
+        self.assertEqual(len(item["instancias"]), 2)
+        self.assertEqual(item["resumen_instancias"]["total"], 2)
+        self.assertEqual(item["resumen_instancias"]["disponible"], 2)

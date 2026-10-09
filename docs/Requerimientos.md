@@ -107,7 +107,7 @@ Se identifican a continuación los stakeholders y actores que interactúan direc
 
 * RF02: El sistema debe permitir a los usuarios iniciar sesión y acceder a su perfil.
 
-* RF03: El sistema debe permitir registrar y administrar el inventario de materiales (equipos, libros, objetos), incluyendo su estado, disponibilidad y la parametrización en la ficha de cada objeto de sus atributos de reputación (Tier mínimo requerido, bonificación por devolución a tiempo, y deducciones por tardanza, daño parcial o daño total).
+* RF03: El sistema debe permitir registrar y administrar el inventario de materiales (equipos, libros, objetos), controlando tanto el catálogo general como sus ejemplares o instancias físicas individuales (código de ejemplar, número de serie, estado individual, estado físico y ubicación), incluyendo el cálculo de disponibilidad en tiempo real y la parametrización en la ficha de cada objeto de sus atributos de reputación (Tier mínimo requerido, bonificación por devolución a tiempo, y deducciones por tardanza, daño parcial o daño total).
 
 * RF04: El sistema debe permitir a los usuarios reservar un material disponible para un préstamo futuro.
 
@@ -141,7 +141,7 @@ Se identifican a continuación los stakeholders y actores que interactúan direc
 
 ## 6.3 Reglas de negocio
 
-* RN01: Disponibilidad de Materiales: Un material solo puede prestarse si su estado en el inventario es "Disponible". Si su estado es "En Mantenimiento", "Reservado" o "Prestado", la solicitud será rechazada automáticamente.
+* RN01: Disponibilidad de Materiales: Un material puede prestarse o reservarse únicamente si cuenta con al menos una instancia física (ejemplar) en estado "Disponible". Si todas las instancias están en estado "En Mantenimiento", "Reservado", "Prestado" o "De Baja", la solicitud será rechazada automáticamente por falta de disponibilidad. Cada préstamo se asocia a una instancia física concreta.
 
 * RN03: Sistema de Reputación y Tiers de Acceso: El acceso a préstamos se rige por una escala de reputación en el rango de \[-500, 500\], iniciando cada usuario nuevo con 0 puntos (Neutral). Se establecen tres Tiers de acceso: 1\) Tier Avanzado (201 a 500 pts): Acceso total a todo el inventario (incluyendo equipos de alto valor), prioridad en reservas y prórrogas automáticas/extendidas. 2\) Tier Estándar (-50 a 200 pts): Acceso a libros y equipos estándar, incluyendo un margen de tolerancia en rango negativo (hasta \-50 pts) para imprevistos o retrasos menores sin degradar al usuario al nivel restringido. 3\) Tier Restringido (-500 a \-51 pts): Acceso limitado únicamente a materiales básicos/libros de bajo valor, sin derecho a préstamos de equipos ni prórrogas. Excepción Académica: Un usuario en Tier Restringido que requiera un bien de Tier Superior por necesidad académica urgente podrá acceder al préstamo de manera excepcional si presenta un documento de identidad y un compromiso de responsabilidad firmado como garantía.
 
@@ -153,7 +153,7 @@ Se identifican a continuación los stakeholders y actores que interactúan direc
 
 * RN07: Prórrogas de Préstamos: La solicitud de extensión o prórroga de un préstamo activo está condicionada a la disponibilidad del bien (sin reservas pendientes) y al Tier de reputación del usuario, siendo otorgada de forma prioritaria a los usuarios del Tier Avanzado.
 
-* RN08: Control de Concurrencia en Reservas: El procesamiento de reservas simultáneas para un mismo objeto se realiza mediante transacciones atómicas a nivel de base de datos para prevenir situaciones de condición de carrera (race conditions) sobre la última unidad disponible.
+* RN08: Control de Concurrencia en Reservas: El procesamiento de reservas simultáneas para un mismo objeto se realiza mediante transacciones atómicas a nivel de base de datos para prevenir situaciones de condición de carrera (race conditions) sobre la disponibilidad de ejemplares físicos restantes.
 
 * RN09: Inspección y Checklist de Estado Inicial: En el registro de entrega de un préstamo (CU03) es obligatorio completar un checklist digital del estado inicial del bien, el cual se contrasta durante la devolución (CU04) para garantizar que las sanciones por daño apliquen únicamente a desperfectos nuevos.
 
@@ -223,11 +223,11 @@ A continuación se detallan los casos de uso principales identificados para el s
 
 9. El Gestor de Almacén verifica la identidad y elegibilidad del usuario en el sistema.
 
-10. El Gestor de Almacén registra la entrega del material asociado al préstamo.
+10. El Gestor de Almacén selecciona la instancia física / ejemplar específico del material a entregar.
 
-11. El Gestor de Almacén completa el checklist digital de estado inicial del bien y registra el tiempo de préstamo y la garantía dejada (si corresponde).
+11. El Gestor de Almacén completa el checklist digital de estado inicial de la instancia seleccionada (número de serie, condiciones físicas) y registra el tiempo de préstamo y la garantía dejada (si corresponde).
 
-12. El sistema actualiza el estado del material a "prestado".
+12. El sistema actualiza el estado de la instancia física a "prestado", recalcula la disponibilidad del material y asocia la entrega al préstamo activo.
 
 **Flujos alternativos:**
 
@@ -247,11 +247,11 @@ A continuación se detallan los casos de uso principales identificados para el s
 
 13. El Gestor de Almacén busca el préstamo activo correspondiente.
 
-14. El Gestor de Almacén inspecciona el objeto y completa el checklist digital de devolución, contrastándolo con el estado inicial registrado.
+14. El Gestor de Almacén inspecciona la instancia física devuelta y completa el checklist digital de devolución, contrastándolo con el estado inicial registrado.
 
 15. El sistema compara la fecha de devolución con la fecha límite establecida.
 
-16. El sistema calcula el impacto en la reputación usando los parámetros del objeto (bonificación o descuento) y actualiza el puntaje del usuario, el estado del préstamo a "devuelto" y del material a "disponible".
+16. El sistema calcula el impacto en la reputación usando los parámetros del objeto (bonificación o descuento) y actualiza el puntaje del usuario, el estado del préstamo a "devuelto" y el estado de la instancia física a "disponible" (o "en mantenimiento" ante daños), recalculando la disponibilidad del material.
 
 **Flujos alternativos:**
 

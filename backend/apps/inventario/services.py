@@ -9,8 +9,12 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 
-from apps.inventario.constants import ESTADOS_MATERIAL, TIERS_ACCESIBLES
-from apps.inventario.models import Material
+from apps.inventario.constants import (
+    ESTADOS_INSTANCIA,
+    ESTADOS_MATERIAL,
+    TIERS_ACCESIBLES,
+)
+from apps.inventario.models import InstanciaMaterial, Material
 from apps.inventario.validators import validar_foto
 
 logger = logging.getLogger(__name__)
@@ -149,7 +153,7 @@ def buscar_materiales(
 
     Devuelve un `QuerySet` de `Material` ordenado alfabéticamente por nombre.
     """
-    queryset = Material.objects.all().order_by("nombre")
+    queryset = Material.objects.prefetch_related("instancias").all().order_by("nombre")
 
     if q:
         q_limpio = q.strip()
@@ -270,6 +274,26 @@ def registrar_material(
             raise InventarioError("codigo_inventario", CODIGO_DUPLICADO_MENSAJE) from exc
         raise
 
+    # HU04 / Instancias de material: crear ejemplares físicos iniciales
+    instancias = []
+    for i in range(1, stock + 1):
+        codigo_ejemplar = f"{codigo}-{i:02d}"
+        num_serie = material.numero_serie
+        if num_serie and stock > 1:
+            num_serie = f"{num_serie}-{i:02d}"
+        instancias.append(
+            InstanciaMaterial(
+                material=material,
+                codigo_ejemplar=codigo_ejemplar,
+                numero_serie=num_serie or "",
+                estado="disponible",
+                estado_fisico=material.estado_fisico or "Operativo",
+                observaciones="",
+                ubicacion="",
+            )
+        )
+    InstanciaMaterial.objects.bulk_create(instancias)
+
     return material
 
 
@@ -309,6 +333,31 @@ def actualizar_material(material_id, **campos):
 
     if "stock" in campos and campos["stock"] < 1:
         raise InventarioError("stock", "El stock debe ser al menos 1 unidad.")
+
+    if "stock" in campos and campos["stock"] > material.stock:
+        conteo_actual = material.instancias.count()
+        diferencia = campos["stock"] - conteo_actual
+        if diferencia > 0:
+            nuevas = []
+            base = conteo_actual
+            for i in range(1, diferencia + 1):
+                idx = base + i
+                cod_ej = f"{material.codigo_inventario}-{idx:02d}"
+                while InstanciaMaterial.objects.filter(codigo_ejemplar=cod_ej).exists():
+                    idx += 1
+                    cod_ej = f"{material.codigo_inventario}-{idx:02d}"
+                nuevas.append(
+                    InstanciaMaterial(
+                        material=material,
+                        codigo_ejemplar=cod_ej,
+                        numero_serie="",
+                        estado="disponible",
+                        estado_fisico=material.estado_fisico or "Operativo",
+                        observaciones="",
+                        ubicacion="",
+                    )
+                )
+            InstanciaMaterial.objects.bulk_create(nuevas)
 
     if campos.get("foto") is not None:
         validar_foto(campos["foto"])
@@ -382,3 +431,101 @@ def _eliminar_foto(storage, nombre):
             nombre,
             exc_info=True,
         )
+
+
+def listar_instancias_material(material_id):
+    """Devuelve todas las instancias físicas de un material ordenadas por código."""
+    material = obtener_material(material_id)
+    return material.instancias.all().order_by("codigo_ejemplar")
+
+
+def crear_instancia_material(
+    material_id,
+    *,
+    codigo_ejemplar,
+    numero_serie="",
+    estado="disponible",
+    estado_fisico="Operativo",
+    observaciones="",
+    ubicacion="",
+):
+    """Crea una nueva instancia física para un material existente."""
+    material = obtener_material(material_id)
+    codigo = normalizar_codigo(codigo_ejemplar)
+    if InstanciaMaterial.objects.filter(codigo_ejemplar__iexact=codigo).exists():
+        raise InventarioError("codigo_ejemplar", "El código de ejemplar ya está registrado.")
+
+    estados_validos = {clave for clave, _ in ESTADOS_INSTANCIA}
+    if estado not in estados_validos:
+        raise InventarioError("estado", "El estado de la instancia no es válido.")
+
+    instancia = InstanciaMaterial.objects.create(
+        material=material,
+        codigo_ejemplar=codigo,
+        numero_serie=numero_serie.strip() if numero_serie else "",
+        estado=estado,
+        estado_fisico=estado_fisico.strip() if estado_fisico else "Operativo",
+        observaciones=observaciones.strip() if observaciones else "",
+        ubicacion=ubicacion.strip() if ubicacion else "",
+    )
+
+    total = material.instancias.count()
+    if total > material.stock:
+        material.stock = total
+        material.save(update_fields=["stock", "updated_at"])
+
+    return instancia
+
+
+def actualizar_instancia_material(instancia_id, **campos):
+    """Actualiza datos, estado o notas de una instancia física."""
+    try:
+        instancia = InstanciaMaterial.objects.select_related("material").get(pk=instancia_id)
+    except (InstanciaMaterial.DoesNotExist, ValueError, TypeError) as error:
+        raise InventarioError("instancia_id", "No existe la instancia indicada.") from error
+
+    if "codigo_ejemplar" in campos:
+        codigo = normalizar_codigo(campos["codigo_ejemplar"])
+        if (
+            InstanciaMaterial.objects.filter(codigo_ejemplar__iexact=codigo)
+            .exclude(pk=instancia.pk)
+            .exists()
+        ):
+            raise InventarioError("codigo_ejemplar", "El código de ejemplar ya pertenece a otra unidad.")
+        instancia.codigo_ejemplar = codigo
+
+    if "estado" in campos:
+        estado = campos["estado"]
+        estados_validos = {clave for clave, _ in ESTADOS_INSTANCIA}
+        if estado not in estados_validos:
+            raise InventarioError("estado", "El estado de la instancia no es válido.")
+        instancia.estado = estado
+
+    for campo in ("numero_serie", "estado_fisico", "observaciones", "ubicacion"):
+        if campo in campos and isinstance(campos[campo], str):
+            setattr(instancia, campo, campos[campo].strip())
+
+    instancia.save()
+    return instancia
+
+
+def eliminar_instancia_material(instancia_id):
+    """Elimina una instancia física si no está prestada ni reservada."""
+    try:
+        instancia = InstanciaMaterial.objects.select_related("material").get(pk=instancia_id)
+    except (InstanciaMaterial.DoesNotExist, ValueError, TypeError) as error:
+        raise InventarioError("instancia_id", "No existe la instancia indicada.") from error
+
+    if instancia.estado in ("prestado", "reservado"):
+        raise InventarioError(
+            "instancia",
+            f"No se puede eliminar una unidad en estado '{instancia.get_estado_display()}'.",
+        )
+
+    material = instancia.material
+    instancia.delete()
+
+    total = material.instancias.count()
+    if total > 0 and total < material.stock:
+        material.stock = total
+        material.save(update_fields=["stock", "updated_at"])

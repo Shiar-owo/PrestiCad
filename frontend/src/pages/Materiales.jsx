@@ -9,6 +9,7 @@ import {
   OPCIONES_ESTADO,
 } from '../constantes/catalogo'
 import MaterialForm from '../components/MaterialForm'
+import FichaTecnicaModal from '../components/FichaTecnicaModal'
 import Boton from '../components/ui/Boton'
 import Tarjeta from '../components/ui/Tarjeta'
 import Skeleton from '../components/ui/Skeleton'
@@ -22,6 +23,7 @@ function Materiales() {
   const [error, setError] = useState('')
   const [mostrarFormulario, setMostrarFormulario] = useState(false)
   const [materialEnEdicion, setMaterialEnEdicion] = useState(null)
+  const [materialFicha, setMaterialFicha] = useState(null)
   const [cambiandoEstado, setCambiandoEstado] = useState(null)
 
   useEffect(() => {
@@ -196,14 +198,24 @@ function Materiales() {
                       </select>
                     </td>
                     <td className="px-4 py-3">
-                      <Boton
-                        variante="secundario"
-                        tamanio="pequeno"
-                        tipo="button"
-                        onClick={() => abrirFormularioEdicion(material)}
-                      >
-                        Editar
-                      </Boton>
+                      <div className="flex items-center gap-2">
+                        <Boton
+                          variante="fantasma"
+                          tamanio="pequeno"
+                          tipo="button"
+                          onClick={() => setMaterialFicha(material)}
+                        >
+                          Ficha
+                        </Boton>
+                        <Boton
+                          variante="secundario"
+                          tamanio="pequeno"
+                          tipo="button"
+                          onClick={() => abrirFormularioEdicion(material)}
+                        >
+                          Editar
+                        </Boton>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -211,6 +223,13 @@ function Materiales() {
             </table>
           </div>
         </Tarjeta>
+      )}
+
+      {materialFicha && (
+        <FichaTecnicaModal
+          material={materialFicha}
+          onCerrar={() => setMaterialFicha(null)}
+        />
       )}
     </section>
   )

@@ -7,8 +7,12 @@ from django.conf import settings
 from rest_framework import serializers
 
 from apps.compartido.serializers import RechazarCamposNoPermitidosMixin
-from apps.inventario.constants import ESTADOS_MATERIAL, TIPOS_MATERIAL
-from apps.inventario.models import Material
+from apps.inventario.constants import (
+    ESTADOS_INSTANCIA,
+    ESTADOS_MATERIAL,
+    TIPOS_MATERIAL,
+)
+from apps.inventario.models import InstanciaMaterial, Material
 from apps.inventario.validators import validar_foto
 from apps.usuarios.constants import TIERS
 
@@ -89,11 +93,59 @@ class MaterialListSerializer(serializers.ListSerializer):
         return super().to_representation(materiales)
 
 
+class InstanciaMaterialSerializer(serializers.ModelSerializer):
+    """Contrato de lectura para una instancia física / ejemplar."""
+
+    estado_display = serializers.CharField(source="get_estado_display", read_only=True)
+
+    class Meta:
+        model = InstanciaMaterial
+        fields = (
+            "id",
+            "codigo_ejemplar",
+            "numero_serie",
+            "estado",
+            "estado_display",
+            "estado_fisico",
+            "observaciones",
+            "ubicacion",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = ("id", "created_at", "updated_at")
+
+
+class InstanciaMaterialModificacionSerializer(
+    RechazarCamposNoPermitidosMixin, serializers.ModelSerializer
+):
+    """Contrato para crear o editar una instancia física."""
+
+    codigo_ejemplar = serializers.CharField(max_length=50, required=False)
+    numero_serie = serializers.CharField(max_length=80, required=False, allow_blank=True)
+    estado = serializers.ChoiceField(choices=ESTADOS_INSTANCIA, required=False)
+    estado_fisico = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    observaciones = serializers.CharField(required=False, allow_blank=True)
+    ubicacion = serializers.CharField(max_length=100, required=False, allow_blank=True)
+
+    class Meta:
+        model = InstanciaMaterial
+        fields = (
+            "codigo_ejemplar",
+            "numero_serie",
+            "estado",
+            "estado_fisico",
+            "observaciones",
+            "ubicacion",
+        )
+
+
 class MaterialSerializer(serializers.ModelSerializer):
     """Contrato de salida JSON del inventario."""
 
     unidades_disponibles = serializers.SerializerMethodField()
     foto = FotoMaterial(read_only=True)
+    instancias = serializers.SerializerMethodField()
+    resumen_instancias = serializers.SerializerMethodField()
 
     class Meta:
         model = Material
@@ -109,20 +161,41 @@ class MaterialSerializer(serializers.ModelSerializer):
             *CAMPOS_FICHA_Y_REPUTACION,
             "stock",
             "unidades_disponibles",
+            "instancias",
+            "resumen_instancias",
             "created_at",
             "updated_at",
         )
         read_only_fields = ("id", "created_at", "updated_at")
 
+    def get_instancias(self, material):
+        if getattr(material._state, "adding", True):
+            return []
+        return InstanciaMaterialSerializer(material.instancias.all(), many=True).data
+
+    def get_resumen_instancias(self, material):
+        if getattr(material._state, "adding", True):
+            stock = getattr(material, "stock", 1)
+            estado = getattr(material, "estado", "disponible")
+            return {
+                "total": stock,
+                "disponible": stock if estado == "disponible" else 0,
+                "reservado": stock if estado == "reservado" else 0,
+                "prestado": stock if estado == "prestado" else 0,
+                "en_mantenimiento": stock if estado == "en_mantenimiento" else 0,
+                "de_baja": 0,
+            }
+        return material.resumen_estados
+
     def get_unidades_disponibles(self, material):
         """Unidades libres de un material.
 
-        El stock es el total registrado. Los préstamos activos consumen una
-        unidad cada uno; HU06 deberá extender este cálculo con las reservas
-        vigentes cuando ese módulo se integre.
+        Si existen instancias físicas registradas, combina las unidades en
+        estado 'disponible' con los préstamos vigentes informados por el
+        módulo préstamos.
         """
-        if material._state.adding:
-            return material.stock
+        if not material.pk or material._state.adding:
+            return getattr(material, "stock", 1)
 
         prestamos_por_material = self.context.get("unidades_prestadas_por_material")
         if prestamos_por_material is None:
@@ -130,6 +203,14 @@ class MaterialSerializer(serializers.ModelSerializer):
 
             prestamos_por_material = contar_unidades_prestadas_por_material([material.pk])
         prestamos_activos = prestamos_por_material.get(material.pk, 0)
+
+        instancias = list(material.instancias.all())
+        if instancias:
+            disponibles_instancias = sum(1 for inst in instancias if inst.estado == "disponible")
+            if material.stock > len(instancias):
+                disponibles_instancias += material.stock - len(instancias)
+            return min(disponibles_instancias, max(material.stock - prestamos_activos, 0))
+
         return max(material.stock - prestamos_activos, 0)
 
 

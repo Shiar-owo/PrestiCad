@@ -5,7 +5,11 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils import timezone
 
-from apps.inventario.constants import ESTADOS_MATERIAL, TIPOS_MATERIAL
+from apps.inventario.constants import (
+    ESTADOS_INSTANCIA,
+    ESTADOS_MATERIAL,
+    TIPOS_MATERIAL,
+)
 from apps.inventario.validators import validar_foto
 
 # La taxonomía de Tiers es la misma que usa el módulo usuarios (RN03): un
@@ -168,3 +172,111 @@ class Material(models.Model):
     def requiere_garantia(self):
         """RN05: los materiales de alto valor exigen garantía al prestarlos."""
         return self.es_alto_valor
+
+    @property
+    def total_instancias(self):
+        """Total de instancias físicas. Fallback a stock si no tiene instancias creadas."""
+        instancias = list(self.instancias.all())
+        return len(instancias) if instancias else self.stock
+
+    @property
+    def resumen_estados(self):
+        """Desglose de estados operativos entre todas las instancias registradas."""
+        instancias = list(self.instancias.all())
+        if not instancias:
+            return {
+                "total": self.stock,
+                "disponible": self.stock if self.estado == "disponible" else 0,
+                "reservado": self.stock if self.estado == "reservado" else 0,
+                "prestado": self.stock if self.estado == "prestado" else 0,
+                "en_mantenimiento": self.stock if self.estado == "en_mantenimiento" else 0,
+                "de_baja": 0,
+            }
+
+        conteo = {
+            "total": len(instancias),
+            "disponible": 0,
+            "reservado": 0,
+            "prestado": 0,
+            "en_mantenimiento": 0,
+            "de_baja": 0,
+        }
+        for inst in instancias:
+            if inst.estado in conteo:
+                conteo[inst.estado] += 1
+        return conteo
+
+
+class InstanciaMaterial(models.Model):
+    """Copia física o ejemplar individual de un material.
+
+    Representa la unidad tangible que un usuario solicita, reserva o recibe
+    en préstamo. Cada instancia posee su propia identificación patrimonial
+    única (`codigo_ejemplar`), número de serie de fábrica opcional, estado
+    operativo (`disponible`, `reservado`, `prestado`, `en_mantenimiento`,
+    `de_baja`), estado físico y observaciones de almacén.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    material = models.ForeignKey(
+        Material,
+        on_delete=models.CASCADE,
+        related_name="instancias",
+        verbose_name="Material al que pertenece",
+    )
+    codigo_ejemplar = models.CharField(
+        max_length=50,
+        unique=True,
+        verbose_name="Código de ejemplar / patrimonial",
+        help_text="Identificador único de la copia física (ej. LIB-CLRS-01).",
+    )
+    numero_serie = models.CharField(
+        max_length=80,
+        blank=True,
+        default="",
+        verbose_name="Número de serie",
+        help_text="Número de serie del fabricante si aplica a esta unidad.",
+    )
+    estado = models.CharField(
+        max_length=20,
+        choices=ESTADOS_INSTANCIA,
+        default="disponible",
+        verbose_name="Estado de la instancia",
+    )
+    estado_fisico = models.CharField(
+        max_length=100,
+        blank=True,
+        default="Operativo",
+        verbose_name="Estado físico",
+        help_text="Condición física de este ejemplar (ej. Excelente, Bueno, Desgaste leve).",
+    )
+    observaciones = models.TextField(
+        blank=True,
+        default="",
+        verbose_name="Observaciones",
+        help_text="Notas específicas sobre esta copia (accesorios, defectos, etc.).",
+    )
+    ubicacion = models.CharField(
+        max_length=100,
+        blank=True,
+        default="",
+        verbose_name="Ubicación física",
+        help_text="Estante, repisa o lugar donde se guarda en almacén.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Instancia de Material"
+        verbose_name_plural = "Instancias de Material"
+        ordering = ["codigo_ejemplar"]
+        indexes = [
+            models.Index(fields=["material", "estado"], name="instancia_mat_est_idx"),
+            models.Index(fields=["codigo_ejemplar"], name="instancia_cod_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.material.nombre} [{self.codigo_ejemplar}] ({self.get_estado_display()})"
+
+    def esta_disponible(self):
+        return self.estado == "disponible"

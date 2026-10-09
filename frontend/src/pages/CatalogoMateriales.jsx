@@ -4,6 +4,7 @@ import { api } from '../api/client'
 import useTituloPagina from '../hooks/useTituloPagina'
 import BarraBusqueda from '../components/BarraBusqueda'
 import ResultadosMateriales from '../components/ResultadosMateriales'
+import FichaTecnicaModal from '../components/FichaTecnicaModal'
 
 function CatalogoMateriales({ onSeleccionarMaterial }) {
   useTituloPagina('Catálogo')
@@ -11,6 +12,7 @@ function CatalogoMateriales({ onSeleccionarMaterial }) {
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
   const [filtros, setFiltros] = useState({ q: '', categoria: '', estado: '' })
+  const [materialFicha, setMaterialFicha] = useState(null)
 
   useEffect(() => {
     buscarMateriales(filtros)
@@ -37,12 +39,19 @@ function CatalogoMateriales({ onSeleccionarMaterial }) {
     }
   }
 
+  function manejarSeleccionarMaterial(material) {
+    setMaterialFicha(material)
+    if (onSeleccionarMaterial) {
+      onSeleccionarMaterial(material)
+    }
+  }
+
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-8">
       <header className="mb-6">
         <h2 className="text-xl font-bold text-texto">Catálogo de Materiales</h2>
         <p className="mt-1 text-sm text-texto-suave">
-          Busca y consulta los materiales disponibles para préstamo y reserva.
+          Busca y consulta los materiales disponibles para préstamo y reserva. Haz clic en cualquier material para ver su ficha técnica completa.
         </p>
       </header>
 
@@ -52,8 +61,15 @@ function CatalogoMateriales({ onSeleccionarMaterial }) {
         materiales={materiales}
         cargando={cargando}
         error={error}
-        onSeleccionarMaterial={onSeleccionarMaterial}
+        onSeleccionarMaterial={manejarSeleccionarMaterial}
       />
+
+      {materialFicha && (
+        <FichaTecnicaModal
+          material={materialFicha}
+          onCerrar={() => setMaterialFicha(null)}
+        />
+      )}
     </div>
   )
 }

@@ -318,6 +318,11 @@ def registrar_prestamo(
         material.estado = "disponible"
         material.save(update_fields=("estado", "updated_at"))
 
+    instancia_disponible = material.instancias.filter(estado="disponible").first()
+    if instancia_disponible:
+        instancia_disponible.estado = "prestado"
+        instancia_disponible.save(update_fields=("estado", "updated_at"))
+
     return prestamo
 
 
@@ -513,6 +518,17 @@ def registrar_devolucion(
     if unidades_ocupadas == 0 and material.estado == "prestado":
         material.estado = "disponible"
         material.save(update_fields=("estado", "updated_at"))
+
+    instancia_prestada = material.instancias.filter(estado="prestado").first()
+    if instancia_prestada:
+        if resultado["hay_dano"]:
+            instancia_prestada.estado = "en_mantenimiento"
+            instancia_prestada.observaciones = (
+                f"Devuelto con {resultado['dano']} en préstamo #{prestamo.id}."
+            )
+        else:
+            instancia_prestada.estado = "disponible"
+        instancia_prestada.save(update_fields=("estado", "observaciones", "updated_at"))
 
     devolucion = Devolucion.objects.create(
         prestamo=prestamo,

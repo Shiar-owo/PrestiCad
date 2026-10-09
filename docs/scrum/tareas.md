@@ -182,6 +182,11 @@
 | T11.08 | Crear formulario de devolución con checklist de comparación | Frontend |
 | T11.09 | Mostrar resumen de sanciones/bonificaciones antes de confirmar | Frontend |
 | T11.10 | Integrar formulario con endpoint | Integración |
+| T11.11 | Generar y persistir el reporte PDF de daños con reportlab (RN10) | Backend |
+| T11.12 | Crear endpoint de descarga del reporte `GET /api/prestamos/devoluciones/{id}/reporte/` | Backend |
+| T11.13 | Mostrar descarga del reporte en la confirmación de devolución | Frontend |
+| T11.14 | Crear endpoint `GET /api/prestamos/devoluciones/reportes/` con filtros (daño, rango de fechas) | Backend |
+| T11.15 | Crear vista de listado de reportes de daños con filtros y descarga | Frontend |
 
 ---
 
@@ -303,8 +308,8 @@
 | 2. Inventario | 14 | 7 | 4 | 2 |
 | 3. Reservas | 21 | 11 | 5 | 3 |
 | 4. Préstamos | 16 | 9 | 4 | 2 |
-| 5. Devoluciones | 31 | 17 | 6 | 3 |
+| 5. Devoluciones | 36 | 20 | 8 | 3 |
 | 6. Prórrogas | 8 | 5 | 2 | 1 |
 | 7. Perfil/Historial | 13 | 5 | 5 | 2 |
 | 8. Reportes | 9 | 6 | 2 | 1 |
-| **Total** | **135** | **72** | **35** | **17** |
+| **Total** | **140** | **75** | **37** | **17** |

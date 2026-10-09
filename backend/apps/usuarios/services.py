@@ -10,6 +10,19 @@ from apps.usuarios.models import Credencial, Rol, Usuario
 INTENTOS_FALLIDOS_MAXIMOS = 5
 MINUTOS_BLOQUEO_CUENTA = 15
 
+# Rango del puntaje de reputación (RN03). El clamp vive aquí para que la
+# devolución (HU11) y la gestión de reputación (HU12) compartan fuente.
+PUNTOS_MINIMO_REPUTACION = -500
+PUNTOS_MAXIMO_REPUTACION = 500
+
+# Rangos de Tier por puntaje (RN03): avanzado 201..500, estándar -50..200,
+# restringido -500..-51. Cubren el rango completo de puntaje.
+RANGOS_TIER = (
+    ("avanzado", 201, 500),
+    ("estandar", -50, 200),
+    ("restringido", -500, -51),
+)
+
 
 class UsuariosError(Exception):
     """Error de negocio con campo y mensaje aptos para la API."""
@@ -165,3 +178,32 @@ def actualizar_perfil(usuario, *, nombre, telefono=None):
         campos_actualizados.append("telefono")
     usuario.save(update_fields=campos_actualizados)
     return usuario
+
+
+def puntaje_reputacion_ajustado(puntaje):
+    """Recorta un puntaje al rango válido [-500, 500] (RN03)."""
+    return max(PUNTOS_MINIMO_REPUTACION, min(PUNTOS_MAXIMO_REPUTACION, puntaje))
+
+
+def tier_por_puntaje(puntaje):
+    """Deriva el Tier de acceso a partir de un puntaje (RN03, HU12)."""
+    puntaje = puntaje_reputacion_ajustado(puntaje)
+    for tier, limite_inferior, limite_superior in RANGOS_TIER:
+        if limite_inferior <= puntaje <= limite_superior:
+            return tier
+    return "estandar"
+
+
+def actualizar_reputacion(usuario, delta):
+    """Aplica un delta al puntaje con clamp y recalcula el Tier (RN03).
+
+    Devuelve el puntaje resultante para que el llamante pueda componer el
+    resultado que persista o exponga.
+    """
+    puntaje_nuevo = puntaje_reputacion_ajustado(usuario.reputacion_puntaje + delta)
+    usuario.reputacion_puntaje = puntaje_nuevo
+    usuario.reputacion_tier = tier_por_puntaje(puntaje_nuevo)
+    usuario.save(
+        update_fields=["reputacion_puntaje", "reputacion_tier", "updated_at"],
+    )
+    return puntaje_nuevo

@@ -2,6 +2,7 @@ import { useContext } from 'react'
 import { Link } from 'react-router'
 import {
   ArrowUpRight,
+  FileText,
   Gauge,
   History,
   Package,
@@ -57,6 +58,12 @@ const ACCESOS = {
       icono: History,
     },
     {
+      etiqueta: 'Reportes de daños',
+      a: '/panel/reportes',
+      descripcion: 'Listado y descarga de reportes PDF',
+      icono: FileText,
+    },
+    {
       etiqueta: 'Vista catálogo',
       a: '/panel/catalogo',
       descripcion: 'Búsqueda y filtrado de materiales',
@@ -75,6 +82,12 @@ const ACCESOS = {
       a: '/panel/historial',
       descripcion: 'Consulta y filtrado del historial',
       icono: History,
+    },
+    {
+      etiqueta: 'Reportes de daños',
+      a: '/panel/reportes',
+      descripcion: 'Listado y descarga de reportes PDF',
+      icono: FileText,
     },
     {
       etiqueta: 'Gestionar roles',

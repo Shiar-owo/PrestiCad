@@ -6,3 +6,4 @@ python-dotenv==1.1.1
 Pillow==12.3.0
 django-cloudinary-storage==0.3.0
 cloudinary==1.46.2
+reportlab==5.0.1

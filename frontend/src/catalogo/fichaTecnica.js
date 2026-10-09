@@ -58,5 +58,31 @@ export function obtenerDatosFichaTecnica(material) {
     deduccionDanoTotal: material.deduccion_dano_total ?? 60,
     costoReparacionTexto: formatearMoneda(material.costo_reparacion),
     costoReposicionTexto: formatearMoneda(material.costo_reposicion),
+
+    // Instancias y ejemplares físicos
+    instancias: (Array.isArray(material.instancias) ? material.instancias : []).map(
+      (inst, index) => ({
+        id: inst.id || `inst-${index}`,
+        codigoEjemplar:
+          inst.codigo_ejemplar ||
+          `${material.codigo_inventario || 'MAT'}-${String(index + 1).padStart(2, '0')}`,
+        numeroSerie: inst.numero_serie || '—',
+        estado: inst.estado || 'disponible',
+        estadoLegible:
+          ETIQUETAS_ESTADO[inst.estado] || inst.estado_display || inst.estado || 'Disponible',
+        estadoFisico: inst.estado_fisico || 'Operativo',
+        observaciones: inst.observaciones || '',
+        ubicacion: inst.ubicacion || '',
+        esDisponible: inst.estado === 'disponible',
+      })
+    ),
+    resumenInstancias: material.resumen_instancias || {
+      total: material.stock ?? 1,
+      disponible: unidades,
+      reservado: 0,
+      prestado: 0,
+      en_mantenimiento: 0,
+      de_baja: 0,
+    },
   }
 }

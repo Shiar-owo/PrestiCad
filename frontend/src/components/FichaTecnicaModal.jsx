@@ -5,6 +5,7 @@ import {
   Cpu,
   FileText,
   Info,
+  Layers,
   ShieldAlert,
   Sparkles,
   Tag,
@@ -214,6 +215,91 @@ function FichaTecnicaModal({ material, onCerrar }) {
               <ItemEspecificacion etiqueta="Estado Físico" valor={ficha.estadoFisico} />
               <ItemEspecificacion etiqueta="Categoría" valor={ficha.tipoLegible} />
             </div>
+          </div>
+
+          {/* Sección de Ejemplares e Instancias Físicas */}
+          <div>
+            <div className="flex flex-col gap-2 border-b border-borde pb-2 sm:flex-row sm:items-center sm:justify-between">
+              <h4 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-texto">
+                <Layers className="size-4 text-acento-600 dark:text-acento-400" aria-hidden="true" />
+                Ejemplares e Instancias Físicas ({ficha.instancias?.length || ficha.stockTotal})
+              </h4>
+              <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                {ficha.resumenInstancias?.disponible > 0 && (
+                  <span className="inline-flex items-center gap-1 rounded-md bg-marca-50 px-2 py-0.5 font-medium text-marca-700 ring-1 ring-marca-300 dark:bg-marca-950/40 dark:text-marca-300 dark:ring-marca-800">
+                    <span className="size-1.5 rounded-full bg-marca-600" />
+                    {ficha.resumenInstancias.disponible} disponibles
+                  </span>
+                )}
+                {ficha.resumenInstancias?.reservado > 0 && (
+                  <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-0.5 font-medium text-amber-700 ring-1 ring-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-800">
+                    <span className="size-1.5 rounded-full bg-amber-600" />
+                    {ficha.resumenInstancias.reservado} reservadas
+                  </span>
+                )}
+                {ficha.resumenInstancias?.prestado > 0 && (
+                  <span className="inline-flex items-center gap-1 rounded-md bg-acento-50 px-2 py-0.5 font-medium text-acento-700 ring-1 ring-acento-300 dark:bg-acento-950/40 dark:text-acento-300 dark:ring-acento-800">
+                    <span className="size-1.5 rounded-full bg-acento-600" />
+                    {ficha.resumenInstancias.prestado} prestadas
+                  </span>
+                )}
+                {ficha.resumenInstancias?.en_mantenimiento > 0 && (
+                  <span className="inline-flex items-center gap-1 rounded-md bg-rose-50 px-2 py-0.5 font-medium text-rose-700 ring-1 ring-rose-300 dark:bg-rose-950/40 dark:text-rose-300 dark:ring-rose-800">
+                    <span className="size-1.5 rounded-full bg-rose-600" />
+                    {ficha.resumenInstancias.en_mantenimiento} en mantenimiento
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {ficha.instancias?.length > 0 ? (
+              <div className="mt-3 overflow-hidden rounded-xl border border-borde bg-superficie">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead className="border-b border-borde bg-superficie-alta/60 text-xs font-semibold uppercase tracking-wider text-texto-suave">
+                      <tr>
+                        <th scope="col" className="px-4 py-2.5">Código Ejemplar</th>
+                        <th scope="col" className="px-4 py-2.5">N° de Serie</th>
+                        <th scope="col" className="px-4 py-2.5">Estado</th>
+                        <th scope="col" className="px-4 py-2.5">Condición Física</th>
+                        <th scope="col" className="px-4 py-2.5">Ubicación / Observaciones</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-borde">
+                      {ficha.instancias.map((inst) => (
+                        <tr
+                          key={inst.id}
+                          className="transition-colors hover:bg-superficie-alta/40"
+                        >
+                          <td className="px-4 py-3 font-mono font-semibold text-acento-700 dark:text-acento-300">
+                            {inst.codigoEjemplar}
+                          </td>
+                          <td className="px-4 py-3 font-mono text-xs text-texto-suave">
+                            {inst.numeroSerie && inst.numeroSerie !== '—'
+                              ? inst.numeroSerie
+                              : 'No asignado'}
+                          </td>
+                          <td className="px-4 py-3">
+                            <BadgeEstado estado={inst.estado} texto={inst.estadoLegible} />
+                          </td>
+                          <td className="px-4 py-3 text-texto">
+                            {inst.estadoFisico || 'Operativo'}
+                          </td>
+                          <td className="px-4 py-3 text-xs text-texto-suave">
+                            {[inst.ubicacion, inst.observaciones].filter(Boolean).join(' • ') ||
+                              'Sin observaciones'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : (
+              <p className="mt-3 rounded-xl border border-borde bg-superficie p-3.5 text-xs text-texto-suave">
+                Este material cuenta con un registro global de {ficha.stockTotal} unidades sin instancias individualizadas en el sistema.
+              </p>
+            )}
           </div>
 
           {/* Sección de Reglas de Préstamo y Reputación (RN06) */}

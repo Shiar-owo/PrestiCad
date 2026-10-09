@@ -82,9 +82,32 @@ function TarjetaMaterial({ material, onSeleccionar }) {
             <span
               className={`font-semibold ${hayDisponibilidad ? 'text-marca-700 dark:text-marca-400' : 'text-error'}`}
             >
-              {unidades} {unidades === 1 ? 'unidad' : 'unidades'}
+              {unidades} de {material.stock ?? unidades} {unidades === 1 ? 'libre' : 'libres'}
             </span>
           </div>
+
+          {material.resumen_instancias &&
+            (material.resumen_instancias.reservado > 0 ||
+              material.resumen_instancias.en_mantenimiento > 0 ||
+              material.resumen_instancias.prestado > 0) && (
+              <div className="mt-1.5 flex flex-wrap gap-1 text-[11px] text-texto-suave">
+                {material.resumen_instancias.prestado > 0 && (
+                  <span className="rounded bg-superficie-alta px-1.5 py-0.5">
+                    {material.resumen_instancias.prestado} en préstamo
+                  </span>
+                )}
+                {material.resumen_instancias.reservado > 0 && (
+                  <span className="rounded bg-amber-50 px-1.5 py-0.5 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
+                    {material.resumen_instancias.reservado} reservada(s)
+                  </span>
+                )}
+                {material.resumen_instancias.en_mantenimiento > 0 && (
+                  <span className="rounded bg-rose-50 px-1.5 py-0.5 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
+                    {material.resumen_instancias.en_mantenimiento} en mant.
+                  </span>
+                )}
+              </div>
+            )}
 
           {tierLegible && (
             <p className="mt-1 text-xs text-texto-suave">Tier mínimo: {tierLegible}</p>

@@ -78,7 +78,59 @@ describe('obtenerDatosFichaTecnica', () => {
       deduccionDanoTotal: 100,
       costoReparacionTexto: 'S/. 120.00',
       costoReposicionTexto: 'S/. 1500.00',
+      instancias: [],
+      resumenInstancias: {
+        total: 4,
+        disponible: 3,
+        reservado: 0,
+        prestado: 0,
+        en_mantenimiento: 0,
+        de_baja: 0,
+      },
     })
+  })
+
+  it('procesa correctamente la lista de instancias físicas y su estado', () => {
+    const materialConInstancias = {
+      nombre: 'Libro CLRS',
+      codigo_inventario: 'LIB-CLRS',
+      stock: 2,
+      instancias: [
+        {
+          id: 'inst-1',
+          codigo_ejemplar: 'LIB-CLRS-01',
+          numero_serie: '',
+          estado: 'disponible',
+          estado_fisico: 'Excelente',
+          observaciones: 'Estante A-1',
+        },
+        {
+          id: 'inst-2',
+          codigo_ejemplar: 'LIB-CLRS-02',
+          numero_serie: '',
+          estado: 'en_mantenimiento',
+          estado_fisico: 'Hojas sueltas',
+          observaciones: 'En empastado',
+        },
+      ],
+      resumen_instancias: {
+        total: 2,
+        disponible: 1,
+        en_mantenimiento: 1,
+        prestado: 0,
+        reservado: 0,
+        de_baja: 0,
+      },
+    }
+
+    const ficha = obtenerDatosFichaTecnica(materialConInstancias)
+    expect(ficha.instancias).toHaveLength(2)
+    expect(ficha.instancias[0].codigoEjemplar).toBe('LIB-CLRS-01')
+    expect(ficha.instancias[0].esDisponible).toBe(true)
+    expect(ficha.instancias[1].codigoEjemplar).toBe('LIB-CLRS-02')
+    expect(ficha.instancias[1].esDisponible).toBe(false)
+    expect(ficha.resumenInstancias.disponible).toBe(1)
+    expect(ficha.resumenInstancias.en_mantenimiento).toBe(1)
   })
 
   it('aplica valores por defecto cuando las especificaciones no están registradas', () => {

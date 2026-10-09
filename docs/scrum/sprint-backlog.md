@@ -40,22 +40,28 @@ Material                        Prestamo
 ├── stock (unidades)
 └── created_at, updated_at
 
-Reserva
-├── id
-├── usuario_id (FK)
-├── material_id (FK)
-├── prioridad (Alta/Media/Baja)
-├── justificacion
-├── estado (Reservada/Cancelada/Completada)
-├── fecha_solicitud
-└── fecha_limite_recojo
+InstanciaMaterial               Reserva
+├── id (UUID)                   ├── id
+├── material_id (FK)            ├── usuario_id (FK)
+├── codigo_ejemplar (único)     ├── material_id (FK)
+├── numero_serie                ├── prioridad (Alta/Media/Baja)
+├── estado (disponible,         ├── justificacion
+│   reservado, prestado,        ├── estado (Reservada/Cancelada/Completada)
+│   en_mantenimiento, de_baja)  ├── fecha_solicitud
+├── estado_fisico               └── fecha_limite_recojo
+├── observaciones
+├── ubicacion
+└── created_at, updated_at
 ```
 
 > El agregado `Material` sigue el modelo de dominio DDD
 > (`docs/diagrams/ddd_detailed/03-inventario.puml`): `tipo`, `estado`, la ficha
 > técnica y los parámetros de reputación son value objects que en Django se
-> materializan como columnas de la tabla `inventario_material` (HU04). `stock` agrega el
-> conteo de unidades del criterio 5 de HU04.
+> materializan como columnas de la tabla `inventario_material` (HU04).
+> La entidad `InstanciaMaterial` gestiona los ejemplares físicos individuales en
+> `inventario_instancia_material`, permitiendo controlar números de serie, códigos de ejemplar,
+> estados físicos y ciclos de vida independientes, manteniendo sincronizado el `stock`
+> y la disponibilidad total para el catálogo (HU04/HU05).
 >
 > La ficha técnica incluye `foto`, un `ImageField` opcional (no una URL escrita
 > a mano). En desarrollo se guarda en `MEDIA_ROOT` y en producción en

@@ -78,12 +78,12 @@
 | 2 | Se pueden parametrizar por objeto: Tier mínimo requerido, bonificación por devolución a tiempo, deducción por tardanza, deducción por daño parcial, deducción por daño total |
 | 3 | Si no se parametrizan los valores de reputación, el sistema aplica valores por defecto configurables |
 | 4 | El código/identificador del material es único en el sistema |
-| 5 | Se puede registrar múltiples unidades del mismo material (stock) |
-| 6 | El estado inicial del material es "Disponible" |
+| 5 | Se puede registrar múltiples unidades del mismo material (stock); el sistema genera automáticamente las instancias físicas individuales (`InstanciaMaterial`) con códigos de ejemplar únicos |
+| 6 | El estado inicial de cada instancia física generada es "Disponible" |
 | 7 | Se pueden editar los datos y parámetros de un material existente |
-| 8 | El Gestor de Almacén puede cambiar el estado de un material a "En Mantenimiento" cuando sea necesario |
+| 8 | El Gestor de Almacén puede gestionar individualmente las instancias físicas (editar serie, estado físico, ubicación) y cambiar su estado a "En Mantenimiento" o "De Baja" |
 
-**Reglas de negocio:** RN06 (Parámetros por objeto), RN01 (Estados del material)
+**Reglas de negocio:** RN06 (Parámetros por objeto), RN01 (Disponibilidad por instancias)
 
 ---
 
@@ -97,11 +97,12 @@
 |---|------------------------|
 | 1 | Se puede buscar por nombre (búsqueda parcial, case-insensitive) |
 | 2 | Se puede filtrar por categoría (Equipo/Libro/Objeto) |
-| 3 | Se puede filtrar por estado (Disponible/Prestado/Reservado/En Mantenimiento) |
-| 4 | Los resultados muestran: nombre, categoría, estado, disponibilidad |
+| 3 | Se puede filtrar por estado y disponibilidad |
+| 4 | Los resultados muestran: nombre, categoría, desglose de disponibilidad consolidada (ej. unidades disponibles de stock total) |
 | 5 | La búsqueda responde en menos de 2 segundos |
 | 6 | Un usuario en Tier Restringido solo ve materiales de Tier básico/libros |
 | 7 | Un usuario nuevo puede completar una reserva en menos de 3 minutos sin capacitación |
+| 8 | Al abrir la ficha técnica o detalle de un material, se muestra el listado de ejemplares/instancias físicas individuales con su código, número de serie, estado actual y observaciones |
 
 **Reglas de negocio:** RN01 (Disponibilidad), RN03 (Filtrado por Tier)
 
@@ -119,12 +120,12 @@
 
 | # | Criterio de aceptación |
 |---|------------------------|
-| 1 | El usuario selecciona un material en estado "Disponible" |
+| 1 | El usuario selecciona un material que cuente con disponibilidad (al menos una instancia física disponible) |
 | 2 | El formulario solicita: nivel de prioridad (Alta/Media/Baja), descripción/justificación del uso |
 | 3 | El sistema verifica que el Tier del usuario cumple con el Tier mínimo requerido del material |
 | 4 | Si el Tier no es suficiente, el sistema rechaza la reserva mostrando la restricción |
 | 5 | Al confirmar, la reserva queda en estado "Reservada" con timestamp |
-| 6 | El material cambia a estado "Reservado" |
+| 6 | Se reserva la disponibilidad del material (o se reserva la instancia física asignada) |
 | 7 | La reserva tiene vigencia de 24 horas desde la hora pactada de recojo |
 | 8 | La reserva se asocia al usuario (se puede ver en "Mis reservas") |
 | 9 | Un usuario puede tener un máximo configurable de reservas activas simultáneas |
@@ -143,7 +144,7 @@
 |---|------------------------|
 | 1 | Un proceso periódico (cron job) verifica reservas en estado "Reservada" |
 | 2 | Si la reserva superó las 24 horas sin retiro, cambia a estado "Cancelada por Vencimiento" |
-| 3 | El material vuelve a estado "Disponible" |
+| 3 | La instancia física o cupo reservado vuelve a estado "Disponible" |
 | 4 | Se aplica una penalización al puntaje de reputación del usuario (configurable) |
 | 5 | El usuario recibe una notificación de cancelación |
 | 6 | El Gestor de Almacén puede ejecutar la cancelación manualmente antes del vencimiento |
@@ -185,13 +186,13 @@
 |---|------------------------|
 | 1 | El gestor busca el préstamo/reserva activa del usuario |
 | 2 | El sistema verifica la identidad y elegibilidad del usuario (Tier, sin impedimentos) |
-| 3 | El gestor completa un checklist digital del estado inicial del bien (descripción de condiciones, fotos si aplica) |
+| 3 | El gestor selecciona la instancia física/ejemplar específico a entregar y completa un checklist digital del estado inicial del bien (descripción de condiciones, número de serie, fotos si aplica) |
 | 4 | Para equipos de alto valor o préstamos por excepción académica, se registra la garantía (documento de identidad + compromiso firmado) |
 | 5 | Si la garantía es requerida y no se entrega, el sistema no permite completar el préstamo |
 | 6 | El gestor indica el tiempo de préstamo (días) |
 | 7 | El sistema calcula y muestra la fecha límite de devolución |
 | 8 | El estado del préstamo cambia a "Activo" |
-| 9 | El estado del material cambia a "Prestado" |
+| 9 | El estado de la instancia física seleccionada cambia a "Prestado", reduciendo en 1 el stock disponible del material |
 
 **Reglas de negocio:** RN05, RN09
 
@@ -228,8 +229,8 @@
 | # | Criterio de aceptación |
 |---|------------------------|
 | 1 | El gestor busca el préstamo activo del material |
-| 2 | El sistema muestra el checklist de estado inicial registrado al momento de la entrega |
-| 3 | El gestor completa un checklist de devolución (nuevo checklist) |
+| 2 | El sistema muestra el checklist de estado inicial registrado al momento de la entrega del ejemplar |
+| 3 | El gestor completa un checklist de devolución (nuevo checklist de la instancia devuelta) |
 | 4 | El sistema compara ambos checklist y resalta las diferencias (daños nuevos) |
 | 5 | El sistema compara la fecha de devolución con la fecha límite |
 | 6 | Si devolvió a tiempo: aplica bonificación de puntos (parámetro del objeto) |
@@ -237,7 +238,7 @@
 | 8 | Si hay daño nuevo: aplica penalización de puntos + genera cobro de reparación/reposición |
 | 9 | Se actualiza el puntaje de reputación del usuario |
 | 10 | El estado del préstamo cambia a "Devuelto" |
-| 11 | El estado del material cambia a "Disponible" |
+| 11 | El estado de la instancia física devuelta cambia a "Disponible" (o a "En Mantenimiento" si presentó daños según el checklist), recalculando la disponibilidad del material |
 | 12 | Se registra el historial completo de la operación |
 | 13 | Ante daño parcial o total se genera un reporte en PDF con los datos del préstamo, el prestatario, el gestor, los elementos dañados y la sanción aplicada |
 | 14 | El gestor y el administrador pueden consultar el listado de reportes de daños con filtros (tipo de daño y rango de fechas) y descargar cada PDF |

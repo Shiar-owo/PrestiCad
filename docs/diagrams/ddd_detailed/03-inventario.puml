@@ -58,6 +58,9 @@ class Material <<Aggregate Root>> {
   -atributosRep : AtributosReputacion
   __ Inventario __
   stock : Integer
+  __ Propiedades Derivadas __
+  +total_instancias : Integer
+  +resumen_estados : Dict
   __ Metadata __
   created_at : DateTime
   updated_at : DateTime
@@ -66,6 +69,38 @@ class Material <<Aggregate Root>> {
   +estaDisponible() : Boolean
   +requiereGarantia() : Boolean
   +obtenerTierMinimo() : Tier
+}
+
+class InstanciaMaterial <<Entity>> {
+  --
+  __ Identidad __
+  id : UUID
+  material_id : UUID
+  codigo_ejemplar : String
+  numero_serie : String
+  __ Estado y Condición __
+  -estado : EstadoInstancia
+  estado_fisico : String
+  observaciones : String
+  ubicacion : String
+  __ Metadata __
+  created_at : DateTime
+  updated_at : DateTime
+  --
+  +cambiarEstado(nuevo) : void
+  +estaDisponible() : Boolean
+  +darDeBaja(motivo) : void
+}
+
+class EstadoInstancia <<Value Object>> {
+  DISPONIBLE
+  RESERVADO
+  PRESTADO
+  EN_MANTENIMIENTO
+  DE_BAJA
+  --
+  +esDisponible() : Boolean
+  +puedePrestarse() : Boolean
 }
 
 class EstadoMaterial <<Value Object>> {
@@ -117,6 +152,8 @@ Material *-- EstadoMaterial
 Material *-- TipoMaterial
 Material "0..1" *-- FichaTecnica
 Material *-- AtributosReputacion
+Material "1" *-- "1..*" InstanciaMaterial : posee ejemplares >
+InstanciaMaterial *-- EstadoInstancia
 
 ' ============================================================
 ' REGLAS DE NEGOCIO
@@ -125,13 +162,15 @@ Material *-- AtributosReputacion
 note top of Material
   <b>RN01 - Disponibilidad de Materiales</b>
   ═══════════════════════════════════════
-  Un material solo puede prestarse si
-  su estado en inventario es <b>"Disponible"</b>
+  Un material tiene disponibilidad mientras
+  cuente con al menos una instancia física
+  en estado <b>"Disponible"</b>
   ──────────────────────────────────────
-  Estados que rechazan préstamo:
+  Estados de instancia que no prestan:
   • En Mantenimiento
   • Reservado
   • Prestado
+  • De Baja
 end note
 
 note bottom of AtributosReputacion
@@ -159,28 +198,21 @@ note right of Material
   Ejemplos: laptops, proyectores, cámaras
 end note
 
-note right of EstadoMaterial
-  <b>RF03 - Estados</b>
-  El inventario gestiona
-  el estado de cada material
+note right of EstadoInstancia
+  <b>RF03 - Estados de Instancia</b>
+  Control individual de ciclo
+  de vida de cada ejemplar físico
 end note
 
 note bottom of Material
-  <b>Implementado en HU04 (T04.01/T04.02)</b>
+  <b>Implementado en HU04 / HU05</b>
   ═══════════════════════════════
-  En el modelo Django los value objects
-  <b>FichaTecnica</b> y <b>AtributosReputacion</b>
-  se materializan como <b>columnas</b> de la
-  tabla <b>inventario_material</b> (id UUID, snake_case).
-  • <b>stock</b>: unidades registradas (HU04, crit. 5)
-  • <b>created_at/updated_at</b> en lugar de fechaRegistro
-  • <b>+cambiarEstado()</b> se expone como servicio
-    `cambiar_estado_material` + PATCH del endpoint
-  • Los <i>default</i> de reputación son configurables
-    en <b>settings.MATERIALES_REPUTACION_DEFAULTS</b>
-  • <b>foto</b>: <i>ImageField</i> opcional, no una URL. En
-    desarrollo va a <b>MEDIA_ROOT</b> y en producción a
-    Cloudinary; se aceptan JPEG, PNG y WEBP de hasta 5 MB
+  • <b>Material</b>: catálogo general y configuración de reputación.
+  • <b>InstanciaMaterial</b>: ejemplares físicos individuales con
+    `codigo_ejemplar`, `numero_serie`, `estado_fisico`, `ubicacion`.
+  • <b>stock</b>: sincronizado automáticamente con total de instancias.
+  • <b>resumen_estados</b>: disponibilidad en tiempo real para catálogo.
+  • Endpoints: `/api/materiales/<id>/instancias/` y `/api/instancias/<id>/`
 end note
 
 @enduml

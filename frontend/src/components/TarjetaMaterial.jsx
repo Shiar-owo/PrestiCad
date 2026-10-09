@@ -1,4 +1,4 @@
-import { Box } from 'lucide-react'
+import { Box, FileText } from 'lucide-react'
 
 import { ETIQUETAS_TIER, ETIQUETAS_TIPO } from '../constantes/catalogo'
 import Boton from './ui/Boton'
@@ -11,9 +11,31 @@ function TarjetaMaterial({ material, onSeleccionar }) {
 
   const unidades = material.unidades_disponibles ?? material.stock ?? 0
   const hayDisponibilidad = material.estado === 'disponible' && unidades > 0
+  const especificacionesBreves = [material.marca, material.modelo].filter(Boolean).join(' • ')
+
+  function manejarClick() {
+    if (onSeleccionar) {
+      onSeleccionar(material)
+    }
+  }
+
+  function manejarKeyDown(evento) {
+    if (evento.key === 'Enter' || evento.key === ' ') {
+      evento.preventDefault()
+      manejarClick()
+    }
+  }
 
   return (
-    <Tarjeta className="flex flex-col overflow-hidden" data-id={material.id}>
+    <Tarjeta
+      className="flex flex-col overflow-hidden cursor-pointer transition-all hover:border-marca-400 hover:shadow-md dark:hover:border-marca-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-acento-600"
+      data-id={material.id}
+      tabIndex={0}
+      role="button"
+      onClick={manejarClick}
+      onKeyDown={manejarKeyDown}
+      aria-label={`Ver ficha técnica de ${material.nombre}`}
+    >
       <div className="relative flex h-40 items-center justify-center bg-superficie-alta">
         {material.foto ? (
           <img
@@ -44,6 +66,12 @@ function TarjetaMaterial({ material, onSeleccionar }) {
 
         <h4 className="mt-2 text-base font-semibold text-texto">{material.nombre}</h4>
 
+        {especificacionesBreves && (
+          <p className="mt-0.5 text-xs font-medium text-acento-700 dark:text-acento-300">
+            {especificacionesBreves}
+          </p>
+        )}
+
         {material.descripcion && (
           <p className="mt-1 line-clamp-2 text-sm text-texto-suave">{material.descripcion}</p>
         )}
@@ -63,18 +91,20 @@ function TarjetaMaterial({ material, onSeleccionar }) {
           )}
         </div>
 
-        {onSeleccionar && (
-          <div className="mt-3">
-            <Boton
-              variante="secundario"
-              tipo="button"
-              className="w-full"
-              onClick={() => onSeleccionar(material)}
-            >
-              Ver detalle
-            </Boton>
-          </div>
-        )}
+        <div className="mt-4">
+          <Boton
+            variante="secundario"
+            tipo="button"
+            className="w-full"
+            icono={FileText}
+            onClick={(e) => {
+              e.stopPropagation()
+              manejarClick()
+            }}
+          >
+            Ver ficha técnica
+          </Boton>
+        </div>
       </div>
     </Tarjeta>
   )

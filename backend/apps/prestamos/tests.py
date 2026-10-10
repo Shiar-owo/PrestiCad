@@ -13,7 +13,7 @@ from rest_framework.test import APIClient, APITestCase
 from apps.inventario.models import Material
 from apps.inventario.serializers import MaterialSerializer
 from apps.inventario.services import registrar_material
-from apps.prestamos.models import Devolucion, Prestamo
+from apps.prestamos.models import Devolucion, Garantia, Prestamo, ruta_documento_garantia
 from apps.prestamos.services import (
     PrestamoError,
     consultar_historial_prestamos,
@@ -40,6 +40,18 @@ class AlmacenamientoGarantiaTestCase(SimpleTestCase):
     def test_storage_privado_no_genera_url_publica(self):
         with self.assertRaisesRegex(ValueError, "endpoint protegido"):
             storages["garantias"].url("documentos/prueba.pdf")
+
+    def test_los_campos_de_garantia_usan_el_storage_privado(self):
+        for nombre in ("documento_identidad", "compromiso_responsabilidad"):
+            campo = Garantia._meta.get_field(nombre)
+            self.assertIs(campo.storage, storages["garantias"])
+
+    def test_la_ruta_de_garantia_no_usa_el_nombre_original(self):
+        ruta = ruta_documento_garantia(None, "dni-original.pdf")
+
+        self.assertTrue(ruta.startswith("garantias/"))
+        self.assertTrue(ruta.endswith(".pdf"))
+        self.assertNotIn("dni-original", ruta)
 
 
 def crear_usuario(email, dni, rol="prestatario", **cambios):
@@ -99,6 +111,16 @@ class RegistrarPrestamoServiceTestCase(TestCase):
         }
         datos.update(cambios)
         return registrar_prestamo(**datos)
+
+    def test_garantia_tiene_estado_pendiente_y_se_asocia_al_prestamo(self):
+        prestamo = self._registrar()
+
+        garantia = Garantia.objects.create(prestamo=prestamo)
+
+        self.assertEqual(garantia.tipo, "documento_y_compromiso")
+        self.assertEqual(garantia.estado, "pendiente")
+        self.assertIsNone(garantia.fecha_registro)
+        self.assertEqual(prestamo.garantia, garantia)
 
     def test_registra_prestamo_activo_con_fecha_limite_y_checklist(self):
         antes = timezone.now()

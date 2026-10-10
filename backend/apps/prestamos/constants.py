@@ -7,6 +7,15 @@ ESTADOS_PRESTAMO = [
     ("vencido", "Vencido"),
 ]
 
+TIPOS_GARANTIA = [
+    ("documento_y_compromiso", "Documento y compromiso"),
+]
+
+ESTADOS_GARANTIA = [
+    ("pendiente", "Pendiente"),
+    ("registrada", "Registrada"),
+]
+
 ESTADOS_QUE_OCUPAN_UNIDAD = ("activo", "vencido")
 
 # Solo los préstamos entregados y no devueltos admiten una devolución (HU11).

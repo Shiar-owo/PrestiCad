@@ -15,6 +15,7 @@ import EstadoVacio from '../components/ui/EstadoVacio'
 import SubidaDocumentoPDF from '../components/prestamos/SubidaDocumentoPDF'
 import { TAMANO_MAXIMO_GARANTIA_MB } from '../constantes/garantia'
 import { construirSolicitudPrestamo } from '../prestamos/solicitudPrestamo'
+import { crearOpcionesInstancia } from '../prestamos/instanciasPrestamo'
 
 const FORMULARIO_INICIAL = {
   dni: '',
@@ -49,17 +50,6 @@ const OPCIONES_MATERIAL = (materiales) => [
   ...materiales.map((material) => ({
     valor: String(material.id),
     etiqueta: `${material.nombre} — ${material.codigo_inventario} (${material.unidades_disponibles} disponibles)`,
-  })),
-]
-
-const OPCIONES_INSTANCIA = (instancias, cargando) => [
-  {
-    valor: '',
-    etiqueta: cargando ? 'Cargando instancias…' : 'Selecciona una instancia',
-  },
-  ...instancias.map((instancia) => ({
-    valor: String(instancia.id),
-    etiqueta: instancia.codigo_ejemplar,
   })),
 ]
 
@@ -326,7 +316,7 @@ function RegistrarPrestamo() {
             />
             <Campo
               etiqueta="Instancia disponible"
-              opciones={OPCIONES_INSTANCIA(instancias, cargandoInstancias)}
+              opciones={crearOpcionesInstancia(instancias, cargandoInstancias)}
               valor={formulario.instanciaId}
               onCambio={(evento) => actualizar('instanciaId', evento.target.value)}
               error={errores.instancia_id}

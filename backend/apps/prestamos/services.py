@@ -529,16 +529,25 @@ def registrar_devolucion(
         material.estado = "disponible"
         material.save(update_fields=("estado", "updated_at"))
 
-    instancia_prestada = material.instancias.filter(estado="prestado").first()
-    if instancia_prestada:
-        if resultado["hay_dano"]:
-            instancia_prestada.estado = "en_mantenimiento"
-            instancia_prestada.observaciones = (
-                f"Devuelto con {resultado['dano']} en préstamo #{prestamo.id}."
-            )
-        else:
-            instancia_prestada.estado = "disponible"
-        instancia_prestada.save(update_fields=("estado", "observaciones", "updated_at"))
+    estado_final_instancia = "en_mantenimiento" if resultado["hay_dano"] else "disponible"
+    observaciones_instancia = (
+        f"Devuelto con {resultado['dano']} en préstamo #{prestamo.id}."
+        if resultado["hay_dano"]
+        else None
+    )
+    try:
+        servicios_inventario.registrar_devolucion_instancia(
+            material.id,
+            instancia_id=prestamo.instancia_id,
+            estado_final=estado_final_instancia,
+            observaciones=observaciones_instancia,
+        )
+    except servicios_inventario.InventarioError as error:
+        raise PrestamoError(
+            error.campo,
+            error.mensaje,
+            status_code=error.status_code,
+        ) from error
 
     devolucion = Devolucion.objects.create(
         prestamo=prestamo,

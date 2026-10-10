@@ -499,6 +499,58 @@ def marcar_instancia_prestada(material_id, instancia_id=None):
     }
 
 
+@transaction.atomic
+def registrar_devolucion_instancia(
+    material_id,
+    *,
+    instancia_id=None,
+    estado_final,
+    observaciones=None,
+):
+    """Actualiza la instancia asociada o aplica el fallback de préstamos históricos."""
+    estados_validos = {valor for valor, _ in ESTADOS_INSTANCIA}
+    if estado_final not in estados_validos:
+        raise InventarioError("estado", "El estado de la instancia no es válido.")
+
+    if instancia_id is None:
+        instancia = (
+            InstanciaMaterial.objects.select_for_update()
+            .filter(material_id=material_id, estado="prestado")
+            .first()
+        )
+        if instancia is None:
+            return None
+    else:
+        try:
+            instancia = InstanciaMaterial.objects.select_for_update().get(pk=instancia_id)
+        except (InstanciaMaterial.DoesNotExist, ValueError, TypeError) as error:
+            raise InventarioError(
+                "instancia_id",
+                "No existe la instancia asociada al préstamo.",
+                status_code=404,
+            ) from error
+
+        if instancia.material_id != material_id:
+            raise InventarioError(
+                "instancia_id",
+                "La instancia asociada no pertenece al material del préstamo.",
+            )
+        if instancia.estado != "prestado":
+            raise InventarioError(
+                "instancia_id",
+                "La instancia asociada no figura como prestada.",
+                status_code=409,
+            )
+
+    instancia.estado = estado_final
+    campos_actualizados = ["estado", "updated_at"]
+    if observaciones is not None:
+        instancia.observaciones = observaciones
+        campos_actualizados.append("observaciones")
+    instancia.save(update_fields=campos_actualizados)
+    return {"id": instancia.id, "estado": instancia.estado}
+
+
 def crear_instancia_material(
     material_id,
     *,

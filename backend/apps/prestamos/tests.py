@@ -914,6 +914,48 @@ class RegistrarDevolucionServiceTestCase(DevolucionBaseTestCase):
         self.material.refresh_from_db()
         self.assertEqual(self.material.estado, "disponible")
 
+    def test_devuelve_la_instancia_asociada_al_prestamo(self):
+        material = crear_material(codigo_inventario="EQ-DEVOLUCION-EXACTA", stock=2)
+        instancias = list(material.instancias.order_by("codigo_ejemplar"))
+        segundo_prestatario = crear_usuario("segundo-dev-exacto@unsa.edu.pe", "10000027")
+        primero = registrar_prestamo(
+            dni_prestatario=self.prestatario.dni,
+            material_id=material.id,
+            instancia_id=instancias[0].id,
+            tiempo_prestamo_dias=7,
+            checklist_inicial=CHECKLIST,
+            registrado_por=self.gestor,
+        )
+        segundo = registrar_prestamo(
+            dni_prestatario=segundo_prestatario.dni,
+            material_id=material.id,
+            instancia_id=instancias[1].id,
+            tiempo_prestamo_dias=7,
+            checklist_inicial=CHECKLIST,
+            registrado_por=self.gestor,
+        )
+
+        registrar_devolucion(
+            prestamo_id=segundo.id,
+            checklist_devolucion=self.checklist_ok,
+            realizado_por=self.gestor,
+        )
+
+        instancias[0].refresh_from_db()
+        instancias[1].refresh_from_db()
+        self.assertEqual(primero.instancia_id, instancias[0].id)
+        self.assertEqual(instancias[0].estado, "prestado")
+        self.assertEqual(instancias[1].estado, "disponible")
+
+    def test_prestamo_historico_sin_instancia_usa_fallback(self):
+        self.prestamo.instancia = None
+        self.prestamo.save(update_fields=["instancia"])
+
+        self._devolver()
+
+        instancia = self.material.instancias.get()
+        self.assertEqual(instancia.estado, "disponible")
+
     def test_tardanza_descuenta_proporcional_sin_bonificacion(self):
         devolucion = self._devolver(
             fecha_devolucion=self.prestamo.fecha_limite + timedelta(days=1, hours=1),

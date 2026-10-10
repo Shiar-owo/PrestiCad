@@ -16,7 +16,7 @@ function Boton({
   const variantes = {
     primario: 'bg-marca-700 text-white hover:bg-marca-800 disabled:bg-neutro',
     secundario:
-      'border border-borde bg-white text-texto hover:bg-superficie-alta disabled:text-texto-suave',
+      'border border-borde bg-white text-texto hover:bg-superficie-alta dark:bg-superficie dark:text-texto dark:hover:bg-superficie-alta disabled:text-texto-suave',
     peligro: 'bg-error text-white hover:bg-red-700 disabled:bg-red-300',
     fantasma: 'bg-transparent text-acento-600 hover:bg-acento-50 disabled:text-texto-suave',
   }

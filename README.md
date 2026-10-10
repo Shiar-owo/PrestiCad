@@ -76,6 +76,18 @@ Servicios:
 - **backend** — API en `http://localhost:8000`; ejecuta las migraciones al arrancar.
 - **frontend** — SPA en `http://localhost:5173`; proxy `/api` → backend.
 
+### Cuentas compartidas para pruebas
+
+Al iniciar el backend en desarrollo, se crean automáticamente tres cuentas de prueba. Todas usan la contraseña `PresticadDemo2026!`:
+
+| Rol | Correo |
+|-----|--------|
+| Prestatario | `prestatario@presticad.test` |
+| Administrador | `administrador@presticad.test` |
+| Gestor de Almacén | `gestor@presticad.test` |
+
+La creación es idempotente: si las cuentas ya existen, no se restablecen sus contraseñas ni roles. Estas credenciales públicas son solo para desarrollo local; nunca deben usarse en producción.
+
 Tests:
 
 ```bash

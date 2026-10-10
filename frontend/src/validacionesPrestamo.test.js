@@ -4,6 +4,7 @@ import {
   calcularFechaLimiteEstimada,
   validarFormularioPrestamo,
 } from './validacionesPrestamo'
+import { TAMANO_MAXIMO_GARANTIA_BYTES } from './constantes/garantia'
 
 const formularioValido = {
   dni: '12345678',
@@ -11,8 +12,6 @@ const formularioValido = {
   instanciaId: 'instancia-1',
   dias: '5',
   checklist: [{ elemento: 'Pantalla', condicion: 'Sin daños' }],
-  documentoIdentidadRecibido: false,
-  compromisoFirmadoRecibido: false,
 }
 
 describe('validarFormularioPrestamo', () => {
@@ -46,14 +45,50 @@ describe('validarFormularioPrestamo', () => {
     expect(errores).toHaveProperty('instancia_id')
   })
 
-  it('exige confirmar ambos documentos para un material de alto valor', () => {
+  it('exige ambos PDF para un material de alto valor', () => {
     const errores = validarFormularioPrestamo({
       ...formularioValido,
       material: { id: 'mat-2', es_alto_valor: true },
     })
 
-    expect(errores).toHaveProperty('garantia_documento_identidad_recibido')
-    expect(errores).toHaveProperty('garantia_compromiso_firmado_recibido')
+    expect(errores).toHaveProperty('documento_identidad')
+    expect(errores).toHaveProperty('compromiso_responsabilidad')
+  })
+
+  it('rechaza extensión, tipo MIME y tamaño incorrectos en los PDF', () => {
+    const errores = validarFormularioPrestamo({
+      ...formularioValido,
+      material: { id: 'mat-2', es_alto_valor: true },
+      documentoIdentidad: { name: 'dni.txt', type: 'application/pdf', size: 100 },
+      compromisoResponsabilidad: {
+        name: 'compromiso.pdf',
+        type: 'text/plain',
+        size: TAMANO_MAXIMO_GARANTIA_BYTES + 1,
+      },
+    })
+
+    expect(errores.documento_identidad).toMatch(/extensión \.pdf/)
+    expect(errores.compromiso_responsabilidad).toMatch(/application\/pdf/)
+  })
+
+  it('rechaza un PDF que supera el tamaño máximo configurado', () => {
+    const errores = validarFormularioPrestamo({
+      ...formularioValido,
+      material: { id: 'mat-2', es_alto_valor: true },
+      documentoIdentidad: {
+        name: 'dni.pdf',
+        type: 'application/pdf',
+        size: TAMANO_MAXIMO_GARANTIA_BYTES + 1,
+      },
+      compromisoResponsabilidad: {
+        name: 'compromiso.pdf',
+        type: 'application/pdf',
+        size: 100,
+      },
+    })
+
+    expect(errores.documento_identidad).toMatch(/no debe superar/)
+    expect(errores).not.toHaveProperty('compromiso_responsabilidad')
   })
 
   it('calcula la fecha estimada y rechaza duraciones inválidas', () => {

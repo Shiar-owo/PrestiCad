@@ -8,6 +8,7 @@ import {
 const formularioValido = {
   dni: '12345678',
   material: { id: 'mat-1', es_alto_valor: false },
+  instanciaId: 'instancia-1',
   dias: '5',
   checklist: [{ elemento: 'Pantalla', condicion: 'Sin daños' }],
   documentoIdentidadRecibido: false,
@@ -24,14 +25,25 @@ describe('validarFormularioPrestamo', () => {
       ...formularioValido,
       dni: 'abc',
       material: null,
+      instanciaId: '',
       dias: 0,
       checklist: [{ elemento: '', condicion: '' }],
     })
 
     expect(errores).toHaveProperty('dni')
     expect(errores).toHaveProperty('material')
+    expect(errores).toHaveProperty('instancia_id')
     expect(errores).toHaveProperty('dias')
     expect(errores).toHaveProperty('checklist')
+  })
+
+  it('requiere seleccionar una instancia específica del material', () => {
+    const errores = validarFormularioPrestamo({
+      ...formularioValido,
+      instanciaId: '',
+    })
+
+    expect(errores).toHaveProperty('instancia_id')
   })
 
   it('exige confirmar ambos documentos para un material de alto valor', () => {

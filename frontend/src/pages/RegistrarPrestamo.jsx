@@ -16,6 +16,7 @@ import EstadoVacio from '../components/ui/EstadoVacio'
 const FORMULARIO_INICIAL = {
   dni: '',
   materialId: '',
+  instanciaId: '',
   dias: '7',
   checklist: [{ elemento: '', condicion: '', observacion: '' }],
   documentoIdentidadRecibido: false,
@@ -48,19 +49,62 @@ const OPCIONES_MATERIAL = (materiales) => [
   })),
 ]
 
+const OPCIONES_INSTANCIA = (instancias, cargando) => [
+  {
+    valor: '',
+    etiqueta: cargando ? 'Cargando instancias…' : 'Selecciona una instancia',
+  },
+  ...instancias.map((instancia) => ({
+    valor: String(instancia.id),
+    etiqueta: instancia.codigo_ejemplar,
+  })),
+]
+
 function RegistrarPrestamo() {
   useTituloPagina('Registrar entrega')
   const [materiales, setMateriales] = useState([])
+  const [instancias, setInstancias] = useState([])
   const [formulario, setFormulario] = useState(FORMULARIO_INICIAL)
   const [cargando, setCargando] = useState(true)
+  const [cargandoInstancias, setCargandoInstancias] = useState(false)
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
+  const [errorInstancias, setErrorInstancias] = useState('')
   const [errores, setErrores] = useState({})
   const [prestamoCreado, setPrestamoCreado] = useState(null)
 
   useEffect(() => {
     cargarMateriales()
   }, [])
+
+  useEffect(() => {
+    let cancelado = false
+    setInstancias([])
+    setErrorInstancias('')
+
+    if (!formulario.materialId) {
+      setCargandoInstancias(false)
+      return () => {
+        cancelado = true
+      }
+    }
+
+    setCargandoInstancias(true)
+    api.get(`/materiales/${formulario.materialId}/instancias/?estado=disponible`)
+      .then((resultado) => {
+        if (!cancelado) setInstancias(resultado)
+      })
+      .catch(() => {
+        if (!cancelado) setErrorInstancias('No se pudieron cargar las instancias disponibles.')
+      })
+      .finally(() => {
+        if (!cancelado) setCargandoInstancias(false)
+      })
+
+    return () => {
+      cancelado = true
+    }
+  }, [formulario.materialId])
 
   async function cargarMateriales() {
     setCargando(true)
@@ -89,12 +133,26 @@ function RegistrarPrestamo() {
     const camposError = {
       dni: 'dni',
       materialId: 'material',
+      instanciaId: 'instancia_id',
       dias: 'dias',
       documentoIdentidadRecibido: 'garantia_documento_identidad_recibido',
       compromisoFirmadoRecibido: 'garantia_compromiso_firmado_recibido',
     }
-    setFormulario((actual) => ({ ...actual, [campo]: valor }))
-    setErrores((actual) => ({ ...actual, [camposError[campo] || campo]: undefined }))
+    setFormulario((actual) => ({
+      ...actual,
+      [campo]: valor,
+      ...(campo === 'materialId' ? { instanciaId: '' } : {}),
+    }))
+    setErrores((actual) => ({
+      ...actual,
+      [camposError[campo] || campo]: undefined,
+      ...(campo === 'materialId' ? { instancia_id: undefined } : {}),
+    }))
+    if (campo === 'materialId') {
+      setInstancias([])
+      setCargandoInstancias(Boolean(valor))
+      setErrorInstancias('')
+    }
     setError('')
     setPrestamoCreado(null)
   }
@@ -129,6 +187,7 @@ function RegistrarPrestamo() {
     const datosValidacion = {
       dni: formulario.dni,
       material: materialSeleccionado,
+      instanciaId: formulario.instanciaId,
       dias: formulario.dias,
       checklist: formulario.checklist,
       documentoIdentidadRecibido: formulario.documentoIdentidadRecibido,
@@ -145,6 +204,7 @@ function RegistrarPrestamo() {
       const respuesta = await api.post('/prestamos/', {
         dni_prestatario: formulario.dni.trim(),
         material_id: materialSeleccionado.id,
+        instancia_id: formulario.instanciaId,
         tiempo_prestamo_dias: Number(formulario.dias),
         checklist_inicial: formulario.checklist.map((item) => ({
           elemento: item.elemento.trim(),
@@ -158,7 +218,19 @@ function RegistrarPrestamo() {
       setFormulario(FORMULARIO_INICIAL)
       await cargarMateriales()
     } catch (errorApi) {
-      setError(mensajeApi(errorApi))
+      const erroresApi = errorApi instanceof ErrorApi ? errorApi.datos : null
+      const errorInstancia = erroresApi?.instancia_id
+      if (errorInstancia) {
+        setErrores((actual) => ({
+          ...actual,
+          instancia_id: Array.isArray(errorInstancia)
+            ? errorInstancia[0]
+            : String(errorInstancia),
+        }))
+        setError('')
+      } else {
+        setError(mensajeApi(errorApi))
+      }
     } finally {
       setGuardando(false)
     }
@@ -229,6 +301,31 @@ function RegistrarPrestamo() {
               error={errores.material}
               requerido
             />
+            <Campo
+              etiqueta="Instancia disponible"
+              opciones={OPCIONES_INSTANCIA(instancias, cargandoInstancias)}
+              valor={formulario.instanciaId}
+              onCambio={(evento) => actualizar('instanciaId', evento.target.value)}
+              error={errores.instancia_id}
+              ayuda={!materialSeleccionado
+                ? 'Selecciona primero el material.'
+                : cargandoInstancias
+                  ? 'Consultando sus instancias disponibles.'
+                  : errorInstancias
+                    ? 'No se pudo consultar el inventario de instancias.'
+                    : instancias.length > 0
+                      ? 'El código identifica el ejemplar físico que se entregará.'
+                      : 'No hay instancias disponibles para este material.'}
+              deshabilitado={!materialSeleccionado || cargandoInstancias || instancias.length === 0}
+              requerido
+            />
+            {errorInstancias && <ErrorAlerta mensaje={errorInstancias} />}
+            {materialSeleccionado && !cargandoInstancias && !errorInstancias && instancias.length === 0 && (
+              <EstadoVacio
+                titulo="Sin instancias disponibles"
+                mensaje="Este material no tiene ejemplares disponibles para prestar."
+              />
+            )}
             <Campo
               etiqueta="Duración del préstamo (días)"
               tipo="number"

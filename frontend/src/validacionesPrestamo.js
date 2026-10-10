@@ -1,6 +1,7 @@
 export function validarFormularioPrestamo({
   dni,
   material,
+  instanciaId,
   dias,
   checklist,
   documentoIdentidadRecibido,
@@ -14,6 +15,9 @@ export function validarFormularioPrestamo({
   }
   if (!material) {
     errores.material = 'Selecciona un material disponible.'
+  }
+  if (!instanciaId) {
+    errores.instancia_id = 'Selecciona una instancia disponible.'
   }
   if (!Number.isInteger(Number(dias)) || Number(dias) < 1) {
     errores.dias = 'El tiempo de préstamo debe ser al menos un día.'

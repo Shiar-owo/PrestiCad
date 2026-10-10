@@ -6,6 +6,7 @@ from django.db.models import Case, CharField, Count, DateTimeField, F, IntegerFi
 from django.db import transaction
 from django.utils import timezone
 
+from apps.inventario import services as servicios_inventario
 from apps.inventario.constants import TIERS_ACCESIBLES
 from apps.inventario.models import Material
 from apps.prestamos.constants import (
@@ -235,6 +236,7 @@ def registrar_prestamo(
     *,
     dni_prestatario,
     material_id,
+    instancia_id=None,
     tiempo_prestamo_dias,
     checklist_inicial,
     registrado_por,
@@ -268,6 +270,18 @@ def registrar_prestamo(
             "El material no está disponible para entrega.",
             status_code=409,
         )
+
+    try:
+        instancia_elegida = servicios_inventario.marcar_instancia_prestada(
+            material.id,
+            instancia_id=instancia_id,
+        )
+    except servicios_inventario.InventarioError as error:
+        raise PrestamoError(
+            error.campo,
+            error.mensaje,
+            status_code=error.status_code,
+        ) from error
 
     unidades_disponibles = contar_unidades_disponibles(material)
     prestamos_existentes = material.prestamos.filter(
@@ -304,6 +318,7 @@ def registrar_prestamo(
         checklist_inicial=checklist_inicial,
         garantia_documento_identidad_recibido=garantia_documento_identidad_recibido,
         garantia_compromiso_firmado_recibido=garantia_compromiso_firmado_recibido,
+        instancia_id=instancia_elegida["id"],
     )
 
     # Material.estado describe disponibilidad del conjunto: solo pasa a
@@ -317,11 +332,6 @@ def registrar_prestamo(
         # Puede ocurrir si inventario se reabasteció sin actualizar el estado.
         material.estado = "disponible"
         material.save(update_fields=("estado", "updated_at"))
-
-    instancia_disponible = material.instancias.filter(estado="disponible").first()
-    if instancia_disponible:
-        instancia_disponible.estado = "prestado"
-        instancia_disponible.save(update_fields=("estado", "updated_at"))
 
     return prestamo
 

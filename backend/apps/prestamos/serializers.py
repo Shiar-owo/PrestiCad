@@ -45,6 +45,7 @@ class RegistrarPrestamoSerializer(
 ):
     dni_prestatario = serializers.CharField(max_length=8)
     material_id = serializers.UUIDField()
+    instancia_id = serializers.UUIDField(required=False)
     tiempo_prestamo_dias = serializers.IntegerField(min_value=1)
     checklist_inicial = ChecklistInicialItemSerializer(many=True, allow_empty=False)
     garantia_documento_identidad_recibido = serializers.BooleanField(default=False)
@@ -66,6 +67,8 @@ class PrestamoRegistroSerializer(serializers.ModelSerializer):
         source="material.codigo_inventario",
         read_only=True,
     )
+    instancia_id = serializers.UUIDField(read_only=True, allow_null=True)
+    codigo_ejemplar = serializers.SerializerMethodField()
     requiere_garantia = serializers.BooleanField(read_only=True)
     garantia_completa = serializers.BooleanField(read_only=True)
 
@@ -78,6 +81,8 @@ class PrestamoRegistroSerializer(serializers.ModelSerializer):
             "material_id",
             "material_nombre",
             "material_codigo",
+            "instancia_id",
+            "codigo_ejemplar",
             "fecha_entrega",
             "fecha_limite",
             "tiempo_prestamo_dias",
@@ -91,6 +96,11 @@ class PrestamoRegistroSerializer(serializers.ModelSerializer):
 
     def get_usuario_nombre(self, prestamo):
         return f"{prestamo.usuario.nombre} {prestamo.usuario.apellido}".strip()
+
+    def get_codigo_ejemplar(self, prestamo):
+        if prestamo.instancia_id is None:
+            return None
+        return prestamo.instancia.codigo_ejemplar
 
 
 class ChecklistDevolucionItemSerializer(serializers.Serializer):

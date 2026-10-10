@@ -64,13 +64,14 @@ CODIGO_DUPLICADO_MENSAJE = "El código de inventario ya está registrado."
 class InventarioError(Exception):
     """Error de negocio del módulo inventario.
 
-    Lleva el campo afectado y un mensaje en español para mostrarlo en la
-    respuesta HTTP (la vista lo traduce a un 409 Conflict o un 400).
+    Lleva el campo, el mensaje en español y el estado HTTP para que el módulo
+    consumidor traduzca el error a su respuesta sin conocer los modelos.
     """
 
-    def __init__(self, campo, mensaje):
+    def __init__(self, campo, mensaje, status_code=400):
         self.campo = campo
         self.mensaje = mensaje
+        self.status_code = status_code
         super().__init__(mensaje)
 
 
@@ -446,6 +447,56 @@ def listar_instancias_material(material_id, *, estado=None):
         instancias = instancias.filter(estado=estado_normalizado)
 
     return instancias.order_by("codigo_ejemplar")
+
+
+@transaction.atomic
+def marcar_instancia_prestada(material_id, instancia_id=None):
+    """Bloquea y marca prestada una instancia del material.
+
+    Si se indica `instancia_id`, valida esa unidad exacta; si no, conserva la
+    selección automática por código para los clientes existentes.
+    """
+    consulta = InstanciaMaterial.objects.select_for_update()
+    if instancia_id is None:
+        instancia = (
+            consulta.filter(material_id=material_id, estado="disponible")
+            .order_by("codigo_ejemplar")
+            .first()
+        )
+        if instancia is None:
+            raise InventarioError(
+                "material_id",
+                "No quedan unidades disponibles de este material.",
+                status_code=409,
+            )
+    else:
+        try:
+            instancia = consulta.get(pk=instancia_id)
+        except (InstanciaMaterial.DoesNotExist, ValueError, TypeError) as error:
+            raise InventarioError(
+                "instancia_id",
+                "No existe la instancia indicada.",
+                status_code=404,
+            ) from error
+
+        if instancia.material_id != material_id:
+            raise InventarioError(
+                "instancia_id",
+                "La instancia no pertenece al material indicado.",
+            )
+        if instancia.estado != "disponible":
+            raise InventarioError(
+                "instancia_id",
+                "La instancia no está disponible para préstamo.",
+                status_code=409,
+            )
+
+    instancia.estado = "prestado"
+    instancia.save(update_fields=("estado", "updated_at"))
+    return {
+        "id": instancia.id,
+        "codigo_ejemplar": instancia.codigo_ejemplar,
+    }
 
 
 def crear_instancia_material(

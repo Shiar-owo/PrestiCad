@@ -34,6 +34,13 @@ class Prestamo(models.Model):
         on_delete=models.PROTECT,
         related_name="prestamos",
     )
+    instancia = models.ForeignKey(
+        "inventario.InstanciaMaterial",
+        on_delete=models.PROTECT,
+        related_name="prestamos",
+        null=True,
+        blank=True,
+    )
     registrado_por = models.ForeignKey(
         Usuario,
         on_delete=models.PROTECT,

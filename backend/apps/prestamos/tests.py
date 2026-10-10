@@ -1,7 +1,11 @@
 """Pruebas de reglas y API para HU09 — registrar la entrega de un préstamo."""
+from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
+from threading import Barrier
+from uuid import uuid4
 
-from django.test import SimpleTestCase, TestCase
+from django.db import close_old_connections
+from django.test import SimpleTestCase, TestCase, TransactionTestCase
 from django.utils import timezone
 from rest_framework.test import APIClient, APITestCase
 
@@ -101,6 +105,68 @@ class RegistrarPrestamoServiceTestCase(TestCase):
         self.assertEqual(prestamo.fecha_limite - prestamo.fecha_entrega, timedelta(days=7))
         self.assertGreaterEqual(prestamo.fecha_entrega, antes)
         self.assertEqual(Material.objects.get(pk=self.material.pk).estado, "prestado")
+        instancia = self.material.instancias.get()
+        self.assertEqual(prestamo.instancia_id, instancia.id)
+        self.assertEqual(instancia.estado, "prestado")
+
+    def test_registra_la_instancia_especifica_solicitada(self):
+        material = crear_material(codigo_inventario="EQ-ESPECIFICO", stock=2)
+        instancias = list(material.instancias.order_by("codigo_ejemplar"))
+
+        prestamo = self._registrar(
+            material_id=material.id,
+            instancia_id=instancias[1].id,
+        )
+
+        self.assertEqual(prestamo.instancia_id, instancias[1].id)
+        instancias[0].refresh_from_db()
+        instancias[1].refresh_from_db()
+        self.assertEqual(instancias[0].estado, "disponible")
+        self.assertEqual(instancias[1].estado, "prestado")
+
+    def test_rechaza_instancia_inexistente(self):
+        with self.assertRaises(PrestamoError) as contexto:
+            self._registrar(instancia_id=uuid4())
+
+        self.assertEqual(contexto.exception.status_code, 404)
+        self.assertEqual(contexto.exception.campo, "instancia_id")
+        self.assertEqual(Prestamo.objects.count(), 0)
+
+    def test_rechaza_instancia_de_otro_material(self):
+        otro_material = crear_material(codigo_inventario="EQ-OTRO")
+
+        with self.assertRaises(PrestamoError) as contexto:
+            self._registrar(instancia_id=otro_material.instancias.get().id)
+
+        self.assertEqual(contexto.exception.status_code, 400)
+        self.assertEqual(contexto.exception.campo, "instancia_id")
+        self.assertEqual(Prestamo.objects.count(), 0)
+
+    def test_rechaza_instancia_no_disponible(self):
+        instancia = self.material.instancias.get()
+        instancia.estado = "prestado"
+        instancia.save(update_fields=["estado"])
+
+        with self.assertRaises(PrestamoError) as contexto:
+            self._registrar(instancia_id=instancia.id)
+
+        self.assertEqual(contexto.exception.status_code, 409)
+        self.assertEqual(contexto.exception.campo, "instancia_id")
+        self.assertEqual(Prestamo.objects.count(), 0)
+
+    def test_rechaza_prestar_dos_veces_la_misma_instancia(self):
+        instancia = self.material.instancias.get()
+        self._registrar(instancia_id=instancia.id)
+        otro_prestatario = crear_usuario("segundo-instancia@unsa.edu.pe", "10000005")
+
+        with self.assertRaises(PrestamoError) as contexto:
+            self._registrar(
+                dni_prestatario=otro_prestatario.dni,
+                instancia_id=instancia.id,
+            )
+
+        self.assertEqual(contexto.exception.status_code, 409)
+        self.assertEqual(Prestamo.objects.count(), 1)
 
     def test_agota_y_restaura_disponibilidad_segun_stock_de_unidades(self):
         material = crear_material(
@@ -213,6 +279,48 @@ class RegistrarPrestamoServiceTestCase(TestCase):
         prestamo.save(update_fields=["estado"])
 
         self.assertFalse(usuario_tiene_prestamos_activos(self.prestatario.id))
+
+
+class RegistrarPrestamoConcurrenciaTestCase(TransactionTestCase):
+    """Comprueba que dos transacciones no entreguen una misma instancia."""
+
+    def test_dos_registros_concurrentes_no_comparten_instancia(self):
+        gestor = crear_usuario("gestor-concurrencia@unsa.edu.pe", "10000020", rol="gestor")
+        prestatarios = [
+            crear_usuario("concurrencia1@unsa.edu.pe", "10000021"),
+            crear_usuario("concurrencia2@unsa.edu.pe", "10000022"),
+        ]
+        material = crear_material(codigo_inventario="EQ-CONCURRENCIA")
+        instancia_id = material.instancias.get().id
+        barrera = Barrier(2)
+
+        def registrar(dni):
+            close_old_connections()
+            try:
+                barrera.wait(timeout=10)
+                prestamo = registrar_prestamo(
+                    dni_prestatario=dni,
+                    material_id=material.id,
+                    instancia_id=instancia_id,
+                    tiempo_prestamo_dias=7,
+                    checklist_inicial=CHECKLIST,
+                    registrado_por=gestor,
+                )
+                return ("registrado", prestamo.id)
+            except PrestamoError as error:
+                return ("rechazado", error.status_code)
+            finally:
+                close_old_connections()
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            resultados = list(
+                executor.map(registrar, [usuario.dni for usuario in prestatarios])
+            )
+
+        self.assertEqual(sum(resultado[0] == "registrado" for resultado in resultados), 1)
+        self.assertEqual(resultados.count(("rechazado", 409)), 1)
+        self.assertEqual(Prestamo.objects.count(), 1)
+        self.assertEqual(material.instancias.filter(estado="prestado").count(), 1)
 
 
 class ConsultarPrestamosServiceTestCase(TestCase):
@@ -562,8 +670,13 @@ class RegistrarPrestamoAPITestCase(APITestCase):
 
     def test_post_como_gestor_devuelve_201_y_datos_de_entrega(self):
         self._iniciar_sesion(self.gestor)
+        instancia = self.material.instancias.get()
 
-        respuesta = self.client.post(self.URL, self._payload(), format="json")
+        respuesta = self.client.post(
+            self.URL,
+            self._payload(instancia_id=str(instancia.id)),
+            format="json",
+        )
 
         self.assertEqual(respuesta.status_code, 201, respuesta.content)
         datos = respuesta.json()
@@ -572,8 +685,20 @@ class RegistrarPrestamoAPITestCase(APITestCase):
         self.assertEqual(datos["estado"], "activo")
         self.assertEqual(datos["tiempo_prestamo_dias"], 5)
         self.assertEqual(datos["checklist_inicial"], CHECKLIST)
+        self.assertEqual(datos["instancia_id"], str(instancia.id))
+        self.assertEqual(datos["codigo_ejemplar"], instancia.codigo_ejemplar)
         self.assertFalse(datos["requiere_garantia"])
         self.assertEqual(Prestamo.objects.count(), 1)
+
+    def test_post_omite_instancia_y_guarda_la_seleccion_automatica(self):
+        self._iniciar_sesion(self.gestor)
+
+        respuesta = self.client.post(self.URL, self._payload(), format="json")
+
+        self.assertEqual(respuesta.status_code, 201, respuesta.content)
+        instancia = self.material.instancias.get()
+        self.assertEqual(respuesta.json()["instancia_id"], str(instancia.id))
+        self.assertEqual(instancia.estado, "prestado")
 
     def test_listado_inventario_devuelve_unidades_libres_actualizadas(self):
         material = crear_material(
@@ -1243,9 +1368,10 @@ class ReportesDevolucionAPITestCase(DevolucionBaseTestCase):
         sesion.save()
 
     def _devolver_otro_prestamo(self):
+        otro_material = crear_material(codigo_inventario="EQ-REPORTES-OTRO")
         prestamo = registrar_prestamo(
             dni_prestatario=self.prestatario.dni,
-            material_id=self.material.id,
+            material_id=otro_material.id,
             tiempo_prestamo_dias=7,
             checklist_inicial=CHECKLIST,
             registrado_por=self.gestor,

@@ -46,19 +46,17 @@ skinparam arrow {
 class Garantia <<Aggregate Root>> {
   --
   __ Identidad __
-  id : UUID
+  id : Integer
+  prestamo_id : Integer (relación 1:1)
   __ Clasificacion __
   -tipo : TipoGarantia
   -estado : EstadoGarantia
   __ Datos __
   fechaRegistro : DateTime
-  fechaLiberacion : DateTime
-  descripcionCompromiso : String
-  documentoUrl : String
-  activa : Boolean
+  documento_identidad : PDF privado
+  compromiso_responsabilidad : PDF privado
   --
-  +registrar(usuario, prestamo, tipo) : Garantia
-  +liberar() : void
+  +registrar(prestamo, documentos) : Garantia
   +verificar() : Boolean
   +estaRegistrada() : Boolean
 }
@@ -80,28 +78,27 @@ class EstadoGarantia <<Value Object>> {
   +estaActiva() : Boolean
 }
 
-class CompromisoResponsabilidad <<Value Object>> {
-  contenido : String
-  fechaFirma : DateTime
-  firmaUrl : String
-  testigo : String
-  --
-  +esValido() : Boolean
-}
-
 ' ============================================================
 ' RELACIONES
 ' ============================================================
 
 Garantia *-- TipoGarantia
 Garantia *-- EstadoGarantia
-Garantia "0..1" *-- CompromisoResponsabilidad
 
 ' ============================================================
 ' REGLAS DE NEGOCIO
 ' ============================================================
 
 note top of Garantia
+  <b>Implementado en HU09</b>
+  ═══════════════════════════════════════
+  Cada préstamo tiene como máximo una garantía.
+  La garantía contiene los dos PDF requeridos;
+  se almacena fuera de la ruta pública de medios
+  y su descarga requiere autorización.
+  HU09 cubre el estado PENDIENTE → REGISTRADA;
+  la liberación o retención pertenece a flujos posteriores.
+  ──────────────────────────────────────
   <b>RN05 - Registro de Garantías</b>
   ═══════════════════════════════════════
   Para préstamos de equipos de alto valor

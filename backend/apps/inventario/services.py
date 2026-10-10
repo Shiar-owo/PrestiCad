@@ -433,10 +433,19 @@ def _eliminar_foto(storage, nombre):
         )
 
 
-def listar_instancias_material(material_id):
-    """Devuelve todas las instancias físicas de un material ordenadas por código."""
+def listar_instancias_material(material_id, *, estado=None):
+    """Devuelve las instancias de un material, opcionalmente filtradas por estado."""
     material = obtener_material(material_id)
-    return material.instancias.all().order_by("codigo_ejemplar")
+    instancias = material.instancias.all()
+
+    if estado is not None and estado.strip():
+        estado_normalizado = estado.strip().lower()
+        estados_validos = {valor for valor, _ in ESTADOS_INSTANCIA}
+        if estado_normalizado not in estados_validos:
+            raise InventarioError("estado", "El estado de la instancia no es válido.")
+        instancias = instancias.filter(estado=estado_normalizado)
+
+    return instancias.order_by("codigo_ejemplar")
 
 
 def crear_instancia_material(

@@ -9,6 +9,7 @@ from rest_framework.generics import (
     RetrieveUpdateAPIView,
     RetrieveUpdateDestroyAPIView,
 )
+from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -149,7 +150,11 @@ class InstanciaMaterialListCreateView(ListCreateAPIView):
 
     def get_queryset(self):
         material_id = self.kwargs.get("material_id")
-        return services.listar_instancias_material(material_id)
+        estado = self.request.query_params.get("estado")
+        try:
+            return services.listar_instancias_material(material_id, estado=estado)
+        except services.InventarioError as error:
+            raise ValidationError({error.campo: [error.mensaje]}) from error
 
     def create(self, request, *args, **kwargs):
         material_id = self.kwargs.get("material_id")

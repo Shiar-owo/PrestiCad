@@ -1,3 +1,4 @@
+import json
 import re
 
 from django.conf import settings
@@ -5,7 +6,8 @@ from rest_framework import serializers
 
 from apps.compartido.serializers import RechazarCamposNoPermitidosMixin
 from apps.prestamos.constants import ESTADOS_CHECKLIST_DEVOLUCION
-from apps.prestamos.models import Devolucion, Prestamo
+from apps.prestamos.models import Devolucion, Garantia, Prestamo
+from apps.prestamos.validators import validar_pdf_garantia
 
 
 class ChecklistInicialItemSerializer(serializers.Serializer):
@@ -48,8 +50,30 @@ class RegistrarPrestamoSerializer(
     instancia_id = serializers.UUIDField(required=False)
     tiempo_prestamo_dias = serializers.IntegerField(min_value=1)
     checklist_inicial = ChecklistInicialItemSerializer(many=True, allow_empty=False)
-    garantia_documento_identidad_recibido = serializers.BooleanField(default=False)
-    garantia_compromiso_firmado_recibido = serializers.BooleanField(default=False)
+    documento_identidad = serializers.FileField(
+        required=False,
+        validators=[validar_pdf_garantia],
+    )
+    compromiso_responsabilidad = serializers.FileField(
+        required=False,
+        validators=[validar_pdf_garantia],
+    )
+
+    def to_internal_value(self, data):
+        checklist = data.get("checklist_inicial") if hasattr(data, "get") else None
+        if isinstance(checklist, str):
+            try:
+                checklist = json.loads(checklist)
+            except (TypeError, ValueError) as error:
+                raise serializers.ValidationError({
+                    "checklist_inicial": "El checklist inicial debe ser una lista JSON válida.",
+                }) from error
+            if hasattr(data, "getlist"):
+                data = {campo: data.get(campo) for campo in data.keys()}
+            else:
+                data = dict(data)
+            data["checklist_inicial"] = checklist
+        return super().to_internal_value(data)
 
     def validate_dni_prestatario(self, value):
         dni = value.strip()
@@ -71,6 +95,8 @@ class PrestamoRegistroSerializer(serializers.ModelSerializer):
     codigo_ejemplar = serializers.SerializerMethodField()
     requiere_garantia = serializers.BooleanField(read_only=True)
     garantia_completa = serializers.BooleanField(read_only=True)
+    garantia_documento_identidad_cargado = serializers.SerializerMethodField()
+    garantia_compromiso_responsabilidad_cargado = serializers.SerializerMethodField()
 
     class Meta:
         model = Prestamo
@@ -89,8 +115,8 @@ class PrestamoRegistroSerializer(serializers.ModelSerializer):
             "estado",
             "checklist_inicial",
             "requiere_garantia",
-            "garantia_documento_identidad_recibido",
-            "garantia_compromiso_firmado_recibido",
+            "garantia_documento_identidad_cargado",
+            "garantia_compromiso_responsabilidad_cargado",
             "garantia_completa",
         )
 
@@ -101,6 +127,20 @@ class PrestamoRegistroSerializer(serializers.ModelSerializer):
         if prestamo.instancia_id is None:
             return None
         return prestamo.instancia.codigo_ejemplar
+
+    def _obtener_garantia(self, prestamo):
+        try:
+            return prestamo.garantia
+        except Garantia.DoesNotExist:
+            return None
+
+    def get_garantia_documento_identidad_cargado(self, prestamo):
+        garantia = self._obtener_garantia(prestamo)
+        return bool(garantia and garantia.documento_identidad)
+
+    def get_garantia_compromiso_responsabilidad_cargado(self, prestamo):
+        garantia = self._obtener_garantia(prestamo)
+        return bool(garantia and garantia.compromiso_responsabilidad)
 
 
 class ChecklistDevolucionItemSerializer(serializers.Serializer):

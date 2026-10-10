@@ -1,12 +1,19 @@
 """Pruebas de reglas y API para HU09 — registrar la entrega de un préstamo."""
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
+import json
+import tempfile
 from datetime import timedelta
+from pathlib import Path
 from threading import Barrier
+from unittest.mock import patch
 from uuid import uuid4
 
-from django.core.files.storage import storages
+from django.core.exceptions import ValidationError
+from django.core.files.storage import FileSystemStorage, storages
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import close_old_connections
-from django.test import SimpleTestCase, TestCase, TransactionTestCase
+from django.test import SimpleTestCase, TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient, APITestCase
 
@@ -14,6 +21,8 @@ from apps.inventario.models import Material
 from apps.inventario.serializers import MaterialSerializer
 from apps.inventario.services import registrar_material
 from apps.prestamos.models import Devolucion, Garantia, Prestamo, ruta_documento_garantia
+from apps.prestamos.serializers import RegistrarPrestamoSerializer
+from apps.prestamos.validators import validar_pdf_garantia
 from apps.prestamos.services import (
     PrestamoError,
     consultar_historial_prestamos,
@@ -36,6 +45,29 @@ CHECKLIST = [
 ]
 
 
+def crear_pdf(nombre):
+    return SimpleUploadedFile(
+        nombre,
+        b"%PDF-1.7\ncontenido de prueba",
+        content_type="application/pdf",
+    )
+
+
+@contextmanager
+def storage_garantias_temporal():
+    with tempfile.TemporaryDirectory() as directorio:
+        almacenamiento = FileSystemStorage(location=directorio)
+        with (
+            patch.object(Garantia._meta.get_field("documento_identidad"), "storage", almacenamiento),
+            patch.object(
+                Garantia._meta.get_field("compromiso_responsabilidad"),
+                "storage",
+                almacenamiento,
+            ),
+        ):
+            yield directorio
+
+
 class AlmacenamientoGarantiaTestCase(SimpleTestCase):
     def test_storage_privado_no_genera_url_publica(self):
         with self.assertRaisesRegex(ValueError, "endpoint protegido"):
@@ -52,6 +84,41 @@ class AlmacenamientoGarantiaTestCase(SimpleTestCase):
         self.assertTrue(ruta.startswith("garantias/"))
         self.assertTrue(ruta.endswith(".pdf"))
         self.assertNotIn("dni-original", ruta)
+
+    def test_rechaza_extension_mime_y_contenido_que_no_corresponden_a_pdf(self):
+        archivos_invalidos = (
+            SimpleUploadedFile("dni.txt", b"%PDF-1.7", content_type="application/pdf"),
+            SimpleUploadedFile("dni.pdf", b"%PDF-1.7", content_type="text/plain"),
+            SimpleUploadedFile("dni.pdf", b"texto plano", content_type="application/pdf"),
+        )
+        for archivo in archivos_invalidos:
+            with self.subTest(nombre=archivo.name, mime=archivo.content_type):
+                with self.assertRaises(ValidationError):
+                    validar_pdf_garantia(archivo)
+
+    @override_settings(GARANTIA_TAMANO_MAXIMO_BYTES=5)
+    def test_rechaza_pdf_que_supera_el_tamano_configurado(self):
+        archivo = SimpleUploadedFile(
+            "dni.pdf",
+            b"%PDF-1",
+            content_type="application/pdf",
+        )
+
+        with self.assertRaises(ValidationError):
+            validar_pdf_garantia(archivo)
+
+    def test_serializer_acepta_checklist_json_codificado_para_multipart(self):
+        datos = {
+            "dni_prestatario": "12345678",
+            "material_id": "00000000-0000-0000-0000-000000000001",
+            "tiempo_prestamo_dias": "5",
+            "checklist_inicial": json.dumps(CHECKLIST),
+        }
+
+        serializer = RegistrarPrestamoSerializer(data=datos)
+
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertEqual(serializer.validated_data["checklist_inicial"], CHECKLIST)
 
 
 def crear_usuario(email, dni, rol="prestatario", **cambios):
@@ -257,28 +324,63 @@ class RegistrarPrestamoServiceTestCase(TestCase):
         self.assertIn("habilitado", contexto.exception.mensaje)
         self.assertEqual(Prestamo.objects.count(), 0)
 
-    def test_exige_los_dos_elementos_de_garantia_para_material_de_alto_valor(self):
+    def test_exige_ambos_pdf_para_material_de_alto_valor(self):
         material = crear_material(codigo_inventario="EQ-003", es_alto_valor=True)
 
         with self.assertRaises(PrestamoError) as contexto:
             self._registrar(material_id=material.id)
-        self.assertEqual(contexto.exception.campo, "garantia_documento_identidad_recibido")
+        self.assertEqual(contexto.exception.campo, "documento_identidad")
         self.assertEqual(Prestamo.objects.count(), 0)
 
         with self.assertRaises(PrestamoError) as contexto:
             self._registrar(
                 material_id=material.id,
-                garantia_documento_identidad_recibido=True,
+                documento_identidad=crear_pdf("dni-original.pdf"),
             )
-        self.assertEqual(contexto.exception.campo, "garantia_compromiso_firmado_recibido")
+        self.assertEqual(contexto.exception.campo, "compromiso_responsabilidad")
         self.assertEqual(Prestamo.objects.count(), 0)
 
-        prestamo = self._registrar(
-            material_id=material.id,
-            garantia_documento_identidad_recibido=True,
-            garantia_compromiso_firmado_recibido=True,
-        )
-        self.assertTrue(prestamo.garantia_completa)
+        with storage_garantias_temporal():
+            prestamo = self._registrar(
+                material_id=material.id,
+                documento_identidad=crear_pdf("dni-original.pdf"),
+                compromiso_responsabilidad=crear_pdf("carta-original.pdf"),
+            )
+            garantia = prestamo.garantia
+
+            self.assertEqual(garantia.estado, "registrada")
+            self.assertIsNotNone(garantia.fecha_registro)
+            self.assertTrue(prestamo.garantia_completa)
+            self.assertNotIn("original", garantia.documento_identidad.name)
+            self.assertNotIn("original", garantia.compromiso_responsabilidad.name)
+
+    def test_rechaza_archivos_de_garantia_para_material_que_no_los_requiere(self):
+        with self.assertRaises(PrestamoError) as contexto:
+            self._registrar(documento_identidad=crear_pdf("dni.pdf"))
+
+        self.assertEqual(contexto.exception.campo, "documento_identidad")
+        self.assertEqual(Prestamo.objects.count(), 0)
+
+    def test_si_falla_el_registro_de_garantia_no_quedan_archivos_ni_prestamo(self):
+        material = crear_material(codigo_inventario="EQ-004", es_alto_valor=True)
+        guardar_garantia = Garantia.save
+
+        def guardar_y_fallar(garantia, *args, **kwargs):
+            guardar_garantia(garantia, *args, **kwargs)
+            raise RuntimeError("Fallo simulado al guardar la garantía")
+
+        with storage_garantias_temporal() as directorio:
+            with patch.object(Garantia, "save", guardar_y_fallar):
+                with self.assertRaises(RuntimeError):
+                    self._registrar(
+                        material_id=material.id,
+                        documento_identidad=crear_pdf("dni.pdf"),
+                        compromiso_responsabilidad=crear_pdf("carta.pdf"),
+                    )
+
+            self.assertEqual(Prestamo.objects.count(), 0)
+            self.assertEqual(Garantia.objects.count(), 0)
+            self.assertEqual(list(Path(directorio).rglob("*.pdf")), [])
 
     def test_rechaza_material_en_mantenimiento_o_reservado(self):
         for estado in ("en_mantenimiento", "reservado"):
@@ -719,6 +821,50 @@ class RegistrarPrestamoAPITestCase(APITestCase):
         self.assertFalse(datos["requiere_garantia"])
         self.assertEqual(Prestamo.objects.count(), 1)
 
+    def test_post_multipart_registra_garantia_y_parsea_checklist_json(self):
+        self._iniciar_sesion(self.gestor)
+        material = crear_material(
+            codigo_inventario="API-ALTO-VALOR",
+            es_alto_valor=True,
+        )
+        instancia = material.instancias.get()
+        datos = self._payload(
+            material_id=str(material.id),
+            instancia_id=str(instancia.id),
+            checklist_inicial=json.dumps(CHECKLIST),
+            documento_identidad=crear_pdf("dni-original.pdf"),
+            compromiso_responsabilidad=crear_pdf("carta-original.pdf"),
+        )
+
+        with storage_garantias_temporal():
+            respuesta = self.client.post(self.URL, datos, format="multipart")
+
+        self.assertEqual(respuesta.status_code, 201, respuesta.content)
+        datos_respuesta = respuesta.json()
+        self.assertEqual(datos_respuesta["checklist_inicial"], CHECKLIST)
+        self.assertTrue(datos_respuesta["garantia_completa"])
+        self.assertTrue(datos_respuesta["garantia_documento_identidad_cargado"])
+        self.assertTrue(datos_respuesta["garantia_compromiso_responsabilidad_cargado"])
+        self.assertNotIn("documento_identidad", datos_respuesta)
+        self.assertEqual(Prestamo.objects.count(), 1)
+
+    def test_post_json_sin_pdf_rechaza_material_de_alto_valor(self):
+        self._iniciar_sesion(self.gestor)
+        material = crear_material(
+            codigo_inventario="API-ALTO-SIN-PDF",
+            es_alto_valor=True,
+        )
+
+        respuesta = self.client.post(
+            self.URL,
+            self._payload(material_id=str(material.id)),
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn("documento_identidad", respuesta.json())
+        self.assertEqual(Prestamo.objects.count(), 0)
+
     def test_post_omite_instancia_y_guarda_la_seleccion_automatica(self):
         self._iniciar_sesion(self.gestor)
 
@@ -790,6 +936,19 @@ class RegistrarPrestamoAPITestCase(APITestCase):
         self.assertEqual(respuesta.status_code, 400)
         self.assertIn("usuario_id", respuesta.json())
         self.assertIn("estado", respuesta.json())
+        self.assertEqual(Prestamo.objects.count(), 0)
+
+    def test_post_rechaza_los_booleanos_obsoletos_de_garantia(self):
+        self._iniciar_sesion(self.gestor)
+
+        respuesta = self.client.post(
+            self.URL,
+            self._payload(garantia_documento_identidad_recibido=True),
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn("garantia_documento_identidad_recibido", respuesta.json())
         self.assertEqual(Prestamo.objects.count(), 0)
 
     def test_post_dni_inexistente_responde_404(self):

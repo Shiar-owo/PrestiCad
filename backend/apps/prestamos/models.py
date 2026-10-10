@@ -63,8 +63,6 @@ class Prestamo(models.Model):
         default="activo",
     )
     checklist_inicial = models.JSONField(default=list)
-    garantia_documento_identidad_recibido = models.BooleanField(default=False)
-    garantia_compromiso_firmado_recibido = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -88,9 +86,14 @@ class Prestamo(models.Model):
     def garantia_completa(self):
         if not self.requiere_garantia:
             return True
-        return (
-            self.garantia_documento_identidad_recibido
-            and self.garantia_compromiso_firmado_recibido
+        try:
+            garantia = self.garantia
+        except Garantia.DoesNotExist:
+            return False
+        return bool(
+            garantia.estado == "registrada"
+            and garantia.documento_identidad
+            and garantia.compromiso_responsabilidad
         )
 
 

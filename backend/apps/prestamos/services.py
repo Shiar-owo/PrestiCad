@@ -2,6 +2,7 @@ from datetime import timedelta
 import math
 
 from django.core.files.base import ContentFile
+from django.core.exceptions import ValidationError
 from django.db.models import Case, CharField, Count, DateTimeField, F, IntegerField, Value, When
 from django.db import transaction
 from django.utils import timezone
@@ -14,8 +15,9 @@ from apps.prestamos.constants import (
     ESTADOS_QUE_OCUPAN_UNIDAD,
     VALORES_ESTADOS_CHECKLIST_DEVOLUCION,
 )
-from apps.prestamos.models import Devolucion, Prestamo
+from apps.prestamos.models import Devolucion, Garantia, Prestamo
 from apps.prestamos.reportes import generar_reporte_dano
+from apps.prestamos.validators import validar_pdf_garantia
 from apps.usuarios.models import Usuario
 from apps.usuarios.services import (
     actualizar_reputacion,
@@ -231,6 +233,64 @@ def _validar_checklist(checklist_inicial):
             )
 
 
+def _validar_documentos_garantia(material, documento_identidad, compromiso_responsabilidad):
+    documentos = (
+        ("documento_identidad", documento_identidad, "El documento de identidad en PDF"),
+        (
+            "compromiso_responsabilidad",
+            compromiso_responsabilidad,
+            "El compromiso de responsabilidad en PDF",
+        ),
+    )
+    requiere_garantia = material.requiere_garantia()
+    if not requiere_garantia:
+        for campo, archivo, _ in documentos:
+            if archivo is not None:
+                raise PrestamoError(
+                    campo,
+                    "Este material no requiere documentos de garantía.",
+                )
+    if requiere_garantia:
+        for campo, archivo, descripcion in documentos:
+            if archivo is None:
+                raise PrestamoError(
+                    campo,
+                    f"{descripcion} es obligatorio para materiales de alto valor.",
+                )
+
+    for campo, archivo, _ in documentos:
+        if archivo is None:
+            continue
+        try:
+            validar_pdf_garantia(archivo)
+        except ValidationError as error:
+            raise PrestamoError(campo, error.messages[0]) from error
+
+
+def _crear_garantia_registrada(prestamo, documento_identidad, compromiso_responsabilidad):
+    garantia = Garantia(
+        prestamo=prestamo,
+        tipo="documento_y_compromiso",
+        estado="registrada",
+        fecha_registro=timezone.now(),
+    )
+    archivos_guardados = []
+    try:
+        for nombre_campo, archivo in (
+            ("documento_identidad", documento_identidad),
+            ("compromiso_responsabilidad", compromiso_responsabilidad),
+        ):
+            campo_archivo = getattr(garantia, nombre_campo)
+            campo_archivo.save(archivo.name, archivo, save=False)
+            archivos_guardados.append((campo_archivo.storage, campo_archivo.name))
+        garantia.save()
+    except Exception:
+        for almacenamiento, nombre in archivos_guardados:
+            almacenamiento.delete(nombre)
+        raise
+    return garantia
+
+
 @transaction.atomic
 def registrar_prestamo(
     *,
@@ -240,8 +300,8 @@ def registrar_prestamo(
     tiempo_prestamo_dias,
     checklist_inicial,
     registrado_por,
-    garantia_documento_identidad_recibido=False,
-    garantia_compromiso_firmado_recibido=False,
+    documento_identidad=None,
+    compromiso_responsabilidad=None,
     fecha_entrega=None,
 ):
     """Registra la entrega con elegibilidad, garantía y control atómico de stock."""
@@ -271,6 +331,13 @@ def registrar_prestamo(
             status_code=409,
         )
 
+    requiere_garantia = material.requiere_garantia()
+    _validar_documentos_garantia(
+        material,
+        documento_identidad,
+        compromiso_responsabilidad,
+    )
+
     try:
         instancia_elegida = servicios_inventario.marcar_instancia_prestada(
             material.id,
@@ -294,18 +361,6 @@ def registrar_prestamo(
             status_code=409,
         )
 
-    requiere_garantia = material.requiere_garantia()
-    if requiere_garantia and not garantia_documento_identidad_recibido:
-        raise PrestamoError(
-            "garantia_documento_identidad_recibido",
-            "El gestor debe confirmar la recepción del documento de identidad.",
-        )
-    if requiere_garantia and not garantia_compromiso_firmado_recibido:
-        raise PrestamoError(
-            "garantia_compromiso_firmado_recibido",
-            "El gestor debe confirmar la recepción del compromiso firmado.",
-        )
-
     fecha_entrega = fecha_entrega or timezone.now()
     prestamo = Prestamo.objects.create(
         usuario=prestatario,
@@ -316,8 +371,6 @@ def registrar_prestamo(
         tiempo_prestamo_dias=tiempo_prestamo_dias,
         estado="activo",
         checklist_inicial=checklist_inicial,
-        garantia_documento_identidad_recibido=garantia_documento_identidad_recibido,
-        garantia_compromiso_firmado_recibido=garantia_compromiso_firmado_recibido,
         instancia_id=instancia_elegida["id"],
     )
 
@@ -332,6 +385,13 @@ def registrar_prestamo(
         # Puede ocurrir si inventario se reabasteció sin actualizar el estado.
         material.estado = "disponible"
         material.save(update_fields=("estado", "updated_at"))
+
+    if requiere_garantia:
+        _crear_garantia_registrada(
+            prestamo,
+            documento_identidad,
+            compromiso_responsabilidad,
+        )
 
     return prestamo
 

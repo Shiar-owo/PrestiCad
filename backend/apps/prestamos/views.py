@@ -34,6 +34,7 @@ from apps.prestamos.services import (
     consultar_prestamos_usuario,
     consultar_reportes_devolucion,
     estimar_devolucion,
+    obtener_documento_garantia,
     registrar_devolucion,
     registrar_prestamo,
 )
@@ -109,6 +110,22 @@ def _respuesta_error(error):
         {error.campo: [error.mensaje]},
         status=error.status_code,
     )
+
+
+class DescargarDocumentoGarantiaView(APIView):
+    """Descarga privada de un PDF de garantía para gestión autorizada."""
+
+    permission_classes = [EsGestorOAdministrador]
+
+    def get(self, request, prestamo_id, tipo):
+        try:
+            archivo, nombre = obtener_documento_garantia(prestamo_id, tipo)
+        except PrestamoError as error:
+            return _respuesta_error(error)
+
+        respuesta = FileResponse(archivo, content_type="application/pdf")
+        respuesta["Content-Disposition"] = f'attachment; filename="{nombre}"'
+        return respuesta
 
 
 def _respuesta_resultado(resultado, prestamo_id, devolucion=None, http_status=200):

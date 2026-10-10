@@ -2,6 +2,7 @@ from django.urls import path
 
 from apps.prestamos.views import (
     DetallePrestamoParaDevolucionView,
+    DescargarDocumentoGarantiaView,
     EstimarDevolucionView,
     HistorialPrestamosView,
     ListarReportesDevolucionView,
@@ -24,6 +25,11 @@ urlpatterns = [
         "prestamos/devoluciones/<int:devolucion_id>/reporte/",
         ReporteDevolucionView.as_view(),
         name="reporte-devolucion",
+    ),
+    path(
+        "prestamos/<int:prestamo_id>/garantia/<str:tipo>/",
+        DescargarDocumentoGarantiaView.as_view(),
+        name="descargar-documento-garantia",
     ),
     path(
         "prestamos/<int:prestamo_id>/devolucion/estimar/",

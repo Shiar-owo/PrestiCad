@@ -977,6 +977,95 @@ class RegistrarPrestamoAPITestCase(APITestCase):
         self.assertEqual(Prestamo.objects.count(), 0)
 
 
+class DescargarGarantiaAPITestCase(APITestCase):
+    URL = "/api/prestamos/{prestamo_id}/garantia/{tipo}/"
+
+    def setUp(self):
+        self.gestor = crear_usuario("gestor-garantia@unsa.edu.pe", "20000301", rol="gestor")
+        self.administrador = crear_usuario(
+            "admin-garantia@unsa.edu.pe",
+            "20000302",
+            rol="administrador",
+        )
+        self.prestatario = crear_usuario("prestatario-garantia@unsa.edu.pe", "20000303")
+        self.material = crear_material(
+            codigo_inventario="GARANTIA-API-001",
+            es_alto_valor=True,
+        )
+
+    def _iniciar_sesion(self, usuario):
+        sesion = self.client.session
+        sesion[CLAVE_SESION_USUARIO_ID] = usuario.id
+        sesion[CLAVE_SESION_ULTIMA_ACTIVIDAD] = timezone.now().isoformat()
+        sesion.save()
+
+    def _registrar_prestamo_con_garantia(self):
+        return registrar_prestamo(
+            dni_prestatario=self.prestatario.dni,
+            material_id=self.material.id,
+            tiempo_prestamo_dias=5,
+            checklist_inicial=CHECKLIST,
+            registrado_por=self.gestor,
+            documento_identidad=crear_pdf("dni-original.pdf"),
+            compromiso_responsabilidad=crear_pdf("carta-original.pdf"),
+        )
+
+    def test_gestor_y_administrador_descargan_pdf_sin_publicarlo_en_media(self):
+        with storage_garantias_temporal():
+            prestamo = self._registrar_prestamo_con_garantia()
+            garantia = prestamo.garantia
+            url = self.URL.format(
+                prestamo_id=prestamo.id,
+                tipo="documento-identidad",
+            )
+
+            for usuario in (self.gestor, self.administrador):
+                with self.subTest(rol=usuario.rol.nombre):
+                    self._iniciar_sesion(usuario)
+                    respuesta = self.client.get(url)
+
+                    self.assertEqual(respuesta.status_code, 200)
+                    self.assertEqual(respuesta["Content-Type"], "application/pdf")
+                    self.assertIn("attachment;", respuesta["Content-Disposition"])
+                    self.assertIn("documento-identidad-prestamo-", respuesta["Content-Disposition"])
+                    self.assertEqual(b"".join(respuesta.streaming_content), b"%PDF-1.7\ncontenido de prueba")
+
+            respuesta_publica = self.client.get(
+                f"/media/{garantia.documento_identidad.name}"
+            )
+            self.assertEqual(respuesta_publica.status_code, 404)
+
+    def test_descarga_sin_sesion_o_como_prestatario_es_denegada(self):
+        url = self.URL.format(prestamo_id=1, tipo="documento-identidad")
+
+        sin_sesion = self.client.get(url)
+        self.assertEqual(sin_sesion.status_code, 403)
+
+        self._iniciar_sesion(self.prestatario)
+        como_prestatario = self.client.get(url)
+        self.assertEqual(como_prestatario.status_code, 403)
+
+    def test_descarga_informa_prestamo_o_documento_inexistente(self):
+        self._iniciar_sesion(self.gestor)
+        inexistente = self.client.get(
+            self.URL.format(prestamo_id=999999, tipo="documento-identidad")
+        )
+        self.assertEqual(inexistente.status_code, 404)
+
+        material_sin_garantia = crear_material(codigo_inventario="GARANTIA-SIN-ARCHIVO")
+        prestamo = registrar_prestamo(
+            dni_prestatario=self.prestatario.dni,
+            material_id=material_sin_garantia.id,
+            tiempo_prestamo_dias=5,
+            checklist_inicial=CHECKLIST,
+            registrado_por=self.gestor,
+        )
+        sin_documento = self.client.get(
+            self.URL.format(prestamo_id=prestamo.id, tipo="compromiso")
+        )
+        self.assertEqual(sin_documento.status_code, 404)
+
+
 class DevolucionBaseTestCase(TestCase):
     """Escenario compartido HU11: préstamo vigente con checklist de entrega."""
 

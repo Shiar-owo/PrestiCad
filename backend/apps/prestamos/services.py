@@ -291,6 +291,56 @@ def _crear_garantia_registrada(prestamo, documento_identidad, compromiso_respons
     return garantia
 
 
+def obtener_documento_garantia(prestamo_id, tipo):
+    """Abre el documento indicado sin exponer su ruta de almacenamiento."""
+    campos = {
+        "documento-identidad": ("documento_identidad", "documento-identidad"),
+        "compromiso": ("compromiso_responsabilidad", "compromiso-responsabilidad"),
+    }
+    if tipo not in campos:
+        raise PrestamoError(
+            "tipo",
+            "El tipo de documento de garantía no es válido.",
+        )
+
+    try:
+        prestamo = Prestamo.objects.get(pk=prestamo_id)
+    except (Prestamo.DoesNotExist, ValueError, TypeError) as error:
+        raise PrestamoError(
+            "prestamo_id",
+            "No existe el préstamo indicado.",
+            status_code=404,
+        ) from error
+
+    try:
+        garantia = prestamo.garantia
+    except Garantia.DoesNotExist as error:
+        raise PrestamoError(
+            "garantia",
+            "El préstamo no tiene una garantía registrada.",
+            status_code=404,
+        ) from error
+
+    nombre_campo, nombre_descarga = campos[tipo]
+    documento = getattr(garantia, nombre_campo)
+    if not documento:
+        raise PrestamoError(
+            nombre_campo,
+            "El documento de garantía solicitado no está disponible.",
+            status_code=404,
+        )
+    try:
+        documento.open("rb")
+    except (FileNotFoundError, OSError) as error:
+        raise PrestamoError(
+            nombre_campo,
+            "El archivo del documento de garantía no existe.",
+            status_code=404,
+        ) from error
+
+    return documento, f"{nombre_descarga}-prestamo-{prestamo.pk}.pdf"
+
+
 @transaction.atomic
 def registrar_prestamo(
     *,

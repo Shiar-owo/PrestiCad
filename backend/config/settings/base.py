@@ -6,6 +6,9 @@ from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 load_dotenv(BASE_DIR / ".env")
+GARANTIAS_STORAGE_ROOT = Path(
+    os.getenv("GARANTIAS_STORAGE_ROOT", BASE_DIR / "privado" / "garantias")
+)
 
 INSTALLED_APPS = [
     "django.contrib.admin",

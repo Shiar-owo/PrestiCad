@@ -19,5 +19,8 @@ pgdata/
 # Imagenes subidas en desarrollo (backend/media/)
 backend/media/
 
+# Documentos privados de garantía
+backend/privado/garantias/
+
 # Sistema
 .DS_Store

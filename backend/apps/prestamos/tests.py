@@ -4,6 +4,7 @@ from datetime import timedelta
 from threading import Barrier
 from uuid import uuid4
 
+from django.core.files.storage import storages
 from django.db import close_old_connections
 from django.test import SimpleTestCase, TestCase, TransactionTestCase
 from django.utils import timezone
@@ -33,6 +34,12 @@ CHECKLIST = [
     {"elemento": "Carcasa", "condicion": "Sin daños visibles", "observacion": ""},
     {"elemento": "Cable", "condicion": "Completo", "observacion": ""},
 ]
+
+
+class AlmacenamientoGarantiaTestCase(SimpleTestCase):
+    def test_storage_privado_no_genera_url_publica(self):
+        with self.assertRaisesRegex(ValueError, "endpoint protegido"):
+            storages["garantias"].url("documentos/prueba.pdf")
 
 
 def crear_usuario(email, dni, rol="prestatario", **cambios):

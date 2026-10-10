@@ -43,4 +43,8 @@ STORAGES = {
     "staticfiles": {
         "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
     },
+    "garantias": {
+        "BACKEND": "apps.prestamos.storage.AlmacenamientoPrivadoGarantias",
+        "OPTIONS": {"location": GARANTIAS_STORAGE_ROOT},
+    },
 }

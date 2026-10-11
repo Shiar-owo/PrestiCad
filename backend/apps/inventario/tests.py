@@ -1525,6 +1525,38 @@ class InstanciaMaterialAPITestCase(APITestCase):
         self.assertEqual(datos[0]["codigo_ejemplar"], "EQ-OSC-01-01")
         self.assertEqual(datos[1]["codigo_ejemplar"], "EQ-OSC-01-02")
 
+    def test_listar_instancias_filtradas_por_estado(self):
+        instancia_prestada = self.material.instancias.order_by("codigo_ejemplar").first()
+        instancia_prestada.estado = "prestado"
+        instancia_prestada.save(update_fields=["estado"])
+
+        url = f"/api/materiales/{self.material.id}/instancias/?estado=disponible"
+        respuesta = self.client.get(url)
+
+        self.assertEqual(respuesta.status_code, 200)
+        datos = respuesta.json()
+        self.assertEqual(len(datos), 1)
+        self.assertEqual(datos[0]["codigo_ejemplar"], "EQ-OSC-01-02")
+
+    def test_rechazar_estado_de_instancia_invalido(self):
+        url = f"/api/materiales/{self.material.id}/instancias/?estado=perdida"
+        respuesta = self.client.get(url)
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(
+            respuesta.json(),
+            {"estado": ["El estado de la instancia no es válido."]},
+        )
+
+    def test_gestor_puede_listar_instancias(self):
+        self._autenticar("gestor.listado@unsa.edu.pe", "gestor")
+        url = f"/api/materiales/{self.material.id}/instancias/?estado=disponible"
+
+        respuesta = self.client.get(url)
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(len(respuesta.json()), 2)
+
     def test_crear_instancia_manual(self):
         self._autenticar("gestor.inst@unsa.edu.pe", "gestor")
         url = f"/api/materiales/{self.material.id}/instancias/"

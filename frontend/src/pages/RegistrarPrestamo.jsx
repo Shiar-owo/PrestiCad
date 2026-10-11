@@ -12,14 +12,19 @@ import Tarjeta from '../components/ui/Tarjeta'
 import Skeleton from '../components/ui/Skeleton'
 import ErrorAlerta from '../components/ui/ErrorAlerta'
 import EstadoVacio from '../components/ui/EstadoVacio'
+import SubidaDocumentoPDF from '../components/prestamos/SubidaDocumentoPDF'
+import { TAMANO_MAXIMO_GARANTIA_MB } from '../constantes/garantia'
+import { construirSolicitudPrestamo } from '../prestamos/solicitudPrestamo'
+import { crearOpcionesInstancia } from '../prestamos/instanciasPrestamo'
 
 const FORMULARIO_INICIAL = {
   dni: '',
   materialId: '',
+  instanciaId: '',
   dias: '7',
   checklist: [{ elemento: '', condicion: '', observacion: '' }],
-  documentoIdentidadRecibido: false,
-  compromisoFirmadoRecibido: false,
+  documentoIdentidad: null,
+  compromisoResponsabilidad: null,
 }
 
 function mensajeApi(error) {
@@ -51,16 +56,48 @@ const OPCIONES_MATERIAL = (materiales) => [
 function RegistrarPrestamo() {
   useTituloPagina('Registrar entrega')
   const [materiales, setMateriales] = useState([])
+  const [instancias, setInstancias] = useState([])
   const [formulario, setFormulario] = useState(FORMULARIO_INICIAL)
   const [cargando, setCargando] = useState(true)
+  const [cargandoInstancias, setCargandoInstancias] = useState(false)
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
+  const [errorInstancias, setErrorInstancias] = useState('')
   const [errores, setErrores] = useState({})
   const [prestamoCreado, setPrestamoCreado] = useState(null)
 
   useEffect(() => {
     cargarMateriales()
   }, [])
+
+  useEffect(() => {
+    let cancelado = false
+    setInstancias([])
+    setErrorInstancias('')
+
+    if (!formulario.materialId) {
+      setCargandoInstancias(false)
+      return () => {
+        cancelado = true
+      }
+    }
+
+    setCargandoInstancias(true)
+    api.get(`/materiales/${formulario.materialId}/instancias/?estado=disponible`)
+      .then((resultado) => {
+        if (!cancelado) setInstancias(resultado)
+      })
+      .catch(() => {
+        if (!cancelado) setErrorInstancias('No se pudieron cargar las instancias disponibles.')
+      })
+      .finally(() => {
+        if (!cancelado) setCargandoInstancias(false)
+      })
+
+    return () => {
+      cancelado = true
+    }
+  }, [formulario.materialId])
 
   async function cargarMateriales() {
     setCargando(true)
@@ -89,12 +126,38 @@ function RegistrarPrestamo() {
     const camposError = {
       dni: 'dni',
       materialId: 'material',
+      instanciaId: 'instancia_id',
       dias: 'dias',
-      documentoIdentidadRecibido: 'garantia_documento_identidad_recibido',
-      compromisoFirmadoRecibido: 'garantia_compromiso_firmado_recibido',
+      documentoIdentidad: 'documento_identidad',
+      compromisoResponsabilidad: 'compromiso_responsabilidad',
     }
-    setFormulario((actual) => ({ ...actual, [campo]: valor }))
-    setErrores((actual) => ({ ...actual, [camposError[campo] || campo]: undefined }))
+    setFormulario((actual) => ({
+      ...actual,
+      [campo]: valor,
+      ...(campo === 'materialId'
+        ? {
+            instanciaId: '',
+            documentoIdentidad: null,
+            compromisoResponsabilidad: null,
+          }
+        : {}),
+    }))
+    setErrores((actual) => ({
+      ...actual,
+      [camposError[campo] || campo]: undefined,
+      ...(campo === 'materialId'
+        ? {
+            instancia_id: undefined,
+            documento_identidad: undefined,
+            compromiso_responsabilidad: undefined,
+          }
+        : {}),
+    }))
+    if (campo === 'materialId') {
+      setInstancias([])
+      setCargandoInstancias(Boolean(valor))
+      setErrorInstancias('')
+    }
     setError('')
     setPrestamoCreado(null)
   }
@@ -129,10 +192,11 @@ function RegistrarPrestamo() {
     const datosValidacion = {
       dni: formulario.dni,
       material: materialSeleccionado,
+      instanciaId: formulario.instanciaId,
       dias: formulario.dias,
       checklist: formulario.checklist,
-      documentoIdentidadRecibido: formulario.documentoIdentidadRecibido,
-      compromisoFirmadoRecibido: formulario.compromisoFirmadoRecibido,
+      documentoIdentidad: formulario.documentoIdentidad,
+      compromisoResponsabilidad: formulario.compromisoResponsabilidad,
     }
     const validacion = validarFormularioPrestamo(datosValidacion)
     setErrores(validacion)
@@ -142,23 +206,44 @@ function RegistrarPrestamo() {
 
     setGuardando(true)
     try {
-      const respuesta = await api.post('/prestamos/', {
-        dni_prestatario: formulario.dni.trim(),
-        material_id: materialSeleccionado.id,
-        tiempo_prestamo_dias: Number(formulario.dias),
-        checklist_inicial: formulario.checklist.map((item) => ({
-          elemento: item.elemento.trim(),
-          condicion: item.condicion.trim(),
-          observacion: item.observacion.trim(),
-        })),
-        garantia_documento_identidad_recibido: formulario.documentoIdentidadRecibido,
-        garantia_compromiso_firmado_recibido: formulario.compromisoFirmadoRecibido,
+      const solicitud = construirSolicitudPrestamo({
+        dni: formulario.dni,
+        material: materialSeleccionado,
+        instanciaId: formulario.instanciaId,
+        dias: formulario.dias,
+        checklist: formulario.checklist,
+        documentoIdentidad: formulario.documentoIdentidad,
+        compromisoResponsabilidad: formulario.compromisoResponsabilidad,
       })
+      const respuesta = await api.post('/prestamos/', solicitud)
       setPrestamoCreado(respuesta)
       setFormulario(FORMULARIO_INICIAL)
       await cargarMateriales()
     } catch (errorApi) {
-      setError(mensajeApi(errorApi))
+      const erroresApi = errorApi instanceof ErrorApi ? errorApi.datos : null
+      const camposApi = {
+        dni_prestatario: 'dni',
+        instancia_id: 'instancia_id',
+        documento_identidad: 'documento_identidad',
+        compromiso_responsabilidad: 'compromiso_responsabilidad',
+      }
+      const erroresDeCampo = Object.fromEntries(
+        Object.entries(camposApi)
+          .filter(([campo]) => erroresApi?.[campo])
+          .map(([campo, destino]) => [
+            destino,
+            Array.isArray(erroresApi[campo]) ? erroresApi[campo][0] : String(erroresApi[campo]),
+          ]),
+      )
+      if (Object.keys(erroresDeCampo).length > 0) {
+        setErrores((actual) => ({
+          ...actual,
+          ...erroresDeCampo,
+        }))
+        setError('')
+      } else {
+        setError(mensajeApi(errorApi))
+      }
     } finally {
       setGuardando(false)
     }
@@ -230,6 +315,31 @@ function RegistrarPrestamo() {
               requerido
             />
             <Campo
+              etiqueta="Instancia disponible"
+              opciones={crearOpcionesInstancia(instancias, cargandoInstancias)}
+              valor={formulario.instanciaId}
+              onCambio={(evento) => actualizar('instanciaId', evento.target.value)}
+              error={errores.instancia_id}
+              ayuda={!materialSeleccionado
+                ? 'Selecciona primero el material.'
+                : cargandoInstancias
+                  ? 'Consultando sus instancias disponibles.'
+                  : errorInstancias
+                    ? 'No se pudo consultar el inventario de instancias.'
+                    : instancias.length > 0
+                      ? 'El código identifica el ejemplar físico que se entregará.'
+                      : 'No hay instancias disponibles para este material.'}
+              deshabilitado={!materialSeleccionado || cargandoInstancias || instancias.length === 0}
+              requerido
+            />
+            {errorInstancias && <ErrorAlerta mensaje={errorInstancias} />}
+            {materialSeleccionado && !cargandoInstancias && !errorInstancias && instancias.length === 0 && (
+              <EstadoVacio
+                titulo="Sin instancias disponibles"
+                mensaje="Este material no tiene ejemplares disponibles para prestar."
+              />
+            )}
+            <Campo
               etiqueta="Duración del préstamo (días)"
               tipo="number"
               min="1"
@@ -293,43 +403,42 @@ function RegistrarPrestamo() {
             </fieldset>
 
             {materialSeleccionado?.es_alto_valor && (
-              <fieldset className="grid gap-3 rounded-xl border border-acento-300 bg-acento-50/50 p-4 dark:border-acento-700/60 dark:bg-acento-500/10">
+              <fieldset
+                key={formulario.materialId}
+                className="grid gap-3 rounded-xl border border-acento-300 bg-acento-50/50 p-4 dark:border-acento-700/60 dark:bg-acento-500/10"
+              >
                 <legend className="px-2 text-sm font-bold text-acento-800 dark:text-acento-300">
                   Garantía obligatoria para material de alto valor
                 </legend>
                 <p className="text-xs text-texto-suave">
-                  Verifica presencialmente los documentos. El sistema guarda constancia de recepción,
-                  no copias de documentos personales.
+                  Adjunta ambos documentos en PDF. Se almacenarán de forma privada y solo gestión
+                  autorizada podrá descargarlos. Tamaño máximo: {TAMANO_MAXIMO_GARANTIA_MB} MB.
                 </p>
-                <label className="flex items-start gap-2 text-sm text-texto">
-                  <input
-                    type="checkbox"
-                    checked={formulario.documentoIdentidadRecibido}
-                    onChange={(evento) => actualizar('documentoIdentidadRecibido', evento.target.checked)}
-                    className="mt-0.5 size-4 accent-marca-600"
-                  />
-                  Documento de identidad recibido y revisado
-                </label>
-                {errores.garantia_documento_identidad_recibido && (
-                  <ErrorAlerta mensaje={errores.garantia_documento_identidad_recibido} />
-                )}
-                <label className="flex items-start gap-2 text-sm text-texto">
-                  <input
-                    type="checkbox"
-                    checked={formulario.compromisoFirmadoRecibido}
-                    onChange={(evento) => actualizar('compromisoFirmadoRecibido', evento.target.checked)}
-                    className="mt-0.5 size-4 accent-marca-600"
-                  />
-                  Compromiso de responsabilidad firmado y recibido
-                </label>
-                {errores.garantia_compromiso_firmado_recibido && (
-                  <ErrorAlerta mensaje={errores.garantia_compromiso_firmado_recibido} />
-                )}
+                <SubidaDocumentoPDF
+                  etiqueta="Documento de identidad (PDF)"
+                  archivo={formulario.documentoIdentidad}
+                  onCambio={(archivo) => actualizar('documentoIdentidad', archivo)}
+                  error={errores.documento_identidad}
+                  ayuda={`Solo se acepta application/pdf, hasta ${TAMANO_MAXIMO_GARANTIA_MB} MB.`}
+                />
+                <SubidaDocumentoPDF
+                  etiqueta="Carta de responsabilidad (PDF)"
+                  archivo={formulario.compromisoResponsabilidad}
+                  onCambio={(archivo) => actualizar('compromisoResponsabilidad', archivo)}
+                  error={errores.compromiso_responsabilidad}
+                  ayuda={`Solo se acepta application/pdf, hasta ${TAMANO_MAXIMO_GARANTIA_MB} MB.`}
+                />
               </fieldset>
             )}
 
             <div className="flex flex-wrap gap-2">
-              <Boton tipo="submit" cargando={guardando}>
+              <Boton
+                tipo="submit"
+                cargando={guardando}
+                deshabilitado={materialSeleccionado?.es_alto_valor && (
+                  !formulario.documentoIdentidad || !formulario.compromisoResponsabilidad
+                )}
+              >
                 Confirmar entrega
               </Boton>
               <Boton

@@ -2,6 +2,7 @@ from django.http import FileResponse
 from rest_framework import status
 from rest_framework.generics import GenericAPIView
 from rest_framework.pagination import PageNumberPagination
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -33,6 +34,7 @@ from apps.prestamos.services import (
     consultar_prestamos_usuario,
     consultar_reportes_devolucion,
     estimar_devolucion,
+    obtener_documento_garantia,
     registrar_devolucion,
     registrar_prestamo,
 )
@@ -42,6 +44,7 @@ class RegistrarPrestamoView(APIView):
     """Registra la entrega de un material: POST /api/prestamos/."""
 
     permission_classes = [EsGestorDeAlmacen]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def post(self, request):
         serializer = RegistrarPrestamoSerializer(data=request.data)
@@ -107,6 +110,22 @@ def _respuesta_error(error):
         {error.campo: [error.mensaje]},
         status=error.status_code,
     )
+
+
+class DescargarDocumentoGarantiaView(APIView):
+    """Descarga privada de un PDF de garantía para gestión autorizada."""
+
+    permission_classes = [EsGestorOAdministrador]
+
+    def get(self, request, prestamo_id, tipo):
+        try:
+            archivo, nombre = obtener_documento_garantia(prestamo_id, tipo)
+        except PrestamoError as error:
+            return _respuesta_error(error)
+
+        respuesta = FileResponse(archivo, content_type="application/pdf")
+        respuesta["Content-Disposition"] = f'attachment; filename="{nombre}"'
+        return respuesta
 
 
 def _respuesta_resultado(resultado, prestamo_id, devolucion=None, http_status=200):

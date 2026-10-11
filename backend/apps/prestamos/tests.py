@@ -1,14 +1,28 @@
 """Pruebas de reglas y API para HU09 — registrar la entrega de un préstamo."""
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
+import json
+import tempfile
 from datetime import timedelta
+from pathlib import Path
+from threading import Barrier
+from unittest.mock import patch
+from uuid import uuid4
 
-from django.test import SimpleTestCase, TestCase
+from django.core.exceptions import ValidationError
+from django.core.files.storage import FileSystemStorage, storages
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import close_old_connections
+from django.test import SimpleTestCase, TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient, APITestCase
 
 from apps.inventario.models import Material
 from apps.inventario.serializers import MaterialSerializer
 from apps.inventario.services import registrar_material
-from apps.prestamos.models import Devolucion, Prestamo
+from apps.prestamos.models import Devolucion, Garantia, Prestamo, ruta_documento_garantia
+from apps.prestamos.serializers import RegistrarPrestamoSerializer
+from apps.prestamos.validators import validar_pdf_garantia
 from apps.prestamos.services import (
     PrestamoError,
     consultar_historial_prestamos,
@@ -29,6 +43,82 @@ CHECKLIST = [
     {"elemento": "Carcasa", "condicion": "Sin daños visibles", "observacion": ""},
     {"elemento": "Cable", "condicion": "Completo", "observacion": ""},
 ]
+
+
+def crear_pdf(nombre):
+    return SimpleUploadedFile(
+        nombre,
+        b"%PDF-1.7\ncontenido de prueba",
+        content_type="application/pdf",
+    )
+
+
+@contextmanager
+def storage_garantias_temporal():
+    with tempfile.TemporaryDirectory() as directorio:
+        almacenamiento = FileSystemStorage(location=directorio)
+        with (
+            patch.object(Garantia._meta.get_field("documento_identidad"), "storage", almacenamiento),
+            patch.object(
+                Garantia._meta.get_field("compromiso_responsabilidad"),
+                "storage",
+                almacenamiento,
+            ),
+        ):
+            yield directorio
+
+
+class AlmacenamientoGarantiaTestCase(SimpleTestCase):
+    def test_storage_privado_no_genera_url_publica(self):
+        with self.assertRaisesRegex(ValueError, "endpoint protegido"):
+            storages["garantias"].url("documentos/prueba.pdf")
+
+    def test_los_campos_de_garantia_usan_el_storage_privado(self):
+        for nombre in ("documento_identidad", "compromiso_responsabilidad"):
+            campo = Garantia._meta.get_field(nombre)
+            self.assertIs(campo.storage, storages["garantias"])
+
+    def test_la_ruta_de_garantia_no_usa_el_nombre_original(self):
+        ruta = ruta_documento_garantia(None, "dni-original.pdf")
+
+        self.assertTrue(ruta.startswith("garantias/"))
+        self.assertTrue(ruta.endswith(".pdf"))
+        self.assertNotIn("dni-original", ruta)
+
+    def test_rechaza_extension_mime_y_contenido_que_no_corresponden_a_pdf(self):
+        archivos_invalidos = (
+            SimpleUploadedFile("dni.txt", b"%PDF-1.7", content_type="application/pdf"),
+            SimpleUploadedFile("dni.pdf", b"%PDF-1.7", content_type="text/plain"),
+            SimpleUploadedFile("dni.pdf", b"texto plano", content_type="application/pdf"),
+        )
+        for archivo in archivos_invalidos:
+            with self.subTest(nombre=archivo.name, mime=archivo.content_type):
+                with self.assertRaises(ValidationError):
+                    validar_pdf_garantia(archivo)
+
+    @override_settings(GARANTIA_TAMANO_MAXIMO_BYTES=5)
+    def test_rechaza_pdf_que_supera_el_tamano_configurado(self):
+        archivo = SimpleUploadedFile(
+            "dni.pdf",
+            b"%PDF-1",
+            content_type="application/pdf",
+        )
+
+        with self.assertRaises(ValidationError):
+            validar_pdf_garantia(archivo)
+
+    def test_serializer_acepta_checklist_json_codificado_para_multipart(self):
+        datos = {
+            "dni_prestatario": "12345678",
+            "material_id": "00000000-0000-0000-0000-000000000001",
+            "tiempo_prestamo_dias": "5",
+            "checklist_inicial": json.dumps(CHECKLIST),
+        }
+
+        serializer = RegistrarPrestamoSerializer(data=datos)
+
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertEqual(serializer.validated_data["checklist_inicial"], CHECKLIST)
 
 
 def crear_usuario(email, dni, rol="prestatario", **cambios):
@@ -89,6 +179,16 @@ class RegistrarPrestamoServiceTestCase(TestCase):
         datos.update(cambios)
         return registrar_prestamo(**datos)
 
+    def test_garantia_tiene_estado_pendiente_y_se_asocia_al_prestamo(self):
+        prestamo = self._registrar()
+
+        garantia = Garantia.objects.create(prestamo=prestamo)
+
+        self.assertEqual(garantia.tipo, "documento_y_compromiso")
+        self.assertEqual(garantia.estado, "pendiente")
+        self.assertIsNone(garantia.fecha_registro)
+        self.assertEqual(prestamo.garantia, garantia)
+
     def test_registra_prestamo_activo_con_fecha_limite_y_checklist(self):
         antes = timezone.now()
 
@@ -101,6 +201,68 @@ class RegistrarPrestamoServiceTestCase(TestCase):
         self.assertEqual(prestamo.fecha_limite - prestamo.fecha_entrega, timedelta(days=7))
         self.assertGreaterEqual(prestamo.fecha_entrega, antes)
         self.assertEqual(Material.objects.get(pk=self.material.pk).estado, "prestado")
+        instancia = self.material.instancias.get()
+        self.assertEqual(prestamo.instancia_id, instancia.id)
+        self.assertEqual(instancia.estado, "prestado")
+
+    def test_registra_la_instancia_especifica_solicitada(self):
+        material = crear_material(codigo_inventario="EQ-ESPECIFICO", stock=2)
+        instancias = list(material.instancias.order_by("codigo_ejemplar"))
+
+        prestamo = self._registrar(
+            material_id=material.id,
+            instancia_id=instancias[1].id,
+        )
+
+        self.assertEqual(prestamo.instancia_id, instancias[1].id)
+        instancias[0].refresh_from_db()
+        instancias[1].refresh_from_db()
+        self.assertEqual(instancias[0].estado, "disponible")
+        self.assertEqual(instancias[1].estado, "prestado")
+
+    def test_rechaza_instancia_inexistente(self):
+        with self.assertRaises(PrestamoError) as contexto:
+            self._registrar(instancia_id=uuid4())
+
+        self.assertEqual(contexto.exception.status_code, 404)
+        self.assertEqual(contexto.exception.campo, "instancia_id")
+        self.assertEqual(Prestamo.objects.count(), 0)
+
+    def test_rechaza_instancia_de_otro_material(self):
+        otro_material = crear_material(codigo_inventario="EQ-OTRO")
+
+        with self.assertRaises(PrestamoError) as contexto:
+            self._registrar(instancia_id=otro_material.instancias.get().id)
+
+        self.assertEqual(contexto.exception.status_code, 400)
+        self.assertEqual(contexto.exception.campo, "instancia_id")
+        self.assertEqual(Prestamo.objects.count(), 0)
+
+    def test_rechaza_instancia_no_disponible(self):
+        instancia = self.material.instancias.get()
+        instancia.estado = "prestado"
+        instancia.save(update_fields=["estado"])
+
+        with self.assertRaises(PrestamoError) as contexto:
+            self._registrar(instancia_id=instancia.id)
+
+        self.assertEqual(contexto.exception.status_code, 409)
+        self.assertEqual(contexto.exception.campo, "instancia_id")
+        self.assertEqual(Prestamo.objects.count(), 0)
+
+    def test_rechaza_prestar_dos_veces_la_misma_instancia(self):
+        instancia = self.material.instancias.get()
+        self._registrar(instancia_id=instancia.id)
+        otro_prestatario = crear_usuario("segundo-instancia@unsa.edu.pe", "10000005")
+
+        with self.assertRaises(PrestamoError) as contexto:
+            self._registrar(
+                dni_prestatario=otro_prestatario.dni,
+                instancia_id=instancia.id,
+            )
+
+        self.assertEqual(contexto.exception.status_code, 409)
+        self.assertEqual(Prestamo.objects.count(), 1)
 
     def test_agota_y_restaura_disponibilidad_segun_stock_de_unidades(self):
         material = crear_material(
@@ -162,28 +324,63 @@ class RegistrarPrestamoServiceTestCase(TestCase):
         self.assertIn("habilitado", contexto.exception.mensaje)
         self.assertEqual(Prestamo.objects.count(), 0)
 
-    def test_exige_los_dos_elementos_de_garantia_para_material_de_alto_valor(self):
+    def test_exige_ambos_pdf_para_material_de_alto_valor(self):
         material = crear_material(codigo_inventario="EQ-003", es_alto_valor=True)
 
         with self.assertRaises(PrestamoError) as contexto:
             self._registrar(material_id=material.id)
-        self.assertEqual(contexto.exception.campo, "garantia_documento_identidad_recibido")
+        self.assertEqual(contexto.exception.campo, "documento_identidad")
         self.assertEqual(Prestamo.objects.count(), 0)
 
         with self.assertRaises(PrestamoError) as contexto:
             self._registrar(
                 material_id=material.id,
-                garantia_documento_identidad_recibido=True,
+                documento_identidad=crear_pdf("dni-original.pdf"),
             )
-        self.assertEqual(contexto.exception.campo, "garantia_compromiso_firmado_recibido")
+        self.assertEqual(contexto.exception.campo, "compromiso_responsabilidad")
         self.assertEqual(Prestamo.objects.count(), 0)
 
-        prestamo = self._registrar(
-            material_id=material.id,
-            garantia_documento_identidad_recibido=True,
-            garantia_compromiso_firmado_recibido=True,
-        )
-        self.assertTrue(prestamo.garantia_completa)
+        with storage_garantias_temporal():
+            prestamo = self._registrar(
+                material_id=material.id,
+                documento_identidad=crear_pdf("dni-original.pdf"),
+                compromiso_responsabilidad=crear_pdf("carta-original.pdf"),
+            )
+            garantia = prestamo.garantia
+
+            self.assertEqual(garantia.estado, "registrada")
+            self.assertIsNotNone(garantia.fecha_registro)
+            self.assertTrue(prestamo.garantia_completa)
+            self.assertNotIn("original", garantia.documento_identidad.name)
+            self.assertNotIn("original", garantia.compromiso_responsabilidad.name)
+
+    def test_rechaza_archivos_de_garantia_para_material_que_no_los_requiere(self):
+        with self.assertRaises(PrestamoError) as contexto:
+            self._registrar(documento_identidad=crear_pdf("dni.pdf"))
+
+        self.assertEqual(contexto.exception.campo, "documento_identidad")
+        self.assertEqual(Prestamo.objects.count(), 0)
+
+    def test_si_falla_el_registro_de_garantia_no_quedan_archivos_ni_prestamo(self):
+        material = crear_material(codigo_inventario="EQ-004", es_alto_valor=True)
+        guardar_garantia = Garantia.save
+
+        def guardar_y_fallar(garantia, *args, **kwargs):
+            guardar_garantia(garantia, *args, **kwargs)
+            raise RuntimeError("Fallo simulado al guardar la garantía")
+
+        with storage_garantias_temporal() as directorio:
+            with patch.object(Garantia, "save", guardar_y_fallar):
+                with self.assertRaises(RuntimeError):
+                    self._registrar(
+                        material_id=material.id,
+                        documento_identidad=crear_pdf("dni.pdf"),
+                        compromiso_responsabilidad=crear_pdf("carta.pdf"),
+                    )
+
+            self.assertEqual(Prestamo.objects.count(), 0)
+            self.assertEqual(Garantia.objects.count(), 0)
+            self.assertEqual(list(Path(directorio).rglob("*.pdf")), [])
 
     def test_rechaza_material_en_mantenimiento_o_reservado(self):
         for estado in ("en_mantenimiento", "reservado"):
@@ -213,6 +410,48 @@ class RegistrarPrestamoServiceTestCase(TestCase):
         prestamo.save(update_fields=["estado"])
 
         self.assertFalse(usuario_tiene_prestamos_activos(self.prestatario.id))
+
+
+class RegistrarPrestamoConcurrenciaTestCase(TransactionTestCase):
+    """Comprueba que dos transacciones no entreguen una misma instancia."""
+
+    def test_dos_registros_concurrentes_no_comparten_instancia(self):
+        gestor = crear_usuario("gestor-concurrencia@unsa.edu.pe", "10000020", rol="gestor")
+        prestatarios = [
+            crear_usuario("concurrencia1@unsa.edu.pe", "10000021"),
+            crear_usuario("concurrencia2@unsa.edu.pe", "10000022"),
+        ]
+        material = crear_material(codigo_inventario="EQ-CONCURRENCIA")
+        instancia_id = material.instancias.get().id
+        barrera = Barrier(2)
+
+        def registrar(dni):
+            close_old_connections()
+            try:
+                barrera.wait(timeout=10)
+                prestamo = registrar_prestamo(
+                    dni_prestatario=dni,
+                    material_id=material.id,
+                    instancia_id=instancia_id,
+                    tiempo_prestamo_dias=7,
+                    checklist_inicial=CHECKLIST,
+                    registrado_por=gestor,
+                )
+                return ("registrado", prestamo.id)
+            except PrestamoError as error:
+                return ("rechazado", error.status_code)
+            finally:
+                close_old_connections()
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            resultados = list(
+                executor.map(registrar, [usuario.dni for usuario in prestatarios])
+            )
+
+        self.assertEqual(sum(resultado[0] == "registrado" for resultado in resultados), 1)
+        self.assertEqual(resultados.count(("rechazado", 409)), 1)
+        self.assertEqual(Prestamo.objects.count(), 1)
+        self.assertEqual(material.instancias.filter(estado="prestado").count(), 1)
 
 
 class ConsultarPrestamosServiceTestCase(TestCase):
@@ -562,8 +801,13 @@ class RegistrarPrestamoAPITestCase(APITestCase):
 
     def test_post_como_gestor_devuelve_201_y_datos_de_entrega(self):
         self._iniciar_sesion(self.gestor)
+        instancia = self.material.instancias.get()
 
-        respuesta = self.client.post(self.URL, self._payload(), format="json")
+        respuesta = self.client.post(
+            self.URL,
+            self._payload(instancia_id=str(instancia.id)),
+            format="json",
+        )
 
         self.assertEqual(respuesta.status_code, 201, respuesta.content)
         datos = respuesta.json()
@@ -572,8 +816,64 @@ class RegistrarPrestamoAPITestCase(APITestCase):
         self.assertEqual(datos["estado"], "activo")
         self.assertEqual(datos["tiempo_prestamo_dias"], 5)
         self.assertEqual(datos["checklist_inicial"], CHECKLIST)
+        self.assertEqual(datos["instancia_id"], str(instancia.id))
+        self.assertEqual(datos["codigo_ejemplar"], instancia.codigo_ejemplar)
         self.assertFalse(datos["requiere_garantia"])
         self.assertEqual(Prestamo.objects.count(), 1)
+
+    def test_post_multipart_registra_garantia_y_parsea_checklist_json(self):
+        self._iniciar_sesion(self.gestor)
+        material = crear_material(
+            codigo_inventario="API-ALTO-VALOR",
+            es_alto_valor=True,
+        )
+        instancia = material.instancias.get()
+        datos = self._payload(
+            material_id=str(material.id),
+            instancia_id=str(instancia.id),
+            checklist_inicial=json.dumps(CHECKLIST),
+            documento_identidad=crear_pdf("dni-original.pdf"),
+            compromiso_responsabilidad=crear_pdf("carta-original.pdf"),
+        )
+
+        with storage_garantias_temporal():
+            respuesta = self.client.post(self.URL, datos, format="multipart")
+
+        self.assertEqual(respuesta.status_code, 201, respuesta.content)
+        datos_respuesta = respuesta.json()
+        self.assertEqual(datos_respuesta["checklist_inicial"], CHECKLIST)
+        self.assertTrue(datos_respuesta["garantia_completa"])
+        self.assertTrue(datos_respuesta["garantia_documento_identidad_cargado"])
+        self.assertTrue(datos_respuesta["garantia_compromiso_responsabilidad_cargado"])
+        self.assertNotIn("documento_identidad", datos_respuesta)
+        self.assertEqual(Prestamo.objects.count(), 1)
+
+    def test_post_json_sin_pdf_rechaza_material_de_alto_valor(self):
+        self._iniciar_sesion(self.gestor)
+        material = crear_material(
+            codigo_inventario="API-ALTO-SIN-PDF",
+            es_alto_valor=True,
+        )
+
+        respuesta = self.client.post(
+            self.URL,
+            self._payload(material_id=str(material.id)),
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn("documento_identidad", respuesta.json())
+        self.assertEqual(Prestamo.objects.count(), 0)
+
+    def test_post_omite_instancia_y_guarda_la_seleccion_automatica(self):
+        self._iniciar_sesion(self.gestor)
+
+        respuesta = self.client.post(self.URL, self._payload(), format="json")
+
+        self.assertEqual(respuesta.status_code, 201, respuesta.content)
+        instancia = self.material.instancias.get()
+        self.assertEqual(respuesta.json()["instancia_id"], str(instancia.id))
+        self.assertEqual(instancia.estado, "prestado")
 
     def test_listado_inventario_devuelve_unidades_libres_actualizadas(self):
         material = crear_material(
@@ -638,6 +938,19 @@ class RegistrarPrestamoAPITestCase(APITestCase):
         self.assertIn("estado", respuesta.json())
         self.assertEqual(Prestamo.objects.count(), 0)
 
+    def test_post_rechaza_los_booleanos_obsoletos_de_garantia(self):
+        self._iniciar_sesion(self.gestor)
+
+        respuesta = self.client.post(
+            self.URL,
+            self._payload(garantia_documento_identidad_recibido=True),
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn("garantia_documento_identidad_recibido", respuesta.json())
+        self.assertEqual(Prestamo.objects.count(), 0)
+
     def test_post_dni_inexistente_responde_404(self):
         self._iniciar_sesion(self.gestor)
 
@@ -662,6 +975,95 @@ class RegistrarPrestamoAPITestCase(APITestCase):
 
         self.assertEqual(respuesta.status_code, 403)
         self.assertEqual(Prestamo.objects.count(), 0)
+
+
+class DescargarGarantiaAPITestCase(APITestCase):
+    URL = "/api/prestamos/{prestamo_id}/garantia/{tipo}/"
+
+    def setUp(self):
+        self.gestor = crear_usuario("gestor-garantia@unsa.edu.pe", "20000301", rol="gestor")
+        self.administrador = crear_usuario(
+            "admin-garantia@unsa.edu.pe",
+            "20000302",
+            rol="administrador",
+        )
+        self.prestatario = crear_usuario("prestatario-garantia@unsa.edu.pe", "20000303")
+        self.material = crear_material(
+            codigo_inventario="GARANTIA-API-001",
+            es_alto_valor=True,
+        )
+
+    def _iniciar_sesion(self, usuario):
+        sesion = self.client.session
+        sesion[CLAVE_SESION_USUARIO_ID] = usuario.id
+        sesion[CLAVE_SESION_ULTIMA_ACTIVIDAD] = timezone.now().isoformat()
+        sesion.save()
+
+    def _registrar_prestamo_con_garantia(self):
+        return registrar_prestamo(
+            dni_prestatario=self.prestatario.dni,
+            material_id=self.material.id,
+            tiempo_prestamo_dias=5,
+            checklist_inicial=CHECKLIST,
+            registrado_por=self.gestor,
+            documento_identidad=crear_pdf("dni-original.pdf"),
+            compromiso_responsabilidad=crear_pdf("carta-original.pdf"),
+        )
+
+    def test_gestor_y_administrador_descargan_pdf_sin_publicarlo_en_media(self):
+        with storage_garantias_temporal():
+            prestamo = self._registrar_prestamo_con_garantia()
+            garantia = prestamo.garantia
+            url = self.URL.format(
+                prestamo_id=prestamo.id,
+                tipo="documento-identidad",
+            )
+
+            for usuario in (self.gestor, self.administrador):
+                with self.subTest(rol=usuario.rol.nombre):
+                    self._iniciar_sesion(usuario)
+                    respuesta = self.client.get(url)
+
+                    self.assertEqual(respuesta.status_code, 200)
+                    self.assertEqual(respuesta["Content-Type"], "application/pdf")
+                    self.assertIn("attachment;", respuesta["Content-Disposition"])
+                    self.assertIn("documento-identidad-prestamo-", respuesta["Content-Disposition"])
+                    self.assertEqual(b"".join(respuesta.streaming_content), b"%PDF-1.7\ncontenido de prueba")
+
+            respuesta_publica = self.client.get(
+                f"/media/{garantia.documento_identidad.name}"
+            )
+            self.assertEqual(respuesta_publica.status_code, 404)
+
+    def test_descarga_sin_sesion_o_como_prestatario_es_denegada(self):
+        url = self.URL.format(prestamo_id=1, tipo="documento-identidad")
+
+        sin_sesion = self.client.get(url)
+        self.assertEqual(sin_sesion.status_code, 403)
+
+        self._iniciar_sesion(self.prestatario)
+        como_prestatario = self.client.get(url)
+        self.assertEqual(como_prestatario.status_code, 403)
+
+    def test_descarga_informa_prestamo_o_documento_inexistente(self):
+        self._iniciar_sesion(self.gestor)
+        inexistente = self.client.get(
+            self.URL.format(prestamo_id=999999, tipo="documento-identidad")
+        )
+        self.assertEqual(inexistente.status_code, 404)
+
+        material_sin_garantia = crear_material(codigo_inventario="GARANTIA-SIN-ARCHIVO")
+        prestamo = registrar_prestamo(
+            dni_prestatario=self.prestatario.dni,
+            material_id=material_sin_garantia.id,
+            tiempo_prestamo_dias=5,
+            checklist_inicial=CHECKLIST,
+            registrado_por=self.gestor,
+        )
+        sin_documento = self.client.get(
+            self.URL.format(prestamo_id=prestamo.id, tipo="compromiso")
+        )
+        self.assertEqual(sin_documento.status_code, 404)
 
 
 class DevolucionBaseTestCase(TestCase):
@@ -788,6 +1190,48 @@ class RegistrarDevolucionServiceTestCase(DevolucionBaseTestCase):
         self.assertEqual(self.prestatario.reputacion_puntaje, 5)
         self.material.refresh_from_db()
         self.assertEqual(self.material.estado, "disponible")
+
+    def test_devuelve_la_instancia_asociada_al_prestamo(self):
+        material = crear_material(codigo_inventario="EQ-DEVOLUCION-EXACTA", stock=2)
+        instancias = list(material.instancias.order_by("codigo_ejemplar"))
+        segundo_prestatario = crear_usuario("segundo-dev-exacto@unsa.edu.pe", "10000027")
+        primero = registrar_prestamo(
+            dni_prestatario=self.prestatario.dni,
+            material_id=material.id,
+            instancia_id=instancias[0].id,
+            tiempo_prestamo_dias=7,
+            checklist_inicial=CHECKLIST,
+            registrado_por=self.gestor,
+        )
+        segundo = registrar_prestamo(
+            dni_prestatario=segundo_prestatario.dni,
+            material_id=material.id,
+            instancia_id=instancias[1].id,
+            tiempo_prestamo_dias=7,
+            checklist_inicial=CHECKLIST,
+            registrado_por=self.gestor,
+        )
+
+        registrar_devolucion(
+            prestamo_id=segundo.id,
+            checklist_devolucion=self.checklist_ok,
+            realizado_por=self.gestor,
+        )
+
+        instancias[0].refresh_from_db()
+        instancias[1].refresh_from_db()
+        self.assertEqual(primero.instancia_id, instancias[0].id)
+        self.assertEqual(instancias[0].estado, "prestado")
+        self.assertEqual(instancias[1].estado, "disponible")
+
+    def test_prestamo_historico_sin_instancia_usa_fallback(self):
+        self.prestamo.instancia = None
+        self.prestamo.save(update_fields=["instancia"])
+
+        self._devolver()
+
+        instancia = self.material.instancias.get()
+        self.assertEqual(instancia.estado, "disponible")
 
     def test_tardanza_descuenta_proporcional_sin_bonificacion(self):
         devolucion = self._devolver(
@@ -1243,9 +1687,10 @@ class ReportesDevolucionAPITestCase(DevolucionBaseTestCase):
         sesion.save()
 
     def _devolver_otro_prestamo(self):
+        otro_material = crear_material(codigo_inventario="EQ-REPORTES-OTRO")
         prestamo = registrar_prestamo(
             dni_prestatario=self.prestatario.dni,
-            material_id=self.material.id,
+            material_id=otro_material.id,
             tiempo_prestamo_dias=7,
             checklist_inicial=CHECKLIST,
             registrado_por=self.gestor,

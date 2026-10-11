@@ -2,10 +2,12 @@ from datetime import timedelta
 import math
 
 from django.core.files.base import ContentFile
+from django.core.exceptions import ValidationError
 from django.db.models import Case, CharField, Count, DateTimeField, F, IntegerField, Value, When
 from django.db import transaction
 from django.utils import timezone
 
+from apps.inventario import services as servicios_inventario
 from apps.inventario.constants import TIERS_ACCESIBLES
 from apps.inventario.models import Material
 from apps.prestamos.constants import (
@@ -13,8 +15,9 @@ from apps.prestamos.constants import (
     ESTADOS_QUE_OCUPAN_UNIDAD,
     VALORES_ESTADOS_CHECKLIST_DEVOLUCION,
 )
-from apps.prestamos.models import Devolucion, Prestamo
+from apps.prestamos.models import Devolucion, Garantia, Prestamo
 from apps.prestamos.reportes import generar_reporte_dano
+from apps.prestamos.validators import validar_pdf_garantia
 from apps.usuarios.models import Usuario
 from apps.usuarios.services import (
     actualizar_reputacion,
@@ -230,16 +233,125 @@ def _validar_checklist(checklist_inicial):
             )
 
 
+def _validar_documentos_garantia(material, documento_identidad, compromiso_responsabilidad):
+    documentos = (
+        ("documento_identidad", documento_identidad, "El documento de identidad en PDF"),
+        (
+            "compromiso_responsabilidad",
+            compromiso_responsabilidad,
+            "El compromiso de responsabilidad en PDF",
+        ),
+    )
+    requiere_garantia = material.requiere_garantia()
+    if not requiere_garantia:
+        for campo, archivo, _ in documentos:
+            if archivo is not None:
+                raise PrestamoError(
+                    campo,
+                    "Este material no requiere documentos de garantía.",
+                )
+    if requiere_garantia:
+        for campo, archivo, descripcion in documentos:
+            if archivo is None:
+                raise PrestamoError(
+                    campo,
+                    f"{descripcion} es obligatorio para materiales de alto valor.",
+                )
+
+    for campo, archivo, _ in documentos:
+        if archivo is None:
+            continue
+        try:
+            validar_pdf_garantia(archivo)
+        except ValidationError as error:
+            raise PrestamoError(campo, error.messages[0]) from error
+
+
+def _crear_garantia_registrada(prestamo, documento_identidad, compromiso_responsabilidad):
+    garantia = Garantia(
+        prestamo=prestamo,
+        tipo="documento_y_compromiso",
+        estado="registrada",
+        fecha_registro=timezone.now(),
+    )
+    archivos_guardados = []
+    try:
+        for nombre_campo, archivo in (
+            ("documento_identidad", documento_identidad),
+            ("compromiso_responsabilidad", compromiso_responsabilidad),
+        ):
+            campo_archivo = getattr(garantia, nombre_campo)
+            campo_archivo.save(archivo.name, archivo, save=False)
+            archivos_guardados.append((campo_archivo.storage, campo_archivo.name))
+        garantia.save()
+    except Exception:
+        for almacenamiento, nombre in archivos_guardados:
+            almacenamiento.delete(nombre)
+        raise
+    return garantia
+
+
+def obtener_documento_garantia(prestamo_id, tipo):
+    """Abre el documento indicado sin exponer su ruta de almacenamiento."""
+    campos = {
+        "documento-identidad": ("documento_identidad", "documento-identidad"),
+        "compromiso": ("compromiso_responsabilidad", "compromiso-responsabilidad"),
+    }
+    if tipo not in campos:
+        raise PrestamoError(
+            "tipo",
+            "El tipo de documento de garantía no es válido.",
+        )
+
+    try:
+        prestamo = Prestamo.objects.get(pk=prestamo_id)
+    except (Prestamo.DoesNotExist, ValueError, TypeError) as error:
+        raise PrestamoError(
+            "prestamo_id",
+            "No existe el préstamo indicado.",
+            status_code=404,
+        ) from error
+
+    try:
+        garantia = prestamo.garantia
+    except Garantia.DoesNotExist as error:
+        raise PrestamoError(
+            "garantia",
+            "El préstamo no tiene una garantía registrada.",
+            status_code=404,
+        ) from error
+
+    nombre_campo, nombre_descarga = campos[tipo]
+    documento = getattr(garantia, nombre_campo)
+    if not documento:
+        raise PrestamoError(
+            nombre_campo,
+            "El documento de garantía solicitado no está disponible.",
+            status_code=404,
+        )
+    try:
+        documento.open("rb")
+    except (FileNotFoundError, OSError) as error:
+        raise PrestamoError(
+            nombre_campo,
+            "El archivo del documento de garantía no existe.",
+            status_code=404,
+        ) from error
+
+    return documento, f"{nombre_descarga}-prestamo-{prestamo.pk}.pdf"
+
+
 @transaction.atomic
 def registrar_prestamo(
     *,
     dni_prestatario,
     material_id,
+    instancia_id=None,
     tiempo_prestamo_dias,
     checklist_inicial,
     registrado_por,
-    garantia_documento_identidad_recibido=False,
-    garantia_compromiso_firmado_recibido=False,
+    documento_identidad=None,
+    compromiso_responsabilidad=None,
     fecha_entrega=None,
 ):
     """Registra la entrega con elegibilidad, garantía y control atómico de stock."""
@@ -269,6 +381,25 @@ def registrar_prestamo(
             status_code=409,
         )
 
+    requiere_garantia = material.requiere_garantia()
+    _validar_documentos_garantia(
+        material,
+        documento_identidad,
+        compromiso_responsabilidad,
+    )
+
+    try:
+        instancia_elegida = servicios_inventario.marcar_instancia_prestada(
+            material.id,
+            instancia_id=instancia_id,
+        )
+    except servicios_inventario.InventarioError as error:
+        raise PrestamoError(
+            error.campo,
+            error.mensaje,
+            status_code=error.status_code,
+        ) from error
+
     unidades_disponibles = contar_unidades_disponibles(material)
     prestamos_existentes = material.prestamos.filter(
         estado__in=ESTADOS_QUE_OCUPAN_UNIDAD
@@ -278,18 +409,6 @@ def registrar_prestamo(
             "material_id",
             "No quedan unidades disponibles de este material.",
             status_code=409,
-        )
-
-    requiere_garantia = material.requiere_garantia()
-    if requiere_garantia and not garantia_documento_identidad_recibido:
-        raise PrestamoError(
-            "garantia_documento_identidad_recibido",
-            "El gestor debe confirmar la recepción del documento de identidad.",
-        )
-    if requiere_garantia and not garantia_compromiso_firmado_recibido:
-        raise PrestamoError(
-            "garantia_compromiso_firmado_recibido",
-            "El gestor debe confirmar la recepción del compromiso firmado.",
         )
 
     fecha_entrega = fecha_entrega or timezone.now()
@@ -302,8 +421,7 @@ def registrar_prestamo(
         tiempo_prestamo_dias=tiempo_prestamo_dias,
         estado="activo",
         checklist_inicial=checklist_inicial,
-        garantia_documento_identidad_recibido=garantia_documento_identidad_recibido,
-        garantia_compromiso_firmado_recibido=garantia_compromiso_firmado_recibido,
+        instancia_id=instancia_elegida["id"],
     )
 
     # Material.estado describe disponibilidad del conjunto: solo pasa a
@@ -318,10 +436,12 @@ def registrar_prestamo(
         material.estado = "disponible"
         material.save(update_fields=("estado", "updated_at"))
 
-    instancia_disponible = material.instancias.filter(estado="disponible").first()
-    if instancia_disponible:
-        instancia_disponible.estado = "prestado"
-        instancia_disponible.save(update_fields=("estado", "updated_at"))
+    if requiere_garantia:
+        _crear_garantia_registrada(
+            prestamo,
+            documento_identidad,
+            compromiso_responsabilidad,
+        )
 
     return prestamo
 
@@ -519,16 +639,25 @@ def registrar_devolucion(
         material.estado = "disponible"
         material.save(update_fields=("estado", "updated_at"))
 
-    instancia_prestada = material.instancias.filter(estado="prestado").first()
-    if instancia_prestada:
-        if resultado["hay_dano"]:
-            instancia_prestada.estado = "en_mantenimiento"
-            instancia_prestada.observaciones = (
-                f"Devuelto con {resultado['dano']} en préstamo #{prestamo.id}."
-            )
-        else:
-            instancia_prestada.estado = "disponible"
-        instancia_prestada.save(update_fields=("estado", "observaciones", "updated_at"))
+    estado_final_instancia = "en_mantenimiento" if resultado["hay_dano"] else "disponible"
+    observaciones_instancia = (
+        f"Devuelto con {resultado['dano']} en préstamo #{prestamo.id}."
+        if resultado["hay_dano"]
+        else None
+    )
+    try:
+        servicios_inventario.registrar_devolucion_instancia(
+            material.id,
+            instancia_id=prestamo.instancia_id,
+            estado_final=estado_final_instancia,
+            observaciones=observaciones_instancia,
+        )
+    except servicios_inventario.InventarioError as error:
+        raise PrestamoError(
+            error.campo,
+            error.mensaje,
+            status_code=error.status_code,
+        ) from error
 
     devolucion = Devolucion.objects.create(
         prestamo=prestamo,

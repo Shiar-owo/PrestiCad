@@ -6,6 +6,7 @@ abierto. La configuración real de producción (imágenes en Cloudinary) se
 agrega en un commit posterior.
 """
 import os
+from pathlib import Path
 
 from django.core.exceptions import ImproperlyConfigured
 
@@ -28,6 +29,14 @@ if not ALLOWED_HOSTS:
         "Define DJANGO_ALLOWED_HOSTS en el entorno de producción con los "
         "dominios que sirven la API."
     )
+
+ruta_garantias = os.getenv("GARANTIAS_STORAGE_ROOT")
+if not ruta_garantias or not Path(ruta_garantias).is_absolute():
+    raise ImproperlyConfigured(
+        "Define GARANTIAS_STORAGE_ROOT como ruta absoluta de un volumen "
+        "privado y persistente para los documentos de garantía."
+    )
+GARANTIAS_STORAGE_ROOT = Path(ruta_garantias)
 
 # El proyecto es un frontend servido por nginx más una API, así que el origen
 # del SPA hay que declararlo: dejarlo vacío rompe el navegador en silencio.
@@ -76,5 +85,9 @@ STORAGES = {
     },
     "staticfiles": {
         "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+    },
+    "garantias": {
+        "BACKEND": "apps.prestamos.storage.AlmacenamientoPrivadoGarantias",
+        "OPTIONS": {"location": GARANTIAS_STORAGE_ROOT},
     },
 }

@@ -10,6 +10,7 @@ from apps.compartido.serializers import RechazarCamposNoPermitidosMixin
 from apps.inventario.constants import (
     ESTADOS_INSTANCIA,
     ESTADOS_MATERIAL,
+    MODOS_REGISTRO_MATERIAL,
     TIPOS_MATERIAL,
 )
 from apps.inventario.models import InstanciaMaterial, Material
@@ -234,6 +235,14 @@ class MaterialRegistroSerializer(RechazarCamposNoPermitidosMixin, serializers.Mo
         error_messages={"invalid_choice": "Tipo de material inválido."},
     )
     stock = serializers.IntegerField(required=False, min_value=1, error_messages=MENSAJES_STOCK)
+    modo = serializers.ChoiceField(
+        choices=MODOS_REGISTRO_MATERIAL,
+        required=False,
+        default="unico",
+        error_messages={"invalid_choice": "Modo de registro inválido."},
+    )
+    ubicacion = serializers.CharField(required=False, allow_blank=True, default="")
+    instancias = serializers.JSONField(required=False)
     tier_minimo_requerido = serializers.ChoiceField(
         choices=TIERS,
         required=False,
@@ -257,6 +266,9 @@ class MaterialRegistroSerializer(RechazarCamposNoPermitidosMixin, serializers.Mo
             "codigo_inventario",
             "tipo",
             "stock",
+            "modo",
+            "ubicacion",
+            "instancias",
             "es_alto_valor",
             *CAMPOS_FICHA_Y_REPUTACION,
         )
@@ -275,6 +287,26 @@ class MaterialRegistroSerializer(RechazarCamposNoPermitidosMixin, serializers.Mo
             "costo_reparacion": {"required": False, "allow_null": True},
             "costo_reposicion": {"required": False, "allow_null": True},
         }
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        modo = attrs.get("modo", "unico")
+        filas = attrs.get("instancias")
+        if modo in ("lote", "detalle"):
+            if not isinstance(filas, list):
+                raise serializers.ValidationError(
+                    {"instancias": "Envía una lista de ejemplares para este modo."}
+                )
+            if attrs.get("stock", len(filas)) != len(filas):
+                raise serializers.ValidationError(
+                    {"stock": "El stock debe coincidir con la cantidad de ejemplares."}
+                )
+            attrs["stock"] = len(filas)
+        elif filas is not None:
+            raise serializers.ValidationError(
+                {"instancias": "Las filas solo se aceptan en modo lote o detalle."}
+            )
+        return attrs
 
 
 class MaterialActualizacionSerializer(RechazarCamposNoPermitidosMixin, serializers.ModelSerializer):

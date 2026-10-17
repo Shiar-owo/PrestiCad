@@ -27,3 +27,12 @@ TIERS_ACCESIBLES = {
     "estandar": ("restringido", "estandar"),
     "avanzado": ("restringido", "estandar", "avanzado"),
 }
+
+# HU04: límite común para las filas de lote y registro por detalle.
+MAXIMO_EJEMPLARES_REGISTRO = 50
+
+MODOS_REGISTRO_MATERIAL = [
+    ("unico", "Único"),
+    ("lote", "Lote"),
+    ("detalle", "Detalle"),
+]

@@ -9,6 +9,8 @@ from rest_framework.generics import (
     RetrieveUpdateAPIView,
     RetrieveUpdateDestroyAPIView,
 )
+import json
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny
@@ -45,17 +47,46 @@ class MaterialListCreateView(ListCreateAPIView):
         return MaterialSerializer
 
     def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
+        if request.content_type and request.content_type.startswith("multipart/"):
+            # Copia superficial: `QueryDict.copy()` intenta copiar en
+            # profundidad los archivos subidos y falla con sus streams.
+            datos = {clave: valor for clave, valor in request.data.items()}
+            filas = datos.get("instancias")
+            if filas:
+                try:
+                    filas = json.loads(filas)
+                except (TypeError, ValueError):
+                    return Response(
+                        {"instancias": "Las filas de ejemplares deben ser JSON válido."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                if isinstance(filas, list):
+                    for indice, fila in enumerate(filas):
+                        archivo = request.FILES.get(f"instancia_foto_{indice}")
+                        if archivo is not None and isinstance(fila, dict):
+                            fila["foto"] = archivo
+                        datos.pop(f"instancia_foto_{indice}", None)
+                    datos["instancias"] = filas
+        else:
+            datos = request.data
+        serializer = self.get_serializer(data=datos)
         # 400: el formato de los datos no es válido.
         serializer.is_valid(raise_exception=True)
 
         try:
             material = services.registrar_material(**serializer.validated_data)
         except services.InventarioError as error:
-            # 409: el código de inventario ya existe (no se crea ningún registro).
+            respuesta = {error.campo: [error.mensaje]}
+            if getattr(error, "indice", None) is not None:
+                respuesta["indice"] = error.indice
             return Response(
-                {error.campo: [error.mensaje]},
-                status=status.HTTP_409_CONFLICT,
+                respuesta,
+                status=error.status_code,
+            )
+        except DjangoValidationError as error:
+            return Response(
+                error.message_dict if hasattr(error, "message_dict") else {"foto": error.messages},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         return Response(MaterialSerializer(material).data, status=status.HTTP_201_CREATED)

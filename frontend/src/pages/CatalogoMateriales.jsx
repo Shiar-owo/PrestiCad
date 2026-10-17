@@ -46,16 +46,6 @@ function CatalogoMateriales({ onSeleccionarMaterial }) {
     }
   }
 
-  async function actualizarFichaTrasAgregarInstancias() {
-    try {
-      const materialActualizado = await api.get(`/materiales/${materialFicha.id}/`)
-      setMaterialFicha(materialActualizado)
-    } catch {
-      setError('Los ejemplares se agregaron, pero no se pudo actualizar la ficha.')
-    }
-    await buscarMateriales(filtros)
-  }
-
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-8">
       <header className="mb-6">
@@ -78,7 +68,6 @@ function CatalogoMateriales({ onSeleccionarMaterial }) {
         <FichaTecnicaModal
           material={materialFicha}
           onCerrar={() => setMaterialFicha(null)}
-          onAgregarInstancias={actualizarFichaTrasAgregarInstancias}
         />
       )}
     </div>

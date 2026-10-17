@@ -1,5 +1,14 @@
 export const TAMANO_PAGINA_HISTORIAL = 25
 
+export function obtenerPrestamoAdyacente(prestamos, prestamoId, direccion) {
+  if (!Array.isArray(prestamos) || !['anterior', 'siguiente'].includes(direccion)) return null
+  const indice = prestamos.findIndex((prestamo) => prestamo.id === prestamoId)
+  if (indice < 0) return null
+
+  const indiceAdyacente = indice + (direccion === 'anterior' ? -1 : 1)
+  return prestamos[indiceAdyacente] || null
+}
+
 export function construirRutaHistorial({ estado = 'todos', pagina = 1, dni = '' } = {}) {
   const parametros = new URLSearchParams({
     page: String(pagina),

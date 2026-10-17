@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, RotateCcw, Trash2, Upload } from 'lucide-react'
+import { ArrowLeft, ChevronLeft, ChevronRight, RotateCcw, Trash2, Upload } from 'lucide-react'
 
 import { api, ErrorApi } from '../../api/client'
 import BadgeEstado from '../ui/BadgeEstado'
@@ -59,6 +59,10 @@ export default function DetallePrestamo({
   etiquetaVolver = 'Volver a mis préstamos',
   onDevolucion = null,
   puedeEditarGarantia = false,
+  onAnterior = null,
+  onSiguiente = null,
+  hayAnterior = false,
+  haySiguiente = false,
 }) {
   const [detalle, setDetalle] = useState(null)
   const [cargando, setCargando] = useState(true)
@@ -71,7 +75,10 @@ export default function DetallePrestamo({
   useEffect(() => {
     let activa = true
     setCargando(true)
+    setDetalle(null)
     setError('')
+    setArchivos({})
+    setErrorArchivos({})
 
     api.get(`/prestamos/${prestamo.id}/historial/`)
       .then((datos) => {
@@ -141,6 +148,30 @@ export default function DetallePrestamo({
       >
         {etiquetaVolver}
       </Boton>
+      {(onAnterior || onSiguiente) && (
+        <nav className="mt-3 flex flex-wrap gap-2" aria-label="Navegar entre préstamos">
+          <Boton
+            variante="secundario"
+            tamanio="pequeno"
+            tipo="button"
+            icono={ChevronLeft}
+            deshabilitado={!hayAnterior}
+            onClick={onAnterior}
+          >
+            Préstamo anterior
+          </Boton>
+          <Boton
+            variante="secundario"
+            tamanio="pequeno"
+            tipo="button"
+            icono={ChevronRight}
+            deshabilitado={!haySiguiente}
+            onClick={onSiguiente}
+          >
+            Préstamo siguiente
+          </Boton>
+        </nav>
+      )}
       <h3 id="prestamo-detalle-titulo" className="mt-4 text-lg font-bold text-texto">
         Detalle del préstamo
       </h3>

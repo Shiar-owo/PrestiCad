@@ -1,26 +1,35 @@
-import { useState } from 'react'
-
 import BadgeEstado from '../components/ui/BadgeEstado'
 import DetallePrestamo from '../components/prestamos/DetallePrestamo'
 import { esDevoluble } from '../constantes/devolucion'
+import { obtenerPrestamoAdyacente } from './historialPrestamos'
 
 export default function ListaHistorialPrestamos({
   prestamos,
+  seleccionado = null,
+  onSeleccionar = () => {},
+  onAnteriorPagina = null,
+  onSiguientePagina = null,
+  hayPaginaAnterior = false,
+  hayPaginaSiguiente = false,
   onDevolucion = null,
   puedeEditarGarantia = false,
 }) {
-  const [seleccionado, setSeleccionado] = useState(null)
-
   if (seleccionado) {
     const puedeDevolver =
       Boolean(onDevolucion) && esDevoluble(seleccionado.estado)
+    const anterior = obtenerPrestamoAdyacente(prestamos, seleccionado.id, 'anterior')
+    const siguiente = obtenerPrestamoAdyacente(prestamos, seleccionado.id, 'siguiente')
 
     return (
       <DetallePrestamo
         etiquetaVolver="Volver al historial"
-        onVolver={() => setSeleccionado(null)}
+        onVolver={() => onSeleccionar(null)}
         prestamo={seleccionado}
         puedeEditarGarantia={puedeEditarGarantia}
+        onAnterior={anterior ? () => onSeleccionar(anterior) : onAnteriorPagina}
+        onSiguiente={siguiente ? () => onSeleccionar(siguiente) : onSiguientePagina}
+        hayAnterior={Boolean(anterior) || hayPaginaAnterior}
+        haySiguiente={Boolean(siguiente) || hayPaginaSiguiente}
         onDevolucion={
           puedeDevolver ? () => onDevolucion(seleccionado.id) : undefined
         }
@@ -35,7 +44,7 @@ export default function ListaHistorialPrestamos({
           <button
             type="button"
             className="w-full rounded-xl border border-borde bg-white p-4 text-left transition-colors hover:border-acento-400 hover:bg-superficie-alta dark:bg-superficie"
-            onClick={() => setSeleccionado(prestamo)}
+            onClick={() => onSeleccionar(prestamo)}
           >
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="font-bold text-texto">{prestamo.material_nombre}</span>

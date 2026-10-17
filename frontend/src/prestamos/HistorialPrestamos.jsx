@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState } from 'react'
+import { useContext, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 
 import { api } from '../api/client'
@@ -29,22 +29,37 @@ export default function HistorialPrestamos() {
   const [pagina, setPagina] = useState(1)
   const [intento, setIntento] = useState(0)
   const [consulta, setConsulta] = useState(CONSULTA_INICIAL)
+  const [prestamoSeleccionado, setPrestamoSeleccionado] = useState(null)
+  const navegacionPendiente = useRef('')
 
   useEffect(() => {
     let activa = true
-    setConsulta({ cargando: true, error: '', datos: null })
+    setConsulta((actual) => ({
+      cargando: true,
+      error: '',
+      datos: navegacionPendiente.current || prestamoSeleccionado ? actual.datos : null,
+    }))
 
     api.get(construirRutaHistorial({ estado, pagina, dni: dniFiltro }))
       .then(validarRespuestaHistorial)
       .then((datos) => {
-        if (activa) setConsulta({ cargando: false, error: '', datos })
+        if (activa) {
+          if (navegacionPendiente.current) {
+            const indice = navegacionPendiente.current === 'anterior' ? datos.results.length - 1 : 0
+            setPrestamoSeleccionado(datos.results[indice] || null)
+            navegacionPendiente.current = ''
+          }
+          setConsulta({ cargando: false, error: '', datos })
+        }
       })
       .catch(() => {
         if (activa) {
+          const conservarDatos = Boolean(navegacionPendiente.current || prestamoSeleccionado)
+          navegacionPendiente.current = ''
           setConsulta({
             cargando: false,
             error: 'No fue posible consultar el historial. Intenta nuevamente.',
-            datos: null,
+            datos: conservarDatos ? consulta.datos : null,
           })
         }
       })
@@ -55,11 +70,27 @@ export default function HistorialPrestamos() {
   }, [estado, pagina, dniFiltro, intento])
 
   function cambiarEstado(nuevoEstado) {
+    setPrestamoSeleccionado(null)
+    navegacionPendiente.current = ''
     setEstado(nuevoEstado)
     setPagina(1)
   }
 
-  if (consulta.cargando) {
+  function cambiarPaginaDesdeDetalle(direccion) {
+    const hayPagina = direccion === 'anterior' ? consulta.datos.previous : consulta.datos.next
+    if (!hayPagina) return
+
+    navegacionPendiente.current = direccion
+    setPagina((actual) => actual + (direccion === 'anterior' ? -1 : 1))
+  }
+
+  function cambiarPaginaDesdeLista(direccion) {
+    setPrestamoSeleccionado(null)
+    navegacionPendiente.current = ''
+    setPagina((actual) => actual + (direccion === 'anterior' ? -1 : 1))
+  }
+
+  if (consulta.cargando && !prestamoSeleccionado) {
     return (
       <div className="space-y-3" role="status" aria-live="polite">
         <p className="text-sm text-texto-suave">Cargando historial de préstamos…</p>
@@ -69,7 +100,7 @@ export default function HistorialPrestamos() {
     )
   }
 
-  if (consulta.error) {
+  if (consulta.error && !prestamoSeleccionado) {
     return (
       <section aria-label="Historial de préstamos" className="grid gap-4">
         <div>
@@ -106,11 +137,15 @@ export default function HistorialPrestamos() {
             etiqueta="Buscar historial por prestatario"
             ayuda="Escribe el DNI para elegir un prestatario y filtrar sus préstamos."
             onCambio={(valor) => {
+              setPrestamoSeleccionado(null)
+              navegacionPendiente.current = ''
               setDniEntrada(valor)
               setDniFiltro('')
               setPagina(1)
             }}
             onSeleccionar={(prestatario) => {
+              setPrestamoSeleccionado(null)
+              navegacionPendiente.current = ''
               setDniEntrada(prestatario.dni)
               setDniFiltro(prestatario.dni)
               setPagina(1)
@@ -122,6 +157,8 @@ export default function HistorialPrestamos() {
             variante="secundario"
             tipo="button"
             onClick={() => {
+              setPrestamoSeleccionado(null)
+              navegacionPendiente.current = ''
               setDniEntrada('')
               setDniFiltro('')
               setPagina(1)
@@ -149,8 +186,13 @@ export default function HistorialPrestamos() {
         </div>
       ) : (
         <ListaHistorialPrestamos
-          key={`${estado}-${pagina}`}
           prestamos={results}
+          seleccionado={prestamoSeleccionado}
+          onSeleccionar={setPrestamoSeleccionado}
+          onAnteriorPagina={() => cambiarPaginaDesdeDetalle('anterior')}
+          onSiguientePagina={() => cambiarPaginaDesdeDetalle('siguiente')}
+          hayPaginaAnterior={Boolean(previous)}
+          hayPaginaSiguiente={Boolean(next)}
           puedeEditarGarantia={usuario?.rol === 'gestor'}
           onDevolucion={
             usuario?.rol === 'gestor'
@@ -160,13 +202,22 @@ export default function HistorialPrestamos() {
         />
       )}
 
-      {count > 0 && (
+      {consulta.error && prestamoSeleccionado && (
+        <div className="mt-4 grid gap-3">
+          <ErrorAlerta mensaje={consulta.error} />
+          <Boton variante="secundario" tipo="button" className="w-fit" onClick={() => setIntento((valor) => valor + 1)}>
+            Reintentar
+          </Boton>
+        </div>
+      )}
+
+      {count > 0 && !prestamoSeleccionado && (
         <nav className="mt-6 flex flex-wrap items-center justify-center gap-3" aria-label="Páginas del historial">
           <Boton
             variante="secundario"
             tipo="button"
             deshabilitado={!previous}
-            onClick={() => setPagina((actual) => actual - 1)}
+            onClick={() => cambiarPaginaDesdeLista('anterior')}
           >
             Anterior
           </Boton>
@@ -177,7 +228,7 @@ export default function HistorialPrestamos() {
             variante="secundario"
             tipo="button"
             deshabilitado={!next}
-            onClick={() => setPagina((actual) => actual + 1)}
+            onClick={() => cambiarPaginaDesdeLista('siguiente')}
           >
             Siguiente
           </Boton>

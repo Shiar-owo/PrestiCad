@@ -148,6 +148,8 @@ def _respuesta_error(error):
 class DescargarDocumentoGarantiaView(APIView):
     """Consulta privada del PDF y edición exclusiva del gestor de almacén."""
 
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+
     def get_permissions(self):
         permiso = (
             EsGestorDeAlmacen

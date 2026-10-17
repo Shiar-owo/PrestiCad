@@ -18,6 +18,12 @@ describe('construirRutaHistorial', () => {
     )
   })
 
+  it('incluye el DNI del prestatario al filtrar el historial', () => {
+    expect(construirRutaHistorial({ estado: 'activo', pagina: 2, dni: '12345678' })).toBe(
+      '/prestamos/historial/?page=2&page_size=25&estado=activo&dni=12345678',
+    )
+  })
+
   it('omite el filtro para todos los estados', () => {
     expect(construirRutaHistorial({ estado: 'todos' })).toBe(
       '/prestamos/historial/?page=1&page_size=25',

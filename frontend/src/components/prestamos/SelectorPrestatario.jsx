@@ -1,9 +1,14 @@
 import { useEffect, useId, useState } from 'react'
 
 import { api } from '../../api/client'
+import {
+  construirRutaBusquedaPrestatarios,
+  crearSeleccionPrestatario,
+  debeBuscarPrestatarios,
+  MINIMO_DIGITOS_BUSQUEDA_PRESTATARIO,
+  normalizarDniPrestatario,
+} from '../../prestamos/prestatarios'
 import Campo from '../ui/Campo'
-
-const MINIMO_DIGITOS = 3
 
 export default function SelectorPrestatario({
   etiqueta = 'Buscar prestatario por DNI',
@@ -26,7 +31,7 @@ export default function SelectorPrestatario({
 
     if (seleccionado && seleccionado.dni !== dni) setSeleccionado(null)
 
-    if (seleccionado?.dni === dni || dni.length < MINIMO_DIGITOS) {
+    if (!debeBuscarPrestatarios(dni, seleccionado)) {
       setSugerencias([])
       setCargando(false)
       setErrorBusqueda('')
@@ -39,8 +44,7 @@ export default function SelectorPrestatario({
     setErrorBusqueda('')
     const temporizador = window.setTimeout(async () => {
       try {
-        const parametros = new URLSearchParams({ dni })
-        const resultados = await api.get(`/prestamos/prestatarios/?${parametros.toString()}`)
+        const resultados = await api.get(construirRutaBusquedaPrestatarios(dni))
         if (vigente) setSugerencias(resultados)
       } catch {
         if (vigente) {
@@ -59,19 +63,23 @@ export default function SelectorPrestatario({
   }, [valor, seleccionado])
 
   function cambiar(evento) {
-    const nuevoValor = evento.target.value.replace(/\D/g, '').slice(0, 8)
+    const nuevoValor = normalizarDniPrestatario(evento.target.value)
     setSeleccionado(null)
     onCambio(nuevoValor)
   }
 
   function seleccionar(prestatario) {
-    setSeleccionado(prestatario)
+    const seleccion = crearSeleccionPrestatario(prestatario)
+    if (!seleccion) return
+    setSeleccionado(seleccion)
     setSugerencias([])
-    onCambio(prestatario.dni)
-    onSeleccionar(prestatario)
+    onCambio(seleccion.dni)
+    onSeleccionar(seleccion)
   }
 
-  const ayudaCampo = error || ayuda || `Escribe al menos ${MINIMO_DIGITOS} dígitos para ver coincidencias.`
+  const ayudaCampo = error || ayuda || (
+    `Escribe al menos ${MINIMO_DIGITOS_BUSQUEDA_PRESTATARIO} dígitos para ver coincidencias.`
+  )
 
   return (
     <div className="grid gap-2">

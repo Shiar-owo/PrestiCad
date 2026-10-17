@@ -9,6 +9,7 @@ import Tarjeta from './ui/Tarjeta'
 
 const CAMPOS_MASIVOS = [
   { campo: 'estado_fisico', etiqueta: 'Estado físico' },
+  { campo: 'color', etiqueta: 'Color' },
   { campo: 'ubicacion', etiqueta: 'Estante o ubicación' },
   { campo: 'observaciones', etiqueta: 'Observaciones' },
 ]
@@ -18,6 +19,7 @@ function crearDatosInstancia(instancia) {
     codigo_ejemplar: instancia?.codigo_ejemplar || '',
     numero_serie: instancia?.numero_serie || '',
     estado_fisico: instancia?.estado_fisico || '',
+    color: instancia?.color || '',
     ubicacion: instancia?.ubicacion || '',
     observaciones: instancia?.observaciones || '',
   }
@@ -40,6 +42,7 @@ function EditorInstanciasMaterial({ material, alcance, onCambiarAlcance, onGuard
   const [quitarFoto, setQuitarFoto] = useState(false)
   const [valoresMasivos, setValoresMasivos] = useState({
     estado_fisico: '',
+    color: '',
     ubicacion: '',
     observaciones: '',
   })
@@ -201,7 +204,7 @@ function EditorInstanciasMaterial({ material, alcance, onCambiarAlcance, onGuard
                   valor={valoresMasivos[campo]}
                   deshabilitado={!camposMasivos[campo]}
                   onCambio={(evento) => setValoresMasivos((actuales) => ({ ...actuales, [campo]: evento.target.value }))}
-                  maxLength={campo === 'ubicacion' ? 100 : undefined}
+                  maxLength={campo === 'ubicacion' ? 100 : campo === 'color' ? 30 : undefined}
                 />
               </div>
             ))}
@@ -231,6 +234,7 @@ function EditorInstanciasMaterial({ material, alcance, onCambiarAlcance, onGuard
             <Campo etiqueta="Código de ejemplar" valor={datos.codigo_ejemplar} maxLength={50} onCambio={(evento) => setDatos((actuales) => ({ ...actuales, codigo_ejemplar: evento.target.value }))} />
             <Campo etiqueta="Número de serie" valor={datos.numero_serie} maxLength={80} onCambio={(evento) => setDatos((actuales) => ({ ...actuales, numero_serie: evento.target.value }))} />
             <Campo etiqueta="Estado físico" valor={datos.estado_fisico} maxLength={100} onCambio={(evento) => setDatos((actuales) => ({ ...actuales, estado_fisico: evento.target.value }))} />
+            <Campo etiqueta="Color del ejemplar" valor={datos.color} maxLength={30} onCambio={(evento) => setDatos((actuales) => ({ ...actuales, color: evento.target.value }))} />
             <Campo etiqueta="Estante o ubicación" valor={datos.ubicacion} maxLength={100} onCambio={(evento) => setDatos((actuales) => ({ ...actuales, ubicacion: evento.target.value }))} />
             <Campo etiqueta="Observaciones" tipo="area" valor={datos.observaciones} onCambio={(evento) => setDatos((actuales) => ({ ...actuales, observaciones: evento.target.value }))} />
             <div className="grid gap-2 sm:col-span-2">

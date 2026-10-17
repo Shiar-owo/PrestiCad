@@ -263,6 +263,7 @@ function FichaTecnicaModal({ material, onCerrar, onEliminarInstancia }) {
                         <th scope="col" className="px-4 py-2.5">N° de Serie</th>
                         <th scope="col" className="px-4 py-2.5">Estado</th>
                         <th scope="col" className="px-4 py-2.5">Condición Física</th>
+                        <th scope="col" className="px-4 py-2.5">Color</th>
                         <th scope="col" className="px-4 py-2.5">Ubicación / Observaciones</th>
                         {onEliminarInstancia && <th scope="col" className="px-4 py-2.5">Acciones</th>}
                       </tr>
@@ -298,6 +299,9 @@ function FichaTecnicaModal({ material, onCerrar, onEliminarInstancia }) {
                           </td>
                           <td className="px-4 py-3 text-texto">
                             {inst.estadoFisico || 'Operativo'}
+                          </td>
+                          <td className="px-4 py-3 text-texto">
+                            {inst.color || 'No especificado'}
                           </td>
                           <td className="px-4 py-3 text-xs text-texto-suave">
                             {[inst.ubicacion, inst.observaciones].filter(Boolean).join(' • ') ||

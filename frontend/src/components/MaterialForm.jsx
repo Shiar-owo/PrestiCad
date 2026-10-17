@@ -527,7 +527,11 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
               />
             )}
             <Campo
-              etiqueta="Color"
+              etiqueta={!esEdicion && datos.modo === 'unico'
+                ? 'Color del ejemplar'
+                : !esEdicion
+                  ? 'Color general (predeterminado)'
+                  : 'Color del material'}
               valor={datos.color}
               onCambio={(evento) => actualizar('color', evento.target.value)}
               maxLength={30}
@@ -608,6 +612,12 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
                         valor={fila.numero_serie}
                         onCambio={(evento) => actualizarFila(indice, 'numero_serie', evento.target.value)}
                         maxLength={80}
+                      />
+                      <Campo
+                        etiqueta="Color del ejemplar (opcional)"
+                        valor={fila.color}
+                        onCambio={(evento) => actualizarFila(indice, 'color', evento.target.value)}
+                        maxLength={30}
                       />
                       {datos.modo === 'detalle' && (
                         <Campo

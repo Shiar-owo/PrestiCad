@@ -1134,7 +1134,7 @@ class DescargarGarantiaAPITestCase(APITestCase):
             compromiso_responsabilidad=crear_pdf("carta-original.pdf"),
         )
 
-    def test_gestor_y_administrador_descargan_pdf_sin_publicarlo_en_media(self):
+    def test_titular_gestor_y_administrador_visualizan_pdf_sin_publicarlo_en_media(self):
         with storage_garantias_temporal():
             prestamo = self._registrar_prestamo_con_garantia()
             garantia = prestamo.garantia
@@ -1143,14 +1143,14 @@ class DescargarGarantiaAPITestCase(APITestCase):
                 tipo="documento-identidad",
             )
 
-            for usuario in (self.gestor, self.administrador):
+            for usuario in (self.prestatario, self.gestor, self.administrador):
                 with self.subTest(rol=usuario.rol.nombre):
                     self._iniciar_sesion(usuario)
                     respuesta = self.client.get(url)
 
                     self.assertEqual(respuesta.status_code, 200)
                     self.assertEqual(respuesta["Content-Type"], "application/pdf")
-                    self.assertIn("attachment;", respuesta["Content-Disposition"])
+                    self.assertIn("inline;", respuesta["Content-Disposition"])
                     self.assertIn("documento-identidad-prestamo-", respuesta["Content-Disposition"])
                     self.assertEqual(b"".join(respuesta.streaming_content), b"%PDF-1.7\ncontenido de prueba")
 

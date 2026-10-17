@@ -1,6 +1,7 @@
 from django.urls import path
 
 from apps.prestamos.views import (
+    DetalleHistorialPrestamoView,
     DetallePrestamoParaDevolucionView,
     BuscarPrestatariosView,
     DescargarDocumentoGarantiaView,
@@ -21,6 +22,11 @@ urlpatterns = [
         name="buscar-prestatarios-prestamo",
     ),
     path("prestamos/historial/", HistorialPrestamosView.as_view(), name="historial-prestamos"),
+    path(
+        "prestamos/<int:prestamo_id>/historial/",
+        DetalleHistorialPrestamoView.as_view(),
+        name="detalle-historial-prestamo",
+    ),
     path("prestamos/mis-prestamos/", MisPrestamosView.as_view(), name="mis-prestamos"),
     path(
         "prestamos/devoluciones/reportes/",

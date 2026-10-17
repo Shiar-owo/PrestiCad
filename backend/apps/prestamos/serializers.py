@@ -71,6 +71,24 @@ class FiltroHistorialPrestamosSerializer(serializers.Serializer):
         return value
 
 
+class ActualizarDocumentoGarantiaSerializer(serializers.Serializer):
+    """Valida el reemplazo o eliminación de un documento PDF de garantía."""
+
+    archivo = serializers.FileField(
+        required=False,
+        allow_empty_file=False,
+        validators=[validar_pdf_garantia],
+    )
+    eliminar = serializers.BooleanField(required=False, default=False)
+
+    def validate(self, attrs):
+        if bool(attrs.get("archivo")) == attrs["eliminar"]:
+            raise serializers.ValidationError(
+                "Adjunta un PDF para reemplazar o indica que deseas eliminar el documento."
+            )
+        return attrs
+
+
 class RegistrarPrestamoSerializer(
     RechazarCamposNoPermitidosMixin,
     serializers.Serializer,

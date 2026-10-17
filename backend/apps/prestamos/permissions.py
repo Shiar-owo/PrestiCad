@@ -1,6 +1,8 @@
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import BasePermission
 
+from apps.prestamos.models import Prestamo
+
 
 class EsGestorDeAlmacen(BasePermission):
     """Solo el gestor autenticado puede formalizar una entrega (HU09)."""
@@ -46,3 +48,24 @@ class EsGestorOAdministrador(BasePermission):
         if usuario.rol.nombre not in self.roles_permitidos:
             raise PermissionDenied(detail=self.message_rol)
         return True
+
+
+class EsGestorAdministradorOPrestatarioPropio(BasePermission):
+    """Permite consultar el préstamo a gestión o a su prestatario titular."""
+
+    def has_permission(self, request, view):
+        usuario = getattr(request, "usuario_autenticado", None)
+        if usuario is None:
+            raise PermissionDenied(detail="Inicia sesión para consultar este préstamo.")
+
+        if usuario.rol.nombre in {"gestor", "administrador"}:
+            return True
+        if usuario.rol.nombre == "prestatario" and Prestamo.objects.filter(
+            pk=view.kwargs.get("prestamo_id"),
+            usuario_id=usuario.id,
+        ).exists():
+            return True
+
+        raise PermissionDenied(
+            detail="Solo gestión o el prestatario titular puede consultar este préstamo."
+        )

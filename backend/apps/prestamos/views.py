@@ -9,6 +9,7 @@ from rest_framework.views import APIView
 from apps.prestamos.constants import ESTADOS_PRESTAMO
 from apps.prestamos.consultar_serializers import (
     PrestamoDevolucionDetalleSerializer,
+    PrestamoHistorialDetalleSerializer,
     PrestamoConsultaSerializer,
     PrestamoHistorialSerializer,
     SugerenciaPrestatarioSerializer,
@@ -16,10 +17,12 @@ from apps.prestamos.consultar_serializers import (
 from apps.prestamos.models import Devolucion
 from apps.prestamos.permissions import (
     EsGestorDeAlmacen,
+    EsGestorAdministradorOPrestatarioPropio,
     EsGestorOAdministrador,
     EsPrestatarioAutenticado,
 )
 from apps.prestamos.serializers import (
+    ActualizarDocumentoGarantiaSerializer,
     BusquedaPrestatarioSerializer,
     ConsultaReportesSerializer,
     DevolucionIngresoSerializer,
@@ -32,7 +35,9 @@ from apps.prestamos.serializers import (
 )
 from apps.prestamos.services import (
     PrestamoError,
+    actualizar_documento_garantia,
     buscar_prestatarios_por_dni,
+    consultar_detalle_historial_prestamo,
     consultar_historial_prestamos,
     consultar_prestamo_para_devolucion,
     consultar_prestamos_usuario,
@@ -141,9 +146,15 @@ def _respuesta_error(error):
 
 
 class DescargarDocumentoGarantiaView(APIView):
-    """Descarga privada de un PDF de garantía para gestión autorizada."""
+    """Consulta privada del PDF y edición exclusiva del gestor de almacén."""
 
-    permission_classes = [EsGestorOAdministrador]
+    def get_permissions(self):
+        permiso = (
+            EsGestorDeAlmacen
+            if self.request.method == "PATCH"
+            else EsGestorAdministradorOPrestatarioPropio
+        )
+        return [permiso()]
 
     def get(self, request, prestamo_id, tipo):
         try:
@@ -152,8 +163,41 @@ class DescargarDocumentoGarantiaView(APIView):
             return _respuesta_error(error)
 
         respuesta = FileResponse(archivo, content_type="application/pdf")
-        respuesta["Content-Disposition"] = f'attachment; filename="{nombre}"'
+        respuesta["Content-Disposition"] = f'inline; filename="{nombre}"'
         return respuesta
+
+    def patch(self, request, prestamo_id, tipo):
+        serializer = ActualizarDocumentoGarantiaSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            garantia = actualizar_documento_garantia(
+                prestamo_id=prestamo_id,
+                tipo=tipo,
+                **serializer.validated_data,
+            )
+        except PrestamoError as error:
+            return _respuesta_error(error)
+
+        return Response({
+            "estado": garantia.estado,
+            "documento_identidad_disponible": bool(garantia.documento_identidad),
+            "compromiso_responsabilidad_disponible": bool(
+                garantia.compromiso_responsabilidad
+            ),
+        })
+
+
+class DetalleHistorialPrestamoView(APIView):
+    """Devuelve ficha técnica, ejemplar y checklist de una entrega histórica."""
+
+    permission_classes = [EsGestorAdministradorOPrestatarioPropio]
+
+    def get(self, request, prestamo_id):
+        try:
+            prestamo = consultar_detalle_historial_prestamo(prestamo_id)
+        except PrestamoError as error:
+            return _respuesta_error(error)
+        return Response(PrestamoHistorialDetalleSerializer(prestamo).data)
 
 
 def _respuesta_resultado(resultado, prestamo_id, devolucion=None, http_status=200):

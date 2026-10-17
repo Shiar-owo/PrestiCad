@@ -167,6 +167,12 @@ class InstanciaMaterialModificacionSerializer(
         )
 
 
+class InstanciaMaterialCreacionSerializer(InstanciaMaterialModificacionSerializer):
+    """Contrato para el alta de una instancia, que exige su código único."""
+
+    codigo_ejemplar = serializers.CharField(max_length=50, required=True)
+
+
 class MaterialSerializer(serializers.ModelSerializer):
     """Contrato de salida JSON del inventario."""
 

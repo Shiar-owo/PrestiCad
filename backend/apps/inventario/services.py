@@ -681,6 +681,7 @@ def registrar_devolucion_instancia(
     return {"id": instancia.id, "estado": instancia.estado}
 
 
+@transaction.atomic
 def crear_instancia_material(
     material_id,
     *,
@@ -688,6 +689,7 @@ def crear_instancia_material(
     numero_serie="",
     estado="disponible",
     estado_fisico="Operativo",
+    foto=None,
     observaciones="",
     ubicacion="",
 ):
@@ -701,22 +703,42 @@ def crear_instancia_material(
     if estado not in estados_validos:
         raise InventarioError("estado", "El estado de la instancia no es válido.")
 
-    instancia = InstanciaMaterial.objects.create(
+    if foto is not None:
+        validar_foto(foto)
+
+    instancia_en_proceso = InstanciaMaterial(
         material=material,
         codigo_ejemplar=codigo,
         numero_serie=numero_serie.strip() if numero_serie else "",
         estado=estado,
         estado_fisico=estado_fisico.strip() if estado_fisico else "Operativo",
+        foto=foto,
         observaciones=observaciones.strip() if observaciones else "",
         ubicacion=ubicacion.strip() if ubicacion else "",
     )
+    try:
+        instancia_en_proceso.save()
+        instancia = instancia_en_proceso
 
-    total = material.instancias.count()
-    if total > material.stock:
-        material.stock = total
-        material.save(update_fields=["stock", "updated_at"])
+        total = material.instancias.count()
+        if total > material.stock:
+            material.stock = total
+            material.save(update_fields=["stock", "updated_at"])
 
-    return instancia
+        return instancia
+    except Exception as error:
+        if instancia_en_proceso.foto and instancia_en_proceso.foto.name:
+            _eliminar_foto(instancia_en_proceso.foto.storage, instancia_en_proceso.foto.name)
+        if foto is not None:
+            almacenamiento = InstanciaMaterial._meta.get_field("foto").storage
+            nombre_original = getattr(foto, "name", "")
+            if nombre_original and almacenamiento.exists(nombre_original):
+                _eliminar_foto(almacenamiento, nombre_original)
+        if isinstance(error, IntegrityError) and "codigo_ejemplar" in str(error):
+            raise InventarioError(
+                "codigo_ejemplar", "El código de ejemplar ya está registrado.", status_code=409
+            ) from error
+        raise
 
 
 def actualizar_instancia_material(instancia_id, **campos):

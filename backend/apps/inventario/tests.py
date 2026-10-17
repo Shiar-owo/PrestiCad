@@ -1767,6 +1767,56 @@ class InstanciaMaterialAPITestCase(APITestCase):
         self.assertEqual(instancia.estado, "en_mantenimiento")
         self.assertEqual(instancia.observaciones, "Punta de prueba dañada")
 
+    def test_actualizar_foto_de_instancia_reemplaza_y_borra_la_anterior(self):
+        self._autenticar("gestor.foto.inst@unsa.edu.pe", "gestor")
+        instancia = self.material.instancias.first()
+        url = f"/api/instancias/{instancia.id}/"
+
+        with tempfile.TemporaryDirectory() as directorio:
+            with override_settings(MEDIA_ROOT=Path(directorio)):
+                primera = self.client.patch(
+                    url,
+                    {"foto": imagen_en_memoria("JPEG", "primera.jpg")},
+                    format="multipart",
+                )
+                self.assertEqual(primera.status_code, 200, primera.content)
+                instancia.refresh_from_db()
+                nombre_anterior = instancia.foto.name
+                storage = instancia.foto.storage
+                self.assertTrue(storage.exists(nombre_anterior))
+
+                with self.captureOnCommitCallbacks(execute=True):
+                    segunda = self.client.patch(
+                        url,
+                        {"foto": imagen_en_memoria("PNG", "segunda.png")},
+                        format="multipart",
+                    )
+
+                self.assertEqual(segunda.status_code, 200, segunda.content)
+                instancia.refresh_from_db()
+                self.assertNotEqual(instancia.foto.name, nombre_anterior)
+                self.assertFalse(storage.exists(nombre_anterior))
+                self.assertTrue(storage.exists(instancia.foto.name))
+                self.assertTrue(segunda.json()["foto"])
+
+    def test_editar_instancia_rechaza_foto_invalida_sin_guardarla(self):
+        self._autenticar("gestor.foto.invalida.inst@unsa.edu.pe", "gestor")
+        instancia = self.material.instancias.first()
+        url = f"/api/instancias/{instancia.id}/"
+
+        with tempfile.TemporaryDirectory() as directorio:
+            with override_settings(MEDIA_ROOT=Path(directorio)):
+                respuesta = self.client.patch(
+                    url,
+                    {"foto": imagen_en_memoria("GIF", "invalida.gif")},
+                    format="multipart",
+                )
+
+                self.assertEqual(respuesta.status_code, 400)
+                self.assertIn("foto", respuesta.json())
+                instancia.refresh_from_db()
+                self.assertFalse(instancia.foto)
+
     def test_busqueda_materiales_incluye_instancias_y_resumen(self):
         resp = self.client.get("/api/materiales/buscar/?q=Osciloscopio")
         self.assertEqual(resp.status_code, 200)

@@ -145,6 +145,12 @@ class InstanciaMaterialModificacionSerializer(
     numero_serie = serializers.CharField(max_length=80, required=False, allow_blank=True)
     estado = serializers.ChoiceField(choices=ESTADOS_INSTANCIA, required=False)
     estado_fisico = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    foto = serializers.ImageField(
+        required=False,
+        allow_null=True,
+        allow_empty_file=False,
+        validators=[validar_foto],
+    )
     observaciones = serializers.CharField(required=False, allow_blank=True)
     ubicacion = serializers.CharField(max_length=100, required=False, allow_blank=True)
 
@@ -155,6 +161,7 @@ class InstanciaMaterialModificacionSerializer(
             "numero_serie",
             "estado",
             "estado_fisico",
+            "foto",
             "observaciones",
             "ubicacion",
         )

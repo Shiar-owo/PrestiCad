@@ -216,6 +216,7 @@ class InstanciaMaterialDetailView(RetrieveUpdateDestroyAPIView):
     """Consulta (GET), edita (PATCH/PUT) o elimina (DELETE) una instancia física."""
 
     queryset = InstanciaMaterial.objects.all()
+    parser_classes = PARSERS_CON_ARCHIVOS
 
     def get_permissions(self):
         if self.request.method == "GET":

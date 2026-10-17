@@ -709,11 +709,25 @@ def actualizar_instancia_material(instancia_id, **campos):
             raise InventarioError("estado", "El estado de la instancia no es válido.")
         instancia.estado = estado
 
+    if campos.get("foto") is not None:
+        validar_foto(campos["foto"])
+
+    foto_anterior = instancia.foto.name if "foto" in campos and instancia.foto else None
+
     for campo in ("numero_serie", "estado_fisico", "observaciones", "ubicacion"):
         if campo in campos and isinstance(campos[campo], str):
             setattr(instancia, campo, campos[campo].strip())
 
+    if "foto" in campos:
+        instancia.foto = campos["foto"]
+
     instancia.save()
+
+    foto_nueva = instancia.foto.name if instancia.foto else None
+    if foto_anterior and foto_anterior != foto_nueva:
+        storage_foto = InstanciaMaterial._meta.get_field("foto").storage
+        transaction.on_commit(lambda: _eliminar_foto(storage_foto, foto_anterior))
+
     return instancia
 
 

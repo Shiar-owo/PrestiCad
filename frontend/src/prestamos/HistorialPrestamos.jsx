@@ -151,6 +151,7 @@ export default function HistorialPrestamos() {
         <ListaHistorialPrestamos
           key={`${estado}-${pagina}`}
           prestamos={results}
+          puedeEditarGarantia={usuario?.rol === 'gestor'}
           onDevolucion={
             usuario?.rol === 'gestor'
               ? (prestamoId) => navigate(`/panel/devolucion/${prestamoId}`)

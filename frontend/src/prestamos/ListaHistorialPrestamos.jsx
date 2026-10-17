@@ -4,7 +4,11 @@ import BadgeEstado from '../components/ui/BadgeEstado'
 import DetallePrestamo from '../components/prestamos/DetallePrestamo'
 import { esDevoluble } from '../constantes/devolucion'
 
-export default function ListaHistorialPrestamos({ prestamos, onDevolucion = null }) {
+export default function ListaHistorialPrestamos({
+  prestamos,
+  onDevolucion = null,
+  puedeEditarGarantia = false,
+}) {
   const [seleccionado, setSeleccionado] = useState(null)
 
   if (seleccionado) {
@@ -16,6 +20,7 @@ export default function ListaHistorialPrestamos({ prestamos, onDevolucion = null
         etiquetaVolver="Volver al historial"
         onVolver={() => setSeleccionado(null)}
         prestamo={seleccionado}
+        puedeEditarGarantia={puedeEditarGarantia}
         onDevolucion={
           puedeDevolver ? () => onDevolucion(seleccionado.id) : undefined
         }

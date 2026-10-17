@@ -88,7 +88,7 @@ function FichaTecnicaModal({ material, onCerrar, onEliminarInstancia, onAgregarI
         }
       }}
     >
-      <div className="relative flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-borde bg-superficie shadow-2xl">
+      <div className="relative flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-borde bg-superficie shadow-2xl sm:max-w-4xl">
         {/* Cabecera del modal */}
         <header className="flex items-start justify-between gap-4 border-b border-borde bg-superficie-alta/60 px-6 py-4">
           <div>
@@ -222,12 +222,12 @@ function FichaTecnicaModal({ material, onCerrar, onEliminarInstancia, onAgregarI
 
           {/* Sección de Ejemplares e Instancias Físicas */}
           <div>
-            <div className="flex flex-col gap-2 border-b border-borde pb-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="border-b border-borde pb-3">
               <h4 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-texto">
                 <Layers className="size-4 text-acento-600 dark:text-acento-400" aria-hidden="true" />
                 Ejemplares e Instancias Físicas ({ficha.instancias?.length || ficha.stockTotal})
               </h4>
-              <div className="flex flex-wrap items-center gap-1.5 text-xs">
+              <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 {onAgregarInstancias && (
                   <Boton
                     tipo="button"
@@ -239,30 +239,32 @@ function FichaTecnicaModal({ material, onCerrar, onEliminarInstancia, onAgregarI
                     {mostrarAltaInstancias ? 'Cerrar alta' : 'Agregar ejemplares'}
                   </Boton>
                 )}
-                {ficha.resumenInstancias?.disponible > 0 && (
-                  <span className="inline-flex items-center gap-1 rounded-md bg-marca-50 px-2 py-0.5 font-medium text-marca-700 ring-1 ring-marca-300 dark:bg-marca-950/40 dark:text-marca-300 dark:ring-marca-800">
-                    <span className="size-1.5 rounded-full bg-marca-600" />
-                    {ficha.resumenInstancias.disponible} disponibles
-                  </span>
-                )}
-                {ficha.resumenInstancias?.reservado > 0 && (
-                  <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-0.5 font-medium text-amber-700 ring-1 ring-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-800">
-                    <span className="size-1.5 rounded-full bg-amber-600" />
-                    {ficha.resumenInstancias.reservado} reservadas
-                  </span>
-                )}
-                {ficha.resumenInstancias?.prestado > 0 && (
-                  <span className="inline-flex items-center gap-1 rounded-md bg-acento-50 px-2 py-0.5 font-medium text-acento-700 ring-1 ring-acento-300 dark:bg-acento-950/40 dark:text-acento-300 dark:ring-acento-800">
-                    <span className="size-1.5 rounded-full bg-acento-600" />
-                    {ficha.resumenInstancias.prestado} prestadas
-                  </span>
-                )}
-                {ficha.resumenInstancias?.en_mantenimiento > 0 && (
-                  <span className="inline-flex items-center gap-1 rounded-md bg-rose-50 px-2 py-0.5 font-medium text-rose-700 ring-1 ring-rose-300 dark:bg-rose-950/40 dark:text-rose-300 dark:ring-rose-800">
-                    <span className="size-1.5 rounded-full bg-rose-600" />
-                    {ficha.resumenInstancias.en_mantenimiento} en mantenimiento
-                  </span>
-                )}
+                <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                  {ficha.resumenInstancias?.disponible > 0 && (
+                    <span className="inline-flex items-center gap-1 rounded-md bg-marca-50 px-2 py-0.5 font-medium text-marca-700 ring-1 ring-marca-300 dark:bg-marca-950/40 dark:text-marca-300 dark:ring-marca-800">
+                      <span className="size-1.5 rounded-full bg-marca-600" />
+                      {ficha.resumenInstancias.disponible} disponibles
+                    </span>
+                  )}
+                  {ficha.resumenInstancias?.reservado > 0 && (
+                    <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-0.5 font-medium text-amber-700 ring-1 ring-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-800">
+                      <span className="size-1.5 rounded-full bg-amber-600" />
+                      {ficha.resumenInstancias.reservado} reservadas
+                    </span>
+                  )}
+                  {ficha.resumenInstancias?.prestado > 0 && (
+                    <span className="inline-flex items-center gap-1 rounded-md bg-acento-50 px-2 py-0.5 font-medium text-acento-700 ring-1 ring-acento-300 dark:bg-acento-950/40 dark:text-acento-300 dark:ring-acento-800">
+                      <span className="size-1.5 rounded-full bg-acento-600" />
+                      {ficha.resumenInstancias.prestado} prestadas
+                    </span>
+                  )}
+                  {ficha.resumenInstancias?.en_mantenimiento > 0 && (
+                    <span className="inline-flex items-center gap-1 rounded-md bg-rose-50 px-2 py-0.5 font-medium text-rose-700 ring-1 ring-rose-300 dark:bg-rose-950/40 dark:text-rose-300 dark:ring-rose-800">
+                      <span className="size-1.5 rounded-full bg-rose-600" />
+                      {ficha.resumenInstancias.en_mantenimiento} en mantenimiento
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -290,14 +292,18 @@ function FichaTecnicaModal({ material, onCerrar, onEliminarInstancia, onAgregarI
                         <th scope="col" className="px-4 py-2.5">Condición Física</th>
                         <th scope="col" className="px-4 py-2.5">Color</th>
                         <th scope="col" className="px-4 py-2.5">Ubicación / Observaciones</th>
-                        {onEliminarInstancia && <th scope="col" className="px-4 py-2.5">Acciones</th>}
+                        {onEliminarInstancia && (
+                          <th scope="col" className="sticky right-0 z-10 whitespace-nowrap border-l border-borde bg-superficie-alta px-4 py-2.5">
+                            Acciones
+                          </th>
+                        )}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-borde">
                       {ficha.instancias.map((inst) => (
                         <tr
                           key={inst.id}
-                          className="transition-colors hover:bg-superficie-alta/40"
+                          className="group transition-colors hover:bg-superficie-alta/40"
                         >
                           <td className="px-4 py-3">
                             {inst.foto ? (
@@ -333,7 +339,7 @@ function FichaTecnicaModal({ material, onCerrar, onEliminarInstancia, onAgregarI
                               'Sin observaciones'}
                           </td>
                           {onEliminarInstancia && (
-                            <td className="px-4 py-3">
+                            <td className="sticky right-0 z-[1] border-l border-borde bg-superficie px-4 py-3 group-hover:bg-superficie-alta/40">
                               {ficha.instancias.length === 1 ? (
                                 <span className="text-xs text-texto-suave">Elimina el material completo</span>
                               ) : (

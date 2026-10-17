@@ -1,4 +1,5 @@
 """Tests del módulo inventario."""
+import json
 import os
 import tempfile
 from io import BytesIO
@@ -12,7 +13,7 @@ from django.utils import timezone
 from PIL import Image
 from rest_framework.test import APITestCase
 
-from apps.inventario.models import Material
+from apps.inventario.models import InstanciaMaterial, Material
 from apps.inventario.serializers import (
     FotoMaterial,
     MaterialActualizacionSerializer,
@@ -1443,6 +1444,179 @@ class MaterialesFotoApiTestCase(EscenariosDeMaterialApi):
 
         self.assertNotIn("foto_url", cuerpo)
         self.assertIn("foto", cuerpo)
+
+
+class RegistroMaterialMultipleAPITestCase(EscenariosDeMaterialApi):
+    """Pruebas del alta de materiales en sus tres modos (HU04)."""
+
+    def setUp(self):
+        super().setUp()
+        self._autenticar("gestor@unsa.edu.pe", "gestor")
+
+    def test_modo_unico_guarda_datos_fisicos_en_su_instancia(self):
+        respuesta = self.client.post(
+            self.LIST_URL,
+            self._payload_valido(
+                modo="unico", numero_serie="SER-01", estado_fisico="Bueno", ubicacion="Estante A"
+            ),
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, 201, respuesta.content)
+        instancia = InstanciaMaterial.objects.get()
+        self.assertEqual(instancia.codigo_ejemplar, "OBJ-001-01")
+        self.assertEqual(instancia.estado, "disponible")
+        self.assertEqual(instancia.numero_serie, "SER-01")
+        self.assertEqual(instancia.estado_fisico, "Bueno")
+        self.assertEqual(instancia.ubicacion, "Estante A")
+
+    def test_modo_lote_genera_codigos_y_resuelve_estantes(self):
+        respuesta = self.client.post(
+            self.LIST_URL,
+            {
+                **self._payload_valido(
+                    modo="lote", stock=2, ubicacion="Estante común", estado_fisico="Bueno"
+                ),
+                "instancias": [
+                    {"numero_serie": "SER-A", "observaciones": "Con funda"},
+                    {"numero_serie": "SER-B", "ubicacion": "Estante propio"},
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, 201, respuesta.content)
+        instancias = list(InstanciaMaterial.objects.order_by("codigo_ejemplar"))
+        self.assertEqual([fila.codigo_ejemplar for fila in instancias], ["OBJ-001-01", "OBJ-001-02"])
+        self.assertEqual([fila.ubicacion for fila in instancias], ["Estante común", "Estante propio"])
+        self.assertEqual([fila.estado_fisico for fila in instancias], ["Bueno", "Bueno"])
+        self.assertEqual([fila.numero_serie for fila in instancias], ["SER-A", "SER-B"])
+        self.assertEqual(instancias[0].observaciones, "Con funda")
+        self.assertTrue(all(fila.estado == "disponible" for fila in instancias))
+
+    def test_modo_detalle_guarda_datos_individuales(self):
+        respuesta = self.client.post(
+            self.LIST_URL,
+            {
+                **self._payload_valido(modo="detalle", stock=2),
+                "instancias": [
+                    {"codigo_ejemplar": "UNIDAD-A", "numero_serie": "SER-A", "estado_fisico": "Bueno", "ubicacion": "A1", "observaciones": "Marca lateral"},
+                    {"codigo_ejemplar": "UNIDAD-B", "numero_serie": "SER-B", "estado_fisico": "Regular", "ubicacion": "B2"},
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, 201, respuesta.content)
+        primero = InstanciaMaterial.objects.get(codigo_ejemplar="UNIDAD-A")
+        self.assertEqual(primero.numero_serie, "SER-A")
+        self.assertEqual(primero.estado_fisico, "Bueno")
+        self.assertEqual(primero.ubicacion, "A1")
+        self.assertEqual(primero.observaciones, "Marca lateral")
+        self.assertEqual(primero.estado, "disponible")
+
+    def test_codigo_repetido_en_payload_indica_fila_y_no_crea_registros(self):
+        respuesta = self.client.post(
+            self.LIST_URL,
+            {
+                **self._payload_valido(modo="detalle", stock=2),
+                "instancias": [{"codigo_ejemplar": "UNIDAD-A"}, {"codigo_ejemplar": "unidad-a"}],
+            },
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(respuesta.json()["indice"], 1)
+        self.assertEqual(Material.objects.count(), 0)
+        self.assertEqual(InstanciaMaterial.objects.count(), 0)
+
+    def test_codigo_existente_indica_fila_y_responde_409(self):
+        existente = registrar_material(nombre="Existente", codigo_inventario="EX-01", tipo="equipo")
+        self._autenticar("otro.gestor@unsa.edu.pe", "gestor")
+        respuesta = self.client.post(
+            self.LIST_URL,
+            {
+                **self._payload_valido(modo="detalle", stock=2),
+                "instancias": [
+                    {"codigo_ejemplar": existente.instancias.get().codigo_ejemplar},
+                    {"codigo_ejemplar": "UNIDAD-B"},
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, 409)
+        self.assertEqual(respuesta.json()["indice"], 0)
+        self.assertEqual(Material.objects.count(), 1)
+        self.assertEqual(InstanciaMaterial.objects.count(), 1)
+
+    def test_foto_individual_se_guarda_y_se_expone(self):
+        respuesta = self.client.post(
+            self.LIST_URL,
+            {
+                **self._payload_valido(modo="lote", stock=2),
+                "instancias": json.dumps([{}, {}]),
+                "instancia_foto_1": imagen_en_memoria("PNG", "ejemplar.png"),
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(respuesta.status_code, 201, respuesta.content)
+        segundo = InstanciaMaterial.objects.get(codigo_ejemplar="OBJ-001-02")
+        self.assertTrue(segundo.foto.name)
+        self.assertTrue(respuesta.json()["instancias"][1]["foto"])
+
+    def test_foto_invalida_en_fila_no_crea_registros_ni_archivos(self):
+        respuesta = self.client.post(
+            self.LIST_URL,
+            {
+                **self._payload_valido(modo="lote", stock=2),
+                "instancias": json.dumps([{}, {}]),
+                "instancia_foto_0": imagen_en_memoria(),
+                "instancia_foto_1": imagen_en_memoria("GIF"),
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(respuesta.json()["indice"], 1)
+        self.assertEqual(Material.objects.count(), 0)
+        self.assertEqual(InstanciaMaterial.objects.count(), 0)
+        self.assertEqual(list(Path(settings.MEDIA_ROOT).rglob("*.*")), [])
+
+    def test_stock_distinto_de_filas_responde_400_sin_crear(self):
+        respuesta = self.client.post(
+            self.LIST_URL,
+            {
+                **self._payload_valido(modo="detalle", stock=3),
+                "instancias": [{"codigo_ejemplar": "UNIDAD-A"}, {"codigo_ejemplar": "UNIDAD-B"}],
+            },
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn("stock", respuesta.json())
+        self.assertEqual(Material.objects.count(), 0)
+
+    def test_registro_multiple_rechaza_mas_de_cincuenta_filas(self):
+        filas = [{"codigo_ejemplar": f"UNIDAD-{indice}"} for indice in range(51)]
+        respuesta = self.client.post(
+            self.LIST_URL,
+            {**self._payload_valido(modo="detalle", stock=51), "instancias": filas},
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn("instancias", respuesta.json())
+        self.assertEqual(Material.objects.count(), 0)
+        self.assertEqual(InstanciaMaterial.objects.count(), 0)
+
+    def test_sin_modo_conserva_el_registro_unico(self):
+        respuesta = self.client.post(self.LIST_URL, self._payload_valido(), format="json")
+
+        self.assertEqual(respuesta.status_code, 201, respuesta.content)
+        self.assertEqual(InstanciaMaterial.objects.count(), 1)
+        self.assertEqual(InstanciaMaterial.objects.get().codigo_ejemplar, "OBJ-001-01")
 
 
 class InstanciaMaterialModelTestCase(TestCase):

@@ -3,6 +3,8 @@
 Las validaciones de formato se declaran aquí; las reglas de negocio (código
 único, estado inicial, valores por defecto) se delegan a `services.py`.
 """
+import json
+
 from django.conf import settings
 from rest_framework import serializers
 
@@ -75,6 +77,22 @@ class FotoMaterial(serializers.ImageField):
             return url
 
         return f"{settings.MEDIA_URL_PUBLICA.rstrip('/')}/{url.lstrip('/')}"
+
+
+class InstanciasJSONField(serializers.Field):
+    """Acepta filas como lista JSON o como cadena JSON de un formulario multipart."""
+
+    default_error_messages = {"invalid": "Las filas de ejemplares deben ser JSON válido."}
+
+    def to_internal_value(self, data):
+        if isinstance(data, str):
+            try:
+                data = json.loads(data)
+            except (TypeError, ValueError):
+                self.fail("invalid")
+        if not isinstance(data, list):
+            self.fail("invalid")
+        return data
 
 
 class MaterialListSerializer(serializers.ListSerializer):
@@ -242,7 +260,7 @@ class MaterialRegistroSerializer(RechazarCamposNoPermitidosMixin, serializers.Mo
         error_messages={"invalid_choice": "Modo de registro inválido."},
     )
     ubicacion = serializers.CharField(required=False, allow_blank=True, default="")
-    instancias = serializers.JSONField(required=False)
+    instancias = InstanciasJSONField(required=False)
     tier_minimo_requerido = serializers.ChoiceField(
         choices=TIERS,
         required=False,

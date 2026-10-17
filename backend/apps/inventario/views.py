@@ -180,6 +180,8 @@ class MaterialSearchView(ListAPIView):
 class InstanciaMaterialListCreateView(ListCreateAPIView):
     """Lista las instancias de un material (GET) y registra una nueva unidad física (POST)."""
 
+    parser_classes = PARSERS_CON_ARCHIVOS
+
     def get_permissions(self):
         if self.request.method == "POST":
             return [EsGestorOAdministrador()]
@@ -200,23 +202,71 @@ class InstanciaMaterialListCreateView(ListCreateAPIView):
 
     def create(self, request, *args, **kwargs):
         material_id = self.kwargs.get("material_id")
-        serializer = self.get_serializer(data=request.data)
+        filas_recibidas = "instancias" in request.data
+        if filas_recibidas:
+            filas = request.data.get("instancias")
+            if isinstance(filas, str):
+                try:
+                    filas = json.loads(filas)
+                except (TypeError, ValueError):
+                    return Response(
+                        {"instancias": ["Las filas de ejemplares deben ser JSON válido."]},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+            if not isinstance(filas, list):
+                return Response(
+                    {"instancias": ["Envía una lista de ejemplares válida."]},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if not 1 <= len(filas) <= services.MAXIMO_EJEMPLARES_REGISTRO:
+                return Response(
+                    {
+                        "instancias": [
+                            f"Registra entre 1 y {services.MAXIMO_EJEMPLARES_REGISTRO} ejemplares."
+                        ]
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            filas = [dict(fila) if isinstance(fila, dict) else fila for fila in filas]
+            for indice, fila in enumerate(filas):
+                if isinstance(fila, dict):
+                    foto = request.FILES.get(f"instancia_foto_{indice}")
+                    if foto:
+                        fila["foto"] = foto
+            serializer = self.get_serializer(data=filas, many=True)
+        else:
+            serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
         try:
-            instancia = services.crear_instancia_material(
-                material_id, **serializer.validated_data
-            )
+            if filas_recibidas:
+                instancias = services.crear_instancias_material(
+                    material_id, serializer.validated_data
+                )
+            else:
+                instancia = services.crear_instancia_material(
+                    material_id, **serializer.validated_data
+                )
         except services.InventarioError as error:
+            if filas_recibidas and error.indice is not None:
+                return Response(
+                    {
+                        "indice": error.indice,
+                        "campo": error.campo,
+                        "mensaje": error.mensaje,
+                    },
+                    status=error.status_code,
+                )
             return Response(
                 {error.campo: [error.mensaje]},
-                status=(
-                    status.HTTP_409_CONFLICT
-                    if error.campo == "codigo_ejemplar"
-                    else status.HTTP_400_BAD_REQUEST
-                ),
+                status=error.status_code,
             )
 
+        if filas_recibidas:
+            return Response(
+                InstanciaMaterialSerializer(instancias, many=True).data,
+                status=status.HTTP_201_CREATED,
+            )
         return Response(
             InstanciaMaterialSerializer(instancia).data,
             status=status.HTTP_201_CREATED,

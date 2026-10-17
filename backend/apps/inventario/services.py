@@ -694,49 +694,120 @@ def crear_instancia_material(
     ubicacion="",
 ):
     """Crea una nueva instancia física para un material existente."""
-    material = obtener_material(material_id)
-    codigo = normalizar_codigo(codigo_ejemplar)
-    if InstanciaMaterial.objects.filter(codigo_ejemplar__iexact=codigo).exists():
-        raise InventarioError("codigo_ejemplar", "El código de ejemplar ya está registrado.")
+    return crear_instancias_material(
+        material_id,
+        [
+            {
+                "codigo_ejemplar": codigo_ejemplar,
+                "numero_serie": numero_serie,
+                "estado": estado,
+                "estado_fisico": estado_fisico,
+                "foto": foto,
+                "observaciones": observaciones,
+                "ubicacion": ubicacion,
+            }
+        ],
+    )[0]
 
-    estados_validos = {clave for clave, _ in ESTADOS_INSTANCIA}
-    if estado not in estados_validos:
-        raise InventarioError("estado", "El estado de la instancia no es válido.")
 
-    if foto is not None:
-        validar_foto(foto)
+@transaction.atomic
+def crear_instancias_material(material_id, filas):
+    """Crea varias instancias juntas y aumenta el stock según las nuevas filas."""
+    if not isinstance(filas, list) or not 1 <= len(filas) <= MAXIMO_EJEMPLARES_REGISTRO:
+        raise InventarioError(
+            "instancias",
+            f"Registra entre 1 y {MAXIMO_EJEMPLARES_REGISTRO} ejemplares.",
+        )
 
-    instancia_en_proceso = InstanciaMaterial(
-        material=material,
-        codigo_ejemplar=codigo,
-        numero_serie=numero_serie.strip() if numero_serie else "",
-        estado=estado,
-        estado_fisico=estado_fisico.strip() if estado_fisico else "Operativo",
-        foto=foto,
-        observaciones=observaciones.strip() if observaciones else "",
-        ubicacion=ubicacion.strip() if ubicacion else "",
-    )
     try:
-        instancia_en_proceso.save()
-        instancia = instancia_en_proceso
+        material = Material.objects.select_for_update().get(pk=material_id)
+    except (Material.DoesNotExist, ValueError, TypeError) as error:
+        raise MaterialNoEncontradoError(f"No existe un material con id={material_id}") from error
 
-        total = material.instancias.count()
-        if total > material.stock:
-            material.stock = total
-            material.save(update_fields=["stock", "updated_at"])
+    codigos_en_filas = set()
+    filas_preparadas = []
+    estados_validos = {clave for clave, _ in ESTADOS_INSTANCIA}
+    for indice, fila in enumerate(filas):
+        if not isinstance(fila, dict):
+            raise InventarioError("instancias", "La fila debe ser un objeto válido.", indice=indice)
+        codigo_original = str(fila.get("codigo_ejemplar", "")).strip()
+        if not codigo_original:
+            raise InventarioError(
+                "codigo_ejemplar", "El código del ejemplar es obligatorio.", indice=indice
+            )
+        codigo = normalizar_codigo(codigo_original)
+        if len(codigo) > 50:
+            raise InventarioError(
+                "codigo_ejemplar", "El código admite máximo 50 caracteres.", indice=indice
+            )
+        clave = codigo.casefold()
+        if clave in codigos_en_filas:
+            raise InventarioError(
+                "codigo_ejemplar", "El código del ejemplar está duplicado en el registro.", indice=indice
+            )
+        codigos_en_filas.add(clave)
+        if InstanciaMaterial.objects.filter(codigo_ejemplar__iexact=codigo).exists():
+            raise InventarioError(
+                "codigo_ejemplar",
+                "El código de ejemplar ya está registrado.",
+                status_code=409,
+                indice=indice,
+            )
 
-        return instancia
-    except Exception as error:
-        if instancia_en_proceso.foto and instancia_en_proceso.foto.name:
-            _eliminar_foto(instancia_en_proceso.foto.storage, instancia_en_proceso.foto.name)
+        estado = fila.get("estado", "disponible")
+        if estado not in estados_validos:
+            raise InventarioError("estado", "El estado de la instancia no es válido.", indice=indice)
+        foto = fila.get("foto")
         if foto is not None:
-            almacenamiento = InstanciaMaterial._meta.get_field("foto").storage
-            nombre_original = getattr(foto, "name", "")
-            if nombre_original and almacenamiento.exists(nombre_original):
-                _eliminar_foto(almacenamiento, nombre_original)
+            try:
+                validar_foto(foto)
+            except ValidationError as error:
+                raise InventarioError("foto", error.messages[0], indice=indice) from error
+        filas_preparadas.append({
+            "codigo_ejemplar": codigo,
+            "numero_serie": fila.get("numero_serie", ""),
+            "estado": estado,
+            "estado_fisico": fila.get("estado_fisico", "Operativo"),
+            "foto": foto,
+            "observaciones": fila.get("observaciones", ""),
+            "ubicacion": fila.get("ubicacion", ""),
+        })
+
+    instancias_creadas = []
+    instancia_en_proceso = None
+    indice_en_proceso = None
+    try:
+        for indice_en_proceso, fila in enumerate(filas_preparadas):
+            instancia_en_proceso = InstanciaMaterial(
+                material=material,
+                codigo_ejemplar=fila["codigo_ejemplar"],
+                numero_serie=fila["numero_serie"].strip() if fila["numero_serie"] else "",
+                estado=fila["estado"],
+                estado_fisico=fila["estado_fisico"].strip() if fila["estado_fisico"] else "Operativo",
+                foto=fila["foto"],
+                observaciones=fila["observaciones"].strip() if fila["observaciones"] else "",
+                ubicacion=fila["ubicacion"].strip() if fila["ubicacion"] else "",
+            )
+            instancia_en_proceso.save()
+            instancias_creadas.append(instancia_en_proceso)
+
+        material.stock = max(material.stock, material.instancias.count())
+        material.save(update_fields=["stock", "updated_at"])
+        return instancias_creadas
+    except Exception as error:
+        archivos_guardados = [
+            (instancia.foto.storage, instancia.foto.name)
+            for instancia in [*instancias_creadas, instancia_en_proceso]
+            if instancia and instancia.foto and instancia.foto.name
+        ]
+        for almacenamiento, nombre in archivos_guardados:
+            _eliminar_foto(almacenamiento, nombre)
         if isinstance(error, IntegrityError) and "codigo_ejemplar" in str(error):
             raise InventarioError(
-                "codigo_ejemplar", "El código de ejemplar ya está registrado.", status_code=409
+                "codigo_ejemplar",
+                "El código de ejemplar ya está registrado.",
+                status_code=409,
+                indice=indice_en_proceso,
             ) from error
         raise
 

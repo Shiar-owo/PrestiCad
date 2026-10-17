@@ -97,6 +97,7 @@ class InstanciaMaterialSerializer(serializers.ModelSerializer):
     """Contrato de lectura para una instancia física / ejemplar."""
 
     estado_display = serializers.CharField(source="get_estado_display", read_only=True)
+    foto = FotoMaterial(read_only=True)
 
     class Meta:
         model = InstanciaMaterial
@@ -107,6 +108,7 @@ class InstanciaMaterialSerializer(serializers.ModelSerializer):
             "estado",
             "estado_display",
             "estado_fisico",
+            "foto",
             "observaciones",
             "ubicacion",
             "created_at",

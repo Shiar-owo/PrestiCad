@@ -250,6 +250,13 @@ class InstanciaMaterial(models.Model):
         verbose_name="Estado físico",
         help_text="Condición física de este ejemplar (ej. Excelente, Bueno, Desgaste leve).",
     )
+    foto = models.ImageField(
+        upload_to=ruta_foto,
+        blank=True,
+        validators=[validar_foto],
+        verbose_name="Foto del ejemplar",
+        help_text="Imagen del ejemplar: JPG, PNG o WEBP, hasta 5 MB.",
+    )
     observaciones = models.TextField(
         blank=True,
         default="",

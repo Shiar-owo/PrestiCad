@@ -258,6 +258,7 @@ function FichaTecnicaModal({ material, onCerrar }) {
                   <table className="w-full text-left text-sm">
                     <thead className="border-b border-borde bg-superficie-alta/60 text-xs font-semibold uppercase tracking-wider text-texto-suave">
                       <tr>
+                        <th scope="col" className="px-4 py-2.5">Foto</th>
                         <th scope="col" className="px-4 py-2.5">Código Ejemplar</th>
                         <th scope="col" className="px-4 py-2.5">N° de Serie</th>
                         <th scope="col" className="px-4 py-2.5">Estado</th>
@@ -271,6 +272,18 @@ function FichaTecnicaModal({ material, onCerrar }) {
                           key={inst.id}
                           className="transition-colors hover:bg-superficie-alta/40"
                         >
+                          <td className="px-4 py-3">
+                            {inst.foto ? (
+                              <img
+                                src={inst.foto}
+                                alt={`Foto del ejemplar ${inst.codigoEjemplar}`}
+                                className="size-14 rounded-md border border-borde object-cover"
+                                loading="lazy"
+                              />
+                            ) : (
+                              <span className="text-xs text-texto-suave">Sin foto</span>
+                            )}
+                          </td>
                           <td className="px-4 py-3 font-mono font-semibold text-acento-700 dark:text-acento-300">
                             {inst.codigoEjemplar}
                           </td>

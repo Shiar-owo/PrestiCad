@@ -113,6 +113,7 @@ function Materiales() {
 
       {mostrarFormulario && (
         <MaterialForm
+          key={materialEnEdicion?.id || 'nuevo'}
           material={materialEnEdicion}
           onGuardado={manejarGuardado}
           onCancelar={cerrarFormulario}

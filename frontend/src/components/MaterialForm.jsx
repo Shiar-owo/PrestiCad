@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { api, ErrorApi } from '../api/client'
 import {
@@ -9,6 +9,14 @@ import {
   validarStock,
 } from '../validaciones'
 import { OPCIONES_ESTADO, OPCIONES_TIER, OPCIONES_TIPO } from '../constantes/catalogo'
+import {
+  construirCuerpoRegistroMaterial,
+  crearEjemplares,
+  mapearErroresPorFila,
+  redimensionarEjemplares,
+  validarCodigosDuplicados,
+  validarFotosEjemplares,
+} from '../inventario/registroMaterial'
 import Campo from './ui/Campo'
 import Boton from './ui/Boton'
 import Tarjeta from './ui/Tarjeta'
@@ -29,15 +37,16 @@ const DATOS_INICIALES = {
   codigo_inventario: '',
   tipo: 'equipo',
   stock: 1,
+  modo: 'unico',
   es_alto_valor: false,
   marca: '',
   modelo: '',
   numero_serie: '',
   color: '',
   estado_fisico: '',
-  // `foto` no vive aquí: es un archivo, no un valor de texto. Se maneja aparte
-  // con `archivoFoto` (lo nuevo que elige el gestor) y `vistaPrevia` (la
-  // imagen que se muestra, que al editar es la que ya tenía guardada).
+  ubicacion: '',
+  foto: null,
+  vistaPreviaFoto: '',
   tier_minimo_requerido: '',
   bonificacion_tiempo: '',
   deduccion_tardanza: '',
@@ -48,7 +57,19 @@ const DATOS_INICIALES = {
   estado: 'disponible',
 }
 
-function validar(datos, esEdicion, archivoFoto) {
+function crearDatosIniciales(material) {
+  return {
+    ...DATOS_INICIALES,
+    ...Object.fromEntries(
+      Object.entries(DATOS_INICIALES).map(([campo, inicial]) => [campo, material?.[campo] ?? inicial]),
+    ),
+    modo: 'unico',
+    foto: null,
+    vistaPreviaFoto: material?.foto || '',
+  }
+}
+
+function validar(datos, esEdicion) {
   const errores = {}
 
   const errorNombre = validarNombre(datos.nombre)
@@ -61,11 +82,13 @@ function validar(datos, esEdicion, archivoFoto) {
     errores.codigo_inventario = errorCodigo
   }
 
-  const errorStock = validarStock(datos.stock)
-  if (errorStock) {
-    errores.stock = errorStock
-  } else if (datos.stock === '' && esEdicion) {
-    errores.stock = 'El stock no puede quedar vacío.'
+  if (esEdicion) {
+    const errorStock = validarStock(datos.stock)
+    if (errorStock) {
+      errores.stock = errorStock
+    } else if (datos.stock === '') {
+      errores.stock = 'El stock no puede quedar vacío.'
+    }
   }
 
   for (const { campo } of CAMPOS_PUNTOS) {
@@ -81,7 +104,7 @@ function validar(datos, esEdicion, archivoFoto) {
     }
   }
 
-  const errorFoto = validarFoto(archivoFoto)
+  const errorFoto = validarFoto(datos.foto)
   if (errorFoto) {
     errores.foto = errorFoto
   }
@@ -99,56 +122,95 @@ function EncabezadoSeccion({ children }) {
 
 function MaterialForm({ material, onGuardado, onCancelar }) {
   const esEdicion = Boolean(material)
-  const [datos, setDatos] = useState(DATOS_INICIALES)
-  const [archivoFoto, setArchivoFoto] = useState(null)
-  const [vistaPrevia, setVistaPrevia] = useState('')
+  const contadorIds = useRef(0)
+  const urlsTemporales = useRef(new Set())
+  const enviandoRef = useRef(false)
+  const [datos, setDatos] = useState(() => crearDatosIniciales(material))
+  const [ejemplares, setEjemplares] = useState(() =>
+    material ? [] : crearEjemplares(1, () => `ejemplar-${++contadorIds.current}`),
+  )
   const [errores, setErrores] = useState({})
+  const [erroresFilas, setErroresFilas] = useState({})
   const [enviando, setEnviando] = useState(false)
   const [mensajeExito, setMensajeExito] = useState('')
 
-  useEffect(() => {
-    if (!material) {
-      setDatos(DATOS_INICIALES)
-    } else {
-      setDatos({
-        ...DATOS_INICIALES,
-        ...Object.fromEntries(
-          Object.keys(DATOS_INICIALES).map((campo) => [
-            campo,
-            material[campo] ?? (campo === 'stock' ? 1 : ''),
-          ]),
-        ),
-      })
-    }
-    setArchivoFoto(null)
-    setVistaPrevia(material?.foto || '')
-    setErrores({})
-    setMensajeExito('')
-  }, [material])
+  useEffect(() => () => {
+    urlsTemporales.current.forEach((url) => URL.revokeObjectURL(url))
+    urlsTemporales.current.clear()
+  }, [])
 
-  // El cleanup corre con la URL anterior a la que `vistaPrevia` va a tomar, y
-  // también al desmontar. Solo se liberan las URLs temporales creadas con
-  // `createObjectURL`; las ya guardadas las administra el backend.
-  useEffect(
-    () => () => {
-      if (vistaPrevia.startsWith('blob:')) {
-        URL.revokeObjectURL(vistaPrevia)
-      }
-    },
-    [vistaPrevia],
-  )
+  function crearVistaPrevia(archivo) {
+    const url = URL.createObjectURL(archivo)
+    urlsTemporales.current.add(url)
+    return url
+  }
+
+  function liberarVistaPrevia(url) {
+    if (url && urlsTemporales.current.has(url)) {
+      URL.revokeObjectURL(url)
+      urlsTemporales.current.delete(url)
+    }
+  }
+
+  function liberarVistasDeFilas(filas) {
+    filas.forEach((fila) => liberarVistaPrevia(fila.vistaPrevia))
+  }
+
+  function redimensionarFilas(cantidad) {
+    const siguiente = redimensionarEjemplares(
+      ejemplares,
+      cantidad,
+      () => `ejemplar-${++contadorIds.current}`,
+    )
+    const idsConservados = new Set(siguiente.map((fila) => fila.id))
+    liberarVistasDeFilas(ejemplares.filter((fila) => !idsConservados.has(fila.id)))
+    setEjemplares(siguiente)
+    setErroresFilas({})
+  }
+
+  function cambiarModo(modo) {
+    const cantidad = modo === 'unico' ? 1 : Math.max(ejemplares.length, 2)
+    redimensionarFilas(cantidad)
+    actualizar('modo', modo)
+  }
 
   function actualizar(campo, valor) {
     setDatos((previos) => ({ ...previos, [campo]: valor }))
   }
 
+  function actualizarFila(indice, campo, valor) {
+    setEjemplares(ejemplares.map((fila, posicion) =>
+      posicion === indice ? { ...fila, [campo]: valor } : fila,
+    ))
+  }
+
   function manejarArchivoFoto(evento) {
     const archivo = evento.target.files?.[0] || null
-    setArchivoFoto(archivo)
-    // Sin archivo nuevo se vuelve a la foto guardada: al editar, quitar la
-    // selección no debe dejar la vista previa en blanco.
-    setVistaPrevia(archivo ? URL.createObjectURL(archivo) : material?.foto || '')
+    liberarVistaPrevia(datos.vistaPreviaFoto)
+    actualizar('foto', archivo)
+    actualizar('vistaPreviaFoto', archivo ? crearVistaPrevia(archivo) : material?.foto || '')
     setErrores((previos) => ({ ...previos, foto: validarFoto(archivo) }))
+  }
+
+  function manejarFotoEjemplar(indice, evento) {
+    const archivo = evento.target.files?.[0] || null
+    const fila = ejemplares[indice]
+    liberarVistaPrevia(fila?.vistaPrevia)
+    const vistaPrevia = archivo ? crearVistaPrevia(archivo) : ''
+    setEjemplares(ejemplares.map((actual, posicion) =>
+      posicion === indice ? { ...actual, foto: archivo, vistaPrevia } : actual,
+    ))
+    setErroresFilas((previos) => {
+      const siguientes = { ...previos }
+      const error = validarFoto(archivo)
+      if (error) siguientes[indice] = { ...siguientes[indice], foto: error }
+      else if (siguientes[indice]) {
+        const { foto, ...resto } = siguientes[indice]
+        if (Object.keys(resto).length) siguientes[indice] = resto
+        else delete siguientes[indice]
+      }
+      return siguientes
+    })
   }
 
   // Los parámetros en blanco no se envían: el backend los resuelve con los
@@ -193,7 +255,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
   function construirCuerpo() {
     const campos = construirCampos()
 
-    if (!archivoFoto) {
+    if (!datos.foto) {
       return campos
     }
 
@@ -204,16 +266,24 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
       // que admiten nulo, que es justo lo que limpia los costos.
       formulario.append(campo, valor === null ? '' : valor)
     }
-    formulario.append('foto', archivoFoto)
+    formulario.append('foto', datos.foto)
 
     return formulario
   }
 
   function mostrarErroresDelBackend(datosError) {
     const erroresApi = {}
+    const erroresDeFila = mapearErroresPorFila(datosError)
     for (const campo of Object.keys(datosError)) {
-      if (campo === 'detail') {
+      if (campo === 'detail' || campo === 'indice') {
+        if (campo === 'indice') continue
         erroresApi.formulario = String(datosError[campo])
+        continue
+      }
+      if (campo === 'instancias') {
+        erroresApi.formulario = Array.isArray(datosError[campo])
+          ? datosError[campo][0]
+          : String(datosError[campo])
         continue
       }
       erroresApi[campo] = Array.isArray(datosError[campo])
@@ -221,21 +291,54 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
         : String(datosError[campo])
     }
     setErrores(erroresApi)
+    setErroresFilas(erroresDeFila)
   }
 
   async function manejarEnvio(evento) {
     evento.preventDefault()
+    if (enviandoRef.current) return
 
-    const erroresFormulario = validar(datos, esEdicion, archivoFoto)
+    const erroresFormulario = validar(datos, esEdicion)
     setErrores(erroresFormulario)
-    if (Object.keys(erroresFormulario).length > 0) {
+    let erroresDeFila = {}
+    if (!esEdicion && datos.modo !== 'unico') {
+      if (ejemplares.length < 2 || ejemplares.length > 50) {
+        erroresFormulario.stock = 'Registra entre 2 y 50 ejemplares.'
+      }
+      const erroresCodigo = datos.modo === 'detalle' ? validarCodigosDuplicados(ejemplares) : []
+      if (datos.modo === 'detalle') {
+        ejemplares.forEach((fila, indice) => {
+          if (!fila.codigo_ejemplar.trim()) {
+            erroresDeFila[indice] = {
+              ...(erroresDeFila[indice] || {}),
+              codigo_ejemplar: 'El código del ejemplar es obligatorio.',
+            }
+          }
+        })
+      }
+      erroresCodigo.forEach(({ indice, mensaje }) => {
+        erroresDeFila[indice] = { ...(erroresDeFila[indice] || {}), codigo_ejemplar: mensaje }
+      })
+      validarFotosEjemplares(ejemplares).forEach(({ indice, mensaje }) => {
+        erroresDeFila[indice] = { ...(erroresDeFila[indice] || {}), foto: mensaje }
+      })
+    }
+    setErroresFilas(erroresDeFila)
+    if (Object.keys(erroresFormulario).length > 0 || Object.keys(erroresDeFila).length > 0) {
       return
     }
 
+    enviandoRef.current = true
     setEnviando(true)
     setMensajeExito('')
     try {
-      const cuerpo = construirCuerpo()
+      const cuerpo = esEdicion
+        ? construirCuerpo()
+        : construirCuerpoRegistroMaterial({
+          modo: datos.modo,
+          datos: { ...construirCampos(), foto: datos.foto, ubicacion: datos.ubicacion },
+          ejemplares,
+        })
       if (esEdicion) {
         await api.put(`/materiales/${material.id}/`, cuerpo)
       } else {
@@ -246,10 +349,12 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
         esEdicion ? 'Material actualizado correctamente.' : 'Material registrado correctamente.',
       )
       setErrores({})
-      setArchivoFoto(null)
-      setVistaPrevia(material?.foto || '')
+      setErroresFilas({})
       if (!esEdicion) {
-        setDatos(DATOS_INICIALES)
+        liberarVistaPrevia(datos.vistaPreviaFoto)
+        liberarVistasDeFilas(ejemplares)
+        setDatos(crearDatosIniciales(null))
+        setEjemplares(crearEjemplares(1, () => `ejemplar-${++contadorIds.current}`))
       }
       if (onGuardado) {
         onGuardado()
@@ -263,6 +368,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
         })
       }
     } finally {
+      enviandoRef.current = false
       setEnviando(false)
     }
   }
@@ -314,6 +420,18 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
               valor={datos.tipo}
               onCambio={(evento) => actualizar('tipo', evento.target.value)}
             />
+            {!esEdicion && (
+              <Campo
+                etiqueta="Modo de registro"
+                opciones={[
+                  { valor: 'unico', etiqueta: 'Único' },
+                  { valor: 'lote', etiqueta: 'Lote idéntico' },
+                  { valor: 'detalle', etiqueta: 'Por detalle' },
+                ]}
+                valor={datos.modo}
+                onCambio={(evento) => cambiarModo(evento.target.value)}
+              />
+            )}
             {esEdicion && (
               <Campo
                 etiqueta="Estado"
@@ -323,15 +441,34 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
                 error={errores.estado}
               />
             )}
-            <Campo
-              etiqueta="Stock (unidades)"
-              tipo="number"
-              min="1"
-              step="1"
-              valor={datos.stock}
-              onCambio={(evento) => actualizar('stock', evento.target.value)}
-              error={errores.stock}
-            />
+            {esEdicion && (
+              <Campo
+                etiqueta="Stock (unidades)"
+                tipo="number"
+                min="1"
+                step="1"
+                valor={datos.stock}
+                onCambio={(evento) => actualizar('stock', evento.target.value)}
+                error={errores.stock}
+              />
+            )}
+            {!esEdicion && datos.modo !== 'unico' && (
+              <Campo
+                etiqueta="Cantidad de ejemplares"
+                tipo="number"
+                min="2"
+                max="50"
+                step="1"
+                valor={ejemplares.length}
+                onCambio={(evento) => {
+                  const cantidad = Number(evento.target.value)
+                  if (Number.isInteger(cantidad) && cantidad >= 2 && cantidad <= 50) {
+                    redimensionarFilas(cantidad)
+                  }
+                }}
+                error={errores.stock}
+              />
+            )}
           </div>
 
           <label className="flex items-center gap-2 text-sm font-semibold text-texto">
@@ -359,24 +496,36 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
               onCambio={(evento) => actualizar('modelo', evento.target.value)}
               maxLength={60}
             />
-            <Campo
-              etiqueta="Número de serie"
-              valor={datos.numero_serie}
-              onCambio={(evento) => actualizar('numero_serie', evento.target.value)}
-              maxLength={60}
-            />
+            {(esEdicion || datos.modo === 'unico') && (
+              <Campo
+                etiqueta="Número de serie"
+                valor={datos.numero_serie}
+                onCambio={(evento) => actualizar('numero_serie', evento.target.value)}
+                maxLength={50}
+              />
+            )}
             <Campo
               etiqueta="Color"
               valor={datos.color}
               onCambio={(evento) => actualizar('color', evento.target.value)}
               maxLength={30}
             />
-            <Campo
-              etiqueta="Estado físico"
-              valor={datos.estado_fisico}
-              onCambio={(evento) => actualizar('estado_fisico', evento.target.value)}
-              maxLength={120}
-            />
+            {(esEdicion || ['unico', 'lote'].includes(datos.modo)) && (
+              <Campo
+                etiqueta="Estado físico"
+                valor={datos.estado_fisico}
+                onCambio={(evento) => actualizar('estado_fisico', evento.target.value)}
+                maxLength={50}
+              />
+            )}
+            {!esEdicion && ['unico', 'lote'].includes(datos.modo) && (
+              <Campo
+                etiqueta={datos.modo === 'lote' ? 'Estante por defecto' : 'Estante'}
+                valor={datos.ubicacion}
+                onCambio={(evento) => actualizar('ubicacion', evento.target.value)}
+                maxLength={100}
+              />
+            )}
           </div>
 
           <div className="grid gap-1">
@@ -393,10 +542,10 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
               onChange={manejarArchivoFoto}
               className="block w-full text-sm text-texto file:mr-3 file:rounded-lg file:border-0 file:bg-superficie-alta file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-texto hover:file:bg-acento-50"
             />
-            {vistaPrevia ? (
+            {datos.vistaPreviaFoto ? (
               <img
                 className="mt-2 h-32 w-32 rounded-lg border border-borde object-cover"
-                src={vistaPrevia}
+                src={datos.vistaPreviaFoto}
                 alt="Vista previa de la foto"
               />
             ) : (
@@ -405,6 +554,89 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
               </span>
             )}
           </div>
+
+          {!esEdicion && datos.modo !== 'unico' && (
+            <>
+              <EncabezadoSeccion>
+                {datos.modo === 'lote' ? 'Datos de cada ejemplar' : 'Detalle de los ejemplares'}
+              </EncabezadoSeccion>
+              <div className="grid gap-4">
+                {ejemplares.map((fila, indice) => (
+                  <Tarjeta key={fila.id} className="grid gap-4 border border-borde p-4">
+                    <h5 className="text-sm font-bold text-texto">Ejemplar {indice + 1}</h5>
+                    {erroresFilas[indice] && (
+                      <ErrorAlerta
+                        mensaje={Object.values(erroresFilas[indice]).join(' ')}
+                      />
+                    )}
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      {datos.modo === 'detalle' && (
+                        <Campo
+                          etiqueta="Código de ejemplar"
+                          valor={fila.codigo_ejemplar}
+                          placeholder={`${datos.codigo_inventario.trim() || 'CODIGO'}-${String(indice + 1).padStart(2, '0')}`}
+                          onCambio={(evento) => actualizarFila(indice, 'codigo_ejemplar', evento.target.value)}
+                          error={erroresFilas[indice]?.codigo_ejemplar}
+                          maxLength={50}
+                          requerido
+                        />
+                      )}
+                      <Campo
+                        etiqueta="Número de serie"
+                        valor={fila.numero_serie}
+                        onCambio={(evento) => actualizarFila(indice, 'numero_serie', evento.target.value)}
+                        maxLength={80}
+                      />
+                      {datos.modo === 'detalle' && (
+                        <Campo
+                          etiqueta="Estado físico"
+                          valor={fila.estado_fisico}
+                          onCambio={(evento) => actualizarFila(indice, 'estado_fisico', evento.target.value)}
+                          maxLength={100}
+                        />
+                      )}
+                      <Campo
+                        etiqueta={datos.modo === 'lote' ? 'Estante (opcional)' : 'Estante'}
+                        valor={fila.ubicacion}
+                        onCambio={(evento) => actualizarFila(indice, 'ubicacion', evento.target.value)}
+                        maxLength={100}
+                      />
+                      <Campo
+                        etiqueta={datos.modo === 'detalle' ? 'Descripción individual' : 'Observaciones'}
+                        tipo="area"
+                        valor={fila.observaciones}
+                        onCambio={(evento) => actualizarFila(indice, 'observaciones', evento.target.value)}
+                        rows={2}
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <label className="text-sm font-semibold text-texto" htmlFor={`foto-ejemplar-${fila.id}`}>
+                        Foto del ejemplar (opcional)
+                      </label>
+                      <input
+                        id={`foto-ejemplar-${fila.id}`}
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        aria-invalid={Boolean(erroresFilas[indice]?.foto)}
+                        onChange={(evento) => manejarFotoEjemplar(indice, evento)}
+                        className="block w-full text-sm text-texto file:mr-3 file:rounded-lg file:border-0 file:bg-superficie-alta file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-texto hover:file:bg-acento-50"
+                      />
+                      {erroresFilas[indice]?.foto && (
+                        <p className="text-xs text-error">{erroresFilas[indice].foto}</p>
+                      )}
+                      {fila.vistaPrevia && (
+                        <img
+                          className="h-24 w-24 rounded-lg border border-borde object-cover"
+                          src={fila.vistaPrevia}
+                          alt={`Vista previa del ejemplar ${indice + 1}`}
+                        />
+                      )}
+                    </div>
+                  </Tarjeta>
+                ))}
+              </div>
+            </>
+          )}
 
           <EncabezadoSeccion>Parámetros de reputación</EncabezadoSeccion>
 

@@ -102,6 +102,7 @@ describe('obtenerDatosFichaTecnica', () => {
           numero_serie: '',
           estado: 'disponible',
           estado_fisico: 'Excelente',
+          foto: 'https://ejemplo.com/ejemplar-1.jpg',
           observaciones: 'Estante A-1',
         },
         {
@@ -126,8 +127,10 @@ describe('obtenerDatosFichaTecnica', () => {
     const ficha = obtenerDatosFichaTecnica(materialConInstancias)
     expect(ficha.instancias).toHaveLength(2)
     expect(ficha.instancias[0].codigoEjemplar).toBe('LIB-CLRS-01')
+    expect(ficha.instancias[0].foto).toBe('https://ejemplo.com/ejemplar-1.jpg')
     expect(ficha.instancias[0].esDisponible).toBe(true)
     expect(ficha.instancias[1].codigoEjemplar).toBe('LIB-CLRS-02')
+    expect(ficha.instancias[1].foto).toBe('')
     expect(ficha.instancias[1].esDisponible).toBe(false)
     expect(ficha.resumenInstancias.disponible).toBe(1)
     expect(ficha.resumenInstancias.en_mantenimiento).toBe(1)

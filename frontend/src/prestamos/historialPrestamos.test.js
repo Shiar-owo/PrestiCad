@@ -2,8 +2,32 @@ import { describe, expect, it } from 'vitest'
 
 import {
   construirRutaHistorial,
+  obtenerPrestamoAdyacente,
   validarRespuestaHistorial,
 } from './historialPrestamos'
+
+describe('obtenerPrestamoAdyacente', () => {
+  const prestamos = [{ id: 10 }, { id: 11 }, { id: 12 }]
+
+  it('obtiene el préstamo anterior dentro de la página', () => {
+    expect(obtenerPrestamoAdyacente(prestamos, 11, 'anterior')).toEqual({ id: 10 })
+  })
+
+  it('obtiene el préstamo siguiente dentro de la página', () => {
+    expect(obtenerPrestamoAdyacente(prestamos, 11, 'siguiente')).toEqual({ id: 12 })
+  })
+
+  it('devuelve null cuando el préstamo está en un extremo o no existe', () => {
+    expect(obtenerPrestamoAdyacente(prestamos, 10, 'anterior')).toBeNull()
+    expect(obtenerPrestamoAdyacente(prestamos, 12, 'siguiente')).toBeNull()
+    expect(obtenerPrestamoAdyacente(prestamos, 99, 'anterior')).toBeNull()
+  })
+
+  it('rechaza listas o direcciones inválidas', () => {
+    expect(obtenerPrestamoAdyacente(null, 11, 'anterior')).toBeNull()
+    expect(obtenerPrestamoAdyacente(prestamos, 11, 'otra')).toBeNull()
+  })
+})
 
 describe('construirRutaHistorial', () => {
   it('solicita la primera página con el tamaño acordado', () => {

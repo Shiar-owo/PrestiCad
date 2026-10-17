@@ -334,6 +334,11 @@ def registrar_material(
                 "codigo_ejemplar", "El código del ejemplar ya está registrado.", status_code=409, indice=indice
             )
         foto_fila = fila.get("foto")
+        color_fila = fila.get("color", "")
+        if not isinstance(color_fila, str):
+            raise InventarioError("color", "El color del ejemplar debe ser texto.", indice=indice)
+        if len(color_fila) > 30:
+            raise InventarioError("color", "El color admite máximo 30 caracteres.", indice=indice)
         if foto_fila is not None:
             try:
                 validar_foto(foto_fila)
@@ -348,6 +353,7 @@ def registrar_material(
             "ubicacion": ubicacion_fila,
             "observaciones": fila.get("observaciones", ""),
             "foto": foto_fila,
+            "color": color_fila.strip(),
         })
 
     campos = {
@@ -394,6 +400,7 @@ def registrar_material(
                 numero_serie=fila["numero_serie"],
                 estado="disponible",
                 estado_fisico=fila["estado_fisico"] or "Operativo",
+                color=fila["color"],
                 observaciones=fila["observaciones"],
                 ubicacion=fila["ubicacion"],
                 foto=fila["foto"],
@@ -689,6 +696,7 @@ def crear_instancia_material(
     numero_serie="",
     estado="disponible",
     estado_fisico="Operativo",
+    color="",
     foto=None,
     observaciones="",
     ubicacion="",
@@ -702,6 +710,7 @@ def crear_instancia_material(
                 "numero_serie": numero_serie,
                 "estado": estado,
                 "estado_fisico": estado_fisico,
+                "color": color,
                 "foto": foto,
                 "observaciones": observaciones,
                 "ubicacion": ubicacion,
@@ -757,6 +766,11 @@ def crear_instancias_material(material_id, filas):
         estado = fila.get("estado", "disponible")
         if estado not in estados_validos:
             raise InventarioError("estado", "El estado de la instancia no es válido.", indice=indice)
+        color = fila.get("color", "")
+        if not isinstance(color, str):
+            raise InventarioError("color", "El color del ejemplar debe ser texto.", indice=indice)
+        if len(color) > 30:
+            raise InventarioError("color", "El color admite máximo 30 caracteres.", indice=indice)
         foto = fila.get("foto")
         if foto is not None:
             try:
@@ -768,6 +782,7 @@ def crear_instancias_material(material_id, filas):
             "numero_serie": fila.get("numero_serie", ""),
             "estado": estado,
             "estado_fisico": fila.get("estado_fisico", "Operativo"),
+            "color": color.strip(),
             "foto": foto,
             "observaciones": fila.get("observaciones", ""),
             "ubicacion": fila.get("ubicacion", ""),
@@ -784,6 +799,7 @@ def crear_instancias_material(material_id, filas):
                 numero_serie=fila["numero_serie"].strip() if fila["numero_serie"] else "",
                 estado=fila["estado"],
                 estado_fisico=fila["estado_fisico"].strip() if fila["estado_fisico"] else "Operativo",
+                color=fila["color"].strip() if fila["color"] else "",
                 foto=fila["foto"],
                 observaciones=fila["observaciones"].strip() if fila["observaciones"] else "",
                 ubicacion=fila["ubicacion"].strip() if fila["ubicacion"] else "",
@@ -841,7 +857,7 @@ def actualizar_instancia_material(instancia_id, **campos):
 
     foto_anterior = instancia.foto.name if "foto" in campos and instancia.foto else None
 
-    for campo in ("numero_serie", "estado_fisico", "observaciones", "ubicacion"):
+    for campo in ("numero_serie", "estado_fisico", "color", "observaciones", "ubicacion"):
         if campo in campos and isinstance(campos[campo], str):
             setattr(instancia, campo, campos[campo].strip())
 

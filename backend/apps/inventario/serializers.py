@@ -127,6 +127,7 @@ class InstanciaMaterialSerializer(serializers.ModelSerializer):
             "estado",
             "estado_display",
             "estado_fisico",
+            "color",
             "foto",
             "observaciones",
             "ubicacion",
@@ -145,6 +146,7 @@ class InstanciaMaterialModificacionSerializer(
     numero_serie = serializers.CharField(max_length=80, required=False, allow_blank=True)
     estado = serializers.ChoiceField(choices=ESTADOS_INSTANCIA, required=False)
     estado_fisico = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    color = serializers.CharField(max_length=30, required=False, allow_blank=True)
     foto = serializers.ImageField(
         required=False,
         allow_null=True,
@@ -161,6 +163,7 @@ class InstanciaMaterialModificacionSerializer(
             "numero_serie",
             "estado",
             "estado_fisico",
+            "color",
             "foto",
             "observaciones",
             "ubicacion",

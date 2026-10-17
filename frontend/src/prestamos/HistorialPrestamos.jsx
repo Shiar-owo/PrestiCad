@@ -5,6 +5,7 @@ import { api } from '../api/client'
 import SesionContext from '../contextos/SesionContext'
 import useTituloPagina from '../hooks/useTituloPagina'
 import FiltroPrestamos from '../components/prestamos/FiltroPrestamos'
+import SelectorPrestatario from '../components/prestamos/SelectorPrestatario'
 import {
   construirRutaHistorial,
   TAMANO_PAGINA_HISTORIAL,
@@ -23,6 +24,8 @@ export default function HistorialPrestamos() {
   const { usuario } = useContext(SesionContext)
   const navigate = useNavigate()
   const [estado, setEstado] = useState('todos')
+  const [dniEntrada, setDniEntrada] = useState('')
+  const [dniFiltro, setDniFiltro] = useState('')
   const [pagina, setPagina] = useState(1)
   const [intento, setIntento] = useState(0)
   const [consulta, setConsulta] = useState(CONSULTA_INICIAL)
@@ -31,7 +34,7 @@ export default function HistorialPrestamos() {
     let activa = true
     setConsulta({ cargando: true, error: '', datos: null })
 
-    api.get(construirRutaHistorial({ estado, pagina }))
+    api.get(construirRutaHistorial({ estado, pagina, dni: dniFiltro }))
       .then(validarRespuestaHistorial)
       .then((datos) => {
         if (activa) setConsulta({ cargando: false, error: '', datos })
@@ -49,7 +52,7 @@ export default function HistorialPrestamos() {
     return () => {
       activa = false
     }
-  }, [estado, pagina, intento])
+  }, [estado, pagina, dniFiltro, intento])
 
   function cambiarEstado(nuevoEstado) {
     setEstado(nuevoEstado)
@@ -96,13 +99,49 @@ export default function HistorialPrestamos() {
       </header>
 
       <FiltroPrestamos estado={estado} onCambiar={cambiarEstado} />
+      <div className="my-4 flex flex-wrap items-end gap-3">
+        <div className="w-full sm:max-w-sm">
+          <SelectorPrestatario
+            valor={dniEntrada}
+            etiqueta="Buscar historial por prestatario"
+            ayuda="Escribe el DNI para elegir un prestatario y filtrar sus préstamos."
+            onCambio={(valor) => {
+              setDniEntrada(valor)
+              setDniFiltro('')
+              setPagina(1)
+            }}
+            onSeleccionar={(prestatario) => {
+              setDniEntrada(prestatario.dni)
+              setDniFiltro(prestatario.dni)
+              setPagina(1)
+            }}
+          />
+        </div>
+        {dniFiltro && (
+          <Boton
+            variante="secundario"
+            tipo="button"
+            onClick={() => {
+              setDniEntrada('')
+              setDniFiltro('')
+              setPagina(1)
+            }}
+          >
+            Quitar filtro de prestatario
+          </Boton>
+        )}
+      </div>
 
       {results.length === 0 ? (
         <div className="mt-6">
           <EstadoVacio
-            titulo={estado === 'todos' ? 'Aún no hay préstamos registrados' : 'Sin préstamos con este estado'}
+            titulo={dniFiltro
+              ? 'Sin préstamos para este prestatario'
+              : estado === 'todos' ? 'Aún no hay préstamos registrados' : 'Sin préstamos con este estado'}
             mensaje={
-              estado === 'todos'
+              dniFiltro
+                ? 'No se encontraron préstamos que coincidan con los filtros aplicados.'
+                : estado === 'todos'
                 ? 'Los préstamos del sistema aparecerán aquí al registrar una entrega.'
                 : 'Prueba con otro filtro de estado.'
             }

@@ -13,6 +13,7 @@ import Skeleton from '../components/ui/Skeleton'
 import ErrorAlerta from '../components/ui/ErrorAlerta'
 import EstadoVacio from '../components/ui/EstadoVacio'
 import SubidaDocumentoPDF from '../components/prestamos/SubidaDocumentoPDF'
+import SelectorPrestatario from '../components/prestamos/SelectorPrestatario'
 import { TAMANO_MAXIMO_GARANTIA_MB } from '../constantes/garantia'
 import { construirSolicitudPrestamo } from '../prestamos/solicitudPrestamo'
 import { crearOpcionesInstancia } from '../prestamos/instanciasPrestamo'
@@ -295,15 +296,12 @@ function RegistrarPrestamo() {
       {!cargando && materiales.length > 0 && (
         <Tarjeta className="p-6">
           <form onSubmit={registrar} noValidate className="grid gap-5">
-            <Campo
+            <SelectorPrestatario
               etiqueta="DNI del prestatario"
               valor={formulario.dni}
-              onCambio={(evento) => actualizar('dni', evento.target.value)}
+              onCambio={(valor) => actualizar('dni', valor)}
               error={errores.dni}
               ayuda="El sistema verificará que el usuario esté activo y cumpla el Tier requerido."
-              inputMode="numeric"
-              autoComplete="off"
-              maxLength={8}
               requerido
             />
             <Campo

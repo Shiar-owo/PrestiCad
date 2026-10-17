@@ -6,7 +6,6 @@ from rest_framework import status
 from rest_framework.generics import (
     ListAPIView,
     ListCreateAPIView,
-    RetrieveUpdateAPIView,
     RetrieveUpdateDestroyAPIView,
 )
 import json
@@ -92,8 +91,8 @@ class MaterialListCreateView(ListCreateAPIView):
         return Response(MaterialSerializer(material).data, status=status.HTTP_201_CREATED)
 
 
-class MaterialDetailView(RetrieveUpdateAPIView):
-    """Consulta un material (GET) y lo edita (PUT/PATCH).
+class MaterialDetailView(RetrieveUpdateDestroyAPIView):
+    """Consulta, edita o elimina un material y sus ejemplares.
 
     El cambio de estado viaja como un campo más de la edición: un PATCH con
     solo `estado` es el mecanismo para pasar un material a 'En Mantenimiento'
@@ -132,6 +131,17 @@ class MaterialDetailView(RetrieveUpdateAPIView):
             )
 
         return Response(MaterialSerializer(material).data, status=status.HTTP_200_OK)
+
+    def destroy(self, request, *args, **kwargs):
+        material = self.get_object()
+        try:
+            services.eliminar_material(material.id)
+        except services.InventarioError as error:
+            return Response(
+                {error.campo: [error.mensaje]},
+                status=error.status_code,
+            )
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class MaterialSearchView(ListAPIView):
@@ -258,6 +268,6 @@ class InstanciaMaterialDetailView(RetrieveUpdateDestroyAPIView):
         except services.InventarioError as error:
             return Response(
                 {error.campo: [error.mensaje]},
-                status=status.HTTP_400_BAD_REQUEST,
+                status=error.status_code,
             )
         return Response(status=status.HTTP_204_NO_CONTENT)

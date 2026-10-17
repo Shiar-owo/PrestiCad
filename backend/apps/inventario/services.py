@@ -8,6 +8,7 @@ import logging
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
+from django.db.models.deletion import ProtectedError
 
 from apps.inventario.constants import (
     ESTADOS_INSTANCIA,
@@ -102,6 +103,39 @@ def obtener_material(material_id):
         return Material.objects.get(pk=material_id)
     except (Material.DoesNotExist, ValueError, TypeError) as exc:
         raise MaterialNoEncontradoError(f"No existe un material con id={material_id}") from exc
+
+
+@transaction.atomic
+def eliminar_material(material_id):
+    """Elimina un material y sus ejemplares cuando no tienen préstamos asociados."""
+    material = obtener_material(material_id)
+    instancias = list(material.instancias.all())
+
+    if material.estado in ("prestado", "reservado") or any(
+        instancia.estado in ("prestado", "reservado") for instancia in instancias
+    ):
+        raise InventarioError(
+            "material",
+            "No se puede eliminar un material prestado o reservado.",
+            status_code=409,
+        )
+
+    fotos = []
+    for elemento in [material, *instancias]:
+        if elemento.foto:
+            fotos.append((elemento.foto.storage, elemento.foto.name))
+
+    try:
+        material.delete()
+    except ProtectedError as error:
+        raise InventarioError(
+            "material",
+            "No se puede eliminar el material porque tiene historial de préstamos asociado.",
+            status_code=409,
+        ) from error
+
+    for storage, nombre in fotos:
+        transaction.on_commit(lambda storage=storage, nombre=nombre: _eliminar_foto(storage, nombre))
 
 
 def listar_materiales():
@@ -745,9 +779,28 @@ def eliminar_instancia_material(instancia_id):
         )
 
     material = instancia.material
-    instancia.delete()
+    if material.instancias.count() <= 1:
+        raise InventarioError(
+            "instancia",
+            "No se puede eliminar el último ejemplar por separado; elimina el material completo.",
+            status_code=409,
+        )
+
+    foto = (instancia.foto.storage, instancia.foto.name) if instancia.foto else None
+    try:
+        instancia.delete()
+    except ProtectedError as error:
+        raise InventarioError(
+            "instancia",
+            "No se puede eliminar el ejemplar porque tiene historial de préstamos asociado.",
+            status_code=409,
+        ) from error
 
     total = material.instancias.count()
-    if total > 0 and total < material.stock:
+    if total < material.stock:
         material.stock = total
         material.save(update_fields=["stock", "updated_at"])
+
+    if foto:
+        storage, nombre = foto
+        transaction.on_commit(lambda: _eliminar_foto(storage, nombre))

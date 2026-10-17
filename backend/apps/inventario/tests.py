@@ -1817,6 +1817,76 @@ class InstanciaMaterialAPITestCase(APITestCase):
                 instancia.refresh_from_db()
                 self.assertFalse(instancia.foto)
 
+    def test_eliminar_material_borra_sus_ejemplares_y_fotos(self):
+        self._autenticar("gestor.eliminar.material@unsa.edu.pe", "gestor")
+
+        with tempfile.TemporaryDirectory() as directorio:
+            with override_settings(MEDIA_ROOT=Path(directorio)):
+                self.material.foto = imagen_en_memoria("JPEG", "portada.jpg")
+                self.material.save(update_fields=["foto"])
+                instancia = self.material.instancias.first()
+                instancia.foto = imagen_en_memoria("PNG", "ejemplar.png")
+                instancia.save(update_fields=["foto"])
+                nombres_fotos = [self.material.foto.name, instancia.foto.name]
+                storage = self.material.foto.storage
+                self.assertTrue(all(storage.exists(nombre) for nombre in nombres_fotos))
+
+                with self.captureOnCommitCallbacks(execute=True):
+                    respuesta = self.client.delete(f"/api/materiales/{self.material.id}/")
+
+                self.assertEqual(respuesta.status_code, 204)
+                self.assertFalse(Material.objects.filter(pk=self.material.id).exists())
+                self.assertEqual(InstanciaMaterial.objects.count(), 0)
+                self.assertTrue(all(not storage.exists(nombre) for nombre in nombres_fotos))
+
+    def test_no_eliminar_material_con_ejemplar_prestado(self):
+        self._autenticar("gestor.material.prestado@unsa.edu.pe", "gestor")
+        instancia = self.material.instancias.first()
+        instancia.estado = "prestado"
+        instancia.save(update_fields=["estado"])
+
+        respuesta = self.client.delete(f"/api/materiales/{self.material.id}/")
+
+        self.assertEqual(respuesta.status_code, 409)
+        self.assertTrue(Material.objects.filter(pk=self.material.id).exists())
+        self.assertTrue(InstanciaMaterial.objects.filter(pk=instancia.id).exists())
+
+    def test_eliminar_instancia_actualiza_stock_y_borra_su_foto(self):
+        self._autenticar("gestor.eliminar.instancia@unsa.edu.pe", "gestor")
+        instancia = self.material.instancias.first()
+
+        with tempfile.TemporaryDirectory() as directorio:
+            with override_settings(MEDIA_ROOT=Path(directorio)):
+                instancia.foto = imagen_en_memoria("PNG", "ejemplar.png")
+                instancia.save(update_fields=["foto"])
+                nombre_foto = instancia.foto.name
+                storage = instancia.foto.storage
+
+                with self.captureOnCommitCallbacks(execute=True):
+                    respuesta = self.client.delete(f"/api/instancias/{instancia.id}/")
+
+                self.assertEqual(respuesta.status_code, 204)
+                self.assertFalse(InstanciaMaterial.objects.filter(pk=instancia.id).exists())
+                self.assertFalse(storage.exists(nombre_foto))
+                self.material.refresh_from_db()
+                self.assertEqual(self.material.stock, 1)
+
+    def test_no_eliminar_por_separado_el_ultimo_ejemplar(self):
+        material = registrar_material(
+            nombre="Unidad única",
+            codigo_inventario="EQ-UNICO-DELETE",
+            tipo="equipo",
+        )
+        self._autenticar("gestor.eliminar.ultimo@unsa.edu.pe", "gestor")
+
+        respuesta = self.client.delete(
+            f"/api/instancias/{material.instancias.get().id}/"
+        )
+
+        self.assertEqual(respuesta.status_code, 409)
+        self.assertTrue(Material.objects.filter(pk=material.id).exists())
+        self.assertEqual(material.instancias.count(), 1)
+
     def test_busqueda_materiales_incluye_instancias_y_resumen(self):
         resp = self.client.get("/api/materiales/buscar/?q=Osciloscopio")
         self.assertEqual(resp.status_code, 200)

@@ -73,4 +73,8 @@ export const api = {
     method: 'PATCH',
     body: construirBody(datos),
   }),
+  delete: (ruta, opciones = {}) => peticion(ruta, {
+    ...opciones,
+    method: 'DELETE',
+  }),
 }

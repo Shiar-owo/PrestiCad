@@ -10,6 +10,7 @@ import {
 } from '../constantes/catalogo'
 import MaterialForm from '../components/MaterialForm'
 import FichaTecnicaModal from '../components/FichaTecnicaModal'
+import ConfirmacionDobleEliminacion from '../components/ConfirmacionDobleEliminacion'
 import Boton from '../components/ui/Boton'
 import Tarjeta from '../components/ui/Tarjeta'
 import Skeleton from '../components/ui/Skeleton'
@@ -25,6 +26,7 @@ function Materiales() {
   const [materialEnEdicion, setMaterialEnEdicion] = useState(null)
   const [materialFicha, setMaterialFicha] = useState(null)
   const [cambiandoEstado, setCambiandoEstado] = useState(null)
+  const [registroAEliminar, setRegistroAEliminar] = useState(null)
 
   useEffect(() => {
     cargarMateriales()
@@ -61,6 +63,17 @@ function Materiales() {
   async function manejarGuardado() {
     setMostrarFormulario(false)
     setMaterialEnEdicion(null)
+    await cargarMateriales()
+  }
+
+  async function confirmarEliminacion() {
+    if (registroAEliminar.tipo === 'material') {
+      await api.delete(`/materiales/${registroAEliminar.material.id}/`)
+    } else {
+      await api.delete(`/instancias/${registroAEliminar.instancia.id}/`)
+    }
+    setRegistroAEliminar(null)
+    setMaterialFicha(null)
     await cargarMateriales()
   }
 
@@ -216,6 +229,14 @@ function Materiales() {
                         >
                           Editar
                         </Boton>
+                        <Boton
+                          variante="peligro"
+                          tamanio="pequeno"
+                          tipo="button"
+                          onClick={() => setRegistroAEliminar({ tipo: 'material', material })}
+                        >
+                          Eliminar
+                        </Boton>
                       </div>
                     </td>
                   </tr>
@@ -230,6 +251,27 @@ function Materiales() {
         <FichaTecnicaModal
           material={materialFicha}
           onCerrar={() => setMaterialFicha(null)}
+          onEliminarInstancia={(instancia) => setRegistroAEliminar({
+            tipo: 'instancia',
+            material: materialFicha,
+            instancia,
+          })}
+        />
+      )}
+
+      {registroAEliminar && (
+        <ConfirmacionDobleEliminacion
+          titulo={registroAEliminar.tipo === 'material'
+            ? `Eliminar material ${registroAEliminar.material.nombre}`
+            : `Eliminar ejemplar ${registroAEliminar.instancia.codigo_ejemplar}`}
+          descripcion={registroAEliminar.tipo === 'material'
+            ? `Se eliminarán el material ${registroAEliminar.material.codigo_inventario}, sus ${registroAEliminar.material.instancias?.length || registroAEliminar.material.stock} ejemplares y sus fotos.`
+            : `Se eliminará el ejemplar ${registroAEliminar.instancia.codigo_ejemplar} del material ${registroAEliminar.material.nombre}.`}
+          codigoConfirmacion={registroAEliminar.tipo === 'material'
+            ? registroAEliminar.material.codigo_inventario
+            : registroAEliminar.instancia.codigo_ejemplar}
+          onConfirmar={confirmarEliminacion}
+          onCancelar={() => setRegistroAEliminar(null)}
         />
       )}
     </section>

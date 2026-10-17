@@ -51,7 +51,7 @@ function ItemRegla({ etiqueta, valor, descripcion = '', tipo = 'neutral' }) {
   )
 }
 
-function FichaTecnicaModal({ material, onCerrar }) {
+function FichaTecnicaModal({ material, onCerrar, onEliminarInstancia }) {
   const ficha = obtenerDatosFichaTecnica(material)
 
   useEffect(() => {
@@ -264,6 +264,7 @@ function FichaTecnicaModal({ material, onCerrar }) {
                         <th scope="col" className="px-4 py-2.5">Estado</th>
                         <th scope="col" className="px-4 py-2.5">Condición Física</th>
                         <th scope="col" className="px-4 py-2.5">Ubicación / Observaciones</th>
+                        {onEliminarInstancia && <th scope="col" className="px-4 py-2.5">Acciones</th>}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-borde">
@@ -302,6 +303,27 @@ function FichaTecnicaModal({ material, onCerrar }) {
                             {[inst.ubicacion, inst.observaciones].filter(Boolean).join(' • ') ||
                               'Sin observaciones'}
                           </td>
+                          {onEliminarInstancia && (
+                            <td className="px-4 py-3">
+                              {ficha.instancias.length === 1 ? (
+                                <span className="text-xs text-texto-suave">Elimina el material completo</span>
+                              ) : (
+                                <Boton
+                                  variante="peligro"
+                                  tamanio="pequeno"
+                                  tipo="button"
+                                  deshabilitado={['prestado', 'reservado'].includes(inst.estado)}
+                                  title={['prestado', 'reservado'].includes(inst.estado)
+                                    ? 'No se puede eliminar un ejemplar prestado o reservado.'
+                                    : undefined}
+                                  aria-label={`Eliminar ejemplar ${inst.codigoEjemplar}`}
+                                  onClick={() => onEliminarInstancia(inst)}
+                                >
+                                  Eliminar
+                                </Boton>
+                              )}
+                            </td>
+                          )}
                         </tr>
                       ))}
                     </tbody>

@@ -760,6 +760,130 @@ class HistorialPrestamosAPITestCase(APITestCase):
         invalida = self.client.get(self.URL, {"estado": "inexistente"})
         self.assertEqual(invalida.status_code, 400)
 
+    def test_get_filtra_por_dni_completo_y_combina_con_estado(self):
+        prestamo_buscado = self._crear_prestamo(self.prestatario, "HIST-DNI-001")
+        self._crear_prestamo(self.prestatario, "HIST-DNI-002")
+        self._crear_prestamo(self.otro_prestatario, "HIST-DNI-003")
+        prestamo_buscado.estado = "devuelto"
+        prestamo_buscado.save(update_fields=["estado"])
+        self._iniciar_sesion(self.gestor)
+
+        respuesta = self.client.get(self.URL, {"dni": self.prestatario.dni})
+
+        self.assertEqual(respuesta.status_code, 200)
+        datos = respuesta.json()
+        self.assertEqual(datos["count"], 2)
+        self.assertTrue(all(
+            prestamo["prestatario_nombre"]
+            == f"{self.prestatario.nombre} {self.prestatario.apellido}"
+            for prestamo in datos["results"]
+        ))
+
+        filtrado = self.client.get(
+            self.URL,
+            {"dni": self.prestatario.dni, "estado": "devuelto"},
+        )
+        self.assertEqual(filtrado.status_code, 200)
+        self.assertEqual(filtrado.json()["count"], 1)
+        self.assertEqual(filtrado.json()["results"][0]["id"], prestamo_buscado.id)
+
+    def test_get_rechaza_dni_incompleto_o_no_numerico(self):
+        self._iniciar_sesion(self.gestor)
+
+        for dni in ("123", "abcdefgh", "123456789"):
+            with self.subTest(dni=dni):
+                respuesta = self.client.get(self.URL, {"dni": dni})
+                self.assertEqual(respuesta.status_code, 400)
+                self.assertIn("dni", respuesta.json())
+
+
+class BuscarPrestatariosAPITestCase(APITestCase):
+    URL = "/api/prestamos/prestatarios/"
+
+    def setUp(self):
+        self.gestor = crear_usuario("gestor-busqueda@unsa.edu.pe", "22000001", rol="gestor")
+        self.administrador = crear_usuario(
+            "admin-busqueda@unsa.edu.pe", "22000002", rol="administrador"
+        )
+        self.prestatario = crear_usuario("prestatario-busqueda@unsa.edu.pe", "12345678")
+
+    def _iniciar_sesion(self, usuario):
+        sesion = self.client.session
+        sesion[CLAVE_SESION_USUARIO_ID] = usuario.id
+        sesion[CLAVE_SESION_ULTIMA_ACTIVIDAD] = timezone.now().isoformat()
+        sesion.save()
+
+    def test_get_sugiere_por_prefijo_solo_prestatarios_activos_y_expone_datos_minimos(self):
+        inactivo = crear_usuario(
+            "inactivo-busqueda@unsa.edu.pe",
+            "12349999",
+            estado="inactivo",
+        )
+        otro_rol = crear_usuario(
+            "gestor-prefijo-busqueda@unsa.edu.pe",
+            "12340000",
+            rol="gestor",
+        )
+        self._iniciar_sesion(self.gestor)
+
+        respuesta = self.client.get(self.URL, {"dni": "123"})
+
+        self.assertEqual(respuesta.status_code, 200)
+        datos = respuesta.json()
+        self.assertEqual(len(datos), 1)
+        self.assertEqual(datos[0], {
+            "dni": self.prestatario.dni,
+            "nombre_completo": f"{self.prestatario.nombre} {self.prestatario.apellido}",
+        })
+        self.assertNotEqual(self.prestatario.id, inactivo.id)
+        self.assertNotEqual(self.prestatario.id, otro_rol.id)
+
+    def test_get_requiere_gestor_o_administrador(self):
+        prestatario = crear_usuario("otro-prestatario-busqueda@unsa.edu.pe", "22000003")
+
+        for usuario in (self.gestor, self.administrador):
+            with self.subTest(rol=usuario.rol.nombre):
+                self._iniciar_sesion(usuario)
+                respuesta = self.client.get(self.URL, {"dni": "123"})
+                self.assertEqual(respuesta.status_code, 200)
+
+        self._iniciar_sesion(prestatario)
+        respuesta = self.client.get(self.URL, {"dni": "123"})
+        self.assertEqual(respuesta.status_code, 403)
+
+    def test_get_valida_prefijo_y_devuelve_lista_vacia_si_no_hay_coincidencias(self):
+        self._iniciar_sesion(self.gestor)
+
+        for dni in ("12", "abcdefgh", "123456789"):
+            with self.subTest(dni=dni):
+                respuesta = self.client.get(self.URL, {"dni": dni})
+                self.assertEqual(respuesta.status_code, 400)
+                self.assertIn("dni", respuesta.json())
+
+        sin_coincidencias = self.client.get(self.URL, {"dni": "999"})
+        self.assertEqual(sin_coincidencias.status_code, 200)
+        self.assertEqual(sin_coincidencias.json(), [])
+
+    def test_get_limita_sugerencias_a_diez_ordenadas_por_dni(self):
+        prestatarios = [
+            crear_usuario(
+                f"prestatario-limite-{indice}@unsa.edu.pe",
+                f"98765{indice:03d}",
+            )
+            for indice in range(11)
+        ]
+        self._iniciar_sesion(self.administrador)
+
+        respuesta = self.client.get(self.URL, {"dni": "987"})
+
+        self.assertEqual(respuesta.status_code, 200)
+        resultados = respuesta.json()
+        self.assertEqual(len(resultados), 10)
+        self.assertEqual(
+            [resultado["dni"] for resultado in resultados],
+            sorted(prestatario.dni for prestatario in prestatarios)[:10],
+        )
+
 
 class RegistrarPrestamoAPITestCase(APITestCase):
     URL = "/api/prestamos/"

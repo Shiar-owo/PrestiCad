@@ -1478,8 +1478,8 @@ class RegistroMaterialMultipleAPITestCase(EscenariosDeMaterialApi):
                     modo="lote", stock=2, ubicacion="Estante común", estado_fisico="Bueno"
                 ),
                 "instancias": [
-                    {"numero_serie": "SER-A", "observaciones": "Con funda"},
-                    {"numero_serie": "SER-B", "ubicacion": "Estante propio"},
+                    {"numero_serie": "SER-A", "color": "Negro", "observaciones": "Con funda"},
+                    {"numero_serie": "SER-B", "color": "Blanco", "ubicacion": "Estante propio"},
                 ],
             },
             format="json",
@@ -1491,6 +1491,7 @@ class RegistroMaterialMultipleAPITestCase(EscenariosDeMaterialApi):
         self.assertEqual([fila.ubicacion for fila in instancias], ["Estante común", "Estante propio"])
         self.assertEqual([fila.estado_fisico for fila in instancias], ["Bueno", "Bueno"])
         self.assertEqual([fila.numero_serie for fila in instancias], ["SER-A", "SER-B"])
+        self.assertEqual([fila.color for fila in instancias], ["Negro", "Blanco"])
         self.assertEqual(instancias[0].observaciones, "Con funda")
         self.assertTrue(all(fila.estado == "disponible" for fila in instancias))
 
@@ -1500,8 +1501,8 @@ class RegistroMaterialMultipleAPITestCase(EscenariosDeMaterialApi):
             {
                 **self._payload_valido(modo="detalle", stock=2),
                 "instancias": [
-                    {"codigo_ejemplar": "UNIDAD-A", "numero_serie": "SER-A", "estado_fisico": "Bueno", "ubicacion": "A1", "observaciones": "Marca lateral"},
-                    {"codigo_ejemplar": "UNIDAD-B", "numero_serie": "SER-B", "estado_fisico": "Regular", "ubicacion": "B2"},
+                    {"codigo_ejemplar": "UNIDAD-A", "numero_serie": "SER-A", "estado_fisico": "Bueno", "color": "Azul", "ubicacion": "A1", "observaciones": "Marca lateral"},
+                    {"codigo_ejemplar": "UNIDAD-B", "numero_serie": "SER-B", "estado_fisico": "Regular", "color": "Rojo", "ubicacion": "B2"},
                 ],
             },
             format="json",
@@ -1511,6 +1512,7 @@ class RegistroMaterialMultipleAPITestCase(EscenariosDeMaterialApi):
         primero = InstanciaMaterial.objects.get(codigo_ejemplar="UNIDAD-A")
         self.assertEqual(primero.numero_serie, "SER-A")
         self.assertEqual(primero.estado_fisico, "Bueno")
+        self.assertEqual(primero.color, "Azul")
         self.assertEqual(primero.ubicacion, "A1")
         self.assertEqual(primero.observaciones, "Marca lateral")
         self.assertEqual(primero.estado, "disponible")
@@ -1657,7 +1659,7 @@ class InstanciaMaterialModelTestCase(TestCase):
         self.assertEqual(resumen["reservado"], 0)
 
 
-class InstanciaMaterialAPITestCase(APITestCase):
+class InstanciaMaterialAPITestCase(ConMediaTemporal, APITestCase):
     """Pruebas de endpoints para gestión y consulta de instancias físicas."""
 
     def setUp(self):
@@ -1741,14 +1743,59 @@ class InstanciaMaterialAPITestCase(APITestCase):
                 "numero_serie": "SN-998877",
                 "estado": "disponible",
                 "estado_fisico": "Excelente",
+                "color": "Gris",
                 "observaciones": "Donación con cables de prueba",
                 "ubicacion": "Estante B-4",
             },
             format="json",
         )
         self.assertEqual(resp.status_code, 201)
+        instancia_creada = InstanciaMaterial.objects.get(codigo_ejemplar="EQ-OSC-01-03")
+        self.assertEqual(instancia_creada.color, "Gris")
+        self.assertEqual(resp.json()["color"], "Gris")
         self.material.refresh_from_db()
         self.assertEqual(self.material.stock, 3)
+
+    def test_agregar_varias_instancias_con_colores_distintos_actualiza_stock(self):
+        self._autenticar("gestor.inst.lote@unsa.edu.pe", "gestor")
+        respuesta = self.client.post(
+            f"/api/materiales/{self.material.id}/instancias/",
+            {
+                "instancias": [
+                    {"codigo_ejemplar": "EQ-OSC-01-03", "color": "Negro"},
+                    {"codigo_ejemplar": "EQ-OSC-01-04", "color": "Blanco"},
+                ]
+            },
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, 201, respuesta.content)
+        self.assertEqual([fila["color"] for fila in respuesta.json()], ["Negro", "Blanco"])
+        self.material.refresh_from_db()
+        self.assertEqual(self.material.stock, 4)
+        self.assertEqual(
+            list(self.material.instancias.order_by("codigo_ejemplar").values_list("color", flat=True)),
+            ["", "", "Negro", "Blanco"],
+        )
+
+    def test_alta_multiple_con_codigo_duplicado_no_crea_parte_del_lote(self):
+        self._autenticar("gestor.inst.lote.duplicado@unsa.edu.pe", "gestor")
+        respuesta = self.client.post(
+            f"/api/materiales/{self.material.id}/instancias/",
+            {
+                "instancias": [
+                    {"codigo_ejemplar": "EQ-OSC-01-03", "color": "Negro"},
+                    {"codigo_ejemplar": "eq-osc-01-03", "color": "Blanco"},
+                ]
+            },
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(respuesta.json()["indice"], 1)
+        self.assertEqual(self.material.instancias.count(), 2)
+        self.material.refresh_from_db()
+        self.assertEqual(self.material.stock, 2)
 
     def test_actualizar_estado_de_instancia(self):
         self._autenticar("gestor.inst@unsa.edu.pe", "gestor")
@@ -1758,6 +1805,7 @@ class InstanciaMaterialAPITestCase(APITestCase):
             url,
             {
                 "estado": "en_mantenimiento",
+                "color": "Verde",
                 "observaciones": "Punta de prueba dañada",
             },
             format="json",
@@ -1765,6 +1813,7 @@ class InstanciaMaterialAPITestCase(APITestCase):
         self.assertEqual(resp.status_code, 200)
         instancia.refresh_from_db()
         self.assertEqual(instancia.estado, "en_mantenimiento")
+        self.assertEqual(instancia.color, "Verde")
         self.assertEqual(instancia.observaciones, "Punta de prueba dañada")
 
     def test_actualizar_foto_de_instancia_reemplaza_y_borra_la_anterior(self):

@@ -233,15 +233,29 @@ class InstanciaMaterialListCreateView(ListCreateAPIView):
                     foto = request.FILES.get(f"instancia_foto_{indice}")
                     if foto:
                         fila["foto"] = foto
-            serializer = self.get_serializer(data=filas, many=True)
+            filas_validadas = []
+            errores_por_fila = []
+            for fila in filas:
+                serializer = self.get_serializer(data=fila)
+                if serializer.is_valid():
+                    filas_validadas.append(serializer.validated_data)
+                    errores_por_fila.append({})
+                else:
+                    filas_validadas.append(None)
+                    errores_por_fila.append(serializer.errors)
+            if any(errores_por_fila):
+                return Response(
+                    {"instancias": errores_por_fila},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
         else:
             serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+            serializer.is_valid(raise_exception=True)
 
         try:
             if filas_recibidas:
                 instancias = services.crear_instancias_material(
-                    material_id, serializer.validated_data
+                    material_id, filas_validadas
                 )
             else:
                 instancia = services.crear_instancia_material(

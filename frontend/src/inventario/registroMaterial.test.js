@@ -24,11 +24,14 @@ describe('crear y redimensionar ejemplares', () => {
       return () => `fila-${++id}`
     })())
     iniciales[0].numero_serie = 'SER-01'
+    iniciales[0].color = 'Negro'
     const ampliadas = redimensionarEjemplares(iniciales, 3, () => 'fila-3')
     const reducidas = redimensionarEjemplares(ampliadas, 1, () => 'no-usado')
 
     expect(ampliadas.map((fila) => fila.id)).toEqual(['fila-1', 'fila-2', 'fila-3'])
     expect(ampliadas[0].numero_serie).toBe('SER-01')
+    expect(ampliadas[0].color).toBe('Negro')
+    expect(ampliadas[2].color).toBe('')
     expect(reducidas).toEqual([ampliadas[0]])
   })
 })
@@ -74,15 +77,15 @@ describe('construirCuerpoRegistroMaterial', () => {
       modo: 'lote',
       datos: { nombre: 'Cámara', codigo_inventario: 'EQ-2', ubicacion: 'Estante A', numero_serie: 'no-compartir' },
       ejemplares: [
-        { id: 'a', numero_serie: 'SER-A', foto: null, observaciones: 'ok' },
-        { id: 'b', numero_serie: 'SER-B', foto, ubicacion: 'Estante B' },
+        { id: 'a', numero_serie: 'SER-A', color: 'Negro', foto: null, observaciones: 'ok' },
+        { id: 'b', numero_serie: 'SER-B', color: 'Blanco', foto, ubicacion: 'Estante B' },
       ],
     })
 
     expect(cuerpo).toBeInstanceOf(FormData)
     expect(cuerpo.get('stock')).toBe('2')
     expect(cuerpo.get('numero_serie')).toBeNull()
-    expect(JSON.parse(cuerpo.get('instancias'))[1]).toMatchObject({ numero_serie: 'SER-B', ubicacion: 'Estante B' })
+    expect(JSON.parse(cuerpo.get('instancias'))[1]).toMatchObject({ numero_serie: 'SER-B', color: 'Blanco', ubicacion: 'Estante B' })
     expect(cuerpo.get('instancia_foto_1').name).toBe('ejemplar.png')
   })
 
@@ -91,14 +94,14 @@ describe('construirCuerpoRegistroMaterial', () => {
       modo: 'detalle',
       datos: { nombre: 'Libro', codigo_inventario: 'LIB-1', estado_fisico: 'no-compartir' },
       ejemplares: [{
-        codigo_ejemplar: 'LIB-A', estado_fisico: 'Bueno', numero_serie: 'S1', ubicacion: 'A1', observaciones: 'Nota',
+        codigo_ejemplar: 'LIB-A', estado_fisico: 'Bueno', numero_serie: 'S1', color: 'Azul', ubicacion: 'A1', observaciones: 'Nota',
       }, {
-        codigo_ejemplar: 'LIB-B', estado_fisico: 'Regular',
+        codigo_ejemplar: 'LIB-B', estado_fisico: 'Regular', color: 'Rojo',
       }],
     })
 
     expect(cuerpo).toMatchObject({ modo: 'detalle', stock: 2 })
-    expect(cuerpo.instancias[0]).toMatchObject({ codigo_ejemplar: 'LIB-A', estado_fisico: 'Bueno', observaciones: 'Nota' })
+    expect(cuerpo.instancias[0]).toMatchObject({ codigo_ejemplar: 'LIB-A', estado_fisico: 'Bueno', color: 'Azul', observaciones: 'Nota' })
     expect(cuerpo.estado_fisico).toBeUndefined()
   })
 })

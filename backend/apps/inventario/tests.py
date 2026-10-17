@@ -1478,8 +1478,8 @@ class RegistroMaterialMultipleAPITestCase(EscenariosDeMaterialApi):
                     modo="lote", stock=2, ubicacion="Estante común", estado_fisico="Bueno"
                 ),
                 "instancias": [
-                    {"numero_serie": "SER-A", "observaciones": "Con funda"},
-                    {"numero_serie": "SER-B", "ubicacion": "Estante propio"},
+                    {"numero_serie": "SER-A", "color": "Negro", "observaciones": "Con funda"},
+                    {"numero_serie": "SER-B", "color": "Blanco", "ubicacion": "Estante propio"},
                 ],
             },
             format="json",
@@ -1491,6 +1491,7 @@ class RegistroMaterialMultipleAPITestCase(EscenariosDeMaterialApi):
         self.assertEqual([fila.ubicacion for fila in instancias], ["Estante común", "Estante propio"])
         self.assertEqual([fila.estado_fisico for fila in instancias], ["Bueno", "Bueno"])
         self.assertEqual([fila.numero_serie for fila in instancias], ["SER-A", "SER-B"])
+        self.assertEqual([fila.color for fila in instancias], ["Negro", "Blanco"])
         self.assertEqual(instancias[0].observaciones, "Con funda")
         self.assertTrue(all(fila.estado == "disponible" for fila in instancias))
 
@@ -1500,8 +1501,8 @@ class RegistroMaterialMultipleAPITestCase(EscenariosDeMaterialApi):
             {
                 **self._payload_valido(modo="detalle", stock=2),
                 "instancias": [
-                    {"codigo_ejemplar": "UNIDAD-A", "numero_serie": "SER-A", "estado_fisico": "Bueno", "ubicacion": "A1", "observaciones": "Marca lateral"},
-                    {"codigo_ejemplar": "UNIDAD-B", "numero_serie": "SER-B", "estado_fisico": "Regular", "ubicacion": "B2"},
+                    {"codigo_ejemplar": "UNIDAD-A", "numero_serie": "SER-A", "estado_fisico": "Bueno", "color": "Azul", "ubicacion": "A1", "observaciones": "Marca lateral"},
+                    {"codigo_ejemplar": "UNIDAD-B", "numero_serie": "SER-B", "estado_fisico": "Regular", "color": "Rojo", "ubicacion": "B2"},
                 ],
             },
             format="json",
@@ -1511,6 +1512,7 @@ class RegistroMaterialMultipleAPITestCase(EscenariosDeMaterialApi):
         primero = InstanciaMaterial.objects.get(codigo_ejemplar="UNIDAD-A")
         self.assertEqual(primero.numero_serie, "SER-A")
         self.assertEqual(primero.estado_fisico, "Bueno")
+        self.assertEqual(primero.color, "Azul")
         self.assertEqual(primero.ubicacion, "A1")
         self.assertEqual(primero.observaciones, "Marca lateral")
         self.assertEqual(primero.estado, "disponible")
@@ -1657,7 +1659,7 @@ class InstanciaMaterialModelTestCase(TestCase):
         self.assertEqual(resumen["reservado"], 0)
 
 
-class InstanciaMaterialAPITestCase(APITestCase):
+class InstanciaMaterialAPITestCase(ConMediaTemporal, APITestCase):
     """Pruebas de endpoints para gestión y consulta de instancias físicas."""
 
     def setUp(self):
@@ -1741,14 +1743,59 @@ class InstanciaMaterialAPITestCase(APITestCase):
                 "numero_serie": "SN-998877",
                 "estado": "disponible",
                 "estado_fisico": "Excelente",
+                "color": "Gris",
                 "observaciones": "Donación con cables de prueba",
                 "ubicacion": "Estante B-4",
             },
             format="json",
         )
         self.assertEqual(resp.status_code, 201)
+        instancia_creada = InstanciaMaterial.objects.get(codigo_ejemplar="EQ-OSC-01-03")
+        self.assertEqual(instancia_creada.color, "Gris")
+        self.assertEqual(resp.json()["color"], "Gris")
         self.material.refresh_from_db()
         self.assertEqual(self.material.stock, 3)
+
+    def test_agregar_varias_instancias_con_colores_distintos_actualiza_stock(self):
+        self._autenticar("gestor.inst.lote@unsa.edu.pe", "gestor")
+        respuesta = self.client.post(
+            f"/api/materiales/{self.material.id}/instancias/",
+            {
+                "instancias": [
+                    {"codigo_ejemplar": "EQ-OSC-01-03", "color": "Negro"},
+                    {"codigo_ejemplar": "EQ-OSC-01-04", "color": "Blanco"},
+                ]
+            },
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, 201, respuesta.content)
+        self.assertEqual([fila["color"] for fila in respuesta.json()], ["Negro", "Blanco"])
+        self.material.refresh_from_db()
+        self.assertEqual(self.material.stock, 4)
+        self.assertEqual(
+            list(self.material.instancias.order_by("codigo_ejemplar").values_list("color", flat=True)),
+            ["", "", "Negro", "Blanco"],
+        )
+
+    def test_alta_multiple_con_codigo_duplicado_no_crea_parte_del_lote(self):
+        self._autenticar("gestor.inst.lote.duplicado@unsa.edu.pe", "gestor")
+        respuesta = self.client.post(
+            f"/api/materiales/{self.material.id}/instancias/",
+            {
+                "instancias": [
+                    {"codigo_ejemplar": "EQ-OSC-01-03", "color": "Negro"},
+                    {"codigo_ejemplar": "eq-osc-01-03", "color": "Blanco"},
+                ]
+            },
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(respuesta.json()["indice"], 1)
+        self.assertEqual(self.material.instancias.count(), 2)
+        self.material.refresh_from_db()
+        self.assertEqual(self.material.stock, 2)
 
     def test_actualizar_estado_de_instancia(self):
         self._autenticar("gestor.inst@unsa.edu.pe", "gestor")
@@ -1758,6 +1805,7 @@ class InstanciaMaterialAPITestCase(APITestCase):
             url,
             {
                 "estado": "en_mantenimiento",
+                "color": "Verde",
                 "observaciones": "Punta de prueba dañada",
             },
             format="json",
@@ -1765,7 +1813,128 @@ class InstanciaMaterialAPITestCase(APITestCase):
         self.assertEqual(resp.status_code, 200)
         instancia.refresh_from_db()
         self.assertEqual(instancia.estado, "en_mantenimiento")
+        self.assertEqual(instancia.color, "Verde")
         self.assertEqual(instancia.observaciones, "Punta de prueba dañada")
+
+    def test_actualizar_foto_de_instancia_reemplaza_y_borra_la_anterior(self):
+        self._autenticar("gestor.foto.inst@unsa.edu.pe", "gestor")
+        instancia = self.material.instancias.first()
+        url = f"/api/instancias/{instancia.id}/"
+
+        with tempfile.TemporaryDirectory() as directorio:
+            with override_settings(MEDIA_ROOT=Path(directorio)):
+                primera = self.client.patch(
+                    url,
+                    {"foto": imagen_en_memoria("JPEG", "primera.jpg")},
+                    format="multipart",
+                )
+                self.assertEqual(primera.status_code, 200, primera.content)
+                instancia.refresh_from_db()
+                nombre_anterior = instancia.foto.name
+                storage = instancia.foto.storage
+                self.assertTrue(storage.exists(nombre_anterior))
+
+                with self.captureOnCommitCallbacks(execute=True):
+                    segunda = self.client.patch(
+                        url,
+                        {"foto": imagen_en_memoria("PNG", "segunda.png")},
+                        format="multipart",
+                    )
+
+                self.assertEqual(segunda.status_code, 200, segunda.content)
+                instancia.refresh_from_db()
+                self.assertNotEqual(instancia.foto.name, nombre_anterior)
+                self.assertFalse(storage.exists(nombre_anterior))
+                self.assertTrue(storage.exists(instancia.foto.name))
+                self.assertTrue(segunda.json()["foto"])
+
+    def test_editar_instancia_rechaza_foto_invalida_sin_guardarla(self):
+        self._autenticar("gestor.foto.invalida.inst@unsa.edu.pe", "gestor")
+        instancia = self.material.instancias.first()
+        url = f"/api/instancias/{instancia.id}/"
+
+        with tempfile.TemporaryDirectory() as directorio:
+            with override_settings(MEDIA_ROOT=Path(directorio)):
+                respuesta = self.client.patch(
+                    url,
+                    {"foto": imagen_en_memoria("GIF", "invalida.gif")},
+                    format="multipart",
+                )
+
+                self.assertEqual(respuesta.status_code, 400)
+                self.assertIn("foto", respuesta.json())
+                instancia.refresh_from_db()
+                self.assertFalse(instancia.foto)
+
+    def test_eliminar_material_borra_sus_ejemplares_y_fotos(self):
+        self._autenticar("gestor.eliminar.material@unsa.edu.pe", "gestor")
+
+        with tempfile.TemporaryDirectory() as directorio:
+            with override_settings(MEDIA_ROOT=Path(directorio)):
+                self.material.foto = imagen_en_memoria("JPEG", "portada.jpg")
+                self.material.save(update_fields=["foto"])
+                instancia = self.material.instancias.first()
+                instancia.foto = imagen_en_memoria("PNG", "ejemplar.png")
+                instancia.save(update_fields=["foto"])
+                nombres_fotos = [self.material.foto.name, instancia.foto.name]
+                storage = self.material.foto.storage
+                self.assertTrue(all(storage.exists(nombre) for nombre in nombres_fotos))
+
+                with self.captureOnCommitCallbacks(execute=True):
+                    respuesta = self.client.delete(f"/api/materiales/{self.material.id}/")
+
+                self.assertEqual(respuesta.status_code, 204)
+                self.assertFalse(Material.objects.filter(pk=self.material.id).exists())
+                self.assertEqual(InstanciaMaterial.objects.count(), 0)
+                self.assertTrue(all(not storage.exists(nombre) for nombre in nombres_fotos))
+
+    def test_no_eliminar_material_con_ejemplar_prestado(self):
+        self._autenticar("gestor.material.prestado@unsa.edu.pe", "gestor")
+        instancia = self.material.instancias.first()
+        instancia.estado = "prestado"
+        instancia.save(update_fields=["estado"])
+
+        respuesta = self.client.delete(f"/api/materiales/{self.material.id}/")
+
+        self.assertEqual(respuesta.status_code, 409)
+        self.assertTrue(Material.objects.filter(pk=self.material.id).exists())
+        self.assertTrue(InstanciaMaterial.objects.filter(pk=instancia.id).exists())
+
+    def test_eliminar_instancia_actualiza_stock_y_borra_su_foto(self):
+        self._autenticar("gestor.eliminar.instancia@unsa.edu.pe", "gestor")
+        instancia = self.material.instancias.first()
+
+        with tempfile.TemporaryDirectory() as directorio:
+            with override_settings(MEDIA_ROOT=Path(directorio)):
+                instancia.foto = imagen_en_memoria("PNG", "ejemplar.png")
+                instancia.save(update_fields=["foto"])
+                nombre_foto = instancia.foto.name
+                storage = instancia.foto.storage
+
+                with self.captureOnCommitCallbacks(execute=True):
+                    respuesta = self.client.delete(f"/api/instancias/{instancia.id}/")
+
+                self.assertEqual(respuesta.status_code, 204)
+                self.assertFalse(InstanciaMaterial.objects.filter(pk=instancia.id).exists())
+                self.assertFalse(storage.exists(nombre_foto))
+                self.material.refresh_from_db()
+                self.assertEqual(self.material.stock, 1)
+
+    def test_no_eliminar_por_separado_el_ultimo_ejemplar(self):
+        material = registrar_material(
+            nombre="Unidad única",
+            codigo_inventario="EQ-UNICO-DELETE",
+            tipo="equipo",
+        )
+        self._autenticar("gestor.eliminar.ultimo@unsa.edu.pe", "gestor")
+
+        respuesta = self.client.delete(
+            f"/api/instancias/{material.instancias.get().id}/"
+        )
+
+        self.assertEqual(respuesta.status_code, 409)
+        self.assertTrue(Material.objects.filter(pk=material.id).exists())
+        self.assertEqual(material.instancias.count(), 1)
 
     def test_busqueda_materiales_incluye_instancias_y_resumen(self):
         resp = self.client.get("/api/materiales/buscar/?q=Osciloscopio")

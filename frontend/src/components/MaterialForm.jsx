@@ -6,7 +6,6 @@ import {
   validarFoto,
   validarNombre,
   validarPuntosReputacion,
-  validarStock,
 } from '../validaciones'
 import { OPCIONES_ESTADO, OPCIONES_TIER, OPCIONES_TIPO } from '../constantes/catalogo'
 import {
@@ -21,6 +20,7 @@ import Campo from './ui/Campo'
 import Boton from './ui/Boton'
 import Tarjeta from './ui/Tarjeta'
 import ErrorAlerta from './ui/ErrorAlerta'
+import EditorInstanciasMaterial from './EditorInstanciasMaterial'
 
 // Parámetros de reputación en puntos: si se blanks, el backend aplica los
 // valores por defecto configurados (HU04 criterio 3).
@@ -69,7 +69,7 @@ function crearDatosIniciales(material) {
   }
 }
 
-function validar(datos, esEdicion) {
+function validar(datos) {
   const errores = {}
 
   const errorNombre = validarNombre(datos.nombre)
@@ -80,15 +80,6 @@ function validar(datos, esEdicion) {
   const errorCodigo = validarCodigoInventario(datos.codigo_inventario)
   if (errorCodigo) {
     errores.codigo_inventario = errorCodigo
-  }
-
-  if (esEdicion) {
-    const errorStock = validarStock(datos.stock)
-    if (errorStock) {
-      errores.stock = errorStock
-    } else if (datos.stock === '') {
-      errores.stock = 'El stock no puede quedar vacío.'
-    }
   }
 
   for (const { campo } of CAMPOS_PUNTOS) {
@@ -122,6 +113,7 @@ function EncabezadoSeccion({ children }) {
 
 function MaterialForm({ material, onGuardado, onCancelar }) {
   const esEdicion = Boolean(material)
+  const [alcanceEdicion, setAlcanceEdicion] = useState(null)
   const contadorIds = useRef(0)
   const urlsTemporales = useRef(new Set())
   const enviandoRef = useRef(false)
@@ -222,15 +214,18 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
       descripcion: datos.descripcion.trim(),
       codigo_inventario: datos.codigo_inventario.trim(),
       tipo: datos.tipo,
-      stock: Number(datos.stock),
       es_alto_valor: datos.es_alto_valor,
       marca: datos.marca.trim(),
       modelo: datos.modelo.trim(),
-      numero_serie: datos.numero_serie.trim(),
       color: datos.color.trim(),
-      estado_fisico: datos.estado_fisico.trim(),
       costo_reparacion: datos.costo_reparacion === '' ? null : Number(datos.costo_reparacion),
       costo_reposicion: datos.costo_reposicion === '' ? null : Number(datos.costo_reposicion),
+    }
+
+    if (!esEdicion) {
+      cuerpo.stock = Number(datos.stock)
+      cuerpo.numero_serie = datos.numero_serie.trim()
+      cuerpo.estado_fisico = datos.estado_fisico.trim()
     }
 
     if (datos.tier_minimo_requerido) {
@@ -298,7 +293,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
     evento.preventDefault()
     if (enviandoRef.current) return
 
-    const erroresFormulario = validar(datos, esEdicion)
+    const erroresFormulario = validar(datos)
     setErrores(erroresFormulario)
     let erroresDeFila = {}
     if (!esEdicion && datos.modo !== 'unico') {
@@ -373,6 +368,44 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
     }
   }
 
+  if (esEdicion && alcanceEdicion && alcanceEdicion !== 'general') {
+    return (
+      <EditorInstanciasMaterial
+        material={material}
+        alcance={alcanceEdicion}
+        onCambiarAlcance={() => setAlcanceEdicion(null)}
+        onGuardado={onGuardado}
+        onCancelar={onCancelar}
+      />
+    )
+  }
+
+  if (esEdicion && !alcanceEdicion) {
+    const cantidad = material.instancias?.length || material.stock
+    return (
+      <section>
+        <header className="mb-5">
+          <h3 className="text-lg font-bold text-texto">Editar material: {material.nombre}</h3>
+          <p className="mt-1 text-sm text-texto-suave">Elige qué información quieres modificar. El material tiene {cantidad} ejemplar{cantidad === 1 ? '' : 'es'}.</p>
+        </header>
+        <Tarjeta className="grid gap-3 p-6 sm:grid-cols-3">
+          <Boton tipo="button" variante="secundario" onClick={() => setAlcanceEdicion('general')}>
+            Datos generales
+          </Boton>
+          <Boton tipo="button" variante="secundario" onClick={() => setAlcanceEdicion('instancia')}>
+            Elegir un ejemplar
+          </Boton>
+          <Boton tipo="button" variante="secundario" onClick={() => setAlcanceEdicion('todas')}>
+            Aplicar campos a todos
+          </Boton>
+          <Boton tipo="button" variante="fantasma" className="sm:col-span-3" onClick={onCancelar}>
+            Cancelar
+          </Boton>
+        </Tarjeta>
+      </section>
+    )
+  }
+
   return (
     <section>
       <header className="mb-5">
@@ -441,17 +474,6 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
                 error={errores.estado}
               />
             )}
-            {esEdicion && (
-              <Campo
-                etiqueta="Stock (unidades)"
-                tipo="number"
-                min="1"
-                step="1"
-                valor={datos.stock}
-                onCambio={(evento) => actualizar('stock', evento.target.value)}
-                error={errores.stock}
-              />
-            )}
             {!esEdicion && datos.modo !== 'unico' && (
               <Campo
                 etiqueta="Cantidad de ejemplares"
@@ -496,7 +518,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
               onCambio={(evento) => actualizar('modelo', evento.target.value)}
               maxLength={60}
             />
-            {(esEdicion || datos.modo === 'unico') && (
+            {(!esEdicion && datos.modo === 'unico') && (
               <Campo
                 etiqueta="Número de serie"
                 valor={datos.numero_serie}
@@ -505,12 +527,16 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
               />
             )}
             <Campo
-              etiqueta="Color"
+              etiqueta={!esEdicion && datos.modo === 'unico'
+                ? 'Color del ejemplar'
+                : !esEdicion
+                  ? 'Color general (predeterminado)'
+                  : 'Color del material'}
               valor={datos.color}
               onCambio={(evento) => actualizar('color', evento.target.value)}
               maxLength={30}
             />
-            {(esEdicion || ['unico', 'lote'].includes(datos.modo)) && (
+            {(!esEdicion && ['unico', 'lote'].includes(datos.modo)) && (
               <Campo
                 etiqueta="Estado físico"
                 valor={datos.estado_fisico}
@@ -586,6 +612,12 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
                         valor={fila.numero_serie}
                         onCambio={(evento) => actualizarFila(indice, 'numero_serie', evento.target.value)}
                         maxLength={80}
+                      />
+                      <Campo
+                        etiqueta="Color del ejemplar (opcional)"
+                        valor={fila.color}
+                        onCambio={(evento) => actualizarFila(indice, 'color', evento.target.value)}
+                        maxLength={30}
                       />
                       {datos.modo === 'detalle' && (
                         <Campo

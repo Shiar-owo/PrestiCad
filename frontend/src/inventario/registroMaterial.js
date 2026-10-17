@@ -7,6 +7,7 @@ export function crearEjemplar(idLocal) {
     id: idLocal,
     codigo_ejemplar: '',
     numero_serie: '',
+    color: '',
     foto: null,
     vistaPrevia: '',
     estado_fisico: 'Operativo',
@@ -58,6 +59,7 @@ export function validarFotosEjemplares(ejemplares) {
 function camposDeEjemplar(ejemplar, modo) {
   const campos = {
     numero_serie: ejemplar.numero_serie || '',
+    color: ejemplar.color || '',
     observaciones: ejemplar.observaciones || '',
     ubicacion: ejemplar.ubicacion || '',
   }

@@ -163,6 +163,13 @@ describe('api', () => {
 
       expect(cuerpoDeLaPeticion()).toBeUndefined()
     })
+
+    it('envía DELETE sin cuerpo', async () => {
+      await api.delete('/materiales/123/')
+
+      expect(ultimaPeticion()[1].method).toBe('DELETE')
+      expect(cuerpoDeLaPeticion()).toBeUndefined()
+    })
   })
 
   // La vista de perfil (HU16) es el único endpoint con `csrf_protect`, así que

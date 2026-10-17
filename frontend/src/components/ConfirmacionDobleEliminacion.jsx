@@ -37,7 +37,8 @@ function ConfirmacionDobleEliminacion({
     }
   }
 
-  const codigoValido = codigoIngresado.trim().toLocaleUpperCase() === codigoConfirmacion.toLocaleUpperCase()
+  const codigoEsperado = String(codigoConfirmacion || '')
+  const codigoValido = codigoIngresado.trim().toLocaleUpperCase() === codigoEsperado.toLocaleUpperCase()
 
   return (
     <div
@@ -66,7 +67,7 @@ function ConfirmacionDobleEliminacion({
         ) : (
           <div className="mt-3 grid gap-3">
             <p className="text-sm text-texto-suave">
-              Como segunda verificación, escribe el código <strong className="font-mono text-texto">{codigoConfirmacion}</strong> para continuar.
+              Como segunda verificación, escribe el código <strong className="font-mono text-texto">{codigoEsperado}</strong> para continuar.
             </p>
             <Campo
               etiqueta="Código de confirmación"

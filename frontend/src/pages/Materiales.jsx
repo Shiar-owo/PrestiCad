@@ -16,6 +16,7 @@ import Tarjeta from '../components/ui/Tarjeta'
 import Skeleton from '../components/ui/Skeleton'
 import ErrorAlerta from '../components/ui/ErrorAlerta'
 import EstadoVacio from '../components/ui/EstadoVacio'
+import { obtenerCodigoInstancia } from '../inventario/eliminacionMaterial'
 
 function Materiales() {
   useTituloPagina('Inventario')
@@ -105,6 +106,10 @@ function Materiales() {
       setCambiandoEstado(null)
     }
   }
+
+  const codigoInstanciaAEliminar = registroAEliminar?.tipo === 'instancia'
+    ? obtenerCodigoInstancia(registroAEliminar.instancia)
+    : ''
 
   return (
     <section>
@@ -263,13 +268,13 @@ function Materiales() {
         <ConfirmacionDobleEliminacion
           titulo={registroAEliminar.tipo === 'material'
             ? `Eliminar material ${registroAEliminar.material.nombre}`
-            : `Eliminar ejemplar ${registroAEliminar.instancia.codigo_ejemplar}`}
+            : `Eliminar ejemplar ${codigoInstanciaAEliminar}`}
           descripcion={registroAEliminar.tipo === 'material'
             ? `Se eliminarán el material ${registroAEliminar.material.codigo_inventario}, sus ${registroAEliminar.material.instancias?.length || registroAEliminar.material.stock} ejemplares y sus fotos.`
-            : `Se eliminará el ejemplar ${registroAEliminar.instancia.codigo_ejemplar} del material ${registroAEliminar.material.nombre}.`}
+            : `Se eliminará el ejemplar ${codigoInstanciaAEliminar} del material ${registroAEliminar.material.nombre}.`}
           codigoConfirmacion={registroAEliminar.tipo === 'material'
             ? registroAEliminar.material.codigo_inventario
-            : registroAEliminar.instancia.codigo_ejemplar}
+            : codigoInstanciaAEliminar}
           onConfirmar={confirmarEliminacion}
           onCancelar={() => setRegistroAEliminar(null)}
         />

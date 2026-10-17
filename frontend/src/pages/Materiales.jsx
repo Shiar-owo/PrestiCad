@@ -67,6 +67,16 @@ function Materiales() {
     await cargarMateriales()
   }
 
+  async function actualizarFichaTrasAgregarInstancias() {
+    try {
+      const materialActualizado = await api.get(`/materiales/${materialFicha.id}/`)
+      setMaterialFicha(materialActualizado)
+    } catch {
+      setError('Los ejemplares se agregaron, pero no se pudo actualizar la ficha.')
+    }
+    await cargarMateriales()
+  }
+
   async function confirmarEliminacion() {
     if (registroAEliminar.tipo === 'material') {
       await api.delete(`/materiales/${registroAEliminar.material.id}/`)
@@ -261,6 +271,7 @@ function Materiales() {
             material: materialFicha,
             instancia,
           })}
+          onAgregarInstancias={actualizarFichaTrasAgregarInstancias}
         />
       )}
 

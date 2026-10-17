@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Award,
   Box,
@@ -6,6 +6,7 @@ import {
   FileText,
   Info,
   Layers,
+  Plus,
   ShieldAlert,
   Sparkles,
   Tag,
@@ -14,6 +15,7 @@ import {
 } from 'lucide-react'
 
 import { obtenerDatosFichaTecnica } from '../catalogo/fichaTecnica'
+import AgregarEjemplaresMaterial from './AgregarEjemplaresMaterial'
 import BadgeEstado from './ui/BadgeEstado'
 import Boton from './ui/Boton'
 
@@ -51,7 +53,8 @@ function ItemRegla({ etiqueta, valor, descripcion = '', tipo = 'neutral' }) {
   )
 }
 
-function FichaTecnicaModal({ material, onCerrar, onEliminarInstancia }) {
+function FichaTecnicaModal({ material, onCerrar, onEliminarInstancia, onAgregarInstancias }) {
+  const [mostrarAltaInstancias, setMostrarAltaInstancias] = useState(false)
   const ficha = obtenerDatosFichaTecnica(material)
 
   useEffect(() => {
@@ -225,6 +228,17 @@ function FichaTecnicaModal({ material, onCerrar, onEliminarInstancia }) {
                 Ejemplares e Instancias Físicas ({ficha.instancias?.length || ficha.stockTotal})
               </h4>
               <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                {onAgregarInstancias && (
+                  <Boton
+                    tipo="button"
+                    variante="secundario"
+                    tamanio="pequeno"
+                    icono={Plus}
+                    onClick={() => setMostrarAltaInstancias((actual) => !actual)}
+                  >
+                    {mostrarAltaInstancias ? 'Cerrar alta' : 'Agregar ejemplares'}
+                  </Boton>
+                )}
                 {ficha.resumenInstancias?.disponible > 0 && (
                   <span className="inline-flex items-center gap-1 rounded-md bg-marca-50 px-2 py-0.5 font-medium text-marca-700 ring-1 ring-marca-300 dark:bg-marca-950/40 dark:text-marca-300 dark:ring-marca-800">
                     <span className="size-1.5 rounded-full bg-marca-600" />
@@ -251,6 +265,17 @@ function FichaTecnicaModal({ material, onCerrar, onEliminarInstancia }) {
                 )}
               </div>
             </div>
+
+            {mostrarAltaInstancias && onAgregarInstancias && (
+              <AgregarEjemplaresMaterial
+                material={material}
+                onCancelar={() => setMostrarAltaInstancias(false)}
+                onGuardado={async () => {
+                  setMostrarAltaInstancias(false)
+                  await onAgregarInstancias()
+                }}
+              />
+            )}
 
             {ficha.instancias?.length > 0 ? (
               <div className="mt-3 overflow-hidden rounded-xl border border-borde bg-superficie">

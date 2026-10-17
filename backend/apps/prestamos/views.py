@@ -11,6 +11,7 @@ from apps.prestamos.consultar_serializers import (
     PrestamoDevolucionDetalleSerializer,
     PrestamoConsultaSerializer,
     PrestamoHistorialSerializer,
+    SugerenciaPrestatarioSerializer,
 )
 from apps.prestamos.models import Devolucion
 from apps.prestamos.permissions import (
@@ -19,9 +20,11 @@ from apps.prestamos.permissions import (
     EsPrestatarioAutenticado,
 )
 from apps.prestamos.serializers import (
+    BusquedaPrestatarioSerializer,
     ConsultaReportesSerializer,
     DevolucionIngresoSerializer,
     DevolucionResultadoSerializer,
+    FiltroHistorialPrestamosSerializer,
     PrestamoRegistroSerializer,
     RegistrarPrestamoSerializer,
     ReporteDevolucionSerializer,
@@ -29,6 +32,7 @@ from apps.prestamos.serializers import (
 )
 from apps.prestamos.services import (
     PrestamoError,
+    buscar_prestatarios_por_dni,
     consultar_historial_prestamos,
     consultar_prestamo_para_devolucion,
     consultar_prestamos_usuario,
@@ -67,6 +71,22 @@ class RegistrarPrestamoView(APIView):
         )
 
 
+class BuscarPrestatariosView(APIView):
+    """Sugiere prestatarios activos por DNI para entrega e historial."""
+
+    permission_classes = [EsGestorOAdministrador]
+
+    def get(self, request):
+        prefijo = request.query_params.get("dni", "").strip()
+        if not prefijo:
+            return Response([])
+
+        serializer = BusquedaPrestatarioSerializer(data={"dni": prefijo})
+        serializer.is_valid(raise_exception=True)
+        prestatarios = buscar_prestatarios_por_dni(serializer.validated_data["dni"])
+        return Response(SugerenciaPrestatarioSerializer(prestatarios, many=True).data)
+
+
 class MisPrestamosView(APIView):
     """Devuelve exclusivamente los préstamos del prestatario en sesión."""
 
@@ -91,6 +111,14 @@ class HistorialPrestamosView(GenericAPIView):
     pagination_class = HistorialPrestamosPagination
 
     def get(self, request):
+        dni = request.query_params.get("dni", "").strip()
+        if dni:
+            filtro = FiltroHistorialPrestamosSerializer(data={"dni": dni})
+            filtro.is_valid(raise_exception=True)
+            dni = filtro.validated_data["dni"]
+        else:
+            dni = None
+
         estado = request.query_params.get("estado")
         estados_validos = dict(ESTADOS_PRESTAMO)
         if estado is not None and estado not in estados_validos:
@@ -99,7 +127,7 @@ class HistorialPrestamosView(GenericAPIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        prestamos = consultar_historial_prestamos(estado=estado)
+        prestamos = consultar_historial_prestamos(estado=estado, dni=dni)
         pagina = self.paginate_queryset(prestamos)
         serializer = self.get_serializer(pagina, many=True)
         return self.get_paginated_response(serializer.data)

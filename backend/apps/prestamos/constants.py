@@ -18,6 +18,10 @@ ESTADOS_GARANTIA = [
 
 ESTADOS_QUE_OCUPAN_UNIDAD = ("activo", "vencido")
 
+# Límites para sugerir prestatarios al registrar una entrega.
+MINIMO_DIGITOS_BUSQUEDA_PRESTATARIO = 3
+MAXIMO_PRESTATARIOS_SUGERIDOS = 10
+
 # Solo los préstamos entregados y no devueltos admiten una devolución (HU11).
 ESTADOS_DEVOLUBLES = ("activo", "vencido")
 

@@ -5,7 +5,10 @@ from django.conf import settings
 from rest_framework import serializers
 
 from apps.compartido.serializers import RechazarCamposNoPermitidosMixin
-from apps.prestamos.constants import ESTADOS_CHECKLIST_DEVOLUCION
+from apps.prestamos.constants import (
+    ESTADOS_CHECKLIST_DEVOLUCION,
+    MINIMO_DIGITOS_BUSQUEDA_PRESTATARIO,
+)
 from apps.prestamos.models import Devolucion, Garantia, Prestamo
 from apps.prestamos.validators import validar_pdf_garantia
 
@@ -39,6 +42,33 @@ class ChecklistInicialItemSerializer(serializers.Serializer):
         if not value.strip():
             raise serializers.ValidationError("Describe la condición inicial.")
         return value.strip()
+
+
+class BusquedaPrestatarioSerializer(serializers.Serializer):
+    """Valida el prefijo de DNI usado para sugerir prestatarios al gestor."""
+
+    dni = serializers.CharField(max_length=8, allow_blank=False, trim_whitespace=True)
+
+    def validate_dni(self, value):
+        minimo = MINIMO_DIGITOS_BUSQUEDA_PRESTATARIO
+        if not re.fullmatch(rf"\d{{{minimo},8}}", value):
+            raise serializers.ValidationError(
+                f"El DNI de búsqueda debe contener entre {minimo} y 8 dígitos."
+            )
+        return value
+
+
+class FiltroHistorialPrestamosSerializer(serializers.Serializer):
+    """Valida el DNI completo opcional del filtro de historial global."""
+
+    dni = serializers.CharField(max_length=8, allow_blank=False, trim_whitespace=True)
+
+    def validate_dni(self, value):
+        if not re.fullmatch(r"\d{8}", value):
+            raise serializers.ValidationError(
+                "El DNI debe tener exactamente 8 dígitos numéricos."
+            )
+        return value
 
 
 class RegistrarPrestamoSerializer(

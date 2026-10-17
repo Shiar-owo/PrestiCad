@@ -4,6 +4,16 @@ from rest_framework import serializers
 from apps.prestamos.models import Prestamo
 
 
+class SugerenciaPrestatarioSerializer(serializers.Serializer):
+    """Datos mínimos para identificar un prestatario durante la entrega."""
+
+    dni = serializers.CharField(read_only=True)
+    nombre_completo = serializers.SerializerMethodField()
+
+    def get_nombre_completo(self, obj):
+        return f"{obj.nombre} {obj.apellido}".strip()
+
+
 class PrestamoConsultaSerializer(serializers.ModelSerializer):
     material_id = serializers.UUIDField(source="material.id", read_only=True)
     material_nombre = serializers.CharField(source="material.nombre", read_only=True)

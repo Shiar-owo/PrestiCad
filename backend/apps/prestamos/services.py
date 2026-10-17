@@ -13,6 +13,7 @@ from apps.inventario.models import Material
 from apps.prestamos.constants import (
     ESTADOS_DEVOLUBLES,
     ESTADOS_QUE_OCUPAN_UNIDAD,
+    MAXIMO_PRESTATARIOS_SUGERIDOS,
     VALORES_ESTADOS_CHECKLIST_DEVOLUCION,
 )
 from apps.prestamos.models import Devolucion, Garantia, Prestamo
@@ -34,6 +35,19 @@ class PrestamoError(Exception):
         self.mensaje = mensaje
         self.status_code = status_code
         super().__init__(mensaje)
+
+
+def buscar_prestatarios_por_dni(prefijo):
+    """Busca prestatarios activos por prefijo de DNI para la entrega de materiales."""
+    return (
+        Usuario.objects.select_related("rol")
+        .filter(
+            rol__nombre="prestatario",
+            estado="activo",
+            dni__startswith=prefijo,
+        )
+        .order_by("dni")[:MAXIMO_PRESTATARIOS_SUGERIDOS]
+    )
 
 
 def contar_unidades_disponibles(material):
@@ -126,11 +140,13 @@ def consultar_prestamos_usuario(usuario_id, ahora=None):
     return _consultar_prestamos_con_estado(ahora=ahora).filter(usuario_id=usuario_id)
 
 
-def consultar_historial_prestamos(ahora=None, estado=None):
+def consultar_historial_prestamos(ahora=None, estado=None, dni=None):
     """Lista global de préstamos para consulta histórica de gestión."""
     prestamos = _consultar_prestamos_con_estado(ahora=ahora).select_related("usuario")
     if estado is not None:
         prestamos = prestamos.filter(estado_consulta=estado)
+    if dni is not None:
+        prestamos = prestamos.filter(usuario__dni=dni)
     return prestamos
 
 

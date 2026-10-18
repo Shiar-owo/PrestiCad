@@ -1,3 +1,16 @@
+export function obtenerInstanciaSeleccionada(instancias, instanciaId) {
+  if (
+    !Array.isArray(instancias)
+    || instanciaId === ''
+    || instanciaId === null
+    || instanciaId === undefined
+  ) {
+    return null
+  }
+
+  return instancias.find((instancia) => String(instancia.id) === String(instanciaId)) || null
+}
+
 export function crearOpcionesInstancia(instancias, cargando = false) {
   return [
     {

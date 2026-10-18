@@ -16,7 +16,10 @@ import SubidaDocumentoPDF from '../components/prestamos/SubidaDocumentoPDF'
 import SelectorPrestatario from '../components/prestamos/SelectorPrestatario'
 import { TAMANO_MAXIMO_GARANTIA_MB } from '../constantes/garantia'
 import { construirSolicitudPrestamo } from '../prestamos/solicitudPrestamo'
-import { crearOpcionesInstancia } from '../prestamos/instanciasPrestamo'
+import {
+  crearOpcionesInstancia,
+  obtenerInstanciaSeleccionada,
+} from '../prestamos/instanciasPrestamo'
 
 const FORMULARIO_INICIAL = {
   dni: '',
@@ -118,8 +121,9 @@ function RegistrarPrestamo() {
   const materialSeleccionado = materiales.find(
     (material) => String(material.id) === String(formulario.materialId),
   )
-  const instanciaSeleccionada = instancias.find(
-    (instancia) => String(instancia.id) === String(formulario.instanciaId),
+  const instanciaSeleccionada = obtenerInstanciaSeleccionada(
+    instancias,
+    formulario.instanciaId,
   )
   const fechaLimiteEstimada = useMemo(
     () => calcularFechaLimiteEstimada(formulario.dias),

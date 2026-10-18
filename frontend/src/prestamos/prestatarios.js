@@ -21,3 +21,9 @@ export function crearSeleccionPrestatario(prestatario) {
     nombre_completo: String(prestatario.nombre_completo).trim(),
   }
 }
+
+export function crearEtiquetaPrestatario(prestatario) {
+  const seleccion = crearSeleccionPrestatario(prestatario)
+  if (!seleccion) return ''
+  return `${seleccion.dni} - ${seleccion.nombre_completo}`
+}

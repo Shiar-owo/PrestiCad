@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   construirRutaBusquedaPrestatarios,
+  crearEtiquetaPrestatario,
   crearSeleccionPrestatario,
   debeBuscarPrestatarios,
   normalizarDniPrestatario,
@@ -40,5 +41,13 @@ describe('búsqueda de prestatarios', () => {
   it('ignora sugerencias sin DNI o nombre completo', () => {
     expect(crearSeleccionPrestatario({ dni: '12345678' })).toBeNull()
     expect(crearSeleccionPrestatario(null)).toBeNull()
+  })
+
+  it('construye la etiqueta accesible con DNI y nombre separados por guion', () => {
+    expect(crearEtiquetaPrestatario({
+      dni: '12345678',
+      nombre_completo: 'Ana Torres',
+    })).toBe('12345678 - Ana Torres')
+    expect(crearEtiquetaPrestatario({ dni: '12345678' })).toBe('')
   })
 })

@@ -3,6 +3,7 @@ import { useEffect, useId, useState } from 'react'
 import { api } from '../../api/client'
 import {
   construirRutaBusquedaPrestatarios,
+  crearEtiquetaPrestatario,
   crearSeleccionPrestatario,
   debeBuscarPrestatarios,
   MINIMO_DIGITOS_BUSQUEDA_PRESTATARIO,
@@ -116,6 +117,7 @@ export default function SelectorPrestatario({
             <li key={prestatario.dni} role="option" aria-selected="false">
               <button
                 type="button"
+                aria-label={crearEtiquetaPrestatario(prestatario)}
                 className="flex w-full flex-wrap items-baseline gap-x-2 px-3 py-2.5 text-left text-sm transition-colors hover:bg-superficie-alta focus-visible:outline focus-visible:outline-2 focus-visible:outline-acento-600"
                 onClick={() => seleccionar(prestatario)}
               >

@@ -1,5 +1,13 @@
 export const TAMANO_PAGINA_HISTORIAL = 25
 
+export function iniciarCargaHistorial(consultaActual) {
+  return {
+    cargando: true,
+    error: '',
+    datos: consultaActual?.datos ?? null,
+  }
+}
+
 export function obtenerPrestamoAdyacente(prestamos, prestamoId, direccion) {
   if (!Array.isArray(prestamos) || !['anterior', 'siguiente'].includes(direccion)) return null
   const indice = prestamos.findIndex((prestamo) => prestamo.id === prestamoId)

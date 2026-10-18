@@ -1,10 +1,11 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import {
   construirRutaBusquedaPrestatarios,
   crearEtiquetaPrestatario,
   crearSeleccionPrestatario,
   debeBuscarPrestatarios,
+  notificarSeleccionPrestatario,
   normalizarDniPrestatario,
 } from './prestatarios'
 
@@ -49,5 +50,27 @@ describe('búsqueda de prestatarios', () => {
       nombre_completo: 'Ana Torres',
     })).toBe('12345678 - Ana Torres')
     expect(crearEtiquetaPrestatario({ dni: '12345678' })).toBe('')
+  })
+
+  it('notifica una sola ruta cuando selecciona una sugerencia', () => {
+    const onCambio = vi.fn()
+    const onSeleccionar = vi.fn()
+    const seleccion = { dni: '12345678', nombre_completo: 'Ana Torres' }
+
+    notificarSeleccionPrestatario(seleccion, onCambio, onSeleccionar)
+
+    expect(onSeleccionar).toHaveBeenCalledOnce()
+    expect(onSeleccionar).toHaveBeenCalledWith(seleccion)
+    expect(onCambio).not.toHaveBeenCalled()
+  })
+
+  it('actualiza el DNI cuando el selector no tiene callback de selección', () => {
+    const onCambio = vi.fn()
+    const seleccion = { dni: '12345678', nombre_completo: 'Ana Torres' }
+
+    notificarSeleccionPrestatario(seleccion, onCambio, null)
+
+    expect(onCambio).toHaveBeenCalledOnce()
+    expect(onCambio).toHaveBeenCalledWith('12345678')
   })
 })

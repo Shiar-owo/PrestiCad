@@ -2,9 +2,30 @@ import { describe, expect, it } from 'vitest'
 
 import {
   construirRutaHistorial,
+  iniciarCargaHistorial,
   obtenerPrestamoAdyacente,
   validarRespuestaHistorial,
 } from './historialPrestamos'
+
+describe('iniciarCargaHistorial', () => {
+  it('conserva los resultados actuales mientras carga un nuevo filtro', () => {
+    const datos = { count: 1, next: null, previous: null, results: [{ id: 8 }] }
+
+    expect(iniciarCargaHistorial({ datos, error: 'error previo' })).toEqual({
+      cargando: true,
+      error: '',
+      datos,
+    })
+  })
+
+  it('inicia la carga sin datos cuando el historial aún no respondió', () => {
+    expect(iniciarCargaHistorial(null)).toEqual({
+      cargando: true,
+      error: '',
+      datos: null,
+    })
+  })
+})
 
 describe('obtenerPrestamoAdyacente', () => {
   const prestamos = [{ id: 10 }, { id: 11 }, { id: 12 }]

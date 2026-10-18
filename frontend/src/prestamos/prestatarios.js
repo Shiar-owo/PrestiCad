@@ -27,3 +27,12 @@ export function crearEtiquetaPrestatario(prestatario) {
   if (!seleccion) return ''
   return `${seleccion.dni} - ${seleccion.nombre_completo}`
 }
+
+export function notificarSeleccionPrestatario(seleccion, onCambio, onSeleccionar) {
+  if (typeof onSeleccionar === 'function') {
+    onSeleccionar(seleccion)
+    return
+  }
+
+  if (typeof onCambio === 'function') onCambio(seleccion.dni)
+}

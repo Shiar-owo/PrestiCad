@@ -8,6 +8,7 @@ import FiltroPrestamos from '../components/prestamos/FiltroPrestamos'
 import SelectorPrestatario from '../components/prestamos/SelectorPrestatario'
 import {
   construirRutaHistorial,
+  iniciarCargaHistorial,
   TAMANO_PAGINA_HISTORIAL,
   validarRespuestaHistorial,
 } from './historialPrestamos'
@@ -34,11 +35,7 @@ export default function HistorialPrestamos() {
 
   useEffect(() => {
     let activa = true
-    setConsulta((actual) => ({
-      cargando: true,
-      error: '',
-      datos: navegacionPendiente.current || prestamoSeleccionado ? actual.datos : null,
-    }))
+    setConsulta(iniciarCargaHistorial)
 
     api.get(construirRutaHistorial({ estado, pagina, dni: dniFiltro }))
       .then(validarRespuestaHistorial)
@@ -90,7 +87,7 @@ export default function HistorialPrestamos() {
     setPagina((actual) => actual + (direccion === 'anterior' ? -1 : 1))
   }
 
-  if (consulta.cargando && !prestamoSeleccionado) {
+  if (consulta.cargando && !consulta.datos && !prestamoSeleccionado) {
     return (
       <div className="space-y-3" role="status" aria-live="polite">
         <p className="text-sm text-texto-suave">Cargando historial de préstamos…</p>
@@ -121,7 +118,7 @@ export default function HistorialPrestamos() {
   const totalPaginas = Math.max(1, Math.ceil(count / TAMANO_PAGINA_HISTORIAL))
 
   return (
-    <section aria-label="Historial de préstamos">
+    <section aria-label="Historial de préstamos" aria-busy={consulta.cargando}>
       <header className="mb-5">
         <h2 className="text-xl font-bold text-texto">Historial de préstamos</h2>
         <p className="mt-1 text-sm text-texto-suave">
@@ -169,6 +166,12 @@ export default function HistorialPrestamos() {
           )}
         </div>
       </div>
+
+      {consulta.cargando && consulta.datos && (
+        <p className="mb-3 text-xs text-texto-suave" role="status" aria-live="polite">
+          Actualizando el historial…
+        </p>
+      )}
 
       {results.length === 0 ? (
         <div className="mt-6">

@@ -7,6 +7,7 @@ import {
   crearSeleccionPrestatario,
   debeBuscarPrestatarios,
   MINIMO_DIGITOS_BUSQUEDA_PRESTATARIO,
+  notificarSeleccionPrestatario,
   normalizarDniPrestatario,
 } from '../../prestamos/prestatarios'
 import Campo from '../ui/Campo'
@@ -15,7 +16,7 @@ export default function SelectorPrestatario({
   etiqueta = 'Buscar prestatario por DNI',
   valor,
   onCambio,
-  onSeleccionar = () => {},
+  onSeleccionar = null,
   error = '',
   ayuda = '',
   requerido = false,
@@ -74,8 +75,7 @@ export default function SelectorPrestatario({
     if (!seleccion) return
     setSeleccionado(seleccion)
     setSugerencias([])
-    onCambio(seleccion.dni)
-    onSeleccionar(seleccion)
+    notificarSeleccionPrestatario(seleccion, onCambio, onSeleccionar)
   }
 
   const ayudaCampo = error || ayuda || (
@@ -101,37 +101,49 @@ export default function SelectorPrestatario({
         aria-busy={cargando}
       />
       {cargando && (
-        <p className="text-xs text-texto-suave" role="status" aria-live="polite">
+        <p className="flex items-center gap-2 text-xs text-texto-suave" role="status" aria-live="polite">
+          <span
+            aria-hidden="true"
+            className="size-3 animate-spin rounded-full border-2 border-acento-600 border-t-transparent"
+          />
           Buscando prestatarios…
         </p>
       )}
-      {errorBusqueda && <p className="text-xs text-error" role="status">{errorBusqueda}</p>}
+      {errorBusqueda && (
+        <p className="rounded-lg border border-error/30 bg-error/5 px-3 py-2 text-xs text-error" role="status">
+          {errorBusqueda}
+        </p>
+      )}
       {sugerencias.length > 0 && (
         <ul
           id={`${id}-sugerencias`}
           role="listbox"
           aria-label="Prestatarios coincidentes"
-          className="max-h-56 overflow-y-auto rounded-xl border border-borde bg-superficie shadow-lg"
+          className="max-h-64 divide-y divide-borde overflow-y-auto rounded-xl border border-borde bg-white shadow-xl ring-1 ring-black/5 dark:bg-superficie"
         >
           {sugerencias.map((prestatario) => (
             <li key={prestatario.dni} role="option" aria-selected="false">
               <button
                 type="button"
                 aria-label={crearEtiquetaPrestatario(prestatario)}
-                className="flex w-full flex-wrap items-baseline gap-x-2 px-3 py-2.5 text-left text-sm transition-colors hover:bg-superficie-alta focus-visible:outline focus-visible:outline-2 focus-visible:outline-acento-600"
+                className="grid w-full grid-cols-[auto_auto_minmax(0,1fr)] items-start gap-x-2 px-3 py-3 text-left transition-colors hover:bg-acento-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-acento-600 focus-visible:outline-offset-[-2px] dark:hover:bg-acento-500/10"
                 onClick={() => seleccionar(prestatario)}
               >
-                <span className="font-semibold tabular-nums text-texto">{prestatario.dni}</span>
-                <span aria-hidden="true" className="text-texto-suave">-</span>
-                <span className="min-w-0 text-texto">{prestatario.nombre_completo}</span>
+                <span className="rounded-md bg-superficie-alta px-2 py-1 font-mono text-xs font-bold tabular-nums text-texto">
+                  {prestatario.dni}
+                </span>
+                <span aria-hidden="true" className="pt-1.5 text-sm text-texto-suave">-</span>
+                <span className="min-w-0 break-words pt-1 text-sm font-medium leading-5 text-texto">
+                  {prestatario.nombre_completo}
+                </span>
               </button>
             </li>
           ))}
         </ul>
       )}
       {seleccionado?.dni === valor && (
-        <p className="text-xs text-texto-suave" role="status">
-          Prestatario seleccionado: {seleccionado.nombre_completo}
+        <p className="rounded-lg border border-marca-200 bg-marca-50 px-3 py-2 text-xs text-marca-800 dark:border-marca-700/60 dark:bg-marca-500/10 dark:text-marca-300" role="status">
+          Seleccionado: <span className="font-semibold">{crearEtiquetaPrestatario(seleccionado)}</span>
         </p>
       )}
     </div>

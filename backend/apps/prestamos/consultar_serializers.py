@@ -1,7 +1,19 @@
 """Serializadores de lectura del módulo de préstamos."""
 from rest_framework import serializers
 
-from apps.prestamos.models import Prestamo
+from apps.inventario.models import Material
+from apps.inventario.serializers import FotoMaterial, InstanciaMaterialSerializer
+from apps.prestamos.models import Garantia, Prestamo
+
+
+class SugerenciaPrestatarioSerializer(serializers.Serializer):
+    """Datos mínimos para identificar un prestatario durante la entrega."""
+
+    dni = serializers.CharField(read_only=True)
+    nombre_completo = serializers.SerializerMethodField()
+
+    def get_nombre_completo(self, obj):
+        return f"{obj.nombre} {obj.apellido}".strip()
 
 
 class PrestamoConsultaSerializer(serializers.ModelSerializer):
@@ -50,6 +62,89 @@ class PrestamoHistorialSerializer(serializers.ModelSerializer):
             "fecha_limite",
             "tiempo_prestamo_dias",
             "estado",
+        )
+        read_only_fields = fields
+
+    def get_prestatario_nombre(self, obj):
+        return f"{obj.usuario.nombre} {obj.usuario.apellido}".strip()
+
+
+class MaterialPrestamoHistorialSerializer(serializers.ModelSerializer):
+    """Ficha técnica del material asociada al detalle histórico del préstamo."""
+
+    foto = FotoMaterial(read_only=True)
+
+    class Meta:
+        model = Material
+        fields = (
+            "nombre",
+            "descripcion",
+            "codigo_inventario",
+            "tipo",
+            "es_alto_valor",
+            "marca",
+            "modelo",
+            "numero_serie",
+            "color",
+            "estado_fisico",
+            "foto",
+            "tier_minimo_requerido",
+            "bonificacion_tiempo",
+            "deduccion_tardanza",
+            "deduccion_dano_parcial",
+            "deduccion_dano_total",
+            "costo_reparacion",
+            "costo_reposicion",
+        )
+        read_only_fields = fields
+
+
+class DocumentosGarantiaHistorialSerializer(serializers.Serializer):
+    documento_identidad_disponible = serializers.SerializerMethodField()
+    compromiso_responsabilidad_disponible = serializers.SerializerMethodField()
+
+    def _obtener_garantia(self, prestamo):
+        try:
+            return prestamo.garantia
+        except Garantia.DoesNotExist:
+            return None
+
+    def get_documento_identidad_disponible(self, prestamo):
+        garantia = self._obtener_garantia(prestamo)
+        return bool(garantia and garantia.documento_identidad)
+
+    def get_compromiso_responsabilidad_disponible(self, prestamo):
+        garantia = self._obtener_garantia(prestamo)
+        return bool(garantia and garantia.compromiso_responsabilidad)
+
+
+class PrestamoHistorialDetalleSerializer(serializers.ModelSerializer):
+    """Detalle completo de préstamo para el titular y el historial de gestión."""
+
+    prestatario_nombre = serializers.SerializerMethodField()
+    prestatario_dni = serializers.CharField(source="usuario.dni", read_only=True)
+    material = MaterialPrestamoHistorialSerializer(read_only=True)
+    instancia = InstanciaMaterialSerializer(read_only=True, allow_null=True)
+    documentos_garantia = DocumentosGarantiaHistorialSerializer(
+        source="*",
+        read_only=True,
+    )
+    estado = serializers.CharField(source="estado_consulta", read_only=True)
+
+    class Meta:
+        model = Prestamo
+        fields = (
+            "id",
+            "prestatario_nombre",
+            "prestatario_dni",
+            "material",
+            "instancia",
+            "fecha_entrega",
+            "fecha_limite",
+            "tiempo_prestamo_dias",
+            "estado",
+            "checklist_inicial",
+            "documentos_garantia",
         )
         read_only_fields = fields
 

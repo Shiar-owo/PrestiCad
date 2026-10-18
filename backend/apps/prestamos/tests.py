@@ -659,6 +659,7 @@ class MisPrestamosAPITestCase(APITestCase):
 
 class HistorialPrestamosAPITestCase(APITestCase):
     URL = "/api/prestamos/historial/"
+    URL_DETALLE = "/api/prestamos/{prestamo_id}/historial/"
     CAMPOS_HISTORIAL = {
         "id",
         "prestatario_nombre",
@@ -759,6 +760,189 @@ class HistorialPrestamosAPITestCase(APITestCase):
 
         invalida = self.client.get(self.URL, {"estado": "inexistente"})
         self.assertEqual(invalida.status_code, 400)
+
+    def test_get_filtra_por_dni_completo_y_combina_con_estado(self):
+        prestamo_buscado = self._crear_prestamo(self.prestatario, "HIST-DNI-001")
+        self._crear_prestamo(self.prestatario, "HIST-DNI-002")
+        self._crear_prestamo(self.otro_prestatario, "HIST-DNI-003")
+        prestamo_buscado.estado = "devuelto"
+        prestamo_buscado.save(update_fields=["estado"])
+        self._iniciar_sesion(self.gestor)
+
+        respuesta = self.client.get(self.URL, {"dni": self.prestatario.dni})
+
+        self.assertEqual(respuesta.status_code, 200)
+        datos = respuesta.json()
+        self.assertEqual(datos["count"], 2)
+        self.assertTrue(all(
+            prestamo["prestatario_nombre"]
+            == f"{self.prestatario.nombre} {self.prestatario.apellido}"
+            for prestamo in datos["results"]
+        ))
+
+        filtrado = self.client.get(
+            self.URL,
+            {"dni": self.prestatario.dni, "estado": "devuelto"},
+        )
+        self.assertEqual(filtrado.status_code, 200)
+        self.assertEqual(filtrado.json()["count"], 1)
+        self.assertEqual(filtrado.json()["results"][0]["id"], prestamo_buscado.id)
+
+    def test_get_rechaza_dni_incompleto_o_no_numerico(self):
+        self._iniciar_sesion(self.gestor)
+
+        for dni in ("123", "abcdefgh", "123456789"):
+            with self.subTest(dni=dni):
+                respuesta = self.client.get(self.URL, {"dni": dni})
+                self.assertEqual(respuesta.status_code, 400)
+                self.assertIn("dni", respuesta.json())
+
+    def test_detalle_expone_ficha_individual_checklist_y_estado_visible(self):
+        prestamo = self._crear_prestamo(self.prestatario, "HIST-DETALLE-001")
+        instancia = prestamo.instancia
+        instancia.numero_serie = "SERIE-DETALLE"
+        instancia.color = "Azul"
+        instancia.estado_fisico = "Bueno"
+        instancia.ubicacion = "Estante A"
+        instancia.observaciones = "Sin accesorios adicionales"
+        instancia.save(
+            update_fields=[
+                "numero_serie",
+                "color",
+                "estado_fisico",
+                "ubicacion",
+                "observaciones",
+            ]
+        )
+        prestamo.material.marca = "Marca de prueba"
+        prestamo.material.modelo = "Modelo de prueba"
+        prestamo.material.descripcion = "Ficha técnica del préstamo"
+        prestamo.material.save(update_fields=["marca", "modelo", "descripcion"])
+        self._iniciar_sesion(self.prestatario)
+
+        respuesta = self.client.get(self.URL_DETALLE.format(prestamo_id=prestamo.id))
+
+        self.assertEqual(respuesta.status_code, 200)
+        datos = respuesta.json()
+        self.assertEqual(datos["prestatario_dni"], self.prestatario.dni)
+        self.assertEqual(datos["material"]["marca"], "Marca de prueba")
+        self.assertEqual(datos["material"]["modelo"], "Modelo de prueba")
+        self.assertEqual(datos["material"]["descripcion"], "Ficha técnica del préstamo")
+        self.assertEqual(datos["instancia"]["codigo_ejemplar"], instancia.codigo_ejemplar)
+        self.assertEqual(datos["instancia"]["numero_serie"], "SERIE-DETALLE")
+        self.assertEqual(datos["instancia"]["color"], "Azul")
+        self.assertEqual(datos["instancia"]["ubicacion"], "Estante A")
+        self.assertEqual(datos["instancia"]["observaciones"], "Sin accesorios adicionales")
+        self.assertEqual(datos["checklist_inicial"], CHECKLIST)
+        self.assertEqual(datos["estado"], "activo")
+
+    def test_detalle_permite_gestion_y_rechaza_a_otro_prestatario(self):
+        prestamo = self._crear_prestamo(self.prestatario, "HIST-DETALLE-002")
+        url = self.URL_DETALLE.format(prestamo_id=prestamo.id)
+
+        for usuario in (self.gestor, self.administrador):
+            with self.subTest(rol=usuario.rol.nombre):
+                self._iniciar_sesion(usuario)
+                self.assertEqual(self.client.get(url).status_code, 200)
+
+        self._iniciar_sesion(self.otro_prestatario)
+        respuesta = self.client.get(url)
+        self.assertEqual(respuesta.status_code, 403)
+
+    def test_detalle_inexistente_responde_404_a_gestion(self):
+        self._iniciar_sesion(self.administrador)
+
+        respuesta = self.client.get(self.URL_DETALLE.format(prestamo_id=999999))
+
+        self.assertEqual(respuesta.status_code, 404)
+
+
+class BuscarPrestatariosAPITestCase(APITestCase):
+    URL = "/api/prestamos/prestatarios/"
+
+    def setUp(self):
+        self.gestor = crear_usuario("gestor-busqueda@unsa.edu.pe", "22000001", rol="gestor")
+        self.administrador = crear_usuario(
+            "admin-busqueda@unsa.edu.pe", "22000002", rol="administrador"
+        )
+        self.prestatario = crear_usuario("prestatario-busqueda@unsa.edu.pe", "12345678")
+
+    def _iniciar_sesion(self, usuario):
+        sesion = self.client.session
+        sesion[CLAVE_SESION_USUARIO_ID] = usuario.id
+        sesion[CLAVE_SESION_ULTIMA_ACTIVIDAD] = timezone.now().isoformat()
+        sesion.save()
+
+    def test_get_sugiere_por_prefijo_solo_prestatarios_activos_y_expone_datos_minimos(self):
+        inactivo = crear_usuario(
+            "inactivo-busqueda@unsa.edu.pe",
+            "12349999",
+            estado="inactivo",
+        )
+        otro_rol = crear_usuario(
+            "gestor-prefijo-busqueda@unsa.edu.pe",
+            "12340000",
+            rol="gestor",
+        )
+        self._iniciar_sesion(self.gestor)
+
+        respuesta = self.client.get(self.URL, {"dni": "123"})
+
+        self.assertEqual(respuesta.status_code, 200)
+        datos = respuesta.json()
+        self.assertEqual(len(datos), 1)
+        self.assertEqual(datos[0], {
+            "dni": self.prestatario.dni,
+            "nombre_completo": f"{self.prestatario.nombre} {self.prestatario.apellido}",
+        })
+        self.assertNotEqual(self.prestatario.id, inactivo.id)
+        self.assertNotEqual(self.prestatario.id, otro_rol.id)
+
+    def test_get_requiere_gestor_o_administrador(self):
+        prestatario = crear_usuario("otro-prestatario-busqueda@unsa.edu.pe", "22000003")
+
+        for usuario in (self.gestor, self.administrador):
+            with self.subTest(rol=usuario.rol.nombre):
+                self._iniciar_sesion(usuario)
+                respuesta = self.client.get(self.URL, {"dni": "123"})
+                self.assertEqual(respuesta.status_code, 200)
+
+        self._iniciar_sesion(prestatario)
+        respuesta = self.client.get(self.URL, {"dni": "123"})
+        self.assertEqual(respuesta.status_code, 403)
+
+    def test_get_valida_prefijo_y_devuelve_lista_vacia_si_no_hay_coincidencias(self):
+        self._iniciar_sesion(self.gestor)
+
+        for dni in ("12", "abcdefgh", "123456789"):
+            with self.subTest(dni=dni):
+                respuesta = self.client.get(self.URL, {"dni": dni})
+                self.assertEqual(respuesta.status_code, 400)
+                self.assertIn("dni", respuesta.json())
+
+        sin_coincidencias = self.client.get(self.URL, {"dni": "999"})
+        self.assertEqual(sin_coincidencias.status_code, 200)
+        self.assertEqual(sin_coincidencias.json(), [])
+
+    def test_get_limita_sugerencias_a_diez_ordenadas_por_dni(self):
+        prestatarios = [
+            crear_usuario(
+                f"prestatario-limite-{indice}@unsa.edu.pe",
+                f"98765{indice:03d}",
+            )
+            for indice in range(11)
+        ]
+        self._iniciar_sesion(self.administrador)
+
+        respuesta = self.client.get(self.URL, {"dni": "987"})
+
+        self.assertEqual(respuesta.status_code, 200)
+        resultados = respuesta.json()
+        self.assertEqual(len(resultados), 10)
+        self.assertEqual(
+            [resultado["dni"] for resultado in resultados],
+            sorted(prestatario.dni for prestatario in prestatarios)[:10],
+        )
 
 
 class RegistrarPrestamoAPITestCase(APITestCase):
@@ -1010,7 +1194,7 @@ class DescargarGarantiaAPITestCase(APITestCase):
             compromiso_responsabilidad=crear_pdf("carta-original.pdf"),
         )
 
-    def test_gestor_y_administrador_descargan_pdf_sin_publicarlo_en_media(self):
+    def test_titular_gestor_y_administrador_visualizan_pdf_sin_publicarlo_en_media(self):
         with storage_garantias_temporal():
             prestamo = self._registrar_prestamo_con_garantia()
             garantia = prestamo.garantia
@@ -1019,31 +1203,166 @@ class DescargarGarantiaAPITestCase(APITestCase):
                 tipo="documento-identidad",
             )
 
-            for usuario in (self.gestor, self.administrador):
+            for usuario in (self.prestatario, self.gestor, self.administrador):
                 with self.subTest(rol=usuario.rol.nombre):
                     self._iniciar_sesion(usuario)
                     respuesta = self.client.get(url)
 
                     self.assertEqual(respuesta.status_code, 200)
                     self.assertEqual(respuesta["Content-Type"], "application/pdf")
-                    self.assertIn("attachment;", respuesta["Content-Disposition"])
+                    self.assertIn("inline;", respuesta["Content-Disposition"])
                     self.assertIn("documento-identidad-prestamo-", respuesta["Content-Disposition"])
-                    self.assertEqual(b"".join(respuesta.streaming_content), b"%PDF-1.7\ncontenido de prueba")
+                    self.assertEqual(
+                        b"".join(respuesta.streaming_content),
+                        b"%PDF-1.7\ncontenido de prueba",
+                    )
 
             respuesta_publica = self.client.get(
                 f"/media/{garantia.documento_identidad.name}"
             )
             self.assertEqual(respuesta_publica.status_code, 404)
 
-    def test_descarga_sin_sesion_o_como_prestatario_es_denegada(self):
-        url = self.URL.format(prestamo_id=1, tipo="documento-identidad")
+    def test_descarga_sin_sesion_o_a_nombre_de_otro_prestatario_es_denegada(self):
+        with storage_garantias_temporal():
+            prestamo = self._registrar_prestamo_con_garantia()
+            url = self.URL.format(
+                prestamo_id=prestamo.id,
+                tipo="documento-identidad",
+            )
 
-        sin_sesion = self.client.get(url)
-        self.assertEqual(sin_sesion.status_code, 403)
+            sin_sesion = self.client.get(url)
+            self.assertEqual(sin_sesion.status_code, 403)
 
-        self._iniciar_sesion(self.prestatario)
-        como_prestatario = self.client.get(url)
-        self.assertEqual(como_prestatario.status_code, 403)
+            otro_prestatario = crear_usuario(
+                "otro-prestatario-garantia@unsa.edu.pe",
+                "20000304",
+            )
+            self._iniciar_sesion(otro_prestatario)
+            como_otro_prestatario = self.client.get(url)
+            self.assertEqual(como_otro_prestatario.status_code, 403)
+
+    def test_solo_el_gestor_puede_reemplazar_documentos_de_garantia(self):
+        with storage_garantias_temporal():
+            prestamo = self._registrar_prestamo_con_garantia()
+            url = self.URL.format(
+                prestamo_id=prestamo.id,
+                tipo="documento-identidad",
+            )
+
+            for usuario in (self.administrador, self.prestatario):
+                with self.subTest(rol=usuario.rol.nombre):
+                    self._iniciar_sesion(usuario)
+                    respuesta = self.client.patch(
+                        url,
+                        {"archivo": crear_pdf("reemplazo.pdf")},
+                        format="multipart",
+                    )
+                    self.assertEqual(respuesta.status_code, 403)
+
+            prestamo.garantia.refresh_from_db()
+            self.assertTrue(prestamo.garantia.documento_identidad.name)
+
+    def test_gestor_reemplaza_documento_pdf(self):
+        with storage_garantias_temporal():
+            prestamo = self._registrar_prestamo_con_garantia()
+            garantia = prestamo.garantia
+            nombre_anterior = garantia.documento_identidad.name
+            url = self.URL.format(
+                prestamo_id=prestamo.id,
+                tipo="documento-identidad",
+            )
+            self._iniciar_sesion(self.gestor)
+
+            respuesta = self.client.patch(
+                url,
+                {"archivo": crear_pdf("reemplazo.pdf")},
+                format="multipart",
+            )
+
+            self.assertEqual(respuesta.status_code, 200, respuesta.content)
+            self.assertTrue(respuesta.json()["documento_identidad_disponible"])
+            garantia.refresh_from_db()
+            self.assertNotEqual(garantia.documento_identidad.name, nombre_anterior)
+            garantia.documento_identidad.open("rb")
+            self.assertEqual(
+                garantia.documento_identidad.read(),
+                b"%PDF-1.7\ncontenido de prueba",
+            )
+            garantia.documento_identidad.close()
+
+    def test_gestor_no_elimina_el_ultimo_documento_pdf_de_garantia(self):
+        with storage_garantias_temporal():
+            prestamo = self._registrar_prestamo_con_garantia()
+            self._iniciar_sesion(self.gestor)
+            url_documento = self.URL.format(
+                prestamo_id=prestamo.id,
+                tipo="documento-identidad",
+            )
+            eliminar = self.client.patch(
+                url_documento,
+                {"eliminar": "true"},
+                format="multipart",
+            )
+
+            self.assertEqual(eliminar.status_code, 200, eliminar.content)
+            self.assertFalse(eliminar.json()["documento_identidad_disponible"])
+            prestamo.garantia.refresh_from_db()
+            self.assertEqual(prestamo.garantia.estado, "pendiente")
+            self.assertTrue(prestamo.garantia.compromiso_responsabilidad)
+
+            url_compromiso = self.URL.format(
+                prestamo_id=prestamo.id,
+                tipo="compromiso",
+            )
+            eliminar_ultimo = self.client.patch(
+                url_compromiso,
+                {"eliminar": "true"},
+                format="multipart",
+            )
+
+            self.assertEqual(eliminar_ultimo.status_code, 400)
+            self.assertIn("compromiso_responsabilidad", eliminar_ultimo.json())
+            prestamo.garantia.refresh_from_db()
+            self.assertTrue(prestamo.garantia.compromiso_responsabilidad)
+
+    def test_reemplazo_rechaza_pdf_invalido_y_payload_ambiguo(self):
+        with storage_garantias_temporal():
+            prestamo = self._registrar_prestamo_con_garantia()
+            nombre_anterior = prestamo.garantia.documento_identidad.name
+            url = self.URL.format(
+                prestamo_id=prestamo.id,
+                tipo="documento-identidad",
+            )
+            self._iniciar_sesion(self.gestor)
+
+            archivo_invalido = SimpleUploadedFile(
+                "invalido.gif",
+                b"no es pdf",
+                content_type="image/gif",
+            )
+            invalido = self.client.patch(
+                url,
+                {"archivo": archivo_invalido},
+                format="multipart",
+            )
+            self.assertEqual(invalido.status_code, 400)
+
+            sin_accion = self.client.patch(
+                url,
+                {"eliminar": "false"},
+                format="multipart",
+            )
+            self.assertEqual(sin_accion.status_code, 400)
+
+            ambas_acciones = self.client.patch(
+                url,
+                {"archivo": crear_pdf("reemplazo.pdf"), "eliminar": "true"},
+                format="multipart",
+            )
+            self.assertEqual(ambas_acciones.status_code, 400)
+
+            prestamo.garantia.refresh_from_db()
+            self.assertEqual(prestamo.garantia.documento_identidad.name, nombre_anterior)
 
     def test_descarga_informa_prestamo_o_documento_inexistente(self):
         self._iniciar_sesion(self.gestor)

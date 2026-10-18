@@ -13,9 +13,13 @@ import Skeleton from '../components/ui/Skeleton'
 import ErrorAlerta from '../components/ui/ErrorAlerta'
 import EstadoVacio from '../components/ui/EstadoVacio'
 import SubidaDocumentoPDF from '../components/prestamos/SubidaDocumentoPDF'
+import SelectorPrestatario from '../components/prestamos/SelectorPrestatario'
 import { TAMANO_MAXIMO_GARANTIA_MB } from '../constantes/garantia'
 import { construirSolicitudPrestamo } from '../prestamos/solicitudPrestamo'
-import { crearOpcionesInstancia } from '../prestamos/instanciasPrestamo'
+import {
+  crearOpcionesInstancia,
+  obtenerInstanciaSeleccionada,
+} from '../prestamos/instanciasPrestamo'
 
 const FORMULARIO_INICIAL = {
   dni: '',
@@ -116,6 +120,10 @@ function RegistrarPrestamo() {
 
   const materialSeleccionado = materiales.find(
     (material) => String(material.id) === String(formulario.materialId),
+  )
+  const instanciaSeleccionada = obtenerInstanciaSeleccionada(
+    instancias,
+    formulario.instanciaId,
   )
   const fechaLimiteEstimada = useMemo(
     () => calcularFechaLimiteEstimada(formulario.dias),
@@ -295,15 +303,12 @@ function RegistrarPrestamo() {
       {!cargando && materiales.length > 0 && (
         <Tarjeta className="p-6">
           <form onSubmit={registrar} noValidate className="grid gap-5">
-            <Campo
+            <SelectorPrestatario
               etiqueta="DNI del prestatario"
               valor={formulario.dni}
-              onCambio={(evento) => actualizar('dni', evento.target.value)}
+              onCambio={(valor) => actualizar('dni', valor)}
               error={errores.dni}
               ayuda="El sistema verificará que el usuario esté activo y cumpla el Tier requerido."
-              inputMode="numeric"
-              autoComplete="off"
-              maxLength={8}
               requerido
             />
             <Campo
@@ -332,6 +337,71 @@ function RegistrarPrestamo() {
               deshabilitado={!materialSeleccionado || cargandoInstancias || instancias.length === 0}
               requerido
             />
+            {instanciaSeleccionada && (
+              <section
+                className="grid gap-4 rounded-xl border border-acento-300 bg-acento-50/50 p-4 dark:border-acento-700/60 dark:bg-acento-500/10 sm:grid-cols-[minmax(9rem,12rem)_1fr]"
+                aria-labelledby="titulo-ficha-instancia-prestamo"
+              >
+                <div className="flex min-h-36 items-center justify-center overflow-hidden rounded-lg border border-borde bg-superficie">
+                  {instanciaSeleccionada.foto ? (
+                    <img
+                      src={instanciaSeleccionada.foto}
+                      alt={`Foto del ejemplar ${instanciaSeleccionada.codigo_ejemplar}`}
+                      className="h-full max-h-48 w-full object-contain p-2"
+                    />
+                  ) : (
+                    <p className="p-4 text-center text-sm text-texto-suave">
+                      Este ejemplar no tiene fotografía individual.
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <h3 id="titulo-ficha-instancia-prestamo" className="font-bold text-texto">
+                    Ficha del ejemplar seleccionado
+                  </h3>
+                  <p className="mt-1 text-sm text-texto-suave">
+                    {materialSeleccionado?.nombre || 'Material'} · Código de inventario:{' '}
+                    {materialSeleccionado?.codigo_inventario || 'No registrado'}
+                  </p>
+                  <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+                    <div>
+                      <dt className="font-semibold text-texto">Código de ejemplar</dt>
+                      <dd className="break-words text-texto-suave">{instanciaSeleccionada.codigo_ejemplar}</dd>
+                    </div>
+                    <div>
+                      <dt className="font-semibold text-texto">Estado</dt>
+                      <dd className="text-texto-suave">
+                        {instanciaSeleccionada.estado_display || instanciaSeleccionada.estado || 'No registrado'}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="font-semibold text-texto">Número de serie</dt>
+                      <dd className="break-words text-texto-suave">
+                        {instanciaSeleccionada.numero_serie || 'No registrado'}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="font-semibold text-texto">Color</dt>
+                      <dd className="text-texto-suave">{instanciaSeleccionada.color || 'No registrado'}</dd>
+                    </div>
+                    <div>
+                      <dt className="font-semibold text-texto">Estado físico</dt>
+                      <dd className="text-texto-suave">{instanciaSeleccionada.estado_fisico || 'No registrado'}</dd>
+                    </div>
+                    <div>
+                      <dt className="font-semibold text-texto">Ubicación</dt>
+                      <dd className="text-texto-suave">{instanciaSeleccionada.ubicacion || 'No registrada'}</dd>
+                    </div>
+                    <div className="sm:col-span-2">
+                      <dt className="font-semibold text-texto">Observaciones</dt>
+                      <dd className="break-words text-texto-suave">
+                        {instanciaSeleccionada.observaciones || 'Sin observaciones'}
+                      </dd>
+                    </div>
+                  </dl>
+                </div>
+              </section>
+            )}
             {errorInstancias && <ErrorAlerta mensaje={errorInstancias} />}
             {materialSeleccionado && !cargandoInstancias && !errorInstancias && instancias.length === 0 && (
               <EstadoVacio

@@ -13,6 +13,7 @@ from apps.inventario.models import Material
 from apps.prestamos.constants import (
     ESTADOS_DEVOLUBLES,
     ESTADOS_QUE_OCUPAN_UNIDAD,
+    MAXIMO_PRESTATARIOS_SUGERIDOS,
     VALORES_ESTADOS_CHECKLIST_DEVOLUCION,
 )
 from apps.prestamos.models import Devolucion, Garantia, Prestamo
@@ -34,6 +35,19 @@ class PrestamoError(Exception):
         self.mensaje = mensaje
         self.status_code = status_code
         super().__init__(mensaje)
+
+
+def buscar_prestatarios_por_dni(prefijo):
+    """Busca prestatarios activos por prefijo de DNI para la entrega de materiales."""
+    return (
+        Usuario.objects.select_related("rol")
+        .filter(
+            rol__nombre="prestatario",
+            estado="activo",
+            dni__startswith=prefijo,
+        )
+        .order_by("dni")[:MAXIMO_PRESTATARIOS_SUGERIDOS]
+    )
 
 
 def contar_unidades_disponibles(material):
@@ -126,11 +140,13 @@ def consultar_prestamos_usuario(usuario_id, ahora=None):
     return _consultar_prestamos_con_estado(ahora=ahora).filter(usuario_id=usuario_id)
 
 
-def consultar_historial_prestamos(ahora=None, estado=None):
+def consultar_historial_prestamos(ahora=None, estado=None, dni=None):
     """Lista global de préstamos para consulta histórica de gestión."""
     prestamos = _consultar_prestamos_con_estado(ahora=ahora).select_related("usuario")
     if estado is not None:
         prestamos = prestamos.filter(estado_consulta=estado)
+    if dni is not None:
+        prestamos = prestamos.filter(usuario__dni=dni)
     return prestamos
 
 
@@ -339,6 +355,100 @@ def obtener_documento_garantia(prestamo_id, tipo):
         ) from error
 
     return documento, f"{nombre_descarga}-prestamo-{prestamo.pk}.pdf"
+
+
+@transaction.atomic
+def actualizar_documento_garantia(*, prestamo_id, tipo, archivo=None, eliminar=False):
+    """Reemplaza o elimina un PDF de garantía sin dejar la garantía vacía."""
+    campos = {
+        "documento-identidad": "documento_identidad",
+        "compromiso": "compromiso_responsabilidad",
+    }
+    if tipo not in campos:
+        raise PrestamoError("tipo", "El tipo de documento de garantía no es válido.")
+    if (archivo is None and not eliminar) or (archivo is not None and eliminar):
+        raise PrestamoError(
+            "documento",
+            "Adjunta un PDF para reemplazar o indica que deseas eliminar el documento.",
+        )
+
+    try:
+        prestamo = Prestamo.objects.select_for_update().get(pk=prestamo_id)
+    except (Prestamo.DoesNotExist, ValueError, TypeError) as error:
+        raise PrestamoError(
+            "prestamo_id",
+            "No existe el préstamo indicado.",
+            status_code=404,
+        ) from error
+    try:
+        garantia = Garantia.objects.select_for_update().get(prestamo=prestamo)
+    except Garantia.DoesNotExist as error:
+        raise PrestamoError(
+            "garantia",
+            "El préstamo no tiene una garantía registrada.",
+            status_code=404,
+        ) from error
+
+    nombre_campo = campos[tipo]
+    otro_campo = (
+        "compromiso_responsabilidad"
+        if nombre_campo == "documento_identidad"
+        else "documento_identidad"
+    )
+    documento_actual = getattr(garantia, nombre_campo)
+    nombre_anterior = documento_actual.name if documento_actual else ""
+    almacenamiento = documento_actual.storage
+
+    if eliminar:
+        if not getattr(garantia, otro_campo):
+            raise PrestamoError(
+                nombre_campo,
+                "Debe conservar al menos un documento PDF de garantía.",
+            )
+        setattr(garantia, nombre_campo, None)
+        garantia.estado = "pendiente"
+        garantia.save(update_fields=[nombre_campo, "estado"])
+        if nombre_anterior:
+            transaction.on_commit(lambda: almacenamiento.delete(nombre_anterior))
+    else:
+        try:
+            validar_pdf_garantia(archivo)
+        except ValidationError as error:
+            raise PrestamoError(nombre_campo, error.messages[0]) from error
+
+        nombre_nuevo = almacenamiento.save(
+            documento_actual.field.generate_filename(garantia, archivo.name),
+            archivo,
+        )
+        setattr(garantia, nombre_campo, nombre_nuevo)
+        if garantia.documento_identidad and garantia.compromiso_responsabilidad:
+            garantia.estado = "registrada"
+            garantia.fecha_registro = timezone.now()
+        try:
+            garantia.save(update_fields=[nombre_campo, "estado", "fecha_registro"])
+        except Exception:
+            almacenamiento.delete(nombre_nuevo)
+            raise
+        if nombre_anterior:
+            transaction.on_commit(lambda: almacenamiento.delete(nombre_anterior))
+
+    return garantia
+
+
+def consultar_detalle_historial_prestamo(prestamo_id, ahora=None):
+    """Recupera la ficha completa asociada a una entrega histórica."""
+    try:
+        return (
+            _consultar_prestamos_con_estado(ahora=ahora)
+            .select_related("usuario", "material", "instancia", "garantia")
+            .get(pk=prestamo_id)
+        )
+    except (Prestamo.DoesNotExist, ValueError, TypeError) as error:
+        raise PrestamoError(
+            "prestamo_id",
+            "No existe el préstamo indicado.",
+            status_code=404,
+        ) from error
 
 
 @transaction.atomic

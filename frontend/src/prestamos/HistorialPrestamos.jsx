@@ -129,9 +129,9 @@ export default function HistorialPrestamos() {
         </p>
       </header>
 
-      <FiltroPrestamos estado={estado} onCambiar={cambiarEstado} />
-      <div className="my-4 flex flex-wrap items-end gap-3">
-        <div className="w-full sm:max-w-sm">
+      <div className="my-4 grid gap-4 sm:max-w-3xl sm:grid-cols-[15rem_minmax(0,24rem)] sm:items-start">
+        <FiltroPrestamos estado={estado} onCambiar={cambiarEstado} />
+        <div className="grid gap-3">
           <SelectorPrestatario
             valor={dniEntrada}
             etiqueta="Buscar historial por prestatario"
@@ -151,22 +151,23 @@ export default function HistorialPrestamos() {
               setPagina(1)
             }}
           />
+          {dniFiltro && (
+            <Boton
+              variante="secundario"
+              tipo="button"
+              className="w-fit"
+              onClick={() => {
+                setPrestamoSeleccionado(null)
+                navegacionPendiente.current = ''
+                setDniEntrada('')
+                setDniFiltro('')
+                setPagina(1)
+              }}
+            >
+              Quitar filtro de prestatario
+            </Boton>
+          )}
         </div>
-        {dniFiltro && (
-          <Boton
-            variante="secundario"
-            tipo="button"
-            onClick={() => {
-              setPrestamoSeleccionado(null)
-              navegacionPendiente.current = ''
-              setDniEntrada('')
-              setDniFiltro('')
-              setPagina(1)
-            }}
-          >
-            Quitar filtro de prestatario
-          </Boton>
-        )}
       </div>
 
       {results.length === 0 ? (

@@ -110,17 +110,18 @@ export default function SelectorPrestatario({
           id={`${id}-sugerencias`}
           role="listbox"
           aria-label="Prestatarios coincidentes"
-          className="max-h-56 overflow-y-auto rounded-lg border border-borde bg-white shadow-lg dark:bg-superficie"
+          className="max-h-56 overflow-y-auto rounded-xl border border-borde bg-superficie shadow-lg"
         >
           {sugerencias.map((prestatario) => (
             <li key={prestatario.dni} role="option" aria-selected="false">
               <button
                 type="button"
-                className="w-full px-3 py-2 text-left text-sm hover:bg-superficie-alta focus-visible:outline focus-visible:outline-2 focus-visible:outline-acento-600"
+                className="flex w-full flex-wrap items-baseline gap-x-2 px-3 py-2.5 text-left text-sm transition-colors hover:bg-superficie-alta focus-visible:outline focus-visible:outline-2 focus-visible:outline-acento-600"
                 onClick={() => seleccionar(prestatario)}
               >
-                <span className="block font-semibold text-texto">{prestatario.dni}</span>
-                <span className="block text-texto-suave">{prestatario.nombre_completo}</span>
+                <span className="font-semibold tabular-nums text-texto">{prestatario.dni}</span>
+                <span aria-hidden="true" className="text-texto-suave">-</span>
+                <span className="min-w-0 text-texto">{prestatario.nombre_completo}</span>
               </button>
             </li>
           ))}

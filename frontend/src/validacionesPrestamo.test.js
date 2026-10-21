@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   calcularFechaLimiteEstimada,
+  evaluarCambioDuracion,
   mapearErroresFotoChecklist,
   obtenerElementosSinFoto,
   validarFoto,
@@ -107,6 +108,28 @@ describe('validarFormularioPrestamo', () => {
   it('limita la duración a treinta días', () => {
     expect(validarFormularioPrestamo({ ...formularioValido, dias: '31' }).dias)
       .toMatch(/1 a 30 días/)
+  })
+
+  it('conserva el último valor válido y avisa ante duraciones fuera del rango permitido', () => {
+    expect(evaluarCambioDuracion('31', '3')).toEqual({
+      valor: '3',
+      error: 'La duración debe ser de 1 a 30 días.',
+    })
+    expect(evaluarCambioDuracion('-1', '3')).toEqual({
+      valor: '3',
+      error: 'La duración debe ser de 1 a 30 días.',
+    })
+    expect(evaluarCambioDuracion('0', '3')).toEqual({
+      valor: '3',
+      error: 'La duración debe ser de 1 a 30 días.',
+    })
+    expect(evaluarCambioDuracion('1.5', '3')).toEqual({
+      valor: '3',
+      error: 'La duración debe ser de 1 a 30 días.',
+    })
+    expect(evaluarCambioDuracion('30', '3')).toEqual({ valor: '30', error: '' })
+    expect(evaluarCambioDuracion('1', '3')).toEqual({ valor: '1', error: '' })
+    expect(evaluarCambioDuracion('', '3')).toEqual({ valor: '', error: '' })
   })
 
   it('requiere fotos válidas por elemento y permite observación opcional', () => {

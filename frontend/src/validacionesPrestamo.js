@@ -77,6 +77,25 @@ export function validarFoto(archivo) {
   return ''
 }
 
+export function evaluarCambioDuracion(duracion, duracionAnterior) {
+  const cantidad = Number(duracion)
+  if (
+    duracion !== ''
+    && (
+      !Number.isFinite(cantidad)
+      || !Number.isInteger(cantidad)
+      || cantidad < 1
+      || cantidad > DURACION_MAXIMA_PRESTAMO_DIAS
+    )
+  ) {
+    return {
+      valor: String(duracionAnterior),
+      error: `La duración debe ser de 1 a ${DURACION_MAXIMA_PRESTAMO_DIAS} días.`,
+    }
+  }
+  return { valor: duracion, error: '' }
+}
+
 export function obtenerElementosSinFoto(checklist) {
   if (!Array.isArray(checklist)) return []
   return checklist

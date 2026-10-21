@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { api, ErrorApi } from '../api/client'
 import {
   calcularFechaLimiteEstimada,
+  evaluarCambioDuracion,
   mapearErroresFotoChecklist,
   obtenerElementosSinFoto,
   validarFormularioPrestamo,
@@ -183,6 +184,15 @@ function RegistrarPrestamo() {
     }
     setError('')
     setPrestamoCreado(null)
+  }
+
+  function cambiarDuracion(duracion) {
+    const cambio = evaluarCambioDuracion(duracion, formulario.dias)
+    if (cambio.error) {
+      setErrores((actual) => ({ ...actual, dias: cambio.error }))
+      return
+    }
+    actualizar('dias', cambio.valor)
   }
 
   function actualizarChecklist(indice, campo, valor) {
@@ -474,7 +484,7 @@ function RegistrarPrestamo() {
               max={DURACION_MAXIMA_PRESTAMO_DIAS}
               step="1"
               valor={formulario.dias}
-              onCambio={(evento) => actualizar('dias', evento.target.value)}
+              onCambio={(evento) => cambiarDuracion(evento.target.value)}
               error={errores.dias}
               requerido
             />

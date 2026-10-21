@@ -298,7 +298,13 @@ export default function DetallePrestamo({
                 {detalle.checklist_inicial.map((elemento, indice) => (
                   <li key={`${elemento.elemento}-${indice}`} className="rounded-lg bg-superficie p-3">
                     <p className="font-semibold text-texto">{elemento.elemento}</p>
-                    <p className="mt-1 text-sm text-texto-suave">Condición: {elemento.condicion}</p>
+                    {elemento.foto_url && (
+                      <img
+                        src={elemento.foto_url}
+                        alt={`Foto de ${elemento.elemento}`}
+                        className="mt-2 h-36 w-full rounded-lg border border-borde bg-superficie object-contain"
+                      />
+                    )}
                     {elemento.observacion && (
                       <p className="mt-1 text-sm text-texto-suave">Observación: {elemento.observacion}</p>
                     )}

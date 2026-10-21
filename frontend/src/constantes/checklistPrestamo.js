@@ -1,0 +1,7 @@
+const TAMANO_PREDETERMINADO = 5 * 1024 * 1024
+
+export const DURACION_MAXIMA_PRESTAMO_DIAS = 30
+export const TAMANO_MAXIMO_FOTO_CHECKLIST_BYTES = TAMANO_PREDETERMINADO
+export const TAMANO_MAXIMO_FOTO_CHECKLIST_MB = TAMANO_MAXIMO_FOTO_CHECKLIST_BYTES / (1024 * 1024)
+export const TIPOS_FOTO_CHECKLIST = ['image/jpeg', 'image/png', 'image/webp']
+export const EXTENSIONES_FOTO_CHECKLIST = ['.jpg', '.jpeg', '.png', '.webp']

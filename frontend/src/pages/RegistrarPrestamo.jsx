@@ -1,8 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { api, ErrorApi } from '../api/client'
 import {
   calcularFechaLimiteEstimada,
+  evaluarCambioDuracion,
+  mapearErroresFotoChecklist,
+  obtenerElementosSinFoto,
   validarFormularioPrestamo,
 } from '../validacionesPrestamo'
 import useTituloPagina from '../hooks/useTituloPagina'
@@ -14,7 +17,12 @@ import ErrorAlerta from '../components/ui/ErrorAlerta'
 import EstadoVacio from '../components/ui/EstadoVacio'
 import SubidaDocumentoPDF from '../components/prestamos/SubidaDocumentoPDF'
 import SelectorPrestatario from '../components/prestamos/SelectorPrestatario'
+import AdvertenciaModal from '../components/ui/AdvertenciaModal'
 import { TAMANO_MAXIMO_GARANTIA_MB } from '../constantes/garantia'
+import {
+  DURACION_MAXIMA_PRESTAMO_DIAS,
+  TAMANO_MAXIMO_FOTO_CHECKLIST_MB,
+} from '../constantes/checklistPrestamo'
 import { construirSolicitudPrestamo } from '../prestamos/solicitudPrestamo'
 import {
   crearOpcionesInstancia,
@@ -26,7 +34,7 @@ const FORMULARIO_INICIAL = {
   materialId: '',
   instanciaId: '',
   dias: '7',
-  checklist: [{ elemento: '', condicion: '', observacion: '' }],
+  checklist: [{ elemento: '', observacion: '', foto: null, fotoPrevia: '' }],
   documentoIdentidad: null,
   compromisoResponsabilidad: null,
 }
@@ -69,6 +77,15 @@ function RegistrarPrestamo() {
   const [errorInstancias, setErrorInstancias] = useState('')
   const [errores, setErrores] = useState({})
   const [prestamoCreado, setPrestamoCreado] = useState(null)
+  const [elementosSinFoto, setElementosSinFoto] = useState(null)
+  const referenciaFormulario = useRef(null)
+  const referenciasFotos = useRef([])
+  const urlsTemporales = useRef(new Set())
+
+  useEffect(() => () => {
+    urlsTemporales.current.forEach((url) => URL.revokeObjectURL(url))
+    urlsTemporales.current.clear()
+  }, [])
 
   useEffect(() => {
     cargarMateriales()
@@ -170,6 +187,15 @@ function RegistrarPrestamo() {
     setPrestamoCreado(null)
   }
 
+  function cambiarDuracion(duracion) {
+    const cambio = evaluarCambioDuracion(duracion, formulario.dias)
+    if (cambio.error) {
+      setErrores((actual) => ({ ...actual, dias: cambio.error }))
+      return
+    }
+    actualizar('dias', cambio.valor)
+  }
+
   function actualizarChecklist(indice, campo, valor) {
     setFormulario((actual) => ({
       ...actual,
@@ -180,14 +206,54 @@ function RegistrarPrestamo() {
     setErrores((actual) => ({ ...actual, checklist: undefined }))
   }
 
+  function cambiarFotoChecklist(indice, archivo) {
+    const filaActual = formulario.checklist[indice]
+    if (filaActual?.fotoPrevia) {
+      URL.revokeObjectURL(filaActual.fotoPrevia)
+      urlsTemporales.current.delete(filaActual.fotoPrevia)
+    }
+    const fotoPrevia = archivo ? URL.createObjectURL(archivo) : ''
+    if (fotoPrevia) urlsTemporales.current.add(fotoPrevia)
+    if (referenciasFotos.current[indice]) referenciasFotos.current[indice].value = ''
+    setFormulario((actual) => ({
+      ...actual,
+      checklist: actual.checklist.map((item, posicion) => (
+        posicion === indice ? { ...item, foto: archivo, fotoPrevia } : item
+      )),
+    }))
+    setErrores((actual) => ({
+      ...actual,
+      fotosChecklist: { ...actual.fotosChecklist, [indice]: undefined },
+    }))
+  }
+
+  function enfocarPrimerError() {
+    window.requestAnimationFrame(() => {
+      const control = referenciaFormulario.current?.querySelector('[aria-invalid="true"]')
+      if (!control) return
+      control.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      control.focus({ preventScroll: true })
+    })
+  }
+
+  function cerrarAdvertenciaFotos() {
+    setElementosSinFoto(null)
+    enfocarPrimerError()
+  }
+
   function agregarElementoChecklist() {
     setFormulario((actual) => ({
       ...actual,
-      checklist: [...actual.checklist, { elemento: '', condicion: '', observacion: '' }],
+      checklist: [...actual.checklist, { elemento: '', observacion: '', foto: null, fotoPrevia: '' }],
     }))
   }
 
   function quitarElementoChecklist(indice) {
+    const fila = formulario.checklist[indice]
+    if (fila?.fotoPrevia) {
+      URL.revokeObjectURL(fila.fotoPrevia)
+      urlsTemporales.current.delete(fila.fotoPrevia)
+    }
     setFormulario((actual) => ({
       ...actual,
       checklist: actual.checklist.filter((_, posicion) => posicion !== indice),
@@ -210,7 +276,12 @@ function RegistrarPrestamo() {
     setErrores(validacion)
     setError('')
     setPrestamoCreado(null)
-    if (Object.keys(validacion).length > 0) return
+    const fotosFaltantes = obtenerElementosSinFoto(formulario.checklist)
+    setElementosSinFoto(fotosFaltantes.length > 0 ? fotosFaltantes : null)
+    if (Object.keys(validacion).length > 0) {
+      if (fotosFaltantes.length === 0) enfocarPrimerError()
+      return
+    }
 
     setGuardando(true)
     try {
@@ -225,6 +296,12 @@ function RegistrarPrestamo() {
       })
       const respuesta = await api.post('/prestamos/', solicitud)
       setPrestamoCreado(respuesta)
+      formulario.checklist.forEach((item) => {
+        if (item.fotoPrevia) {
+          URL.revokeObjectURL(item.fotoPrevia)
+          urlsTemporales.current.delete(item.fotoPrevia)
+        }
+      })
       setFormulario(FORMULARIO_INICIAL)
       await cargarMateriales()
     } catch (errorApi) {
@@ -232,6 +309,7 @@ function RegistrarPrestamo() {
       const camposApi = {
         dni_prestatario: 'dni',
         instancia_id: 'instancia_id',
+        tiempo_prestamo_dias: 'dias',
         documento_identidad: 'documento_identidad',
         compromiso_responsabilidad: 'compromiso_responsabilidad',
       }
@@ -243,12 +321,15 @@ function RegistrarPrestamo() {
             Array.isArray(erroresApi[campo]) ? erroresApi[campo][0] : String(erroresApi[campo]),
           ]),
       )
-      if (Object.keys(erroresDeCampo).length > 0) {
+      const erroresFotosApi = mapearErroresFotoChecklist(erroresApi?.fotos_checklist)
+      if (Object.keys(erroresDeCampo).length > 0 || Object.keys(erroresFotosApi).length > 0) {
         setErrores((actual) => ({
           ...actual,
           ...erroresDeCampo,
+          fotosChecklist: { ...actual.fotosChecklist, ...erroresFotosApi },
         }))
         setError('')
+        enfocarPrimerError()
       } else {
         setError(mensajeApi(errorApi))
       }
@@ -302,7 +383,7 @@ function RegistrarPrestamo() {
 
       {!cargando && materiales.length > 0 && (
         <Tarjeta className="p-6">
-          <form onSubmit={registrar} noValidate className="grid gap-5">
+          <form ref={referenciaFormulario} onSubmit={registrar} noValidate className="grid gap-5">
             <SelectorPrestatario
               etiqueta="DNI del prestatario"
               valor={formulario.dni}
@@ -413,9 +494,10 @@ function RegistrarPrestamo() {
               etiqueta="Duración del préstamo (días)"
               tipo="number"
               min="1"
+              max={DURACION_MAXIMA_PRESTAMO_DIAS}
               step="1"
               valor={formulario.dias}
-              onCambio={(evento) => actualizar('dias', evento.target.value)}
+              onCambio={(evento) => cambiarDuracion(evento.target.value)}
               error={errores.dias}
               requerido
             />
@@ -428,23 +510,18 @@ function RegistrarPrestamo() {
             )}
 
             <fieldset className="grid gap-4 rounded-xl border border-borde p-4">
-              <legend className="px-2 text-sm font-bold text-texto">
-                Checklist del estado inicial
-              </legend>
+              <legend className="px-2 text-sm font-bold text-texto">Checklist del estado inicial</legend>
+              <p className="text-xs text-texto-suave">
+                Cada elemento debe tener una foto JPG, PNG o WEBP. Tamaño máximo: {TAMANO_MAXIMO_FOTO_CHECKLIST_MB} MB.
+              </p>
               {formulario.checklist.map((item, indice) => (
-                <div key={`checklist-${indice}`} className="relative grid gap-4 rounded-lg border border-borde p-4 sm:grid-cols-3">
+                <div key={`checklist-${indice}`} className="relative grid gap-4 rounded-lg border border-borde p-4 sm:grid-cols-2">
                   <Campo
                     etiqueta="Elemento"
                     valor={item.elemento}
                     onCambio={(evento) => actualizarChecklist(indice, 'elemento', evento.target.value)}
+                    aria-invalid={Boolean(errores.checklist && !item.elemento.trim())}
                     maxLength={100}
-                    requerido
-                  />
-                  <Campo
-                    etiqueta="Condición"
-                    valor={item.condicion}
-                    onCambio={(evento) => actualizarChecklist(indice, 'condicion', evento.target.value)}
-                    maxLength={500}
                     requerido
                   />
                   <Campo
@@ -453,6 +530,48 @@ function RegistrarPrestamo() {
                     onCambio={(evento) => actualizarChecklist(indice, 'observacion', evento.target.value)}
                     maxLength={500}
                   />
+                  <div className="grid gap-2 sm:col-span-2">
+                    <label className="text-sm font-semibold text-texto" htmlFor={`foto-checklist-${indice}`}>
+                      Foto del elemento <span aria-hidden="true" className="text-error">*</span>
+                    </label>
+                    <input
+                      ref={(elemento) => { referenciasFotos.current[indice] = elemento }}
+                      id={`foto-checklist-${indice}`}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+                      aria-invalid={Boolean(errores.fotosChecklist?.[indice])}
+                      aria-describedby={errores.fotosChecklist?.[indice]
+                        ? `foto-checklist-${indice}-ayuda foto-checklist-${indice}-error`
+                        : `foto-checklist-${indice}-ayuda`}
+                      className="block w-full text-sm text-texto file:mr-3 file:rounded-lg file:border-0 file:bg-superficie-alta file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-texto"
+                      onChange={(evento) => cambiarFotoChecklist(indice, evento.target.files?.[0] || null)}
+                    />
+                    <p id={`foto-checklist-${indice}-ayuda`} className="text-xs text-texto-suave">
+                      Formatos permitidos: JPG, PNG y WEBP.
+                    </p>
+                    {errores.fotosChecklist?.[indice] && (
+                      <p id={`foto-checklist-${indice}-error`} className="text-xs text-error" role="alert">
+                        {errores.fotosChecklist[indice]}
+                      </p>
+                    )}
+                    {item.fotoPrevia && (
+                      <div className="flex flex-wrap items-start gap-3">
+                        <img
+                          src={item.fotoPrevia}
+                          alt={`Vista previa de ${item.elemento || `elemento ${indice + 1}`}`}
+                          className="h-28 w-28 rounded-lg border border-borde bg-superficie object-contain p-1"
+                        />
+                        <Boton
+                          variante="secundario"
+                          tamanio="pequeno"
+                          tipo="button"
+                          onClick={() => cambiarFotoChecklist(indice, null)}
+                        >
+                          Quitar foto
+                        </Boton>
+                      </div>
+                    )}
+                  </div>
                   {formulario.checklist.length > 1 && (
                     <Boton
                       variante="secundario"
@@ -522,6 +641,14 @@ function RegistrarPrestamo() {
             </div>
           </form>
         </Tarjeta>
+      )}
+      {elementosSinFoto && (
+        <AdvertenciaModal
+          titulo="Faltan fotos del checklist"
+          descripcion="Adjunta una foto para cada uno de estos elementos antes de continuar:"
+          mensajes={elementosSinFoto.map(({ elemento }) => elemento)}
+          onCerrar={cerrarAdvertenciaFotos}
+        />
       )}
     </section>
   )

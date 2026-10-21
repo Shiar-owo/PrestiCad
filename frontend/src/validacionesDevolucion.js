@@ -23,7 +23,7 @@ export function armarChecklistDevolucion(checklistInicial) {
 
   return filas.map((item) => ({
     elemento: String(item?.elemento ?? '').trim(),
-    condicion: String(item?.condicion ?? ''),
+    observacionInicial: String(item?.observacion ?? ''),
     estado: 'sin_cambios',
     observacion: '',
   }))

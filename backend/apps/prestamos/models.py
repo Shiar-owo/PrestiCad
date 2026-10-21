@@ -1,13 +1,20 @@
 import uuid
 from pathlib import Path
 
-from django.core.validators import MinValueValidator
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils import timezone
 
 from apps.inventario.models import Material
-from apps.prestamos.constants import ESTADOS_GARANTIA, ESTADOS_PRESTAMO, TIPOS_GARANTIA
+from apps.prestamos.constants import (
+    ESTADOS_GARANTIA,
+    ESTADOS_PRESTAMO,
+    FASES_FOTO_CHECKLIST,
+    MAXIMO_DIAS_PRESTAMO,
+    TIPOS_GARANTIA,
+)
 from apps.prestamos.storage import obtener_almacenamiento_garantias
+from apps.prestamos.validators import validar_foto_checklist
 from apps.usuarios.models import Usuario
 
 
@@ -25,6 +32,12 @@ def ruta_reporte(instance, filename):
 def ruta_documento_garantia(instance, filename):
     """Genera una ruta privada que no conserva el nombre original del archivo."""
     return f"garantias/{timezone.now():%Y/%m}/{uuid.uuid4().hex}.pdf"
+
+
+def ruta_foto_checklist(instance, filename):
+    """Genera una ruta privada y aleatoria para la foto de un checklist."""
+    extension = Path(filename).suffix.lower() or ".jpg"
+    return f"checklists/{timezone.now():%Y/%m}/{uuid.uuid4().hex}{extension}"
 
 
 class Prestamo(models.Model):
@@ -55,7 +68,7 @@ class Prestamo(models.Model):
     fecha_entrega = models.DateTimeField(default=timezone.now)
     fecha_limite = models.DateTimeField()
     tiempo_prestamo_dias = models.PositiveIntegerField(
-        validators=[MinValueValidator(1)],
+        validators=[MinValueValidator(1), MaxValueValidator(MAXIMO_DIAS_PRESTAMO)],
     )
     estado = models.CharField(
         max_length=20,
@@ -138,6 +151,40 @@ class Garantia(models.Model):
 
     def __str__(self):
         return f"Garantía del préstamo {self.prestamo_id}"
+
+
+class FotoChecklist(models.Model):
+    """Foto privada asociada a un elemento y fase de inspección del préstamo."""
+
+    prestamo = models.ForeignKey(
+        Prestamo,
+        on_delete=models.CASCADE,
+        related_name="fotos_checklist",
+    )
+    fase = models.CharField(max_length=10, choices=FASES_FOTO_CHECKLIST)
+    indice = models.PositiveSmallIntegerField()
+    elemento = models.CharField(max_length=100)
+    imagen = models.ImageField(
+        upload_to=ruta_foto_checklist,
+        storage=obtener_almacenamiento_garantias,
+        validators=[validar_foto_checklist],
+        verbose_name="Foto del checklist",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Foto de checklist"
+        verbose_name_plural = "Fotos de checklist"
+        ordering = ["indice"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=("prestamo", "fase", "indice"),
+                name="prest_foto_check_fase_indice_uniq",
+            ),
+        ]
+
+    def __str__(self):
+        return f"Foto {self.elemento} del checklist {self.fase} del préstamo {self.prestamo_id}"
 
 
 class Devolucion(models.Model):

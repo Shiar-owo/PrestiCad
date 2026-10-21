@@ -186,10 +186,10 @@
 |---|------------------------|
 | 1 | El gestor busca el préstamo/reserva activa del usuario |
 | 2 | El sistema verifica la identidad y elegibilidad del usuario (Tier, sin impedimentos) |
-| 3 | El gestor selecciona la instancia física/ejemplar específico a entregar y completa un checklist digital del estado inicial del bien (descripción de condiciones, número de serie, fotos si aplica) |
+| 3 | El gestor selecciona la instancia física/ejemplar específico a entregar y completa un checklist del estado inicial con cada elemento, una foto obligatoria y una observación opcional |
 | 4 | Para equipos de alto valor o préstamos por excepción académica, se cargan en PDF el documento de identidad y el compromiso de responsabilidad firmado |
 | 5 | Si la garantía es requerida y falta cualquiera de los dos PDF, el sistema no permite que el préstamo pase a "Activo" |
-| 6 | El gestor indica el tiempo de préstamo (días) |
+| 6 | El gestor indica la duración del préstamo entre 1 y 30 días |
 | 7 | El sistema calcula y muestra la fecha límite de devolución |
 | 8 | El estado del préstamo cambia a "Activo" |
 | 9 | El estado de la instancia física seleccionada cambia a "Prestado", reduciendo en 1 el stock disponible del material |

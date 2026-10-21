@@ -6,8 +6,8 @@ import {
 } from './validacionesDevolucion'
 
 const checklistValido = [
-  { elemento: 'Carcasa', condicion: 'Sin daños', estado: 'sin_cambios', observacion: '' },
-  { elemento: 'Cable', condicion: 'Completo', estado: 'dano_parcial', observacion: 'Cortado' },
+  { elemento: 'Carcasa', estado: 'sin_cambios', observacion: '' },
+  { elemento: 'Cable', estado: 'dano_parcial', observacion: 'Cortado' },
 ]
 
 describe('validarChecklistDevolucion', () => {
@@ -46,7 +46,7 @@ describe('armarChecklistDevolucion', () => {
     expect(filas).toEqual([
       {
         elemento: 'Pantalla',
-        condicion: 'Intacta',
+        observacionInicial: 'ok',
         estado: 'sin_cambios',
         observacion: '',
       },

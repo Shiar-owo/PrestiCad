@@ -7,15 +7,15 @@ from rest_framework import serializers
 from apps.compartido.serializers import RechazarCamposNoPermitidosMixin
 from apps.prestamos.constants import (
     ESTADOS_CHECKLIST_DEVOLUCION,
+    MAXIMO_DIAS_PRESTAMO,
     MINIMO_DIGITOS_BUSQUEDA_PRESTATARIO,
 )
 from apps.prestamos.models import Devolucion, Garantia, Prestamo
-from apps.prestamos.validators import validar_pdf_garantia
+from apps.prestamos.validators import validar_foto_checklist, validar_pdf_garantia
 
 
 class ChecklistInicialItemSerializer(serializers.Serializer):
     elemento = serializers.CharField(max_length=100)
-    condicion = serializers.CharField(max_length=500)
     observacion = serializers.CharField(
         max_length=500,
         required=False,
@@ -37,12 +37,6 @@ class ChecklistInicialItemSerializer(serializers.Serializer):
         if not value.strip():
             raise serializers.ValidationError("Describe el elemento inspeccionado.")
         return value.strip()
-
-    def validate_condicion(self, value):
-        if not value.strip():
-            raise serializers.ValidationError("Describe la condición inicial.")
-        return value.strip()
-
 
 class BusquedaPrestatarioSerializer(serializers.Serializer):
     """Valida el prefijo de DNI usado para sugerir prestatarios al gestor."""
@@ -96,8 +90,20 @@ class RegistrarPrestamoSerializer(
     dni_prestatario = serializers.CharField(max_length=8)
     material_id = serializers.UUIDField()
     instancia_id = serializers.UUIDField(required=False)
-    tiempo_prestamo_dias = serializers.IntegerField(min_value=1)
+    tiempo_prestamo_dias = serializers.IntegerField(
+        min_value=1,
+        max_value=MAXIMO_DIAS_PRESTAMO,
+        error_messages={
+            "min_value": "El tiempo de préstamo debe ser al menos un día.",
+            "max_value": f"La duración máxima del préstamo es de {MAXIMO_DIAS_PRESTAMO} días.",
+        },
+    )
     checklist_inicial = ChecklistInicialItemSerializer(many=True, allow_empty=False)
+    fotos_checklist = serializers.ListField(
+        child=serializers.ImageField(validators=[validar_foto_checklist]),
+        write_only=True,
+        required=False,
+    )
     documento_identidad = serializers.FileField(
         required=False,
         validators=[validar_pdf_garantia],
@@ -121,7 +127,61 @@ class RegistrarPrestamoSerializer(
             else:
                 data = dict(data)
             data["checklist_inicial"] = checklist
+        if isinstance(checklist, list):
+            if hasattr(data, "keys"):
+                datos = {
+                    campo: data.get(campo)
+                    for campo in data.keys()
+                }
+            else:
+                datos = dict(data)
+            fotos = [datos.get(f"foto_checklist_{indice}") for indice in range(len(checklist))]
+            for indice in range(len(checklist)):
+                datos.pop(f"foto_checklist_{indice}", None)
+            indices_sin_foto = [
+                indice
+                for indice, foto in enumerate(fotos)
+                if foto is None
+            ]
+            if indices_sin_foto:
+                errores = {
+                    indice: [
+                        (
+                            f'El elemento «{str(checklist[indice].get("elemento", "")).strip()}» '
+                            "requiere una foto."
+                            if isinstance(checklist[indice], dict)
+                            else f"La fila {indice + 1} requiere una foto."
+                        )
+                    ]
+                    for indice in indices_sin_foto
+                }
+                raise serializers.ValidationError({"fotos_checklist": errores})
+            datos["fotos_checklist"] = fotos
+            data = datos
         return super().to_internal_value(data)
+
+    def validate(self, attrs):
+        datos_iniciales = self.initial_data
+        archivos_permitidos = {
+            f"foto_checklist_{indice}"
+            for indice in range(len(attrs["checklist_inicial"]))
+        }
+        if hasattr(datos_iniciales, "keys"):
+            self.initial_data = {
+                campo: datos_iniciales.get(campo)
+                for campo in datos_iniciales.keys()
+                if campo not in archivos_permitidos
+            }
+        try:
+            super().validate(attrs)
+        finally:
+            self.initial_data = datos_iniciales
+
+        if len(attrs.get("fotos_checklist", [])) != len(attrs["checklist_inicial"]):
+            raise serializers.ValidationError({
+                "fotos_checklist": "Adjunta una foto por cada elemento del checklist inicial.",
+            })
+        return attrs
 
     def validate_dni_prestatario(self, value):
         dni = value.strip()

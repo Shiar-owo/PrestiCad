@@ -1,3 +1,5 @@
+from mimetypes import guess_type
+
 from django.http import FileResponse
 from rest_framework import status
 from rest_framework.generics import GenericAPIView
@@ -44,6 +46,7 @@ from apps.prestamos.services import (
     consultar_reportes_devolucion,
     estimar_devolucion,
     obtener_documento_garantia,
+    obtener_foto_checklist,
     registrar_devolucion,
     registrar_prestamo,
 )
@@ -187,6 +190,25 @@ class DescargarDocumentoGarantiaView(APIView):
                 garantia.compromiso_responsabilidad
             ),
         })
+
+
+class DescargarFotoChecklistView(APIView):
+    """Sirve fotos privadas del checklist al titular y al personal autorizado."""
+
+    permission_classes = [EsGestorAdministradorOPrestatarioPropio]
+
+    def get(self, request, prestamo_id, fase, indice):
+        try:
+            archivo, nombre = obtener_foto_checklist(prestamo_id, fase, indice)
+        except PrestamoError as error:
+            return _respuesta_error(error)
+
+        respuesta = FileResponse(
+            archivo,
+            content_type=guess_type(nombre)[0] or "application/octet-stream",
+        )
+        respuesta["Content-Disposition"] = f'inline; filename="{nombre}"'
+        return respuesta
 
 
 class DetalleHistorialPrestamoView(APIView):

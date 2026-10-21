@@ -78,6 +78,7 @@ function RegistrarPrestamo() {
   const [errores, setErrores] = useState({})
   const [prestamoCreado, setPrestamoCreado] = useState(null)
   const [elementosSinFoto, setElementosSinFoto] = useState(null)
+  const referenciaFormulario = useRef(null)
   const referenciasFotos = useRef([])
   const urlsTemporales = useRef(new Set())
 
@@ -226,10 +227,18 @@ function RegistrarPrestamo() {
     }))
   }
 
+  function enfocarPrimerError() {
+    window.requestAnimationFrame(() => {
+      const control = referenciaFormulario.current?.querySelector('[aria-invalid="true"]')
+      if (!control) return
+      control.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      control.focus({ preventScroll: true })
+    })
+  }
+
   function cerrarAdvertenciaFotos() {
-    const primerIndice = elementosSinFoto?.[0]?.indice
     setElementosSinFoto(null)
-    window.requestAnimationFrame(() => referenciasFotos.current[primerIndice]?.focus())
+    enfocarPrimerError()
   }
 
   function agregarElementoChecklist() {
@@ -269,7 +278,10 @@ function RegistrarPrestamo() {
     setPrestamoCreado(null)
     const fotosFaltantes = obtenerElementosSinFoto(formulario.checklist)
     setElementosSinFoto(fotosFaltantes.length > 0 ? fotosFaltantes : null)
-    if (Object.keys(validacion).length > 0) return
+    if (Object.keys(validacion).length > 0) {
+      if (fotosFaltantes.length === 0) enfocarPrimerError()
+      return
+    }
 
     setGuardando(true)
     try {
@@ -317,6 +329,7 @@ function RegistrarPrestamo() {
           fotosChecklist: { ...actual.fotosChecklist, ...erroresFotosApi },
         }))
         setError('')
+        enfocarPrimerError()
       } else {
         setError(mensajeApi(errorApi))
       }
@@ -370,7 +383,7 @@ function RegistrarPrestamo() {
 
       {!cargando && materiales.length > 0 && (
         <Tarjeta className="p-6">
-          <form onSubmit={registrar} noValidate className="grid gap-5">
+          <form ref={referenciaFormulario} onSubmit={registrar} noValidate className="grid gap-5">
             <SelectorPrestatario
               etiqueta="DNI del prestatario"
               valor={formulario.dni}
@@ -507,6 +520,7 @@ function RegistrarPrestamo() {
                     etiqueta="Elemento"
                     valor={item.elemento}
                     onCambio={(evento) => actualizarChecklist(indice, 'elemento', evento.target.value)}
+                    aria-invalid={Boolean(errores.checklist && !item.elemento.trim())}
                     maxLength={100}
                     requerido
                   />

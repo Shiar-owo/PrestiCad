@@ -951,7 +951,15 @@ class MaterialBuscarAPITestCase(EscenariosDeMaterialApi):
 
         respuesta = self.client.get(self.BUSCAR_URL)
         self.assertEqual(respuesta.status_code, 200)
-        self.assertEqual(len(respuesta.json()), 4)
+        self.assertCountEqual(
+            [item["nombre"] for item in respuesta.json()],
+            [
+                "Cable Red UTP Cat6",
+                "Laptop Dell XPS",
+                "Libro Redes de Computadoras Tanenbaum",
+                "Osciloscopio Digital",
+            ],
+        )
 
     def test_buscar_con_usuario_estandar_devuelve_catalogo_completo(self):
         usuario = self._autenticar("alumno2@unsa.edu.pe", "prestatario")
@@ -960,7 +968,32 @@ class MaterialBuscarAPITestCase(EscenariosDeMaterialApi):
 
         respuesta = self.client.get(self.BUSCAR_URL)
         self.assertEqual(respuesta.status_code, 200)
-        self.assertEqual(len(respuesta.json()), 4)
+        self.assertCountEqual(
+            [item["nombre"] for item in respuesta.json()],
+            [
+                "Cable Red UTP Cat6",
+                "Laptop Dell XPS",
+                "Libro Redes de Computadoras Tanenbaum",
+                "Osciloscopio Digital",
+            ],
+        )
+
+    def test_buscar_con_usuario_avanzado_devuelve_catalogo_completo(self):
+        usuario = self._autenticar("alumno3@unsa.edu.pe", "prestatario")
+        usuario.reputacion_tier = "avanzado"
+        usuario.save()
+
+        respuesta = self.client.get(self.BUSCAR_URL)
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertCountEqual(
+            [item["nombre"] for item in respuesta.json()],
+            [
+                "Cable Red UTP Cat6",
+                "Laptop Dell XPS",
+                "Libro Redes de Computadoras Tanenbaum",
+                "Osciloscopio Digital",
+            ],
+        )
 
     def test_buscar_con_gestor_ve_todo(self):
         self._autenticar("gestor@unsa.edu.pe", "gestor")

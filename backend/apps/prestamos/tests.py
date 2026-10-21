@@ -1615,13 +1615,27 @@ class DevolucionBaseTestCase(TestCase):
             {"elemento": "Cable", "estado": "sin_cambios", "observacion": ""},
         ]
 
-    def _devolver(self, fecha_devolucion=None, checklist=None):
-        return registrar_devolucion(
-            prestamo_id=self.prestamo.id,
-            checklist_devolucion=self.checklist_ok if checklist is None else checklist,
-            realizado_por=self.gestor,
-            fecha_devolucion=fecha_devolucion,
-        )
+    def _devolver(self, fecha_devolucion=None, checklist=None, fotos_checklist=None):
+        checklist = self.checklist_ok if checklist is None else checklist
+        if fotos_checklist is None:
+            fotos_checklist = [
+                crear_foto_checklist()
+                if item.get("estado") in ("dano_parcial", "dano_total")
+                else None
+                for item in checklist
+            ]
+        with patch.object(
+            FotoChecklist._meta.get_field("imagen"),
+            "storage",
+            _ALMACENAMIENTO_FOTOS_TEST,
+        ):
+            return registrar_devolucion(
+                prestamo_id=self.prestamo.id,
+                checklist_devolucion=checklist,
+                fotos_checklist=fotos_checklist,
+                realizado_por=self.gestor,
+                fecha_devolucion=fecha_devolucion,
+            )
 
     def _marcar_prestatario(self, puntaje, tier):
         self.prestatario.reputacion_puntaje = puntaje
@@ -1653,6 +1667,7 @@ class EstimarDevolucionServiceTestCase(DevolucionBaseTestCase):
     def test_estimar_coincide_con_lo_que_luego_registra(self):
         checklist = [
             {"elemento": "Carcasa", "estado": "dano_parcial", "observacion": "Rasguño"},
+            {"elemento": "Cable", "estado": "sin_cambios", "observacion": ""},
         ]
         estimado = estimar_devolucion(
             prestamo_id=self.prestamo.id,
@@ -1771,12 +1786,7 @@ class RegistrarDevolucionServiceTestCase(DevolucionBaseTestCase):
         self.assertEqual(resultado["puntos_delta"], -20)
         self.assertEqual(resultado["reputacion_despues"], -20)
 
-    def test_dano_parcial_no_hereda_condicion_del_checklist_inicial(self):
-        self.prestamo.checklist_inicial = [
-            {"elemento": "Carcasa", "condicion": "Dato histórico que ya no se usa"},
-            {"elemento": "Cable", "condicion": "Otro dato histórico"},
-        ]
-        self.prestamo.save(update_fields=["checklist_inicial"])
+    def test_dano_parcial_guarda_el_contrato_actual_del_checklist(self):
         checklist = [
             {"elemento": "Carcasa", "estado": "dano_parcial", "observacion": "Rasguño"},
             {"elemento": "Cable", "estado": "sin_cambios", "observacion": ""},
@@ -1792,11 +1802,15 @@ class RegistrarDevolucionServiceTestCase(DevolucionBaseTestCase):
         self.assertEqual(resultado["deduccion_dano"], 30)
         self.assertEqual(resultado["cobro_economico"], "40.00")
         self.assertEqual(resultado["puntos_delta"], -25)
-        self.assertEqual(devolucion.checklist_devolucion[0]["condicion"], "")
+        self.assertEqual(
+            set(devolucion.checklist_devolucion[0]),
+            {"elemento", "estado", "observacion"},
+        )
 
     def test_dano_total_aplica_deduccion_y_cobro_de_reposicion(self):
         checklist = [
             {"elemento": "Carcasa", "estado": "dano_total", "observacion": "Roto"},
+            {"elemento": "Cable", "estado": "sin_cambios", "observacion": ""},
         ]
 
         devolucion = self._devolver(
@@ -1816,6 +1830,7 @@ class RegistrarDevolucionServiceTestCase(DevolucionBaseTestCase):
         self.material.save(update_fields=["costo_reparacion", "costo_reposicion"])
         checklist = [
             {"elemento": "Carcasa", "estado": "dano_parcial", "observacion": "Leve"},
+            {"elemento": "Cable", "estado": "sin_cambios", "observacion": ""},
         ]
 
         devolucion = self._devolver(fecha_devolucion=self.prestamo.fecha_limite, checklist=checklist)
@@ -1825,8 +1840,8 @@ class RegistrarDevolucionServiceTestCase(DevolucionBaseTestCase):
 
     def test_el_peor_dano_prevalece_entre_elementos(self):
         checklist = [
-            {"elemento": "Carcasa", "estado": "dano_parcial", "observacion": ""},
-            {"elemento": "Cable", "estado": "dano_total", "observacion": ""},
+            {"elemento": "Carcasa", "estado": "dano_parcial", "observacion": "Rasguño"},
+            {"elemento": "Cable", "estado": "dano_total", "observacion": "Roto"},
         ]
 
         devolucion = self._devolver(checklist=checklist)
@@ -1837,7 +1852,8 @@ class RegistrarDevolucionServiceTestCase(DevolucionBaseTestCase):
     def test_puntaje_se_encoge_en_el_limite_inferior(self):
         self._marcar_prestatario(-480, "restringido")
         checklist = [
-            {"elemento": "Carcasa", "estado": "dano_total", "observacion": ""},
+            {"elemento": "Carcasa", "estado": "dano_total", "observacion": "Roto"},
+            {"elemento": "Cable", "estado": "sin_cambios", "observacion": ""},
         ]
 
         devolucion = self._devolver(checklist=checklist)
@@ -1856,7 +1872,8 @@ class RegistrarDevolucionServiceTestCase(DevolucionBaseTestCase):
     def test_recalcula_el_tier_al_atravesar_un_rango(self):
         self._marcar_prestatario(210, "avanzado")
         checklist = [
-            {"elemento": "Carcasa", "estado": "dano_total", "observacion": ""},
+            {"elemento": "Carcasa", "estado": "dano_total", "observacion": "Roto"},
+            {"elemento": "Cable", "estado": "sin_cambios", "observacion": ""},
         ]
 
         devolucion = self._devolver(
@@ -1955,6 +1972,7 @@ class ReporteDevolucionTestCase(DevolucionBaseTestCase):
     def test_dano_parcial_genera_reporte_pdf_persistido(self):
         checklist = [
             {"elemento": "Carcasa", "estado": "dano_parcial", "observacion": "Rasguño"},
+            {"elemento": "Cable", "estado": "sin_cambios", "observacion": ""},
         ]
 
         devolucion = self._devolver(
@@ -1971,6 +1989,7 @@ class ReporteDevolucionTestCase(DevolucionBaseTestCase):
     def test_dano_total_genera_reporte_pdf_persistido(self):
         checklist = [
             {"elemento": "Carcasa", "estado": "dano_total", "observacion": "Roto"},
+            {"elemento": "Cable", "estado": "sin_cambios", "observacion": ""},
         ]
 
         devolucion = self._devolver(
@@ -2021,6 +2040,27 @@ class DevolucionAPITestCase(DevolucionBaseTestCase):
         datos.update(cambios)
         return datos
 
+    def _payload_multipart(self, **cambios):
+        datos = self._payload(**cambios)
+        checklist = datos.pop("checklist")
+        datos["checklist"] = json.dumps(checklist)
+        for indice, elemento in enumerate(checklist):
+            if elemento["estado"] in ("dano_parcial", "dano_total"):
+                datos[f"foto_checklist_{indice}"] = crear_foto_checklist()
+        return datos
+
+    def _post_multipart(self, url=None, **cambios):
+        with patch.object(
+            FotoChecklist._meta.get_field("imagen"),
+            "storage",
+            _ALMACENAMIENTO_FOTOS_TEST,
+        ):
+            return self.client.post(
+                url or self.url,
+                self._payload_multipart(**cambios),
+                format="multipart",
+            )
+
     def test_get_detalle_sin_sesion_responde_403(self):
         respuesta = self.client.get(self.url_detalle)
 
@@ -2029,8 +2069,8 @@ class DevolucionAPITestCase(DevolucionBaseTestCase):
     def test_get_detalle_como_gestor_devuelve_checklist_y_parametros(self):
         FotoChecklist.objects.filter(prestamo=self.prestamo).delete()
         self.prestamo.checklist_inicial = [
-            {"elemento": "Carcasa", "condicion": "Dato histórico", "observacion": ""},
-            {"elemento": "Cable", "condicion": "Otro dato histórico", "observacion": ""},
+            {"elemento": "Carcasa", "observacion": ""},
+            {"elemento": "Cable", "observacion": ""},
         ]
         self.prestamo.save(update_fields=["checklist_inicial"])
         self._iniciar_sesion(self.gestor)
@@ -2083,7 +2123,7 @@ class DevolucionAPITestCase(DevolucionBaseTestCase):
         self.assertEqual(Devolucion.objects.count(), 0)
 
     def test_post_devolucion_sin_sesion_responde_403(self):
-        respuesta = self.client.post(self.url, self._payload(), format="json")
+        respuesta = self._post_multipart()
 
         self.assertEqual(respuesta.status_code, 403)
         self.assertEqual(Devolucion.objects.count(), 0)
@@ -2091,7 +2131,7 @@ class DevolucionAPITestCase(DevolucionBaseTestCase):
     def test_post_devolucion_como_prestatario_responde_403(self):
         self._iniciar_sesion(self.prestatario)
 
-        respuesta = self.client.post(self.url, self._payload(), format="json")
+        respuesta = self._post_multipart()
 
         self.assertEqual(respuesta.status_code, 403)
         self.assertEqual(Devolucion.objects.count(), 0)
@@ -2099,7 +2139,7 @@ class DevolucionAPITestCase(DevolucionBaseTestCase):
     def test_post_devolucion_como_administrador_responde_403(self):
         self._iniciar_sesion(self.administrador)
 
-        respuesta = self.client.post(self.url, self._payload(), format="json")
+        respuesta = self._post_multipart()
 
         self.assertEqual(respuesta.status_code, 403)
         self.assertEqual(Devolucion.objects.count(), 0)
@@ -2107,7 +2147,7 @@ class DevolucionAPITestCase(DevolucionBaseTestCase):
     def test_post_devolucion_con_dano_devuelve_201_con_reporte(self):
         self._iniciar_sesion(self.gestor)
 
-        respuesta = self.client.post(self.url, self._payload(), format="json")
+        respuesta = self._post_multipart()
 
         self.assertEqual(respuesta.status_code, 201, respuesta.content)
         datos = respuesta.json()
@@ -2137,16 +2177,16 @@ class DevolucionAPITestCase(DevolucionBaseTestCase):
 
     def test_post_segunda_devolucion_responde_409(self):
         self._iniciar_sesion(self.gestor)
-        self.client.post(self.url, self._payload(), format="json")
+        self._post_multipart()
 
-        respuesta = self.client.post(self.url, self._payload(), format="json")
+        respuesta = self._post_multipart()
 
         self.assertEqual(respuesta.status_code, 409)
         self.assertEqual(Devolucion.objects.count(), 1)
 
     def test_get_reporte_devuelve_pdf_para_descarga(self):
         self._iniciar_sesion(self.gestor)
-        creacion = self.client.post(self.url, self._payload(), format="json")
+        creacion = self._post_multipart()
         devolucion_id = creacion.json()["devolucion_id"]
 
         respuesta = self.client.get(f"/api/prestamos/devoluciones/{devolucion_id}/reporte/")
@@ -2167,6 +2207,7 @@ class DevolucionAPITestCase(DevolucionBaseTestCase):
             {
                 "checklist": [
                     {"elemento": "Carcasa", "estado": "sin_cambios", "observacion": ""},
+                    {"elemento": "Cable", "estado": "sin_cambios", "observacion": ""},
                 ]
             },
             format="json",
@@ -2186,7 +2227,7 @@ class DevolucionAPITestCase(DevolucionBaseTestCase):
 
     def test_get_reporte_como_administrador_responde_403(self):
         self._iniciar_sesion(self.gestor)
-        creacion = self.client.post(self.url, self._payload(), format="json")
+        creacion = self._post_multipart()
         devolucion_id = creacion.json()["devolucion_id"]
         self._iniciar_sesion(self.administrador)
 

@@ -252,16 +252,10 @@ class PrestamoRegistroSerializer(serializers.ModelSerializer):
 
 
 class ChecklistDevolucionItemSerializer(serializers.Serializer):
-    """Fila del checklist de devolución contrastada contra la entrega (RN09)."""
+    """Estado devuelto de una fila del checklist inicial (RN09)."""
 
     elemento = serializers.CharField(max_length=100)
     estado = serializers.ChoiceField(choices=ESTADOS_CHECKLIST_DEVOLUCION)
-    condicion = serializers.CharField(
-        max_length=500,
-        required=False,
-        allow_blank=True,
-        default="",
-    )
     observacion = serializers.CharField(
         max_length=500,
         required=False,
@@ -289,9 +283,57 @@ class DevolucionIngresoSerializer(
     RechazarCamposNoPermitidosMixin,
     serializers.Serializer,
 ):
-    """Entrada común de estimación y registro de la devolución (HU11)."""
+    """Entrada JSON de estimación y multipart de registro de devolución."""
 
     checklist = ChecklistDevolucionItemSerializer(many=True, allow_empty=False)
+    fotos_checklist = serializers.ListField(
+        child=serializers.ImageField(
+            allow_null=True,
+            validators=[validar_foto_checklist],
+        ),
+        required=False,
+        write_only=True,
+    )
+
+    def to_internal_value(self, data):
+        checklist = data.get("checklist") if hasattr(data, "get") else None
+        if isinstance(checklist, str):
+            try:
+                checklist = json.loads(checklist)
+            except (TypeError, ValueError) as error:
+                raise serializers.ValidationError({
+                    "checklist": "El checklist debe ser una lista JSON válida.",
+                }) from error
+
+        if isinstance(checklist, list):
+            datos = {campo: data.get(campo) for campo in data.keys()}
+            fotos = [
+                datos.pop(f"foto_checklist_{indice}", None)
+                for indice in range(len(checklist))
+            ]
+            datos["checklist"] = checklist
+            datos["fotos_checklist"] = fotos
+            data = datos
+
+        return super().to_internal_value(data)
+
+    def validate(self, attrs):
+        datos_originales = self.initial_data
+        checklist = attrs.get("checklist", [])
+        campos_foto = {
+            f"foto_checklist_{indice}"
+            for indice in range(len(checklist))
+        }
+        if hasattr(datos_originales, "keys"):
+            self.initial_data = {
+                campo: datos_originales.get(campo)
+                for campo in datos_originales.keys()
+                if campo not in campos_foto
+            }
+        try:
+            return super().validate(attrs)
+        finally:
+            self.initial_data = datos_originales
 
 
 def url_reporte_publica(devolucion):

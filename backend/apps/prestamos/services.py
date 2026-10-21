@@ -672,7 +672,7 @@ def _validar_estado_devoluble(prestamo):
     )
 
 
-def _validar_checklist_devolucion(checklist_devolucion):
+def _validar_checklist_devolucion(checklist_devolucion, prestamo=None):
     if not isinstance(checklist_devolucion, list) or not checklist_devolucion:
         raise PrestamoError(
             "checklist",
@@ -694,17 +694,70 @@ def _validar_checklist_devolucion(checklist_devolucion):
                 "checklist",
                 f"El elemento {indice} tiene un estado de devolución no válido.",
             )
+    if prestamo is not None:
+        checklist_inicial = prestamo.checklist_inicial or []
+        if len(checklist_devolucion) != len(checklist_inicial):
+            raise PrestamoError(
+                "checklist",
+                "La devolución debe conservar todos los elementos del checklist inicial.",
+            )
+        for indice, (inicial, devuelto) in enumerate(
+            zip(checklist_inicial, checklist_devolucion),
+            start=1,
+        ):
+            elemento_inicial = (
+                str(inicial.get("elemento", "")).strip()
+                if isinstance(inicial, dict)
+                else ""
+            )
+            elemento_devuelto = str(devuelto.get("elemento", "")).strip()
+            if elemento_devuelto != elemento_inicial:
+                raise PrestamoError(
+                    "checklist",
+                    f"La fila {indice} debe conservar el elemento «{elemento_inicial}» "
+                    "y el orden del checklist inicial.",
+                )
+
+
+def _validar_evidencia_devolucion(checklist_devolucion, fotos_checklist):
+    if len(fotos_checklist) != len(checklist_devolucion):
+        raise PrestamoError(
+            "fotos_checklist",
+            "Adjunta una foto por cada fila con daño del checklist de devolución.",
+        )
+    for indice, elemento in enumerate(checklist_devolucion):
+        tiene_dano = elemento["estado"] in ("dano_parcial", "dano_total")
+        nombre = str(elemento.get("elemento", "")).strip()
+        observacion = str(elemento.get("observacion", "")).strip()
+        foto = fotos_checklist[indice]
+        if tiene_dano and not observacion:
+            raise PrestamoError(
+                "checklist",
+                f"El elemento «{nombre}» requiere una observación porque reporta daño.",
+            )
+        if tiene_dano and foto is None:
+            raise PrestamoError(
+                "fotos_checklist",
+                f"El elemento «{nombre}» requiere una foto porque reporta daño.",
+            )
+        if foto is not None:
+            try:
+                validar_foto_checklist(foto)
+            except ValidationError as error:
+                raise PrestamoError(
+                    "fotos_checklist",
+                    f"La foto del elemento «{nombre}» no es válida: {error.messages[0]}",
+                ) from error
 
 
 def _normalizar_checklist_devolucion(checklist_devolucion):
-    """Normaliza las filas de devolución sin leer datos del checklist inicial."""
+    """Normaliza el estado y la observación de cada fila devuelta."""
     normalizado = []
     for item in checklist_devolucion:
         elemento = str(item.get("elemento", "")).strip()
         normalizado.append(
             {
                 "elemento": elemento,
-                "condicion": str(item.get("condicion", "")).strip(),
                 "estado": item["estado"],
                 "observacion": str(item.get("observacion", "")).strip(),
             }
@@ -774,7 +827,7 @@ def estimar_devolucion(*, prestamo_id, checklist_devolucion, fecha_devolucion=No
     """Resumen de sanciones sin persistir nada: misma fuentes que el registro."""
     prestamo = _obtener_prestamo_para_devolucion(prestamo_id)
     _validar_estado_devoluble(prestamo)
-    _validar_checklist_devolucion(checklist_devolucion)
+    _validar_checklist_devolucion(checklist_devolucion, prestamo)
     checklist = _normalizar_checklist_devolucion(checklist_devolucion)
     fecha_devolucion = fecha_devolucion or timezone.now()
     return _calcular_resultado(prestamo, checklist, fecha_devolucion)
@@ -792,6 +845,7 @@ def registrar_devolucion(
     *,
     prestamo_id,
     checklist_devolucion,
+    fotos_checklist=None,
     realizado_por,
     fecha_devolucion=None,
 ):
@@ -802,7 +856,10 @@ def registrar_devolucion(
     """
     prestamo = _obtener_prestamo_para_devolucion(prestamo_id, bloquear=True)
     _validar_estado_devoluble(prestamo)
-    _validar_checklist_devolucion(checklist_devolucion)
+    _validar_checklist_devolucion(checklist_devolucion, prestamo)
+    if fotos_checklist is None:
+        fotos_checklist = [None] * len(checklist_devolucion)
+    _validar_evidencia_devolucion(checklist_devolucion, fotos_checklist)
     checklist = _normalizar_checklist_devolucion(checklist_devolucion)
     fecha_devolucion = fecha_devolucion or timezone.now()
 
@@ -847,6 +904,29 @@ def registrar_devolucion(
         checklist_devolucion=checklist,
         resultado=resultado,
     )
-    if resultado["hay_dano"]:
-        _generar_reporte_de_dano(devolucion)
+    fotos_guardadas = []
+    try:
+        for indice, (elemento, foto) in enumerate(zip(checklist, fotos_checklist)):
+            if foto is None:
+                continue
+            foto_modelo = FotoChecklist(
+                prestamo=prestamo,
+                fase="final",
+                indice=indice,
+                elemento=elemento["elemento"],
+                imagen=foto,
+            )
+            try:
+                foto_modelo.save()
+            except Exception:
+                if foto_modelo.imagen.name:
+                    foto_modelo.imagen.storage.delete(foto_modelo.imagen.name)
+                raise
+            fotos_guardadas.append((foto_modelo.imagen.storage, foto_modelo.imagen.name))
+        if resultado["hay_dano"]:
+            _generar_reporte_de_dano(devolucion)
+    except Exception:
+        for almacenamiento, nombre in fotos_guardadas:
+            almacenamiento.delete(nombre)
+        raise
     return devolucion

@@ -36,9 +36,7 @@ FASES_FOTO_CHECKLIST = [
 # Solo los préstamos entregados y no devueltos admiten una devolución (HU11).
 ESTADOS_DEVOLUBLES = ("activo", "vencido")
 
-# Estado normalizado de cada ítem en el checklist de devolución (RN09). Se
-# contrasta con la condición inicial registrada al entregar para detectar
-# daños nuevos y aplicar las sanciones de RN06.
+# Estado normalizado de cada fila del checklist de devolución (RN09).
 ESTADOS_CHECKLIST_DEVOLUCION = [
     ("sin_cambios", "Sin cambios"),
     ("dano_parcial", "Daño parcial"),

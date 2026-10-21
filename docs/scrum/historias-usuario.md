@@ -100,11 +100,11 @@
 | 3 | Se puede filtrar por estado y disponibilidad |
 | 4 | Los resultados muestran: nombre, categoría, desglose de disponibilidad consolidada (ej. unidades disponibles de stock total) |
 | 5 | La búsqueda responde en menos de 2 segundos |
-| 6 | Un usuario en Tier Restringido solo ve materiales de Tier básico/libros |
+| 6 | Usuarios de cualquier Tier pueden consultar materiales de todo el catálogo; la elegibilidad para recibir un préstamo se valida según RN03 |
 | 7 | Un usuario nuevo puede completar una reserva en menos de 3 minutos sin capacitación |
 | 8 | Al abrir la ficha técnica o detalle de un material, se muestra el listado de ejemplares/instancias físicas individuales con su código, número de serie, estado actual y observaciones |
 
-**Reglas de negocio:** RN01 (Disponibilidad), RN03 (Filtrado por Tier)
+**Reglas de negocio:** RN01 (Disponibilidad), RN03 (Elegibilidad para préstamos según Tier)
 
 ---
 

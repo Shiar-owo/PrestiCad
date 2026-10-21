@@ -146,12 +146,11 @@ class MaterialDetailView(RetrieveUpdateDestroyAPIView):
 
 
 class MaterialSearchView(ListAPIView):
-    """Búsqueda y consulta de materiales con filtros y visibilidad por Tier (HU05, T05.03).
+    """Búsqueda y consulta de materiales con filtros (HU05, T05.03).
 
-    GET /api/materiales/buscar/?q=&categoria=&estado=&tier=
+    GET /api/materiales/buscar/?q=&categoria=&estado=
     Permite filtrar por nombre parcial (case-insensitive), categoría ('equipo', 'libro', 'objeto')
     y estado ('disponible', 'prestado', 'reservado', 'en_mantenimiento').
-    Aplica automáticamente la regla de negocio RN03 según el tier del usuario autenticado.
     """
 
     serializer_class = MaterialSerializer
@@ -162,18 +161,11 @@ class MaterialSearchView(ListAPIView):
         q = params.get("q")
         categoria = params.get("categoria") or params.get("tipo")
         estado = params.get("estado")
-        tier = params.get("tier")
-
-        usuario = getattr(self.request, "usuario_autenticado", None)
-        if usuario is None and hasattr(self.request, "user") and self.request.user.is_authenticated:
-            usuario = self.request.user
 
         return services.buscar_materiales(
             q=q,
             categoria=categoria,
             estado=estado,
-            tier_usuario=tier or None,
-            usuario=usuario,
         )
 
 

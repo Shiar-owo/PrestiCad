@@ -22,6 +22,17 @@ ESTADOS_QUE_OCUPAN_UNIDAD = ("activo", "vencido")
 MINIMO_DIGITOS_BUSQUEDA_PRESTATARIO = 3
 MAXIMO_PRESTATARIOS_SUGERIDOS = 10
 
+# Límites del registro de entrega (HU09).
+MAXIMO_DIAS_PRESTAMO = 30
+TAMANO_MAXIMO_FOTO_CHECKLIST_BYTES = 5 * 1024 * 1024
+FORMATOS_FOTO_CHECKLIST_PERMITIDOS = frozenset({"image/jpeg", "image/png", "image/webp"})
+EXTENSIONES_FOTO_CHECKLIST_PERMITIDAS = frozenset({".jpg", ".jpeg", ".png", ".webp"})
+
+FASES_FOTO_CHECKLIST = [
+    ("inicial", "Checklist inicial"),
+    ("final", "Checklist de devolución"),
+]
+
 # Solo los préstamos entregados y no devueltos admiten una devolución (HU11).
 ESTADOS_DEVOLUBLES = ("activo", "vencido")
 

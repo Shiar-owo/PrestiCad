@@ -5,6 +5,7 @@ from apps.prestamos.views import (
     DetallePrestamoParaDevolucionView,
     BuscarPrestatariosView,
     DescargarDocumentoGarantiaView,
+    DescargarFotoChecklistView,
     EstimarDevolucionView,
     HistorialPrestamosView,
     ListarReportesDevolucionView,
@@ -42,6 +43,11 @@ urlpatterns = [
         "prestamos/<int:prestamo_id>/garantia/<str:tipo>/",
         DescargarDocumentoGarantiaView.as_view(),
         name="descargar-documento-garantia",
+    ),
+    path(
+        "prestamos/<int:prestamo_id>/checklist/<str:fase>/<int:indice>/foto/",
+        DescargarFotoChecklistView.as_view(),
+        name="foto-checklist",
     ),
     path(
         "prestamos/<int:prestamo_id>/devolucion/estimar/",

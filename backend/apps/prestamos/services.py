@@ -1,5 +1,6 @@
 from datetime import timedelta
 import math
+from pathlib import Path
 
 from django.core.files.base import ContentFile
 from django.core.exceptions import ValidationError
@@ -13,12 +14,13 @@ from apps.inventario.models import Material
 from apps.prestamos.constants import (
     ESTADOS_DEVOLUBLES,
     ESTADOS_QUE_OCUPAN_UNIDAD,
+    MAXIMO_DIAS_PRESTAMO,
     MAXIMO_PRESTATARIOS_SUGERIDOS,
     VALORES_ESTADOS_CHECKLIST_DEVOLUCION,
 )
-from apps.prestamos.models import Devolucion, Garantia, Prestamo
+from apps.prestamos.models import Devolucion, FotoChecklist, Garantia, Prestamo
 from apps.prestamos.reportes import generar_reporte_dano
-from apps.prestamos.validators import validar_pdf_garantia
+from apps.prestamos.validators import validar_foto_checklist, validar_pdf_garantia
 from apps.usuarios.models import Usuario
 from apps.usuarios.services import (
     actualizar_reputacion,
@@ -234,7 +236,7 @@ def _validar_checklist(checklist_inicial):
     if not isinstance(checklist_inicial, list) or not checklist_inicial:
         raise PrestamoError(
             "checklist_inicial",
-            "Registra al menos una condición en el checklist inicial.",
+            "Registra al menos un elemento en el checklist inicial.",
         )
     for indice, elemento in enumerate(checklist_inicial, start=1):
         if not isinstance(elemento, dict):
@@ -242,11 +244,33 @@ def _validar_checklist(checklist_inicial):
                 "checklist_inicial",
                 f"El elemento {indice} del checklist no es válido.",
             )
-        if not elemento.get("elemento", "").strip() or not elemento.get("condicion", "").strip():
+        if not str(elemento.get("elemento", "")).strip():
             raise PrestamoError(
                 "checklist_inicial",
-                f"El elemento {indice} requiere descripción y condición.",
+                f"El elemento {indice} requiere una descripción.",
             )
+
+
+def _validar_fotos_checklist(checklist_inicial, fotos_checklist):
+    if not isinstance(fotos_checklist, (list, tuple)) or len(fotos_checklist) != len(checklist_inicial):
+        raise PrestamoError(
+            "fotos_checklist",
+            "Adjunta una foto por cada elemento del checklist inicial.",
+        )
+    for indice, (elemento, foto) in enumerate(zip(checklist_inicial, fotos_checklist), start=1):
+        if not foto:
+            raise PrestamoError(
+                "fotos_checklist",
+                f'El elemento «{elemento.get("elemento", "").strip()}» requiere una foto.',
+            )
+        try:
+            validar_foto_checklist(foto)
+        except ValidationError as error:
+            mensaje = error.messages[0] if error.messages else "La foto no es válida."
+            raise PrestamoError(
+                "fotos_checklist",
+                f"La foto del elemento {indice}: {mensaje}",
+            ) from error
 
 
 def _validar_documentos_garantia(material, documento_identidad, compromiso_responsabilidad):
@@ -451,6 +475,30 @@ def consultar_detalle_historial_prestamo(prestamo_id, ahora=None):
         ) from error
 
 
+def obtener_foto_checklist(prestamo_id, fase, indice):
+    """Abre una foto de checklist para su entrega mediante endpoint protegido."""
+    try:
+        foto = FotoChecklist.objects.get(
+            prestamo_id=prestamo_id,
+            fase=fase,
+            indice=indice,
+        )
+    except (FotoChecklist.DoesNotExist, ValueError, TypeError) as error:
+        raise PrestamoError(
+            "foto_checklist",
+            "No existe la foto indicada del checklist.",
+            status_code=404,
+        ) from error
+    try:
+        return foto.imagen.open("rb"), Path(foto.imagen.name).name
+    except OSError as error:
+        raise PrestamoError(
+            "foto_checklist",
+            "No se pudo abrir la foto del checklist.",
+            status_code=404,
+        ) from error
+
+
 @transaction.atomic
 def registrar_prestamo(
     *,
@@ -459,18 +507,31 @@ def registrar_prestamo(
     instancia_id=None,
     tiempo_prestamo_dias,
     checklist_inicial,
+    fotos_checklist,
     registrado_por,
     documento_identidad=None,
     compromiso_responsabilidad=None,
     fecha_entrega=None,
 ):
     """Registra la entrega con elegibilidad, garantía y control atómico de stock."""
-    if not isinstance(tiempo_prestamo_dias, int) or tiempo_prestamo_dias < 1:
+    if (
+        not isinstance(tiempo_prestamo_dias, int)
+        or tiempo_prestamo_dias < 1
+        or tiempo_prestamo_dias > MAXIMO_DIAS_PRESTAMO
+    ):
         raise PrestamoError(
             "tiempo_prestamo_dias",
-            "El tiempo de préstamo debe ser al menos un día.",
+            f"El tiempo de préstamo debe estar entre 1 y {MAXIMO_DIAS_PRESTAMO} días.",
         )
     _validar_checklist(checklist_inicial)
+    _validar_fotos_checklist(checklist_inicial, fotos_checklist)
+    checklist_inicial = [
+        {
+            "elemento": str(elemento.get("elemento", "")).strip(),
+            "observacion": str(elemento.get("observacion", "")).strip(),
+        }
+        for elemento in checklist_inicial
+    ]
 
     prestatario = _obtener_prestatario_bloqueado(dni_prestatario)
     try:
@@ -553,6 +614,28 @@ def registrar_prestamo(
             compromiso_responsabilidad,
         )
 
+    fotos_guardadas = []
+    try:
+        for indice, (elemento, foto) in enumerate(zip(checklist_inicial, fotos_checklist)):
+            foto_modelo = FotoChecklist(
+                prestamo=prestamo,
+                fase="inicial",
+                indice=indice,
+                elemento=elemento["elemento"].strip(),
+                imagen=foto,
+            )
+            try:
+                foto_modelo.save()
+            except Exception:
+                if foto_modelo.imagen.name:
+                    foto_modelo.imagen.storage.delete(foto_modelo.imagen.name)
+                raise
+            fotos_guardadas.append((foto_modelo.imagen.storage, foto_modelo.imagen.name))
+    except Exception:
+        for almacenamiento, nombre in fotos_guardadas:
+            almacenamiento.delete(nombre)
+        raise
+
     return prestamo
 
 
@@ -613,27 +696,15 @@ def _validar_checklist_devolucion(checklist_devolucion):
             )
 
 
-def _normalizar_checklist_devolucion(prestamo, checklist_devolucion):
-    """Ordena las filas y ancla la condición inicial al checklist de entrega (RN09).
-
-    La comparación de daños se apoya en la condición registrada al entregar;
-    el estado devuelto es siempre el que informó el gestor en esta operación.
-    """
-    condiciones_iniciales = {
-        str(item.get("elemento", "")).strip().lower(): str(item.get("condicion", "")).strip()
-        for item in prestamo.checklist_inicial or []
-        if isinstance(item, dict)
-    }
+def _normalizar_checklist_devolucion(checklist_devolucion):
+    """Normaliza las filas de devolución sin leer datos del checklist inicial."""
     normalizado = []
     for item in checklist_devolucion:
         elemento = str(item.get("elemento", "")).strip()
         normalizado.append(
             {
                 "elemento": elemento,
-                "condicion": condiciones_iniciales.get(
-                    elemento.lower(),
-                    str(item.get("condicion", "")).strip(),
-                ),
+                "condicion": str(item.get("condicion", "")).strip(),
                 "estado": item["estado"],
                 "observacion": str(item.get("observacion", "")).strip(),
             }
@@ -704,7 +775,7 @@ def estimar_devolucion(*, prestamo_id, checklist_devolucion, fecha_devolucion=No
     prestamo = _obtener_prestamo_para_devolucion(prestamo_id)
     _validar_estado_devoluble(prestamo)
     _validar_checklist_devolucion(checklist_devolucion)
-    checklist = _normalizar_checklist_devolucion(prestamo, checklist_devolucion)
+    checklist = _normalizar_checklist_devolucion(checklist_devolucion)
     fecha_devolucion = fecha_devolucion or timezone.now()
     return _calcular_resultado(prestamo, checklist, fecha_devolucion)
 
@@ -732,7 +803,7 @@ def registrar_devolucion(
     prestamo = _obtener_prestamo_para_devolucion(prestamo_id, bloquear=True)
     _validar_estado_devoluble(prestamo)
     _validar_checklist_devolucion(checklist_devolucion)
-    checklist = _normalizar_checklist_devolucion(prestamo, checklist_devolucion)
+    checklist = _normalizar_checklist_devolucion(checklist_devolucion)
     fecha_devolucion = fecha_devolucion or timezone.now()
 
     resultado = _calcular_resultado(prestamo, checklist, fecha_devolucion)

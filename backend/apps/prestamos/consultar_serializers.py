@@ -1,9 +1,40 @@
 """Serializadores de lectura del módulo de préstamos."""
+from django.urls import reverse
 from rest_framework import serializers
 
 from apps.inventario.models import Material
 from apps.inventario.serializers import FotoMaterial, InstanciaMaterialSerializer
 from apps.prestamos.models import Garantia, Prestamo
+
+
+def serializar_checklist_inicial(prestamo):
+    """Devuelve el checklist sin condición inicial y con URL privada de la foto."""
+    fotos = {
+        foto.indice: foto
+        for foto in prestamo.fotos_checklist.filter(fase="inicial")
+    }
+    checklist = []
+    for indice, item in enumerate(prestamo.checklist_inicial or []):
+        if not isinstance(item, dict):
+            continue
+        foto = fotos.get(indice)
+        checklist.append({
+            "elemento": str(item.get("elemento", "")),
+            "observacion": str(item.get("observacion", "")),
+            "foto_url": (
+                reverse(
+                    "foto-checklist",
+                    kwargs={
+                        "prestamo_id": prestamo.pk,
+                        "fase": "inicial",
+                        "indice": indice,
+                    },
+                )
+                if foto and foto.imagen
+                else ""
+            ),
+        })
+    return checklist
 
 
 class SugerenciaPrestatarioSerializer(serializers.Serializer):
@@ -130,6 +161,7 @@ class PrestamoHistorialDetalleSerializer(serializers.ModelSerializer):
         read_only=True,
     )
     estado = serializers.CharField(source="estado_consulta", read_only=True)
+    checklist_inicial = serializers.SerializerMethodField()
 
     class Meta:
         model = Prestamo
@@ -151,6 +183,9 @@ class PrestamoHistorialDetalleSerializer(serializers.ModelSerializer):
     def get_prestatario_nombre(self, obj):
         return f"{obj.usuario.nombre} {obj.usuario.apellido}".strip()
 
+    def get_checklist_inicial(self, obj):
+        return serializar_checklist_inicial(obj)
+
 
 class PrestamoDevolucionDetalleSerializer(serializers.ModelSerializer):
     """Datos para el formulario de devolución: estado visible, actores,
@@ -163,6 +198,7 @@ class PrestamoDevolucionDetalleSerializer(serializers.ModelSerializer):
         read_only=True,
     )
     estado = serializers.CharField(source="estado_consulta", read_only=True)
+    checklist_inicial = serializers.SerializerMethodField()
     prestatario_nombre = serializers.SerializerMethodField()
     prestatario_dni = serializers.CharField(source="usuario.dni", read_only=True)
     bonificacion_tiempo = serializers.IntegerField(
@@ -221,3 +257,6 @@ class PrestamoDevolucionDetalleSerializer(serializers.ModelSerializer):
 
     def get_prestatario_nombre(self, obj):
         return f"{obj.usuario.nombre} {obj.usuario.apellido}".strip()
+
+    def get_checklist_inicial(self, obj):
+        return serializar_checklist_inicial(obj)

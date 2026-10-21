@@ -1,8 +1,33 @@
-"""Validaciones de documentos PDF adjuntos a las garantías."""
+"""Validaciones de archivos adjuntos a préstamos y garantías."""
 from pathlib import Path
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
+
+from apps.prestamos.constants import (
+    EXTENSIONES_FOTO_CHECKLIST_PERMITIDAS,
+    FORMATOS_FOTO_CHECKLIST_PERMITIDOS,
+    TAMANO_MAXIMO_FOTO_CHECKLIST_BYTES,
+)
+
+
+def validar_foto_checklist(archivo):
+    """Valida tamaño, extensión y MIME; ImageField valida que sea una imagen real."""
+    if archivo.size > TAMANO_MAXIMO_FOTO_CHECKLIST_BYTES:
+        raise ValidationError(
+            "La foto del checklist no debe pesar más de 5 MB.",
+            code="foto_muy_grande",
+        )
+    if Path(archivo.name).suffix.lower() not in EXTENSIONES_FOTO_CHECKLIST_PERMITIDAS:
+        raise ValidationError(
+            "La foto debe tener extensión JPG, PNG o WEBP.",
+            code="extension_foto_invalida",
+        )
+    if getattr(archivo, "content_type", None) not in FORMATOS_FOTO_CHECKLIST_PERMITIDOS:
+        raise ValidationError(
+            "La foto debe ser de tipo JPG, PNG o WEBP.",
+            code="tipo_foto_invalido",
+        )
 
 
 def validar_pdf_garantia(archivo):

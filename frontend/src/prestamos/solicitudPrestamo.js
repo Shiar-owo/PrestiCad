@@ -4,6 +4,7 @@ export function construirSolicitudPrestamo({
   instanciaId,
   dias,
   checklist,
+  fotosChecklist = checklist.map((item) => item.foto),
   documentoIdentidad,
   compromisoResponsabilidad,
 }) {
@@ -14,9 +15,11 @@ export function construirSolicitudPrestamo({
   solicitud.append('tiempo_prestamo_dias', String(Number(dias)))
   solicitud.append('checklist_inicial', JSON.stringify(checklist.map((item) => ({
     elemento: item.elemento.trim(),
-    condicion: item.condicion.trim(),
     observacion: item.observacion.trim(),
   }))))
+  fotosChecklist.forEach((foto, indice) => {
+    if (foto) solicitud.append(`foto_checklist_${indice}`, foto)
+  })
 
   if (material.es_alto_valor && documentoIdentidad) {
     solicitud.append('documento_identidad', documentoIdentidad)

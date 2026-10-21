@@ -70,7 +70,6 @@ function serializarChecklist(filas) {
   return filas.map((fila) => ({
     elemento: fila.elemento.trim(),
     estado: fila.estado,
-    condicion: fila.condicion.trim(),
     observacion: fila.observacion.trim(),
   }))
 }
@@ -232,7 +231,7 @@ function DevolucionPrestamo() {
   function agregarFila() {
     setFilas((actual) => [
       ...actual,
-      { elemento: '', condicion: '', estado: 'sin_cambios', observacion: '' },
+      { elemento: '', observacionInicial: '', estado: 'sin_cambios', observacion: '' },
     ])
     setErrores((actual) => ({ ...actual, checklist: undefined }))
   }
@@ -410,8 +409,8 @@ function DevolucionPrestamo() {
                 className="grid gap-1 rounded-lg border border-borde p-3 text-sm sm:grid-cols-4"
               >
                 <span className="font-semibold text-texto">{item.elemento}</span>
-                <span className="text-texto-suave">
-                  Condición de entrega: {item.condicion || '—'}
+              <span className="text-texto-suave">
+                  Observación al entregar: {filas[indice]?.observacionInicial || 'Sin observaciones'}
                 </span>
                 <span className="font-medium text-texto">
                   {ETIQUETAS_ESTADO_DEVOLUCION[item.estado]}
@@ -525,11 +524,12 @@ function DevolucionPrestamo() {
                 maxLength={100}
                 requerido
               />
-              <Campo
-                etiqueta="Condición de entrega"
-                valor={fila.condicion}
-                deshabilitado
-              />
+              <div className="rounded-lg border border-borde bg-superficie p-3 text-sm">
+                <p className="font-semibold text-texto">Observación inicial</p>
+                <p className="mt-1 text-texto-suave">
+                  {fila.observacionInicial || 'Sin observaciones registradas al entregar.'}
+                </p>
+              </div>
               <Campo
                 etiqueta="Estado de devolución"
                 opciones={OPCIONES_ESTADO}

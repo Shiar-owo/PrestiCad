@@ -2,16 +2,20 @@ import { describe, expect, it } from 'vitest'
 
 import {
   calcularFechaLimiteEstimada,
+  mapearErroresFotoChecklist,
+  obtenerElementosSinFoto,
+  validarFoto,
   validarFormularioPrestamo,
 } from './validacionesPrestamo'
 import { TAMANO_MAXIMO_GARANTIA_BYTES } from './constantes/garantia'
+import { TAMANO_MAXIMO_FOTO_CHECKLIST_BYTES } from './constantes/checklistPrestamo'
 
 const formularioValido = {
   dni: '12345678',
   material: { id: 'mat-1', es_alto_valor: false },
   instanciaId: 'instancia-1',
   dias: '5',
-  checklist: [{ elemento: 'Pantalla', condicion: 'Sin daños' }],
+  checklist: [{ elemento: 'Pantalla', observacion: '', foto: { name: 'pantalla.jpg', type: 'image/jpeg', size: 100 } }],
 }
 
 describe('validarFormularioPrestamo', () => {
@@ -26,7 +30,7 @@ describe('validarFormularioPrestamo', () => {
       material: null,
       instanciaId: '',
       dias: 0,
-      checklist: [{ elemento: '', condicion: '' }],
+      checklist: [{ elemento: '', observacion: '', foto: formularioValido.checklist[0].foto }],
     })
 
     expect(errores).toHaveProperty('dni')
@@ -97,5 +101,52 @@ describe('validarFormularioPrestamo', () => {
 
     expect(fechaLimite.getDate()).toBe(new Date(ahora.setDate(ahora.getDate() + 3)).getDate())
     expect(calcularFechaLimiteEstimada(0)).toBeNull()
+    expect(calcularFechaLimiteEstimada(31)).toBeNull()
+  })
+
+  it('limita la duración a treinta días', () => {
+    expect(validarFormularioPrestamo({ ...formularioValido, dias: '31' }).dias)
+      .toMatch(/1 a 30 días/)
+  })
+
+  it('requiere fotos válidas por elemento y permite observación opcional', () => {
+    const errores = validarFormularioPrestamo({
+      ...formularioValido,
+      checklist: [
+        { elemento: 'Pantalla', observacion: '', foto: null },
+        { elemento: 'Teclado', observacion: 'Revisado', foto: formularioValido.checklist[0].foto },
+      ],
+    })
+
+    expect(errores.fotosChecklist[0]).toMatch(/Adjunta una foto/)
+    expect(errores.fotosChecklist).not.toHaveProperty('1')
+  })
+
+  it('valida extensión, tipo MIME y tamaño de fotos', () => {
+    expect(validarFoto({ name: 'captura.gif', type: 'image/gif', size: 10 })).toMatch(/JPG, PNG o WEBP/)
+    expect(validarFoto({ name: 'captura.png', type: 'text/plain', size: 10 })).toMatch(/tipo JPG/)
+    expect(validarFoto({
+      name: 'captura.png',
+      type: 'image/png',
+      size: TAMANO_MAXIMO_FOTO_CHECKLIST_BYTES + 1,
+    })).toMatch(/no debe superar/)
+  })
+
+  it('identifica las filas que no tienen foto para mostrarlas en la advertencia', () => {
+    expect(obtenerElementosSinFoto([
+      { elemento: 'Pantalla', foto: null },
+      { elemento: 'Teclado', foto: { name: 'teclado.png' } },
+      { elemento: '', foto: null },
+    ])).toEqual([
+      { indice: 0, elemento: 'Pantalla' },
+      { indice: 2, elemento: 'Elemento 3' },
+    ])
+  })
+
+  it('mapea los errores de foto del backend a sus índices de fila', () => {
+    expect(mapearErroresFotoChecklist({ 1: ['La imagen no es válida.'] })).toEqual({
+      1: 'La imagen no es válida.',
+    })
+    expect(mapearErroresFotoChecklist(null)).toEqual({})
   })
 })

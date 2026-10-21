@@ -225,7 +225,7 @@ A continuación se detallan los casos de uso principales identificados para el s
 
 10. El Gestor de Almacén selecciona la instancia física / ejemplar específico del material a entregar.
 
-11. El Gestor de Almacén completa el checklist digital de estado inicial de la instancia seleccionada (número de serie, condiciones físicas) y registra el tiempo de préstamo y la garantía dejada (si corresponde).
+11. El Gestor de Almacén completa el checklist digital de estado inicial de la instancia seleccionada. Cada elemento debe incluir una foto y puede incluir una observación; luego registra la duración del préstamo (de 1 a 30 días) y la garantía dejada, si corresponde.
 
 12. El sistema actualiza el estado de la instancia física a "prestado", recalcula la disponibilidad del material y asocia la entrega al préstamo activo.
 

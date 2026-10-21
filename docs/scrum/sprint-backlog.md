@@ -175,7 +175,7 @@ InstanciaMaterial               Reserva
 | # | Tarea | Tipo |
 |---|-------|------|
 | T05.01 | Implementar servicio de búsqueda con filtros | Backend |
-| T05.02 | Implementar filtrado por Tier del usuario | Backend |
+| T05.02 | Verificar que el catálogo muestre materiales de todos los Tiers | Backend |
 | T05.03 | Crear endpoint GET /api/materiales/buscar | Backend |
 | T05.04 | Crear componente de barra de búsqueda con filtros | Frontend |
 | T05.05 | Crear vista de resultados con tarjetas de material | Frontend |

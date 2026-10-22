@@ -294,16 +294,18 @@ export default function DetallePrestamo({
           <section className="mt-6 rounded-xl border border-borde p-4" aria-labelledby="titulo-checklist-inicial">
             <h4 id="titulo-checklist-inicial" className="font-bold text-texto">Checklist al entregar</h4>
             {detalle.checklist_inicial?.length ? (
-              <ul className="mt-3 grid gap-3 sm:grid-cols-2">
+              <ul className="mt-3 grid min-w-0 gap-3 sm:grid-cols-2">
                 {detalle.checklist_inicial.map((elemento, indice) => (
-                  <li key={`${elemento.elemento}-${indice}`} className="rounded-lg bg-superficie p-3">
+                  <li key={`${elemento.elemento}-${indice}`} className="min-w-0 rounded-lg bg-superficie p-3">
                     <p className="font-semibold text-texto">{elemento.elemento}</p>
                     {elemento.foto_url && (
-                      <img
-                        src={elemento.foto_url}
-                        alt={`Foto de ${elemento.elemento}`}
-                        className="mt-2 h-36 w-full rounded-lg border border-borde bg-superficie object-contain"
-                      />
+                      <figure className="mt-2 aspect-[4/3] w-full max-w-sm overflow-hidden rounded-lg border border-borde bg-superficie">
+                        <img
+                          src={elemento.foto_url}
+                          alt={`Foto de ${elemento.elemento}`}
+                          className="h-full w-full object-contain"
+                        />
+                      </figure>
                     )}
                     {elemento.observacion && (
                       <p className="mt-1 text-sm text-texto-suave">Observación: {elemento.observacion}</p>

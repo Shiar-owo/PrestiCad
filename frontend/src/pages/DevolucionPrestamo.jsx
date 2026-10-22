@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
 import { Download } from 'lucide-react'
 
@@ -12,6 +12,9 @@ import {
 } from '../constantes/devolucion'
 import {
   armarChecklistDevolucion,
+  construirFormularioDevolucion,
+  obtenerElementosSinFotoDevolucion,
+  serializarChecklistDevolucion,
   validarChecklistDevolucion,
 } from '../validacionesDevolucion'
 import { ETIQUETAS_TIER } from '../constantes/roles'
@@ -22,6 +25,7 @@ import Skeleton from '../components/ui/Skeleton'
 import ErrorAlerta from '../components/ui/ErrorAlerta'
 import EstadoVacio from '../components/ui/EstadoVacio'
 import BadgeEstado from '../components/ui/BadgeEstado'
+import AdvertenciaModal from '../components/ui/AdvertenciaModal'
 
 const OPCIONES_ESTADO = ESTADOS_CHECKLIST_DEVOLUCION.map((valor) => ({
   valor,
@@ -38,6 +42,16 @@ function mensajeApi(error) {
     if (primerError) return String(primerError)
   }
   return 'No se pudo completar la operación. Revisa la conexión e inténtalo otra vez.'
+}
+
+function mensajeFotoApi(error) {
+  const errores = error instanceof ErrorApi ? error.datos?.fotos_checklist : null
+  const mensajes = Array.isArray(errores)
+    ? errores.flat(Infinity)
+    : errores && typeof errores === 'object'
+      ? Object.values(errores).flat(Infinity)
+      : []
+  return mensajes.find((mensaje) => typeof mensaje === 'string') ?? ''
 }
 
 function fechaLegible(valor) {
@@ -64,14 +78,6 @@ function firmarPuntos(delta) {
 
 function etiquetaTier(tier) {
   return ETIQUETAS_TIER[tier] ?? tier
-}
-
-function serializarChecklist(filas) {
-  return filas.map((fila) => ({
-    elemento: fila.elemento.trim(),
-    estado: fila.estado,
-    observacion: fila.observacion.trim(),
-  }))
 }
 
 function CampoResumen({ etiqueta, children }) {
@@ -146,9 +152,18 @@ function DevolucionPrestamo() {
   const [guardando, setGuardando] = useState(false)
   const [errorEnvio, setErrorEnvio] = useState('')
   const [resultado, setResultado] = useState(null)
+  const [elementosSinFoto, setElementosSinFoto] = useState(null)
+  const formularioRef = useRef(null)
+  const referenciasFotos = useRef([])
+  const urlsTemporales = useRef(new Set())
 
   const prestamoId = useMemo(() => Number(parametroId), [parametroId])
   const idValido = Number.isInteger(prestamoId) && prestamoId > 0
+
+  useEffect(() => () => {
+    urlsTemporales.current.forEach((url) => URL.revokeObjectURL(url))
+    urlsTemporales.current.clear()
+  }, [])
 
   useEffect(() => {
     if (!idValido) {
@@ -195,7 +210,7 @@ function DevolucionPrestamo() {
     const temporizador = setTimeout(() => {
       api
         .post(`/prestamos/${prestamoId}/devolucion/estimar/`, {
-          checklist: serializarChecklist(filas),
+          checklist: serializarChecklistDevolucion(filas),
         })
         .then((respuesta) => {
           if (vigente) setEstimacion(respuesta)
@@ -224,21 +239,54 @@ function DevolucionPrestamo() {
         posicion === indice ? { ...fila, [campo]: valor } : fila,
       ),
     )
-    setErrores((actual) => ({ ...actual, checklist: undefined }))
+    setErrores((actual) => {
+      const erroresFila = { ...actual.filas?.[indice] }
+      const campos = campo === 'estado' ? ['estado', 'foto', 'observacion'] : [campo]
+      campos.forEach((nombre) => delete erroresFila[nombre])
+      return {
+        ...actual,
+        checklist: undefined,
+        filas: { ...actual.filas, [indice]: erroresFila },
+      }
+    })
     setErrorEnvio('')
   }
 
-  function agregarFila() {
-    setFilas((actual) => [
-      ...actual,
-      { elemento: '', observacionInicial: '', estado: 'sin_cambios', observacion: '' },
-    ])
-    setErrores((actual) => ({ ...actual, checklist: undefined }))
+  function cambiarFoto(indice, archivo) {
+    const fila = filas[indice]
+    if (fila?.fotoPrevia) {
+      URL.revokeObjectURL(fila.fotoPrevia)
+      urlsTemporales.current.delete(fila.fotoPrevia)
+    }
+    const fotoPrevia = archivo ? URL.createObjectURL(archivo) : ''
+    if (fotoPrevia) urlsTemporales.current.add(fotoPrevia)
+    if (referenciasFotos.current[indice]) referenciasFotos.current[indice].value = ''
+    setFilas((actual) => actual.map((elemento, posicion) => (
+      posicion === indice ? { ...elemento, foto: archivo, fotoPrevia } : elemento
+    )))
+    setErrores((actual) => {
+      const erroresFila = { ...actual.filas?.[indice] }
+      delete erroresFila.foto
+      return { ...actual, filas: { ...actual.filas, [indice]: erroresFila } }
+    })
+    setErrorEnvio('')
   }
 
-  function quitarFila(indice) {
-    setFilas((actual) => actual.filter((_, posicion) => posicion !== indice))
-    setErrores((actual) => ({ ...actual, checklist: undefined }))
+  function enfocarPrimerError(indicePreferido = null) {
+    window.requestAnimationFrame(() => {
+      const control = indicePreferido === null
+        ? formularioRef.current?.querySelector('[aria-invalid="true"]')
+        : referenciasFotos.current[indicePreferido]
+      if (!control) return
+      control.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      control.focus({ preventScroll: true })
+    })
+  }
+
+  function cerrarAdvertenciaFotos() {
+    const primerIndice = elementosSinFoto?.[0]?.indice ?? null
+    setElementosSinFoto(null)
+    if (primerIndice !== null) enfocarPrimerError(primerIndice)
   }
 
   function irAlResumen(evento) {
@@ -246,6 +294,9 @@ function DevolucionPrestamo() {
     const validacion = validarChecklistDevolucion(filas)
     setErrores(validacion)
     setErrorEnvio('')
+    const faltantes = obtenerElementosSinFotoDevolucion(filas)
+    setElementosSinFoto(faltantes.length > 0 ? faltantes : null)
+    if (faltantes.length > 0) return
     if (Object.keys(validacion).length > 0) return
     setEtapa('resumen')
     window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -255,14 +306,35 @@ function DevolucionPrestamo() {
     setGuardando(true)
     setErrorEnvio('')
     try {
-      const respuesta = await api.post(`/prestamos/${prestamoId}/devolucion/`, {
-        checklist: serializarChecklist(filas),
-      })
+      const respuesta = await api.post(
+        `/prestamos/${prestamoId}/devolucion/`,
+        construirFormularioDevolucion(filas),
+      )
       setResultado(respuesta)
       setEtapa('exito')
+      urlsTemporales.current.forEach((url) => URL.revokeObjectURL(url))
+      urlsTemporales.current.clear()
       window.scrollTo({ top: 0, behavior: 'smooth' })
     } catch (errorApi) {
       setErrorEnvio(mensajeApi(errorApi))
+      const errorFoto = mensajeFotoApi(errorApi)
+      if (errorFoto) {
+        const indiceConFoto = filas.findIndex((fila) => fila.foto)
+        if (indiceConFoto >= 0) {
+          setErrores((actual) => ({
+            ...actual,
+            filas: {
+              ...actual.filas,
+              [indiceConFoto]: {
+                ...actual.filas?.[indiceConFoto],
+                foto: errorFoto,
+              },
+            },
+          }))
+          setEtapa('edicion')
+          enfocarPrimerError(indiceConFoto)
+        }
+      }
     } finally {
       setGuardando(false)
     }
@@ -403,21 +475,41 @@ function DevolucionPrestamo() {
 
           <h3 className="mt-6 text-sm font-bold text-texto">Checklist de devolución</h3>
           <ul className="mt-3 grid gap-2">
-            {serializarChecklist(filas).map((item, indice) => (
+            {serializarChecklistDevolucion(filas).map((item, indice) => (
               <li
-                key={`resumen-${indice}`}
-                className="grid gap-1 rounded-lg border border-borde p-3 text-sm sm:grid-cols-4"
+                key={`${item.elemento}-${indice}`}
+                className="grid min-w-0 gap-3 rounded-xl border border-borde bg-superficie p-3 sm:grid-cols-2 sm:p-4"
               >
-                <span className="font-semibold text-texto">{item.elemento}</span>
-              <span className="text-texto-suave">
-                  Observación al entregar: {filas[indice]?.observacionInicial || 'Sin observaciones'}
-                </span>
-                <span className="font-medium text-texto">
-                  {ETIQUETAS_ESTADO_DEVOLUCION[item.estado]}
-                </span>
-                <span className="text-texto-suave">
-                  {item.observacion || 'Sin observaciones'}
-                </span>
+                <div className="grid min-w-0 content-start gap-2">
+                  <h4 className="break-words text-base font-semibold text-texto">{item.elemento}</h4>
+                  <p className="text-sm font-medium text-texto">
+                    Estado: {ETIQUETAS_ESTADO_DEVOLUCION[item.estado]}
+                  </p>
+                  <p className="break-words text-sm leading-relaxed text-texto-suave">
+                    Observación inicial: {filas[indice]?.observacionInicial || 'Sin observaciones'}
+                  </p>
+                  <p className="break-words text-sm leading-relaxed text-texto-suave">
+                    Observación de devolución: {item.observacion || 'Sin observaciones'}
+                  </p>
+                </div>
+                {filas[indice]?.fotoInicialUrl && (
+                  <figure className="aspect-[4/3] w-full max-w-[16rem] overflow-hidden rounded-lg border border-borde bg-white dark:bg-superficie">
+                    <img
+                      src={filas[indice].fotoInicialUrl}
+                      alt={`Estado inicial de ${item.elemento}`}
+                      className="h-full w-full object-contain"
+                    />
+                  </figure>
+                )}
+                {filas[indice]?.fotoPrevia && (
+                  <figure className="aspect-[4/3] w-full max-w-[16rem] overflow-hidden rounded-lg border border-borde bg-white dark:bg-superficie">
+                    <img
+                      src={filas[indice].fotoPrevia}
+                      alt={`Estado de devolución de ${item.elemento}`}
+                      className="h-full w-full object-contain"
+                    />
+                  </figure>
+                )}
               </li>
             ))}
           </ul>
@@ -474,8 +566,8 @@ function DevolucionPrestamo() {
           Registrar devolución
         </h2>
         <p className="mt-1 text-sm text-texto-suave">
-          Contrasta cada elemento con la condición de entrega y registra el estado final del
-          material.
+          Compara cada elemento con su observación y foto inicial. Conserva todas las filas en el
+          mismo orden y registra el estado recibido.
         </p>
       </header>
 
@@ -506,61 +598,125 @@ function DevolucionPrestamo() {
         </dl>
       </Tarjeta>
 
-      <form onSubmit={irAlResumen} noValidate className="grid gap-5">
-        <fieldset className="grid gap-4 rounded-xl border border-borde p-4">
+      <form ref={formularioRef} onSubmit={irAlResumen} noValidate className="grid gap-5">
+        <fieldset className="grid gap-3 rounded-xl border border-borde p-3 sm:p-4">
           <legend className="px-2 text-sm font-bold text-texto">
             Estado final del material
           </legend>
 
           {filas.map((fila, indice) => (
             <div
-              key={`devolucion-${indice}`}
-              className="relative grid gap-4 rounded-lg border border-borde p-4 sm:grid-cols-2 lg:grid-cols-4"
+              key={`${fila.elemento}-${indice}`}
+              data-fila-checklist={indice}
+              className="grid min-w-0 gap-3 rounded-xl border border-borde bg-superficie p-3 sm:p-4 lg:grid-cols-2 lg:gap-4"
             >
-              <Campo
-                etiqueta="Elemento"
-                valor={fila.elemento}
-                onCambio={(evento) => actualizarFila(indice, 'elemento', evento.target.value)}
-                maxLength={100}
-                requerido
-              />
-              <div className="rounded-lg border border-borde bg-superficie p-3 text-sm">
-                <p className="font-semibold text-texto">Observación inicial</p>
-                <p className="mt-1 text-texto-suave">
+              <header className="min-w-0 border-b border-borde pb-2 lg:col-span-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-texto-suave">
+                  Elemento {indice + 1}
+                </p>
+                <h4 className="mt-1 break-words text-base font-bold text-texto">
+                  {fila.elemento || `Elemento ${indice + 1}`}
+                </h4>
+              </header>
+
+              <section
+                className="grid min-w-0 content-start gap-2 rounded-lg border border-borde bg-white p-3 dark:bg-superficie"
+                aria-label={`Estado inicial de ${fila.elemento}`}
+              >
+                <h5 className="text-sm font-semibold text-texto">Observación inicial</h5>
+                <p className="break-words text-sm leading-relaxed text-texto-suave">
                   {fila.observacionInicial || 'Sin observaciones registradas al entregar.'}
                 </p>
+                {fila.fotoInicialUrl ? (
+                  <figure className="aspect-[4/3] w-full max-w-[16rem] overflow-hidden rounded-lg border border-borde bg-superficie">
+                    <img
+                      src={fila.fotoInicialUrl}
+                      alt={`Foto inicial de ${fila.elemento}`}
+                      className="h-full w-full object-contain"
+                    />
+                  </figure>
+                ) : (
+                  <p className="text-xs text-texto-suave">No hay foto inicial registrada.</p>
+                )}
+              </section>
+
+              <div className="grid min-w-0 content-start gap-3">
+                <Campo
+                  etiqueta="Estado de devolución"
+                  opciones={OPCIONES_ESTADO}
+                  valor={fila.estado}
+                  onCambio={(evento) => actualizarFila(indice, 'estado', evento.target.value)}
+                  requerido
+                  error={errores.filas?.[indice]?.estado}
+                />
+                <Campo
+                  etiqueta={fila.estado === 'sin_cambios' ? 'Observación (opcional)' : 'Observación del daño'}
+                  valor={fila.observacion}
+                  onCambio={(evento) => actualizarFila(indice, 'observacion', evento.target.value)}
+                  maxLength={500}
+                  tipo="area"
+                  rows={2}
+                  requerido={fila.estado !== 'sin_cambios'}
+                  error={errores.filas?.[indice]?.observacion}
+                />
+                {fila.estado !== 'sin_cambios' && (
+                  <div className="grid min-w-0 gap-2 rounded-lg border border-borde bg-white p-3 dark:bg-superficie">
+                    <label
+                      className="text-sm font-semibold text-texto"
+                      htmlFor={`foto-devolucion-${indice}`}
+                    >
+                      Foto del daño <span aria-hidden="true" className="text-error">*</span>
+                    </label>
+                    <input
+                      ref={(elemento) => { referenciasFotos.current[indice] = elemento }}
+                      id={`foto-devolucion-${indice}`}
+                      data-foto-devolucion={indice}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+                      aria-invalid={Boolean(errores.filas?.[indice]?.foto)}
+                      aria-describedby={errores.filas?.[indice]?.foto
+                        ? `foto-devolucion-${indice}-ayuda`
+                        : undefined}
+                      className="block w-full rounded-lg border border-borde bg-white px-3 py-2 text-sm text-texto file:mr-3 file:rounded-lg file:border-0 file:bg-superficie-alta file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-texto dark:bg-superficie"
+                      onChange={(evento) => cambiarFoto(indice, evento.target.files?.[0] ?? null)}
+                    />
+                    <p
+                      id={`foto-devolucion-${indice}-ayuda`}
+                      className="text-xs leading-relaxed text-texto-suave"
+                    >
+                      Adjunta una foto JPG, PNG o WEBP de hasta 5 MB.
+                    </p>
+                    {errores.filas?.[indice]?.foto && (
+                      <p className="text-xs text-error" role="alert">
+                        {errores.filas[indice].foto}
+                      </p>
+                    )}
+                    {fila.fotoPrevia && (
+                      <div className="flex min-w-0 flex-wrap items-start gap-3">
+                        <figure className="aspect-[4/3] w-full max-w-[12rem] overflow-hidden rounded-lg border border-borde bg-superficie p-1">
+                          <img
+                            src={fila.fotoPrevia}
+                            alt={`Vista previa del daño en ${fila.elemento}`}
+                            className="h-full w-full object-contain"
+                          />
+                        </figure>
+                        <Boton
+                          variante="secundario"
+                          tamanio="pequeno"
+                          tipo="button"
+                          onClick={() => cambiarFoto(indice, null)}
+                        >
+                          Quitar foto
+                        </Boton>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-              <Campo
-                etiqueta="Estado de devolución"
-                opciones={OPCIONES_ESTADO}
-                valor={fila.estado}
-                onCambio={(evento) => actualizarFila(indice, 'estado', evento.target.value)}
-                requerido
-              />
-              <Campo
-                etiqueta="Observación (opcional)"
-                valor={fila.observacion}
-                onCambio={(evento) => actualizarFila(indice, 'observacion', evento.target.value)}
-                maxLength={500}
-              />
-              {filas.length > 1 && (
-                <Boton
-                  variante="secundario"
-                  tamanio="pequeno"
-                  tipo="button"
-                  className="sm:absolute sm:right-3 sm:top-3"
-                  onClick={() => quitarFila(indice)}
-                >
-                  Quitar elemento
-                </Boton>
-              )}
             </div>
           ))}
 
           {errores.checklist && <ErrorAlerta mensaje={errores.checklist} />}
-          <Boton variante="secundario" tipo="button" onClick={agregarFila}>
-            Agregar elemento
-          </Boton>
         </fieldset>
 
         <div>
@@ -584,6 +740,16 @@ function DevolucionPrestamo() {
           </Boton>
         </div>
       </form>
+      {elementosSinFoto && (
+        <AdvertenciaModal
+          titulo="Faltan fotos de devolución"
+          descripcion="Adjunta una foto por cada elemento que reporta daño antes de continuar."
+          mensajes={elementosSinFoto.map(({ indice, elemento }) => (
+            `El elemento «${elemento}» requiere una foto porque reporta daño (${ETIQUETAS_ESTADO_DEVOLUCION[filas[indice]?.estado]}).`
+          ))}
+          onCerrar={cerrarAdvertenciaFotos}
+        />
+      )}
     </section>
   )
 }

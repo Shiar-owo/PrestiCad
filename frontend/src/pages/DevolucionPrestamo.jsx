@@ -474,41 +474,80 @@ function DevolucionPrestamo() {
           </dl>
 
           <h3 className="mt-6 text-sm font-bold text-texto">Checklist de devolución</h3>
-          <ul className="mt-3 grid gap-2">
-            {serializarChecklistDevolucion(filas).map((item, indice) => (
+          <ul className="mt-3 grid gap-4">
+            {filas.map((fila, indice) => (
               <li
-                key={`${item.elemento}-${indice}`}
-                className="grid min-w-0 gap-3 rounded-xl border border-borde bg-superficie p-3 sm:grid-cols-2 sm:p-4"
+                key={`${fila.elemento}-${indice}`}
+                className="grid min-w-0 gap-4 rounded-2xl border border-borde bg-superficie p-4 sm:p-5"
               >
-                <div className="grid min-w-0 content-start gap-2">
-                  <h4 className="break-words text-base font-semibold text-texto">{item.elemento}</h4>
-                  <p className="text-sm font-medium text-texto">
-                    Estado: {ETIQUETAS_ESTADO_DEVOLUCION[item.estado]}
-                  </p>
-                  <p className="break-words text-sm leading-relaxed text-texto-suave">
-                    Observación inicial: {filas[indice]?.observacionInicial || 'Sin observaciones'}
-                  </p>
-                  <p className="break-words text-sm leading-relaxed text-texto-suave">
-                    Observación de devolución: {item.observacion || 'Sin observaciones'}
-                  </p>
-                </div>
-                {filas[indice]?.fotoInicialUrl && (
-                  <figure className="aspect-[4/3] w-full max-w-[16rem] overflow-hidden rounded-lg border border-borde bg-white dark:bg-superficie">
-                    <img
-                      src={filas[indice].fotoInicialUrl}
-                      alt={`Estado inicial de ${item.elemento}`}
-                      className="h-full w-full object-contain"
-                    />
-                  </figure>
-                )}
-                {filas[indice]?.fotoPrevia && (
-                  <figure className="aspect-[4/3] w-full max-w-[16rem] overflow-hidden rounded-lg border border-borde bg-white dark:bg-superficie">
-                    <img
-                      src={filas[indice].fotoPrevia}
-                      alt={`Estado de devolución de ${item.elemento}`}
-                      className="h-full w-full object-contain"
-                    />
-                  </figure>
+                <header className="flex min-w-0 flex-wrap items-center justify-between gap-3 border-b border-borde pb-3">
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-texto-suave">
+                      Elemento {indice + 1}
+                    </p>
+                    <h4 className="mt-1 break-words text-lg font-bold text-texto">{fila.elemento}</h4>
+                  </div>
+                  <span className="rounded-full border border-borde bg-white px-3 py-1.5 text-sm font-semibold text-texto dark:bg-superficie-alta">
+                    {ETIQUETAS_ESTADO_DEVOLUCION[fila.estado]}
+                  </span>
+                </header>
+
+                <dl className="grid min-w-0 gap-3 sm:grid-cols-2">
+                  <div className="min-w-0 rounded-xl border border-borde bg-white p-3 dark:bg-superficie-alta">
+                    <dt className="text-xs font-semibold uppercase tracking-wide text-texto-suave">
+                      Observación inicial
+                    </dt>
+                    <dd className="mt-1 break-words text-sm leading-6 text-texto">
+                      {fila.observacionInicial || 'Sin observaciones'}
+                    </dd>
+                  </div>
+                  <div className="min-w-0 rounded-xl border border-borde bg-white p-3 dark:bg-superficie-alta">
+                    <dt className="text-xs font-semibold uppercase tracking-wide text-texto-suave">
+                      Observación de devolución
+                    </dt>
+                    <dd className="mt-1 break-words text-sm leading-6 text-texto">
+                      {fila.observacion || 'Sin observaciones'}
+                    </dd>
+                  </div>
+                </dl>
+                {(fila.fotoInicialUrl || fila.fotoPrevia) && (
+                  <section
+                    className="grid min-w-0 gap-3"
+                    aria-label={`Fotos de comparación de ${fila.elemento}`}
+                  >
+                    <div>
+                      <h5 className="text-base font-bold text-texto">Evidencia fotográfica</h5>
+                      <p className="mt-1 text-sm text-texto-suave">
+                        Compara el estado del elemento al entregar y al devolver.
+                      </p>
+                    </div>
+                    <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                      {fila.fotoInicialUrl && (
+                        <figure className="grid min-w-0 content-start gap-2 rounded-xl border border-borde bg-white p-3 dark:bg-superficie-alta">
+                          <figcaption className="text-sm font-semibold text-texto">Al entregar</figcaption>
+                          <div className="aspect-[4/3] w-full max-w-[16rem] overflow-hidden rounded-lg border border-borde bg-superficie p-2">
+                            <img
+                              src={fila.fotoInicialUrl}
+                              alt={`Estado inicial de ${fila.elemento}`}
+                              className="h-full w-full object-contain"
+                            />
+                          </div>
+                        </figure>
+                      )}
+                      {fila.fotoPrevia && (
+                        <figure className="grid min-w-0 content-start gap-2 rounded-xl border border-borde bg-white p-3 dark:bg-superficie-alta">
+                          <figcaption className="text-sm font-semibold text-texto">Al devolver</figcaption>
+                          <div className="aspect-[4/3] w-full max-w-[16rem] overflow-hidden rounded-lg border border-borde bg-superficie p-2">
+                            <img
+                              src={fila.fotoPrevia}
+                              alt={`Estado de devolución de ${fila.elemento}`}
+                              className="h-full w-full object-contain"
+                            />
+                          </div>
+                        </figure>
+                      )}
+                    </div>
+                  </section>
                 )}
               </li>
             ))}

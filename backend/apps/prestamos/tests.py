@@ -61,9 +61,14 @@ atexit.register(_DIRECTORIO_FOTOS_TEST.cleanup)
 _ALMACENAMIENTO_FOTOS_TEST = FileSystemStorage(location=_DIRECTORIO_FOTOS_TEST.name)
 
 
-def crear_foto_checklist(nombre="elemento.png", formato="PNG", tipo="image/png"):
+def crear_foto_checklist(
+    nombre="elemento.png",
+    formato="PNG",
+    tipo="image/png",
+    color="white",
+):
     contenido = BytesIO()
-    Image.new("RGB", (2, 2), "white").save(contenido, format=formato)
+    Image.new("RGB", (2, 2), color).save(contenido, format=formato)
     return SimpleUploadedFile(
         nombre,
         contenido.getvalue(),
@@ -1710,6 +1715,84 @@ class EstimarDevolucionServiceTestCase(DevolucionBaseTestCase):
 
 
 class RegistrarDevolucionServiceTestCase(DevolucionBaseTestCase):
+    def test_dano_parcial_y_total_requieren_foto(self):
+        for estado in ("dano_parcial", "dano_total"):
+            with self.subTest(estado=estado):
+                checklist = [
+                    {"elemento": "Carcasa", "estado": estado, "observacion": "Daño visible"},
+                    {"elemento": "Cable", "estado": "sin_cambios", "observacion": ""},
+                ]
+
+                with self.assertRaises(PrestamoError) as contexto:
+                    self._devolver(checklist=checklist, fotos_checklist=[None, None])
+
+                self.assertEqual(contexto.exception.campo, "fotos_checklist")
+                self.assertIn("Carcasa", contexto.exception.mensaje)
+                self.assertEqual(Devolucion.objects.count(), 0)
+                self.assertFalse(
+                    FotoChecklist.objects.filter(prestamo=self.prestamo, fase="final").exists()
+                )
+
+    def test_dano_parcial_y_total_requieren_observacion(self):
+        for estado in ("dano_parcial", "dano_total"):
+            with self.subTest(estado=estado):
+                checklist = [
+                    {"elemento": "Carcasa", "estado": estado, "observacion": "  "},
+                    {"elemento": "Cable", "estado": "sin_cambios", "observacion": ""},
+                ]
+
+                with self.assertRaises(PrestamoError) as contexto:
+                    self._devolver(checklist=checklist)
+
+                self.assertEqual(contexto.exception.campo, "checklist")
+                self.assertIn("Carcasa", contexto.exception.mensaje)
+                self.assertIn("observación", contexto.exception.mensaje)
+                self.assertEqual(Devolucion.objects.count(), 0)
+
+    def test_fotos_son_opcionales_si_no_hay_dano(self):
+        devolucion = self._devolver(
+            checklist=self.checklist_ok,
+            fotos_checklist=[None, None],
+        )
+
+        self.assertFalse(devolucion.resultado["hay_dano"])
+        self.assertFalse(
+            FotoChecklist.objects.filter(prestamo=self.prestamo, fase="final").exists()
+        )
+
+    def test_checklist_debe_conservar_cantidad_elementos_y_orden_inicial(self):
+        casos = {
+            "elemento omitido": self.checklist_ok[:1],
+            "elemento agregado": self.checklist_ok + [
+                {"elemento": "Adaptador", "estado": "sin_cambios", "observacion": ""}
+            ],
+            "elementos reordenados": list(reversed(self.checklist_ok)),
+        }
+        for descripcion, checklist in casos.items():
+            with self.subTest(caso=descripcion):
+                with self.assertRaises(PrestamoError) as contexto:
+                    self._devolver(checklist=checklist)
+
+                self.assertEqual(contexto.exception.campo, "checklist")
+                self.assertIn("checklist inicial", contexto.exception.mensaje)
+                self.assertEqual(Devolucion.objects.count(), 0)
+
+    def test_guarda_foto_final_con_el_indice_del_elemento(self):
+        checklist = [
+            {"elemento": "Carcasa", "estado": "dano_parcial", "observacion": "Rasguño"},
+            {"elemento": "Cable", "estado": "sin_cambios", "observacion": ""},
+        ]
+
+        self._devolver(checklist=checklist)
+
+        foto_final = FotoChecklist.objects.get(
+            prestamo=self.prestamo,
+            fase="final",
+            indice=0,
+        )
+        self.assertEqual(foto_final.elemento, "Carcasa")
+        self.assertTrue(foto_final.imagen)
+
     def test_devolucion_a_tiempo_aplica_bonificacion_y_actualiza_estados(self):
         antes = timezone.now()
 
@@ -1978,6 +2061,7 @@ class ReporteDevolucionTestCase(DevolucionBaseTestCase):
         devolucion = self._devolver(
             fecha_devolucion=self.prestamo.fecha_limite,
             checklist=checklist,
+            fotos_checklist=[crear_foto_checklist(color="red"), None],
         )
 
         self.assertTrue(devolucion.reporte)
@@ -1985,6 +2069,38 @@ class ReporteDevolucionTestCase(DevolucionBaseTestCase):
         contenido = self._contenido_reporte(devolucion)
         self.assertEqual(contenido[:4], b"%PDF")
         self.assertGreater(len(contenido), 1000)
+        self.assertEqual(contenido.count(b"/Subtype /Image"), 2)
+        self.assertTrue(
+            FotoChecklist.objects.filter(
+                prestamo=self.prestamo,
+                fase="inicial",
+                indice=0,
+            ).exists()
+        )
+        self.assertTrue(
+            FotoChecklist.objects.filter(
+                prestamo=self.prestamo,
+                fase="final",
+                indice=0,
+            ).exists()
+        )
+
+    def test_reporte_no_falla_si_el_prestamo_historico_no_tiene_fotos_iniciales(self):
+        FotoChecklist.objects.filter(prestamo=self.prestamo, fase="inicial").delete()
+        checklist = [
+            {"elemento": "Carcasa", "estado": "dano_parcial", "observacion": "Rasguño"},
+            {"elemento": "Cable", "estado": "sin_cambios", "observacion": ""},
+        ]
+
+        devolucion = self._devolver(checklist=checklist)
+
+        contenido = self._contenido_reporte(devolucion)
+        self.assertEqual(contenido[:4], b"%PDF")
+        self.assertGreaterEqual(contenido.count(b"/Subtype /Image"), 1)
+        self.assertEqual(
+            FotoChecklist.objects.filter(prestamo=self.prestamo, fase="final").count(),
+            1,
+        )
 
     def test_dano_total_genera_reporte_pdf_persistido(self):
         checklist = [
@@ -2158,6 +2274,57 @@ class DevolucionAPITestCase(DevolucionBaseTestCase):
         self.assertEqual(Devolucion.objects.count(), 1)
         self.prestamo.refresh_from_db()
         self.assertEqual(self.prestamo.estado, "devuelto")
+
+    def test_post_devolucion_con_dano_sin_foto_responde_400_y_no_persiste(self):
+        self._iniciar_sesion(self.gestor)
+        checklist = self._payload()["checklist"]
+        payload = {
+            "checklist": json.dumps(checklist),
+            "foto_checklist_1": crear_foto_checklist(),
+        }
+
+        with patch.object(
+            FotoChecklist._meta.get_field("imagen"),
+            "storage",
+            _ALMACENAMIENTO_FOTOS_TEST,
+        ):
+            respuesta = self.client.post(self.url, payload, format="multipart")
+
+        self.assertEqual(respuesta.status_code, 400, respuesta.content)
+        self.assertIn("Carcasa", str(respuesta.json()))
+        self.assertEqual(Devolucion.objects.count(), 0)
+        self.assertFalse(
+            FotoChecklist.objects.filter(prestamo=self.prestamo, fase="final").exists()
+        )
+        self.prestamo.refresh_from_db()
+        self.assertEqual(self.prestamo.estado, "activo")
+
+    def test_post_devolucion_con_foto_invalida_responde_400_y_no_persiste(self):
+        self._iniciar_sesion(self.gestor)
+        checklist = self._payload()["checklist"]
+        payload = {
+            "checklist": json.dumps(checklist),
+            "foto_checklist_0": SimpleUploadedFile(
+                "invalida.png",
+                b"no es una imagen",
+                content_type="image/png",
+            ),
+        }
+
+        with patch.object(
+            FotoChecklist._meta.get_field("imagen"),
+            "storage",
+            _ALMACENAMIENTO_FOTOS_TEST,
+        ):
+            respuesta = self.client.post(self.url, payload, format="multipart")
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(Devolucion.objects.count(), 0)
+        self.assertFalse(
+            FotoChecklist.objects.filter(prestamo=self.prestamo, fase="final").exists()
+        )
+        self.prestamo.refresh_from_db()
+        self.assertEqual(self.prestamo.estado, "activo")
 
     def test_post_devolucion_sin_dano_devuelve_201_sin_reporte(self):
         self._iniciar_sesion(self.gestor)

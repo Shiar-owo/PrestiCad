@@ -11,7 +11,7 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import cm
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 AZUL_INSTITUCIONAL = colors.HexColor("#003c84")
 AZUL_CLARO = colors.HexColor("#e3edf7")
@@ -186,34 +186,66 @@ def generar_reporte_dano(devolucion):
         _tabla(datos_prestamo, [4.5 * cm, 12.3 * cm], estilos)
     )
 
+    checklist_inicial = prestamo.checklist_inicial or []
+    fotos_iniciales = {
+        foto.indice: foto
+        for foto in prestamo.fotos_checklist.filter(fase="inicial")
+    }
+    fotos_finales = {
+        foto.indice: foto
+        for foto in prestamo.fotos_checklist.filter(fase="final")
+    }
     daniados = [
-        item for item in devolucion.checklist_devolucion if item["estado"] != "sin_cambios"
+        (indice, item)
+        for indice, item in enumerate(devolucion.checklist_devolucion)
+        if item.get("estado") != "sin_cambios"
     ]
+
+    def celda_foto(foto):
+        if foto is None or not foto.imagen:
+            return Paragraph("—", estilos["celda"])
+        with foto.imagen.open("rb") as archivo:
+            imagen = Image(
+                BytesIO(archivo.read()),
+                width=2.2 * cm,
+                height=1.7 * cm,
+                kind="bound",
+            )
+        imagen.hAlign = "LEFT"
+        return imagen
+
     historia.append(Paragraph("Elementos dañados", estilos["seccion"]))
     filas = [
         [
             Paragraph("Elemento", estilos["celda_negrita"]),
-            Paragraph("Condición inicial", estilos["celda_negrita"]),
+            Paragraph("Observación inicial", estilos["celda_negrita"]),
             Paragraph("Estado devuelto", estilos["celda_negrita"]),
-            Paragraph("Observación", estilos["celda_negrita"]),
+            Paragraph("Observación de devolución", estilos["celda_negrita"]),
+            Paragraph("Foto inicial", estilos["celda_negrita"]),
+            Paragraph("Foto final", estilos["celda_negrita"]),
         ]
     ]
-    for item in daniados:
+    for indice, item in daniados:
+        inicial = checklist_inicial[indice] if indice < len(checklist_inicial) else {}
+        if not isinstance(inicial, dict):
+            inicial = {}
         filas.append(
             [
-                Paragraph(item["elemento"], estilos["celda"]),
-                Paragraph(item["condicion"] or "—", estilos["celda"]),
+                Paragraph(item.get("elemento", ""), estilos["celda"]),
+                Paragraph(str(inicial.get("observacion", "")).strip() or "—", estilos["celda"]),
                 Paragraph(
-                    ETIQUETAS_ESTADO.get(item["estado"], item["estado"]),
+                    ETIQUETAS_ESTADO.get(item.get("estado"), item.get("estado", "")),
                     estilos["celda"],
                 ),
-                Paragraph(item["observacion"] or "—", estilos["celda"]),
+                Paragraph(str(item.get("observacion", "")).strip() or "—", estilos["celda"]),
+                celda_foto(fotos_iniciales.get(indice)),
+                celda_foto(fotos_finales.get(indice)),
             ]
         )
     historia.append(
         Table(
             filas,
-            colWidths=[3.6 * cm, 5.2 * cm, 3.4 * cm, 4.6 * cm],
+            colWidths=[2.5 * cm, 3.0 * cm, 2.6 * cm, 3.0 * cm, 2.8 * cm, 2.8 * cm],
             hAlign="LEFT",
             style=TableStyle(
                 [

@@ -155,9 +155,9 @@ Se identifican a continuación los stakeholders y actores que interactúan direc
 
 * RN08: Control de Concurrencia en Reservas: El procesamiento de reservas simultáneas para un mismo objeto se realiza mediante transacciones atómicas a nivel de base de datos para prevenir situaciones de condición de carrera (race conditions) sobre la disponibilidad de ejemplares físicos restantes.
 
-* RN09: Inspección y Checklist de Estado Inicial: En el registro de entrega de un préstamo (CU03) es obligatorio completar un checklist digital del estado inicial del bien, el cual se contrasta durante la devolución (CU04) para garantizar que las sanciones por daño apliquen únicamente a desperfectos nuevos.
+* RN09: Inspección y Checklist de Estado Inicial y de Devolución: Cada elemento del checklist inicial de entrega (CU03) debe incluir una foto obligatoria y puede incluir una observación. Al registrar la devolución (CU04), el checklist debe conservar exactamente los elementos y el orden iniciales, sin permitir agregar ni quitar elementos. Cada elemento registra su estado y puede incluir una observación; cuando se reporta daño parcial o total, la observación y al menos una foto son obligatorias. Si no hay cambios, la foto es opcional. La devolución se contrasta con el registro inicial para identificar desperfectos nuevos.
 
-* RN10: Reporte Obligatorio de Daños: Toda devolución que detecte daño parcial o total genera obligatoriamente un reporte en PDF con los datos del préstamo, el prestatario, el gestor que registró la devolución, el tipo de daño (parcial o total), el detalle de los elementos dañados contrastando el estado inicial con el estado devuelto, y la sanción aplicada. El reporte se almacena de forma permanente para su consulta y descarga posterior.
+* RN10: Reporte Obligatorio de Daños: Toda devolución que detecte daño parcial o total genera obligatoriamente un reporte en PDF con los datos del préstamo, el prestatario, el gestor que registró la devolución, el tipo de daño (parcial o total), el detalle de los elementos dañados, sus observaciones, las fotos iniciales y finales disponibles, y la sanción aplicada. El reporte se almacena de forma permanente para su consulta y descarga posterior.
 
 # 7\. Casos de uso
 

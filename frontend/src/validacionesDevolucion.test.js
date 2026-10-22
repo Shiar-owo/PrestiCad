@@ -7,7 +7,12 @@ import {
 
 const checklistValido = [
   { elemento: 'Carcasa', estado: 'sin_cambios', observacion: '' },
-  { elemento: 'Cable', estado: 'dano_parcial', observacion: 'Cortado' },
+  {
+    elemento: 'Cable',
+    estado: 'dano_parcial',
+    observacion: 'Cortado',
+    foto: { name: 'cable.png', type: 'image/png', size: 100 },
+  },
 ]
 
 describe('validarChecklistDevolucion', () => {
@@ -20,35 +25,42 @@ describe('validarChecklistDevolucion', () => {
     expect(validarChecklistDevolucion(undefined)).toHaveProperty('checklist')
   })
 
-  it('rechaza filas sin elemento descripto', () => {
+  it('marca la fila que no tiene elemento descrito', () => {
     const errores = validarChecklistDevolucion([
       { elemento: '   ', estado: 'sin_cambios', observacion: '' },
     ])
 
-    expect(errores.checklist).toContain('elemento')
+    expect(errores.filas[0].elemento).toContain('elemento')
   })
 
-  it('rechaza estados fuera de la taxonomía de devolución', () => {
+  it('marca la fila que tiene un estado fuera de la taxonomía', () => {
     const errores = validarChecklistDevolucion([
       { elemento: 'Carcasa', estado: 'regular', observacion: '' },
     ])
 
-    expect(errores.checklist).toContain('estado')
+    expect(errores.filas[0].estado).toContain('estado')
   })
 })
 
 describe('armarChecklistDevolucion', () => {
   it('prellena las filas del checklist inicial en estado sin_cambios', () => {
     const filas = armarChecklistDevolucion([
-      { elemento: ' Pantalla ', condicion: 'Intacta', observacion: 'ok' },
+      {
+        elemento: ' Pantalla ',
+        observacion: 'ok',
+        foto_url: '/api/prestamos/fotos/1/',
+      },
     ])
 
     expect(filas).toEqual([
       {
         elemento: 'Pantalla',
         observacionInicial: 'ok',
+        fotoInicialUrl: '/api/prestamos/fotos/1/',
         estado: 'sin_cambios',
         observacion: '',
+        foto: null,
+        fotoPrevia: '',
       },
     ])
   })

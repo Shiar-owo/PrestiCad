@@ -275,6 +275,7 @@ class RegistrarDevolucionView(APIView):
     """POST /api/prestamos/{id}/devolucion/ — registra y calcula sanciones (HU11)."""
 
     permission_classes = [EsGestorDeAlmacen]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def post(self, request, prestamo_id):
         serializer = DevolucionIngresoSerializer(data=request.data)
@@ -284,6 +285,7 @@ class RegistrarDevolucionView(APIView):
             devolucion = registrar_devolucion(
                 prestamo_id=prestamo_id,
                 checklist_devolucion=serializer.validated_data["checklist"],
+                fotos_checklist=serializer.validated_data.get("fotos_checklist", []),
                 realizado_por=request.usuario_autenticado,
             )
         except PrestamoError as error:

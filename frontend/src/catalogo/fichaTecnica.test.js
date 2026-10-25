@@ -95,6 +95,7 @@ describe('obtenerDatosFichaTecnica', () => {
       nombre: 'Libro CLRS',
       codigo_inventario: 'LIB-CLRS',
       stock: 2,
+      color: 'Gris general',
       instancias: [
         {
           id: 'inst-1',
@@ -102,6 +103,8 @@ describe('obtenerDatosFichaTecnica', () => {
           numero_serie: '',
           estado: 'disponible',
           estado_fisico: 'Excelente',
+          color: 'Negro',
+          foto: 'https://ejemplo.com/ejemplar-1.jpg',
           observaciones: 'Estante A-1',
         },
         {
@@ -126,8 +129,12 @@ describe('obtenerDatosFichaTecnica', () => {
     const ficha = obtenerDatosFichaTecnica(materialConInstancias)
     expect(ficha.instancias).toHaveLength(2)
     expect(ficha.instancias[0].codigoEjemplar).toBe('LIB-CLRS-01')
+    expect(ficha.instancias[0].color).toBe('Negro')
+    expect(ficha.instancias[0].foto).toBe('https://ejemplo.com/ejemplar-1.jpg')
     expect(ficha.instancias[0].esDisponible).toBe(true)
     expect(ficha.instancias[1].codigoEjemplar).toBe('LIB-CLRS-02')
+    expect(ficha.instancias[1].color).toBe('Gris general')
+    expect(ficha.instancias[1].foto).toBe('')
     expect(ficha.instancias[1].esDisponible).toBe(false)
     expect(ficha.resumenInstancias.disponible).toBe(1)
     expect(ficha.resumenInstancias.en_mantenimiento).toBe(1)

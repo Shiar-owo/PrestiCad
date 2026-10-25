@@ -6,6 +6,7 @@ function Boton({
   tamanio = 'mediano',
   cargando = false,
   deshabilitado = false,
+  tipo,
   icono: Icono = null,
   className = '',
   ...rest
@@ -29,6 +30,7 @@ function Boton({
 
   return (
     <button
+      type={tipo}
       className={`${base} ${variantes[variante]} ${tamanios[tamanio]} ${className}`}
       disabled={deshabilitado || cargando}
       {...rest}

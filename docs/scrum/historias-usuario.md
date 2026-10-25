@@ -100,11 +100,11 @@
 | 3 | Se puede filtrar por estado y disponibilidad |
 | 4 | Los resultados muestran: nombre, categoría, desglose de disponibilidad consolidada (ej. unidades disponibles de stock total) |
 | 5 | La búsqueda responde en menos de 2 segundos |
-| 6 | Un usuario en Tier Restringido solo ve materiales de Tier básico/libros |
+| 6 | Usuarios de cualquier Tier pueden consultar materiales de todo el catálogo; la elegibilidad para recibir un préstamo se valida según RN03 |
 | 7 | Un usuario nuevo puede completar una reserva en menos de 3 minutos sin capacitación |
 | 8 | Al abrir la ficha técnica o detalle de un material, se muestra el listado de ejemplares/instancias físicas individuales con su código, número de serie, estado actual y observaciones |
 
-**Reglas de negocio:** RN01 (Disponibilidad), RN03 (Filtrado por Tier)
+**Reglas de negocio:** RN01 (Disponibilidad), RN03 (Elegibilidad para préstamos según Tier)
 
 ---
 
@@ -186,10 +186,10 @@
 |---|------------------------|
 | 1 | El gestor busca el préstamo/reserva activa del usuario |
 | 2 | El sistema verifica la identidad y elegibilidad del usuario (Tier, sin impedimentos) |
-| 3 | El gestor selecciona la instancia física/ejemplar específico a entregar y completa un checklist digital del estado inicial del bien (descripción de condiciones, número de serie, fotos si aplica) |
-| 4 | Para equipos de alto valor o préstamos por excepción académica, se registra la garantía (documento de identidad + compromiso firmado) |
-| 5 | Si la garantía es requerida y no se entrega, el sistema no permite completar el préstamo |
-| 6 | El gestor indica el tiempo de préstamo (días) |
+| 3 | El gestor selecciona la instancia física/ejemplar específico a entregar y completa un checklist del estado inicial con cada elemento, una foto obligatoria y una observación opcional |
+| 4 | Para equipos de alto valor o préstamos por excepción académica, se cargan en PDF el documento de identidad y el compromiso de responsabilidad firmado |
+| 5 | Si la garantía es requerida y falta cualquiera de los dos PDF, el sistema no permite que el préstamo pase a "Activo" |
+| 6 | El gestor indica la duración del préstamo entre 1 y 30 días |
 | 7 | El sistema calcula y muestra la fecha límite de devolución |
 | 8 | El estado del préstamo cambia a "Activo" |
 | 9 | El estado de la instancia física seleccionada cambia a "Prestado", reduciendo en 1 el stock disponible del material |
@@ -230,18 +230,20 @@
 |---|------------------------|
 | 1 | El gestor busca el préstamo activo del material |
 | 2 | El sistema muestra el checklist de estado inicial registrado al momento de la entrega del ejemplar |
-| 3 | El gestor completa un checklist de devolución (nuevo checklist de la instancia devuelta) |
-| 4 | El sistema compara ambos checklist y resalta las diferencias (daños nuevos) |
-| 5 | El sistema compara la fecha de devolución con la fecha límite |
-| 6 | Si devolvió a tiempo: aplica bonificación de puntos (parámetro del objeto) |
-| 7 | Si devolvió con retraso: aplica descuento de puntos proporcional al tiempo excedido |
-| 8 | Si hay daño nuevo: aplica penalización de puntos + genera cobro de reparación/reposición |
-| 9 | Se actualiza el puntaje de reputación del usuario |
-| 10 | El estado del préstamo cambia a "Devuelto" |
-| 11 | El estado de la instancia física devuelta cambia a "Disponible" (o a "En Mantenimiento" si presentó daños según el checklist), recalculando la disponibilidad del material |
-| 12 | Se registra el historial completo de la operación |
-| 13 | Ante daño parcial o total se genera un reporte en PDF con los datos del préstamo, el prestatario, el gestor, los elementos dañados y la sanción aplicada |
-| 14 | El gestor y el administrador pueden consultar el listado de reportes de daños con filtros (tipo de daño y rango de fechas) y descargar cada PDF |
+| 3 | El checklist de devolución conserva exactamente los elementos y el orden del checklist inicial; no se pueden agregar ni quitar elementos |
+| 4 | Para cada elemento, el gestor registra el estado y puede agregar una observación; si indica daño parcial o total, la observación y una foto del daño son obligatorias. Sin cambios, la foto es opcional |
+| 5 | El sistema compara el checklist de devolución con el inicial y resalta las diferencias (daños nuevos), mostrando las observaciones y fotos disponibles de ambas etapas |
+| 6 | Al revisar la devolución, si faltan fotos obligatorias, el sistema muestra en un aviso todos los elementos afectados, no envía la devolución y dirige el foco al primer elemento pendiente |
+| 7 | El sistema compara la fecha de devolución con la fecha límite |
+| 8 | Si devolvió a tiempo: aplica bonificación de puntos (parámetro del objeto) |
+| 9 | Si devolvió con retraso: aplica descuento de puntos proporcional al tiempo excedido |
+| 10 | Si hay daño nuevo: aplica penalización de puntos y genera el cobro de reparación/reposición |
+| 11 | Se actualiza el puntaje de reputación del usuario |
+| 12 | El estado del préstamo cambia a "Devuelto" |
+| 13 | El estado de la instancia física devuelta cambia a "Disponible" (o a "En Mantenimiento" si presentó daños según el checklist), recalculando la disponibilidad del material |
+| 14 | Se registra el historial completo de la operación |
+| 15 | Ante daño parcial o total se genera un reporte en PDF con los datos del préstamo, el prestatario, el gestor, los elementos dañados, sus observaciones, las fotos iniciales y finales disponibles, y la sanción aplicada |
+| 16 | El gestor y el administrador pueden consultar el listado de reportes de daños con filtros (tipo de daño y rango de fechas) y descargar cada PDF |
 
 **Reglas de negocio:** RN06, RN09, RN10
 

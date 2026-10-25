@@ -3,6 +3,8 @@
 Las validaciones de formato se declaran aquí; las reglas de negocio (código
 único, estado inicial, valores por defecto) se delegan a `services.py`.
 """
+import json
+
 from django.conf import settings
 from rest_framework import serializers
 
@@ -10,6 +12,7 @@ from apps.compartido.serializers import RechazarCamposNoPermitidosMixin
 from apps.inventario.constants import (
     ESTADOS_INSTANCIA,
     ESTADOS_MATERIAL,
+    MODOS_REGISTRO_MATERIAL,
     TIPOS_MATERIAL,
 )
 from apps.inventario.models import InstanciaMaterial, Material
@@ -76,6 +79,22 @@ class FotoMaterial(serializers.ImageField):
         return f"{settings.MEDIA_URL_PUBLICA.rstrip('/')}/{url.lstrip('/')}"
 
 
+class InstanciasJSONField(serializers.Field):
+    """Acepta filas como lista JSON o como cadena JSON de un formulario multipart."""
+
+    default_error_messages = {"invalid": "Las filas de ejemplares deben ser JSON válido."}
+
+    def to_internal_value(self, data):
+        if isinstance(data, str):
+            try:
+                data = json.loads(data)
+            except (TypeError, ValueError):
+                self.fail("invalid")
+        if not isinstance(data, list):
+            self.fail("invalid")
+        return data
+
+
 class MaterialListSerializer(serializers.ListSerializer):
     """Resuelve en lote la disponibilidad informada por el módulo préstamos."""
 
@@ -97,6 +116,7 @@ class InstanciaMaterialSerializer(serializers.ModelSerializer):
     """Contrato de lectura para una instancia física / ejemplar."""
 
     estado_display = serializers.CharField(source="get_estado_display", read_only=True)
+    foto = FotoMaterial(read_only=True)
 
     class Meta:
         model = InstanciaMaterial
@@ -107,6 +127,8 @@ class InstanciaMaterialSerializer(serializers.ModelSerializer):
             "estado",
             "estado_display",
             "estado_fisico",
+            "color",
+            "foto",
             "observaciones",
             "ubicacion",
             "created_at",
@@ -124,6 +146,13 @@ class InstanciaMaterialModificacionSerializer(
     numero_serie = serializers.CharField(max_length=80, required=False, allow_blank=True)
     estado = serializers.ChoiceField(choices=ESTADOS_INSTANCIA, required=False)
     estado_fisico = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    color = serializers.CharField(max_length=30, required=False, allow_blank=True)
+    foto = serializers.ImageField(
+        required=False,
+        allow_null=True,
+        allow_empty_file=False,
+        validators=[validar_foto],
+    )
     observaciones = serializers.CharField(required=False, allow_blank=True)
     ubicacion = serializers.CharField(max_length=100, required=False, allow_blank=True)
 
@@ -134,9 +163,17 @@ class InstanciaMaterialModificacionSerializer(
             "numero_serie",
             "estado",
             "estado_fisico",
+            "color",
+            "foto",
             "observaciones",
             "ubicacion",
         )
+
+
+class InstanciaMaterialCreacionSerializer(InstanciaMaterialModificacionSerializer):
+    """Contrato para el alta de una instancia, que exige su código único."""
+
+    codigo_ejemplar = serializers.CharField(max_length=50, required=True)
 
 
 class MaterialSerializer(serializers.ModelSerializer):
@@ -232,6 +269,14 @@ class MaterialRegistroSerializer(RechazarCamposNoPermitidosMixin, serializers.Mo
         error_messages={"invalid_choice": "Tipo de material inválido."},
     )
     stock = serializers.IntegerField(required=False, min_value=1, error_messages=MENSAJES_STOCK)
+    modo = serializers.ChoiceField(
+        choices=MODOS_REGISTRO_MATERIAL,
+        required=False,
+        default="unico",
+        error_messages={"invalid_choice": "Modo de registro inválido."},
+    )
+    ubicacion = serializers.CharField(required=False, allow_blank=True, default="")
+    instancias = InstanciasJSONField(required=False)
     tier_minimo_requerido = serializers.ChoiceField(
         choices=TIERS,
         required=False,
@@ -255,6 +300,9 @@ class MaterialRegistroSerializer(RechazarCamposNoPermitidosMixin, serializers.Mo
             "codigo_inventario",
             "tipo",
             "stock",
+            "modo",
+            "ubicacion",
+            "instancias",
             "es_alto_valor",
             *CAMPOS_FICHA_Y_REPUTACION,
         )
@@ -273,6 +321,26 @@ class MaterialRegistroSerializer(RechazarCamposNoPermitidosMixin, serializers.Mo
             "costo_reparacion": {"required": False, "allow_null": True},
             "costo_reposicion": {"required": False, "allow_null": True},
         }
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        modo = attrs.get("modo", "unico")
+        filas = attrs.get("instancias")
+        if modo in ("lote", "detalle"):
+            if not isinstance(filas, list):
+                raise serializers.ValidationError(
+                    {"instancias": "Envía una lista de ejemplares para este modo."}
+                )
+            if attrs.get("stock", len(filas)) != len(filas):
+                raise serializers.ValidationError(
+                    {"stock": "El stock debe coincidir con la cantidad de ejemplares."}
+                )
+            attrs["stock"] = len(filas)
+        elif filas is not None:
+            raise serializers.ValidationError(
+                {"instancias": "Las filas solo se aceptan en modo lote o detalle."}
+            )
+        return attrs
 
 
 class MaterialActualizacionSerializer(RechazarCamposNoPermitidosMixin, serializers.ModelSerializer):

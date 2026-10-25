@@ -1,26 +1,35 @@
+from mimetypes import guess_type
+
 from django.http import FileResponse
 from rest_framework import status
 from rest_framework.generics import GenericAPIView
 from rest_framework.pagination import PageNumberPagination
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.prestamos.constants import ESTADOS_PRESTAMO
 from apps.prestamos.consultar_serializers import (
     PrestamoDevolucionDetalleSerializer,
+    PrestamoHistorialDetalleSerializer,
     PrestamoConsultaSerializer,
     PrestamoHistorialSerializer,
+    SugerenciaPrestatarioSerializer,
 )
 from apps.prestamos.models import Devolucion
 from apps.prestamos.permissions import (
     EsGestorDeAlmacen,
+    EsGestorAdministradorOPrestatarioPropio,
     EsGestorOAdministrador,
     EsPrestatarioAutenticado,
 )
 from apps.prestamos.serializers import (
+    ActualizarDocumentoGarantiaSerializer,
+    BusquedaPrestatarioSerializer,
     ConsultaReportesSerializer,
     DevolucionIngresoSerializer,
     DevolucionResultadoSerializer,
+    FiltroHistorialPrestamosSerializer,
     PrestamoRegistroSerializer,
     RegistrarPrestamoSerializer,
     ReporteDevolucionSerializer,
@@ -28,11 +37,16 @@ from apps.prestamos.serializers import (
 )
 from apps.prestamos.services import (
     PrestamoError,
+    actualizar_documento_garantia,
+    buscar_prestatarios_por_dni,
+    consultar_detalle_historial_prestamo,
     consultar_historial_prestamos,
     consultar_prestamo_para_devolucion,
     consultar_prestamos_usuario,
     consultar_reportes_devolucion,
     estimar_devolucion,
+    obtener_documento_garantia,
+    obtener_foto_checklist,
     registrar_devolucion,
     registrar_prestamo,
 )
@@ -42,6 +56,7 @@ class RegistrarPrestamoView(APIView):
     """Registra la entrega de un material: POST /api/prestamos/."""
 
     permission_classes = [EsGestorDeAlmacen]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def post(self, request):
         serializer = RegistrarPrestamoSerializer(data=request.data)
@@ -62,6 +77,22 @@ class RegistrarPrestamoView(APIView):
             PrestamoRegistroSerializer(prestamo).data,
             status=status.HTTP_201_CREATED,
         )
+
+
+class BuscarPrestatariosView(APIView):
+    """Sugiere prestatarios activos por DNI para entrega e historial."""
+
+    permission_classes = [EsGestorOAdministrador]
+
+    def get(self, request):
+        prefijo = request.query_params.get("dni", "").strip()
+        if not prefijo:
+            return Response([])
+
+        serializer = BusquedaPrestatarioSerializer(data={"dni": prefijo})
+        serializer.is_valid(raise_exception=True)
+        prestatarios = buscar_prestatarios_por_dni(serializer.validated_data["dni"])
+        return Response(SugerenciaPrestatarioSerializer(prestatarios, many=True).data)
 
 
 class MisPrestamosView(APIView):
@@ -88,6 +119,14 @@ class HistorialPrestamosView(GenericAPIView):
     pagination_class = HistorialPrestamosPagination
 
     def get(self, request):
+        dni = request.query_params.get("dni", "").strip()
+        if dni:
+            filtro = FiltroHistorialPrestamosSerializer(data={"dni": dni})
+            filtro.is_valid(raise_exception=True)
+            dni = filtro.validated_data["dni"]
+        else:
+            dni = None
+
         estado = request.query_params.get("estado")
         estados_validos = dict(ESTADOS_PRESTAMO)
         if estado is not None and estado not in estados_validos:
@@ -96,7 +135,7 @@ class HistorialPrestamosView(GenericAPIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        prestamos = consultar_historial_prestamos(estado=estado)
+        prestamos = consultar_historial_prestamos(estado=estado, dni=dni)
         pagina = self.paginate_queryset(prestamos)
         serializer = self.get_serializer(pagina, many=True)
         return self.get_paginated_response(serializer.data)
@@ -107,6 +146,82 @@ def _respuesta_error(error):
         {error.campo: [error.mensaje]},
         status=error.status_code,
     )
+
+
+class DescargarDocumentoGarantiaView(APIView):
+    """Consulta privada del PDF y edición exclusiva del gestor de almacén."""
+
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+
+    def get_permissions(self):
+        permiso = (
+            EsGestorDeAlmacen
+            if self.request.method == "PATCH"
+            else EsGestorAdministradorOPrestatarioPropio
+        )
+        return [permiso()]
+
+    def get(self, request, prestamo_id, tipo):
+        try:
+            archivo, nombre = obtener_documento_garantia(prestamo_id, tipo)
+        except PrestamoError as error:
+            return _respuesta_error(error)
+
+        respuesta = FileResponse(archivo, content_type="application/pdf")
+        respuesta["Content-Disposition"] = f'inline; filename="{nombre}"'
+        return respuesta
+
+    def patch(self, request, prestamo_id, tipo):
+        serializer = ActualizarDocumentoGarantiaSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            garantia = actualizar_documento_garantia(
+                prestamo_id=prestamo_id,
+                tipo=tipo,
+                **serializer.validated_data,
+            )
+        except PrestamoError as error:
+            return _respuesta_error(error)
+
+        return Response({
+            "estado": garantia.estado,
+            "documento_identidad_disponible": bool(garantia.documento_identidad),
+            "compromiso_responsabilidad_disponible": bool(
+                garantia.compromiso_responsabilidad
+            ),
+        })
+
+
+class DescargarFotoChecklistView(APIView):
+    """Sirve fotos privadas del checklist al titular y al personal autorizado."""
+
+    permission_classes = [EsGestorAdministradorOPrestatarioPropio]
+
+    def get(self, request, prestamo_id, fase, indice):
+        try:
+            archivo, nombre = obtener_foto_checklist(prestamo_id, fase, indice)
+        except PrestamoError as error:
+            return _respuesta_error(error)
+
+        respuesta = FileResponse(
+            archivo,
+            content_type=guess_type(nombre)[0] or "application/octet-stream",
+        )
+        respuesta["Content-Disposition"] = f'inline; filename="{nombre}"'
+        return respuesta
+
+
+class DetalleHistorialPrestamoView(APIView):
+    """Devuelve ficha técnica, ejemplar y checklist de una entrega histórica."""
+
+    permission_classes = [EsGestorAdministradorOPrestatarioPropio]
+
+    def get(self, request, prestamo_id):
+        try:
+            prestamo = consultar_detalle_historial_prestamo(prestamo_id)
+        except PrestamoError as error:
+            return _respuesta_error(error)
+        return Response(PrestamoHistorialDetalleSerializer(prestamo).data)
 
 
 def _respuesta_resultado(resultado, prestamo_id, devolucion=None, http_status=200):
@@ -160,6 +275,7 @@ class RegistrarDevolucionView(APIView):
     """POST /api/prestamos/{id}/devolucion/ — registra y calcula sanciones (HU11)."""
 
     permission_classes = [EsGestorDeAlmacen]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def post(self, request, prestamo_id):
         serializer = DevolucionIngresoSerializer(data=request.data)
@@ -169,6 +285,7 @@ class RegistrarDevolucionView(APIView):
             devolucion = registrar_devolucion(
                 prestamo_id=prestamo_id,
                 checklist_devolucion=serializer.validated_data["checklist"],
+                fotos_checklist=serializer.validated_data.get("fotos_checklist", []),
                 realizado_por=request.usuario_autenticado,
             )
         except PrestamoError as error:

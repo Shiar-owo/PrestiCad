@@ -8,11 +8,12 @@ import logging
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
+from django.db.models.deletion import ProtectedError
 
 from apps.inventario.constants import (
     ESTADOS_INSTANCIA,
     ESTADOS_MATERIAL,
-    TIERS_ACCESIBLES,
+    MAXIMO_EJEMPLARES_REGISTRO,
 )
 from apps.inventario.models import InstanciaMaterial, Material
 from apps.inventario.validators import validar_foto
@@ -64,13 +65,15 @@ CODIGO_DUPLICADO_MENSAJE = "El código de inventario ya está registrado."
 class InventarioError(Exception):
     """Error de negocio del módulo inventario.
 
-    Lleva el campo afectado y un mensaje en español para mostrarlo en la
-    respuesta HTTP (la vista lo traduce a un 409 Conflict o un 400).
+    Lleva el campo, el mensaje en español y el estado HTTP para que el módulo
+    consumidor traduzca el error a su respuesta sin conocer los modelos.
     """
 
-    def __init__(self, campo, mensaje):
+    def __init__(self, campo, mensaje, status_code=400, indice=None):
         self.campo = campo
         self.mensaje = mensaje
+        self.status_code = status_code
+        self.indice = indice
         super().__init__(mensaje)
 
 
@@ -101,36 +104,42 @@ def obtener_material(material_id):
         raise MaterialNoEncontradoError(f"No existe un material con id={material_id}") from exc
 
 
+@transaction.atomic
+def eliminar_material(material_id):
+    """Elimina un material y sus ejemplares cuando no tienen préstamos asociados."""
+    material = obtener_material(material_id)
+    instancias = list(material.instancias.all())
+
+    if material.estado in ("prestado", "reservado") or any(
+        instancia.estado in ("prestado", "reservado") for instancia in instancias
+    ):
+        raise InventarioError(
+            "material",
+            "No se puede eliminar un material prestado o reservado.",
+            status_code=409,
+        )
+
+    fotos = []
+    for elemento in [material, *instancias]:
+        if elemento.foto:
+            fotos.append((elemento.foto.storage, elemento.foto.name))
+
+    try:
+        material.delete()
+    except ProtectedError as error:
+        raise InventarioError(
+            "material",
+            "No se puede eliminar el material porque tiene historial de préstamos asociado.",
+            status_code=409,
+        ) from error
+
+    for storage, nombre in fotos:
+        transaction.on_commit(lambda storage=storage, nombre=nombre: _eliminar_foto(storage, nombre))
+
+
 def listar_materiales():
     """Devuelve todos los materiales del inventario ordenados por nombre."""
     return Material.objects.all()
-
-
-def resolver_tier_usuario(usuario):
-    """Determina el tier aplicable de un usuario para filtros de consulta (RN03).
-
-    Administradores y gestores tienen acceso irrestricto al inventario,
-    por lo que no se restringen por reputación. Para prestatarios,
-    devuelve su `reputacion_tier`.
-    """
-    if not usuario:
-        return None
-
-    rol = getattr(usuario, "rol", None)
-    rol_nombre = ""
-    if isinstance(rol, str):
-        rol_nombre = rol.lower()
-    elif hasattr(rol, "nombre"):
-        rol_nombre = getattr(rol, "nombre", "").lower()
-
-    if rol_nombre in ("gestor", "administrador"):
-        return None
-
-    tier = getattr(usuario, "reputacion_tier", None)
-    if isinstance(tier, str):
-        return tier.strip().lower()
-
-    return None
 
 
 def buscar_materiales(
@@ -139,18 +148,12 @@ def buscar_materiales(
     categoria=None,
     tipo=None,
     estado=None,
-    tier_usuario=None,
-    usuario=None,
 ):
-    """Busca y filtra materiales del inventario según criterios de consulta (HU05, T05.01, T05.02).
+    """Busca y filtra materiales del inventario según criterios de consulta (HU05, T05.01).
 
     - `q`: Búsqueda parcial e insensible a mayúsculas sobre el nombre del material (criterio 1).
     - `categoria` (o `tipo`): Filtra por tipo/categoría de material ('equipo', 'libro', 'objeto') (criterio 2).
     - `estado`: Filtra por estado ('disponible', 'prestado', 'reservado', 'en_mantenimiento') (criterio 3).
-    - `tier_usuario`: Tier específico para filtrar acceso según reputación (RN03, criterio 6).
-    - `usuario`: Instancia de usuario autenticado; si no se especifica `tier_usuario`, se resuelve
-      automáticamente según su rol y `reputacion_tier` (RN03).
-
     Devuelve un `QuerySet` de `Material` ordenado alfabéticamente por nombre.
     """
     queryset = Material.objects.prefetch_related("instancias").all().order_by("nombre")
@@ -170,16 +173,6 @@ def buscar_materiales(
         estado_limpio = estado.strip().lower()
         if estado_limpio:
             queryset = queryset.filter(estado=estado_limpio)
-
-    if tier_usuario is None and usuario is not None:
-        tier_usuario = resolver_tier_usuario(usuario)
-
-    if tier_usuario:
-        tier_limpio = tier_usuario.strip().lower()
-        if tier_limpio in TIERS_ACCESIBLES:
-            queryset = queryset.filter(tier_minimo_requerido__in=TIERS_ACCESIBLES[tier_limpio])
-        else:
-            queryset = queryset.none()
 
     return queryset
 
@@ -206,6 +199,9 @@ def registrar_material(
     deduccion_dano_total=None,
     costo_reparacion=None,
     costo_reposicion=None,
+    modo=None,
+    ubicacion="",
+    instancias=None,
 ):
     """Registra un material en el inventario.
 
@@ -225,15 +221,96 @@ def registrar_material(
     si la foto no cumple las restricciones.
     """
     codigo = normalizar_codigo(codigo_inventario)
-    _verificar_codigo_disponible(codigo)
+    try:
+        _verificar_codigo_disponible(codigo)
+    except InventarioError as error:
+        error.status_code = 409
+        raise
 
     nombre = nombre.strip()
     if not nombre:
         raise InventarioError("nombre", "El nombre del material es obligatorio.")
     if stock < 1:
         raise InventarioError("stock", "El stock debe ser al menos 1 unidad.")
+    filas = list(instancias or [])
+    if modo == "unico":
+        stock = 1
+        filas = [{
+            "codigo_ejemplar": f"{codigo}-01",
+            "numero_serie": numero_serie,
+            "estado_fisico": estado_fisico or "Operativo",
+            "ubicacion": ubicacion,
+        }]
+    elif modo is None:
+        filas = [
+            {
+                "codigo_ejemplar": f"{codigo}-{i:02d}",
+                "numero_serie": f"{numero_serie}-{i:02d}" if numero_serie and stock > 1 else numero_serie,
+                "estado_fisico": estado_fisico or "Operativo",
+                "ubicacion": "",
+            }
+            for i in range(1, stock + 1)
+        ]
+    elif modo in ("lote", "detalle"):
+        if not 2 <= len(filas) <= MAXIMO_EJEMPLARES_REGISTRO:
+            raise InventarioError(
+                "instancias",
+                f"Registra entre 2 y {MAXIMO_EJEMPLARES_REGISTRO} ejemplares.",
+            )
+        if stock != len(filas):
+            raise InventarioError("stock", "El stock debe coincidir con la cantidad de ejemplares.")
+    else:
+        raise InventarioError("modo", "Modo de registro inválido.")
     if foto is not None:
         validar_foto(foto)
+
+    codigos = set()
+    filas_preparadas = []
+    for indice, fila in enumerate(filas):
+        if not isinstance(fila, dict):
+            raise InventarioError("instancias", "La fila debe ser un objeto válido.", indice=indice)
+        if modo in ("lote", None):
+            codigo_fila = fila["codigo_ejemplar"] if modo is None else f"{codigo}-{indice + 1:02d}"
+            estado_fila = estado_fisico or "Operativo"
+            ubicacion_fila = fila.get("ubicacion") or ubicacion
+        else:
+            codigo_fila = str(fila.get("codigo_ejemplar", "")).strip()
+            if not codigo_fila:
+                raise InventarioError("codigo_ejemplar", "El código del ejemplar es obligatorio.", indice=indice)
+            estado_fila = fila.get("estado_fisico", "Operativo")
+            ubicacion_fila = fila.get("ubicacion", "")
+        clave = codigo_fila.casefold()
+        if clave in codigos:
+            raise InventarioError(
+                "codigo_ejemplar", "El código del ejemplar está duplicado en el registro.", indice=indice
+            )
+        codigos.add(clave)
+        if InstanciaMaterial.objects.filter(codigo_ejemplar__iexact=codigo_fila).exists():
+            raise InventarioError(
+                "codigo_ejemplar", "El código del ejemplar ya está registrado.", status_code=409, indice=indice
+            )
+        foto_fila = fila.get("foto")
+        color_fila = fila.get("color", "")
+        if not isinstance(color_fila, str):
+            raise InventarioError("color", "El color del ejemplar debe ser texto.", indice=indice)
+        if len(color_fila) > 30:
+            raise InventarioError("color", "El color admite máximo 30 caracteres.", indice=indice)
+        if foto_fila is not None:
+            try:
+                validar_foto(foto_fila)
+            except ValidationError as error:
+                raise InventarioError("foto", error.messages[0], indice=indice) from error
+        if len(codigo_fila) > 50:
+            raise InventarioError("codigo_ejemplar", "El código admite máximo 50 caracteres.", indice=indice)
+        filas_preparadas.append({
+            "codigo_ejemplar": codigo_fila,
+            "numero_serie": fila.get("numero_serie", ""),
+            "estado_fisico": estado_fila,
+            "ubicacion": ubicacion_fila,
+            "observaciones": fila.get("observaciones", ""),
+            "foto": foto_fila,
+            "color": color_fila.strip(),
+        })
 
     campos = {
         "nombre": nombre,
@@ -244,9 +321,9 @@ def registrar_material(
         "es_alto_valor": es_alto_valor,
         "marca": marca.strip(),
         "modelo": modelo.strip(),
-        "numero_serie": numero_serie.strip(),
+        "numero_serie": numero_serie.strip() if modo in ("unico", None) else "",
         "color": color.strip(),
-        "estado_fisico": estado_fisico.strip(),
+        "estado_fisico": estado_fisico.strip() if modo in ("unico", "lote", None) else "",
         "foto": foto,
     }
 
@@ -265,36 +342,53 @@ def registrar_material(
     defaults.update({campo: valor for campo, valor in reputacion.items() if valor is not None})
     campos.update(defaults)
 
+    archivos_guardados = []
+    archivos_recibidos = [archivo for archivo in [foto, *(fila["foto"] for fila in filas_preparadas)] if archivo]
     try:
         material = Material.objects.create(**campos)
-    except IntegrityError as exc:
-        # Carrera entre dos altas con el mismo código: la restricción del
-        # modelo es la última línea de defensa.
-        if "codigo_inventario" in str(exc):
-            raise InventarioError("codigo_inventario", CODIGO_DUPLICADO_MENSAJE) from exc
-        raise
-
-    # HU04 / Instancias de material: crear ejemplares físicos iniciales
-    instancias = []
-    for i in range(1, stock + 1):
-        codigo_ejemplar = f"{codigo}-{i:02d}"
-        num_serie = material.numero_serie
-        if num_serie and stock > 1:
-            num_serie = f"{num_serie}-{i:02d}"
-        instancias.append(
-            InstanciaMaterial(
+        if material.foto:
+            archivos_guardados.append((material.foto.storage, material.foto.name))
+        instancia_en_proceso = None
+        for fila in filas_preparadas:
+            instancia_en_proceso = InstanciaMaterial(
                 material=material,
-                codigo_ejemplar=codigo_ejemplar,
-                numero_serie=num_serie or "",
+                codigo_ejemplar=fila["codigo_ejemplar"],
+                numero_serie=fila["numero_serie"],
                 estado="disponible",
-                estado_fisico=material.estado_fisico or "Operativo",
-                observaciones="",
-                ubicacion="",
+                estado_fisico=fila["estado_fisico"] or "Operativo",
+                color=fila["color"],
+                observaciones=fila["observaciones"],
+                ubicacion=fila["ubicacion"],
+                foto=fila["foto"],
             )
-        )
-    InstanciaMaterial.objects.bulk_create(instancias)
-
-    return material
+            instancia_en_proceso.save()
+            instancia = instancia_en_proceso
+            if instancia.foto:
+                archivos_guardados.append((instancia.foto.storage, instancia.foto.name))
+        return material
+    except Exception as exc:
+        instancia_en_proceso = locals().get("instancia_en_proceso")
+        if instancia_en_proceso and instancia_en_proceso.foto and instancia_en_proceso.foto.name:
+            archivos_guardados.append(
+                (instancia_en_proceso.foto.storage, instancia_en_proceso.foto.name)
+            )
+        material_en_proceso = locals().get("material")
+        if material_en_proceso and material_en_proceso.foto and material_en_proceso.foto.name:
+            archivos_guardados.append((material_en_proceso.foto.storage, material_en_proceso.foto.name))
+        almacenamiento_fotos = InstanciaMaterial._meta.get_field("foto").storage
+        for archivo in archivos_recibidos:
+            nombre_archivo = getattr(archivo, "name", "")
+            if nombre_archivo and almacenamiento_fotos.exists(nombre_archivo):
+                archivos_guardados.append((almacenamiento_fotos, nombre_archivo))
+        for storage, nombre_archivo in archivos_guardados:
+            _eliminar_foto(storage, nombre_archivo)
+        if isinstance(exc, IntegrityError) and "codigo_ejemplar" in str(exc):
+            raise InventarioError(
+                "codigo_ejemplar", "El código del ejemplar ya está registrado.", status_code=409
+            ) from exc
+        if isinstance(exc, IntegrityError) and "codigo_inventario" in str(exc):
+            raise InventarioError("codigo_inventario", CODIGO_DUPLICADO_MENSAJE, status_code=409) from exc
+        raise
 
 
 @transaction.atomic
@@ -433,12 +527,124 @@ def _eliminar_foto(storage, nombre):
         )
 
 
-def listar_instancias_material(material_id):
-    """Devuelve todas las instancias físicas de un material ordenadas por código."""
+def listar_instancias_material(material_id, *, estado=None):
+    """Devuelve las instancias de un material, opcionalmente filtradas por estado."""
     material = obtener_material(material_id)
-    return material.instancias.all().order_by("codigo_ejemplar")
+    instancias = material.instancias.all()
+
+    if estado is not None and estado.strip():
+        estado_normalizado = estado.strip().lower()
+        estados_validos = {valor for valor, _ in ESTADOS_INSTANCIA}
+        if estado_normalizado not in estados_validos:
+            raise InventarioError("estado", "El estado de la instancia no es válido.")
+        instancias = instancias.filter(estado=estado_normalizado)
+
+    return instancias.order_by("codigo_ejemplar")
 
 
+@transaction.atomic
+def marcar_instancia_prestada(material_id, instancia_id=None):
+    """Bloquea y marca prestada una instancia del material.
+
+    Si se indica `instancia_id`, valida esa unidad exacta; si no, conserva la
+    selección automática por código para los clientes existentes.
+    """
+    consulta = InstanciaMaterial.objects.select_for_update()
+    if instancia_id is None:
+        instancia = (
+            consulta.filter(material_id=material_id, estado="disponible")
+            .order_by("codigo_ejemplar")
+            .first()
+        )
+        if instancia is None:
+            raise InventarioError(
+                "material_id",
+                "No quedan unidades disponibles de este material.",
+                status_code=409,
+            )
+    else:
+        try:
+            instancia = consulta.get(pk=instancia_id)
+        except (InstanciaMaterial.DoesNotExist, ValueError, TypeError) as error:
+            raise InventarioError(
+                "instancia_id",
+                "No existe la instancia indicada.",
+                status_code=404,
+            ) from error
+
+        if instancia.material_id != material_id:
+            raise InventarioError(
+                "instancia_id",
+                "La instancia no pertenece al material indicado.",
+            )
+        if instancia.estado != "disponible":
+            raise InventarioError(
+                "instancia_id",
+                "La instancia no está disponible para préstamo.",
+                status_code=409,
+            )
+
+    instancia.estado = "prestado"
+    instancia.save(update_fields=("estado", "updated_at"))
+    return {
+        "id": instancia.id,
+        "codigo_ejemplar": instancia.codigo_ejemplar,
+    }
+
+
+@transaction.atomic
+def registrar_devolucion_instancia(
+    material_id,
+    *,
+    instancia_id=None,
+    estado_final,
+    observaciones=None,
+):
+    """Actualiza la instancia asociada o aplica el fallback de préstamos históricos."""
+    estados_validos = {valor for valor, _ in ESTADOS_INSTANCIA}
+    if estado_final not in estados_validos:
+        raise InventarioError("estado", "El estado de la instancia no es válido.")
+
+    if instancia_id is None:
+        instancia = (
+            InstanciaMaterial.objects.select_for_update()
+            .filter(material_id=material_id, estado="prestado")
+            .first()
+        )
+        if instancia is None:
+            return None
+    else:
+        try:
+            instancia = InstanciaMaterial.objects.select_for_update().get(pk=instancia_id)
+        except (InstanciaMaterial.DoesNotExist, ValueError, TypeError) as error:
+            raise InventarioError(
+                "instancia_id",
+                "No existe la instancia asociada al préstamo.",
+                status_code=404,
+            ) from error
+
+        if instancia.material_id != material_id:
+            raise InventarioError(
+                "instancia_id",
+                "La instancia asociada no pertenece al material del préstamo.",
+            )
+        if instancia.estado != "prestado":
+            raise InventarioError(
+                "instancia_id",
+                "La instancia asociada no figura como prestada.",
+                status_code=409,
+            )
+
+    instancia.estado = estado_final
+    campos_actualizados = ["estado", "updated_at"]
+    if observaciones is not None:
+        instancia.observaciones = observaciones
+        campos_actualizados.append("observaciones")
+    instancia.save(update_fields=campos_actualizados)
+    return {"id": instancia.id, "estado": instancia.estado}
+
+
+@transaction.atomic
 def crear_instancia_material(
     material_id,
     *,
@@ -446,35 +652,136 @@ def crear_instancia_material(
     numero_serie="",
     estado="disponible",
     estado_fisico="Operativo",
+    color="",
+    foto=None,
     observaciones="",
     ubicacion="",
 ):
     """Crea una nueva instancia física para un material existente."""
-    material = obtener_material(material_id)
-    codigo = normalizar_codigo(codigo_ejemplar)
-    if InstanciaMaterial.objects.filter(codigo_ejemplar__iexact=codigo).exists():
-        raise InventarioError("codigo_ejemplar", "El código de ejemplar ya está registrado.")
+    return crear_instancias_material(
+        material_id,
+        [
+            {
+                "codigo_ejemplar": codigo_ejemplar,
+                "numero_serie": numero_serie,
+                "estado": estado,
+                "estado_fisico": estado_fisico,
+                "color": color,
+                "foto": foto,
+                "observaciones": observaciones,
+                "ubicacion": ubicacion,
+            }
+        ],
+    )[0]
 
+
+@transaction.atomic
+def crear_instancias_material(material_id, filas):
+    """Crea varias instancias juntas y aumenta el stock según las nuevas filas."""
+    if not isinstance(filas, list) or not 1 <= len(filas) <= MAXIMO_EJEMPLARES_REGISTRO:
+        raise InventarioError(
+            "instancias",
+            f"Registra entre 1 y {MAXIMO_EJEMPLARES_REGISTRO} ejemplares.",
+        )
+
+    try:
+        material = Material.objects.select_for_update().get(pk=material_id)
+    except (Material.DoesNotExist, ValueError, TypeError) as error:
+        raise MaterialNoEncontradoError(f"No existe un material con id={material_id}") from error
+
+    codigos_en_filas = set()
+    filas_preparadas = []
     estados_validos = {clave for clave, _ in ESTADOS_INSTANCIA}
-    if estado not in estados_validos:
-        raise InventarioError("estado", "El estado de la instancia no es válido.")
+    for indice, fila in enumerate(filas):
+        if not isinstance(fila, dict):
+            raise InventarioError("instancias", "La fila debe ser un objeto válido.", indice=indice)
+        codigo_original = str(fila.get("codigo_ejemplar", "")).strip()
+        if not codigo_original:
+            raise InventarioError(
+                "codigo_ejemplar", "El código del ejemplar es obligatorio.", indice=indice
+            )
+        codigo = normalizar_codigo(codigo_original)
+        if len(codigo) > 50:
+            raise InventarioError(
+                "codigo_ejemplar", "El código admite máximo 50 caracteres.", indice=indice
+            )
+        clave = codigo.casefold()
+        if clave in codigos_en_filas:
+            raise InventarioError(
+                "codigo_ejemplar", "El código del ejemplar está duplicado en el registro.", indice=indice
+            )
+        codigos_en_filas.add(clave)
+        if InstanciaMaterial.objects.filter(codigo_ejemplar__iexact=codigo).exists():
+            raise InventarioError(
+                "codigo_ejemplar",
+                "El código de ejemplar ya está registrado.",
+                status_code=409,
+                indice=indice,
+            )
 
-    instancia = InstanciaMaterial.objects.create(
-        material=material,
-        codigo_ejemplar=codigo,
-        numero_serie=numero_serie.strip() if numero_serie else "",
-        estado=estado,
-        estado_fisico=estado_fisico.strip() if estado_fisico else "Operativo",
-        observaciones=observaciones.strip() if observaciones else "",
-        ubicacion=ubicacion.strip() if ubicacion else "",
-    )
+        estado = fila.get("estado", "disponible")
+        if estado not in estados_validos:
+            raise InventarioError("estado", "El estado de la instancia no es válido.", indice=indice)
+        color = fila.get("color", "")
+        if not isinstance(color, str):
+            raise InventarioError("color", "El color del ejemplar debe ser texto.", indice=indice)
+        if len(color) > 30:
+            raise InventarioError("color", "El color admite máximo 30 caracteres.", indice=indice)
+        foto = fila.get("foto")
+        if foto is not None:
+            try:
+                validar_foto(foto)
+            except ValidationError as error:
+                raise InventarioError("foto", error.messages[0], indice=indice) from error
+        filas_preparadas.append({
+            "codigo_ejemplar": codigo,
+            "numero_serie": fila.get("numero_serie", ""),
+            "estado": estado,
+            "estado_fisico": fila.get("estado_fisico", "Operativo"),
+            "color": color.strip(),
+            "foto": foto,
+            "observaciones": fila.get("observaciones", ""),
+            "ubicacion": fila.get("ubicacion", ""),
+        })
 
-    total = material.instancias.count()
-    if total > material.stock:
-        material.stock = total
+    instancias_creadas = []
+    instancia_en_proceso = None
+    indice_en_proceso = None
+    try:
+        for indice_en_proceso, fila in enumerate(filas_preparadas):
+            instancia_en_proceso = InstanciaMaterial(
+                material=material,
+                codigo_ejemplar=fila["codigo_ejemplar"],
+                numero_serie=fila["numero_serie"].strip() if fila["numero_serie"] else "",
+                estado=fila["estado"],
+                estado_fisico=fila["estado_fisico"].strip() if fila["estado_fisico"] else "Operativo",
+                color=fila["color"].strip() if fila["color"] else "",
+                foto=fila["foto"],
+                observaciones=fila["observaciones"].strip() if fila["observaciones"] else "",
+                ubicacion=fila["ubicacion"].strip() if fila["ubicacion"] else "",
+            )
+            instancia_en_proceso.save()
+            instancias_creadas.append(instancia_en_proceso)
+
+        material.stock = max(material.stock, material.instancias.count())
         material.save(update_fields=["stock", "updated_at"])
-
-    return instancia
+        return instancias_creadas
+    except Exception as error:
+        archivos_guardados = [
+            (instancia.foto.storage, instancia.foto.name)
+            for instancia in [*instancias_creadas, instancia_en_proceso]
+            if instancia and instancia.foto and instancia.foto.name
+        ]
+        for almacenamiento, nombre in archivos_guardados:
+            _eliminar_foto(almacenamiento, nombre)
+        if isinstance(error, IntegrityError) and "codigo_ejemplar" in str(error):
+            raise InventarioError(
+                "codigo_ejemplar",
+                "El código de ejemplar ya está registrado.",
+                status_code=409,
+                indice=indice_en_proceso,
+            ) from error
+        raise
 
 
 def actualizar_instancia_material(instancia_id, **campos):
@@ -501,11 +808,25 @@ def actualizar_instancia_material(instancia_id, **campos):
             raise InventarioError("estado", "El estado de la instancia no es válido.")
         instancia.estado = estado
 
-    for campo in ("numero_serie", "estado_fisico", "observaciones", "ubicacion"):
+    if campos.get("foto") is not None:
+        validar_foto(campos["foto"])
+
+    foto_anterior = instancia.foto.name if "foto" in campos and instancia.foto else None
+
+    for campo in ("numero_serie", "estado_fisico", "color", "observaciones", "ubicacion"):
         if campo in campos and isinstance(campos[campo], str):
             setattr(instancia, campo, campos[campo].strip())
 
+    if "foto" in campos:
+        instancia.foto = campos["foto"]
+
     instancia.save()
+
+    foto_nueva = instancia.foto.name if instancia.foto else None
+    if foto_anterior and foto_anterior != foto_nueva:
+        storage_foto = InstanciaMaterial._meta.get_field("foto").storage
+        transaction.on_commit(lambda: _eliminar_foto(storage_foto, foto_anterior))
+
     return instancia
 
 
@@ -523,9 +844,28 @@ def eliminar_instancia_material(instancia_id):
         )
 
     material = instancia.material
-    instancia.delete()
+    if material.instancias.count() <= 1:
+        raise InventarioError(
+            "instancia",
+            "No se puede eliminar el último ejemplar por separado; elimina el material completo.",
+            status_code=409,
+        )
+
+    foto = (instancia.foto.storage, instancia.foto.name) if instancia.foto else None
+    try:
+        instancia.delete()
+    except ProtectedError as error:
+        raise InventarioError(
+            "instancia",
+            "No se puede eliminar el ejemplar porque tiene historial de préstamos asociado.",
+            status_code=409,
+        ) from error
 
     total = material.instancias.count()
-    if total > 0 and total < material.stock:
+    if total < material.stock:
         material.stock = total
         material.save(update_fields=["stock", "updated_at"])
+
+    if foto:
+        storage, nombre = foto
+        transaction.on_commit(lambda: _eliminar_foto(storage, nombre))

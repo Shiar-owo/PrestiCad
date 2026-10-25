@@ -71,6 +71,8 @@ export function obtenerDatosFichaTecnica(material) {
         estadoLegible:
           ETIQUETAS_ESTADO[inst.estado] || inst.estado_display || inst.estado || 'Disponible',
         estadoFisico: inst.estado_fisico || 'Operativo',
+        color: inst.color?.trim() || material.color?.trim() || 'No especificado',
+        foto: inst.foto || '',
         observaciones: inst.observaciones || '',
         ubicacion: inst.ubicacion || '',
         esDisponible: inst.estado === 'disponible',

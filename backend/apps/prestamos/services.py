@@ -1,20 +1,26 @@
 from datetime import timedelta
 import math
+from pathlib import Path
 
 from django.core.files.base import ContentFile
+from django.core.exceptions import ValidationError
 from django.db.models import Case, CharField, Count, DateTimeField, F, IntegerField, Value, When
 from django.db import transaction
 from django.utils import timezone
 
+from apps.inventario import services as servicios_inventario
 from apps.inventario.constants import TIERS_ACCESIBLES
 from apps.inventario.models import Material
 from apps.prestamos.constants import (
     ESTADOS_DEVOLUBLES,
     ESTADOS_QUE_OCUPAN_UNIDAD,
+    MAXIMO_DIAS_PRESTAMO,
+    MAXIMO_PRESTATARIOS_SUGERIDOS,
     VALORES_ESTADOS_CHECKLIST_DEVOLUCION,
 )
-from apps.prestamos.models import Devolucion, Prestamo
+from apps.prestamos.models import Devolucion, FotoChecklist, Garantia, Prestamo
 from apps.prestamos.reportes import generar_reporte_dano
+from apps.prestamos.validators import validar_foto_checklist, validar_pdf_garantia
 from apps.usuarios.models import Usuario
 from apps.usuarios.services import (
     actualizar_reputacion,
@@ -31,6 +37,19 @@ class PrestamoError(Exception):
         self.mensaje = mensaje
         self.status_code = status_code
         super().__init__(mensaje)
+
+
+def buscar_prestatarios_por_dni(prefijo):
+    """Busca prestatarios activos por prefijo de DNI para la entrega de materiales."""
+    return (
+        Usuario.objects.select_related("rol")
+        .filter(
+            rol__nombre="prestatario",
+            estado="activo",
+            dni__startswith=prefijo,
+        )
+        .order_by("dni")[:MAXIMO_PRESTATARIOS_SUGERIDOS]
+    )
 
 
 def contar_unidades_disponibles(material):
@@ -123,11 +142,13 @@ def consultar_prestamos_usuario(usuario_id, ahora=None):
     return _consultar_prestamos_con_estado(ahora=ahora).filter(usuario_id=usuario_id)
 
 
-def consultar_historial_prestamos(ahora=None, estado=None):
+def consultar_historial_prestamos(ahora=None, estado=None, dni=None):
     """Lista global de préstamos para consulta histórica de gestión."""
     prestamos = _consultar_prestamos_con_estado(ahora=ahora).select_related("usuario")
     if estado is not None:
         prestamos = prestamos.filter(estado_consulta=estado)
+    if dni is not None:
+        prestamos = prestamos.filter(usuario__dni=dni)
     return prestamos
 
 
@@ -215,7 +236,7 @@ def _validar_checklist(checklist_inicial):
     if not isinstance(checklist_inicial, list) or not checklist_inicial:
         raise PrestamoError(
             "checklist_inicial",
-            "Registra al menos una condición en el checklist inicial.",
+            "Registra al menos un elemento en el checklist inicial.",
         )
     for indice, elemento in enumerate(checklist_inicial, start=1):
         if not isinstance(elemento, dict):
@@ -223,11 +244,259 @@ def _validar_checklist(checklist_inicial):
                 "checklist_inicial",
                 f"El elemento {indice} del checklist no es válido.",
             )
-        if not elemento.get("elemento", "").strip() or not elemento.get("condicion", "").strip():
+        if not str(elemento.get("elemento", "")).strip():
             raise PrestamoError(
                 "checklist_inicial",
-                f"El elemento {indice} requiere descripción y condición.",
+                f"El elemento {indice} requiere una descripción.",
             )
+
+
+def _validar_fotos_checklist(checklist_inicial, fotos_checklist):
+    if not isinstance(fotos_checklist, (list, tuple)) or len(fotos_checklist) != len(checklist_inicial):
+        raise PrestamoError(
+            "fotos_checklist",
+            "Adjunta una foto por cada elemento del checklist inicial.",
+        )
+    for indice, (elemento, foto) in enumerate(zip(checklist_inicial, fotos_checklist), start=1):
+        if not foto:
+            raise PrestamoError(
+                "fotos_checklist",
+                f'El elemento «{elemento.get("elemento", "").strip()}» requiere una foto.',
+            )
+        try:
+            validar_foto_checklist(foto)
+        except ValidationError as error:
+            mensaje = error.messages[0] if error.messages else "La foto no es válida."
+            raise PrestamoError(
+                "fotos_checklist",
+                f"La foto del elemento {indice}: {mensaje}",
+            ) from error
+
+
+def _validar_documentos_garantia(material, documento_identidad, compromiso_responsabilidad):
+    documentos = (
+        ("documento_identidad", documento_identidad, "El documento de identidad en PDF"),
+        (
+            "compromiso_responsabilidad",
+            compromiso_responsabilidad,
+            "El compromiso de responsabilidad en PDF",
+        ),
+    )
+    requiere_garantia = material.requiere_garantia()
+    if not requiere_garantia:
+        for campo, archivo, _ in documentos:
+            if archivo is not None:
+                raise PrestamoError(
+                    campo,
+                    "Este material no requiere documentos de garantía.",
+                )
+    if requiere_garantia:
+        for campo, archivo, descripcion in documentos:
+            if archivo is None:
+                raise PrestamoError(
+                    campo,
+                    f"{descripcion} es obligatorio para materiales de alto valor.",
+                )
+
+    for campo, archivo, _ in documentos:
+        if archivo is None:
+            continue
+        try:
+            validar_pdf_garantia(archivo)
+        except ValidationError as error:
+            raise PrestamoError(campo, error.messages[0]) from error
+
+
+def _crear_garantia_registrada(prestamo, documento_identidad, compromiso_responsabilidad):
+    garantia = Garantia(
+        prestamo=prestamo,
+        tipo="documento_y_compromiso",
+        estado="registrada",
+        fecha_registro=timezone.now(),
+    )
+    archivos_guardados = []
+    try:
+        for nombre_campo, archivo in (
+            ("documento_identidad", documento_identidad),
+            ("compromiso_responsabilidad", compromiso_responsabilidad),
+        ):
+            campo_archivo = getattr(garantia, nombre_campo)
+            campo_archivo.save(archivo.name, archivo, save=False)
+            archivos_guardados.append((campo_archivo.storage, campo_archivo.name))
+        garantia.save()
+    except Exception:
+        for almacenamiento, nombre in archivos_guardados:
+            almacenamiento.delete(nombre)
+        raise
+    return garantia
+
+
+def obtener_documento_garantia(prestamo_id, tipo):
+    """Abre el documento indicado sin exponer su ruta de almacenamiento."""
+    campos = {
+        "documento-identidad": ("documento_identidad", "documento-identidad"),
+        "compromiso": ("compromiso_responsabilidad", "compromiso-responsabilidad"),
+    }
+    if tipo not in campos:
+        raise PrestamoError(
+            "tipo",
+            "El tipo de documento de garantía no es válido.",
+        )
+
+    try:
+        prestamo = Prestamo.objects.get(pk=prestamo_id)
+    except (Prestamo.DoesNotExist, ValueError, TypeError) as error:
+        raise PrestamoError(
+            "prestamo_id",
+            "No existe el préstamo indicado.",
+            status_code=404,
+        ) from error
+
+    try:
+        garantia = prestamo.garantia
+    except Garantia.DoesNotExist as error:
+        raise PrestamoError(
+            "garantia",
+            "El préstamo no tiene una garantía registrada.",
+            status_code=404,
+        ) from error
+
+    nombre_campo, nombre_descarga = campos[tipo]
+    documento = getattr(garantia, nombre_campo)
+    if not documento:
+        raise PrestamoError(
+            nombre_campo,
+            "El documento de garantía solicitado no está disponible.",
+            status_code=404,
+        )
+    try:
+        documento.open("rb")
+    except (FileNotFoundError, OSError) as error:
+        raise PrestamoError(
+            nombre_campo,
+            "El archivo del documento de garantía no existe.",
+            status_code=404,
+        ) from error
+
+    return documento, f"{nombre_descarga}-prestamo-{prestamo.pk}.pdf"
+
+
+@transaction.atomic
+def actualizar_documento_garantia(*, prestamo_id, tipo, archivo=None, eliminar=False):
+    """Reemplaza o elimina un PDF de garantía sin dejar la garantía vacía."""
+    campos = {
+        "documento-identidad": "documento_identidad",
+        "compromiso": "compromiso_responsabilidad",
+    }
+    if tipo not in campos:
+        raise PrestamoError("tipo", "El tipo de documento de garantía no es válido.")
+    if (archivo is None and not eliminar) or (archivo is not None and eliminar):
+        raise PrestamoError(
+            "documento",
+            "Adjunta un PDF para reemplazar o indica que deseas eliminar el documento.",
+        )
+
+    try:
+        prestamo = Prestamo.objects.select_for_update().get(pk=prestamo_id)
+    except (Prestamo.DoesNotExist, ValueError, TypeError) as error:
+        raise PrestamoError(
+            "prestamo_id",
+            "No existe el préstamo indicado.",
+            status_code=404,
+        ) from error
+    try:
+        garantia = Garantia.objects.select_for_update().get(prestamo=prestamo)
+    except Garantia.DoesNotExist as error:
+        raise PrestamoError(
+            "garantia",
+            "El préstamo no tiene una garantía registrada.",
+            status_code=404,
+        ) from error
+
+    nombre_campo = campos[tipo]
+    otro_campo = (
+        "compromiso_responsabilidad"
+        if nombre_campo == "documento_identidad"
+        else "documento_identidad"
+    )
+    documento_actual = getattr(garantia, nombre_campo)
+    nombre_anterior = documento_actual.name if documento_actual else ""
+    almacenamiento = documento_actual.storage
+
+    if eliminar:
+        if not getattr(garantia, otro_campo):
+            raise PrestamoError(
+                nombre_campo,
+                "Debe conservar al menos un documento PDF de garantía.",
+            )
+        setattr(garantia, nombre_campo, None)
+        garantia.estado = "pendiente"
+        garantia.save(update_fields=[nombre_campo, "estado"])
+        if nombre_anterior:
+            transaction.on_commit(lambda: almacenamiento.delete(nombre_anterior))
+    else:
+        try:
+            validar_pdf_garantia(archivo)
+        except ValidationError as error:
+            raise PrestamoError(nombre_campo, error.messages[0]) from error
+
+        nombre_nuevo = almacenamiento.save(
+            documento_actual.field.generate_filename(garantia, archivo.name),
+            archivo,
+        )
+        setattr(garantia, nombre_campo, nombre_nuevo)
+        if garantia.documento_identidad and garantia.compromiso_responsabilidad:
+            garantia.estado = "registrada"
+            garantia.fecha_registro = timezone.now()
+        try:
+            garantia.save(update_fields=[nombre_campo, "estado", "fecha_registro"])
+        except Exception:
+            almacenamiento.delete(nombre_nuevo)
+            raise
+        if nombre_anterior:
+            transaction.on_commit(lambda: almacenamiento.delete(nombre_anterior))
+
+    return garantia
+
+
+def consultar_detalle_historial_prestamo(prestamo_id, ahora=None):
+    """Recupera la ficha completa asociada a una entrega histórica."""
+    try:
+        return (
+            _consultar_prestamos_con_estado(ahora=ahora)
+            .select_related("usuario", "material", "instancia", "garantia")
+            .get(pk=prestamo_id)
+        )
+    except (Prestamo.DoesNotExist, ValueError, TypeError) as error:
+        raise PrestamoError(
+            "prestamo_id",
+            "No existe el préstamo indicado.",
+            status_code=404,
+        ) from error
+
+
+def obtener_foto_checklist(prestamo_id, fase, indice):
+    """Abre una foto de checklist para su entrega mediante endpoint protegido."""
+    try:
+        foto = FotoChecklist.objects.get(
+            prestamo_id=prestamo_id,
+            fase=fase,
+            indice=indice,
+        )
+    except (FotoChecklist.DoesNotExist, ValueError, TypeError) as error:
+        raise PrestamoError(
+            "foto_checklist",
+            "No existe la foto indicada del checklist.",
+            status_code=404,
+        ) from error
+    try:
+        return foto.imagen.open("rb"), Path(foto.imagen.name).name
+    except OSError as error:
+        raise PrestamoError(
+            "foto_checklist",
+            "No se pudo abrir la foto del checklist.",
+            status_code=404,
+        ) from error
 
 
 @transaction.atomic
@@ -235,20 +504,34 @@ def registrar_prestamo(
     *,
     dni_prestatario,
     material_id,
+    instancia_id=None,
     tiempo_prestamo_dias,
     checklist_inicial,
+    fotos_checklist,
     registrado_por,
-    garantia_documento_identidad_recibido=False,
-    garantia_compromiso_firmado_recibido=False,
+    documento_identidad=None,
+    compromiso_responsabilidad=None,
     fecha_entrega=None,
 ):
     """Registra la entrega con elegibilidad, garantía y control atómico de stock."""
-    if not isinstance(tiempo_prestamo_dias, int) or tiempo_prestamo_dias < 1:
+    if (
+        not isinstance(tiempo_prestamo_dias, int)
+        or tiempo_prestamo_dias < 1
+        or tiempo_prestamo_dias > MAXIMO_DIAS_PRESTAMO
+    ):
         raise PrestamoError(
             "tiempo_prestamo_dias",
-            "El tiempo de préstamo debe ser al menos un día.",
+            f"El tiempo de préstamo debe estar entre 1 y {MAXIMO_DIAS_PRESTAMO} días.",
         )
     _validar_checklist(checklist_inicial)
+    _validar_fotos_checklist(checklist_inicial, fotos_checklist)
+    checklist_inicial = [
+        {
+            "elemento": str(elemento.get("elemento", "")).strip(),
+            "observacion": str(elemento.get("observacion", "")).strip(),
+        }
+        for elemento in checklist_inicial
+    ]
 
     prestatario = _obtener_prestatario_bloqueado(dni_prestatario)
     try:
@@ -269,6 +552,25 @@ def registrar_prestamo(
             status_code=409,
         )
 
+    requiere_garantia = material.requiere_garantia()
+    _validar_documentos_garantia(
+        material,
+        documento_identidad,
+        compromiso_responsabilidad,
+    )
+
+    try:
+        instancia_elegida = servicios_inventario.marcar_instancia_prestada(
+            material.id,
+            instancia_id=instancia_id,
+        )
+    except servicios_inventario.InventarioError as error:
+        raise PrestamoError(
+            error.campo,
+            error.mensaje,
+            status_code=error.status_code,
+        ) from error
+
     unidades_disponibles = contar_unidades_disponibles(material)
     prestamos_existentes = material.prestamos.filter(
         estado__in=ESTADOS_QUE_OCUPAN_UNIDAD
@@ -278,18 +580,6 @@ def registrar_prestamo(
             "material_id",
             "No quedan unidades disponibles de este material.",
             status_code=409,
-        )
-
-    requiere_garantia = material.requiere_garantia()
-    if requiere_garantia and not garantia_documento_identidad_recibido:
-        raise PrestamoError(
-            "garantia_documento_identidad_recibido",
-            "El gestor debe confirmar la recepción del documento de identidad.",
-        )
-    if requiere_garantia and not garantia_compromiso_firmado_recibido:
-        raise PrestamoError(
-            "garantia_compromiso_firmado_recibido",
-            "El gestor debe confirmar la recepción del compromiso firmado.",
         )
 
     fecha_entrega = fecha_entrega or timezone.now()
@@ -302,8 +592,7 @@ def registrar_prestamo(
         tiempo_prestamo_dias=tiempo_prestamo_dias,
         estado="activo",
         checklist_inicial=checklist_inicial,
-        garantia_documento_identidad_recibido=garantia_documento_identidad_recibido,
-        garantia_compromiso_firmado_recibido=garantia_compromiso_firmado_recibido,
+        instancia_id=instancia_elegida["id"],
     )
 
     # Material.estado describe disponibilidad del conjunto: solo pasa a
@@ -318,10 +607,34 @@ def registrar_prestamo(
         material.estado = "disponible"
         material.save(update_fields=("estado", "updated_at"))
 
-    instancia_disponible = material.instancias.filter(estado="disponible").first()
-    if instancia_disponible:
-        instancia_disponible.estado = "prestado"
-        instancia_disponible.save(update_fields=("estado", "updated_at"))
+    if requiere_garantia:
+        _crear_garantia_registrada(
+            prestamo,
+            documento_identidad,
+            compromiso_responsabilidad,
+        )
+
+    fotos_guardadas = []
+    try:
+        for indice, (elemento, foto) in enumerate(zip(checklist_inicial, fotos_checklist)):
+            foto_modelo = FotoChecklist(
+                prestamo=prestamo,
+                fase="inicial",
+                indice=indice,
+                elemento=elemento["elemento"].strip(),
+                imagen=foto,
+            )
+            try:
+                foto_modelo.save()
+            except Exception:
+                if foto_modelo.imagen.name:
+                    foto_modelo.imagen.storage.delete(foto_modelo.imagen.name)
+                raise
+            fotos_guardadas.append((foto_modelo.imagen.storage, foto_modelo.imagen.name))
+    except Exception:
+        for almacenamiento, nombre in fotos_guardadas:
+            almacenamiento.delete(nombre)
+        raise
 
     return prestamo
 
@@ -359,7 +672,7 @@ def _validar_estado_devoluble(prestamo):
     )
 
 
-def _validar_checklist_devolucion(checklist_devolucion):
+def _validar_checklist_devolucion(checklist_devolucion, prestamo=None):
     if not isinstance(checklist_devolucion, list) or not checklist_devolucion:
         raise PrestamoError(
             "checklist",
@@ -381,29 +694,70 @@ def _validar_checklist_devolucion(checklist_devolucion):
                 "checklist",
                 f"El elemento {indice} tiene un estado de devolución no válido.",
             )
+    if prestamo is not None:
+        checklist_inicial = prestamo.checklist_inicial or []
+        if len(checklist_devolucion) != len(checklist_inicial):
+            raise PrestamoError(
+                "checklist",
+                "La devolución debe conservar todos los elementos del checklist inicial.",
+            )
+        for indice, (inicial, devuelto) in enumerate(
+            zip(checklist_inicial, checklist_devolucion),
+            start=1,
+        ):
+            elemento_inicial = (
+                str(inicial.get("elemento", "")).strip()
+                if isinstance(inicial, dict)
+                else ""
+            )
+            elemento_devuelto = str(devuelto.get("elemento", "")).strip()
+            if elemento_devuelto != elemento_inicial:
+                raise PrestamoError(
+                    "checklist",
+                    f"La fila {indice} debe conservar el elemento «{elemento_inicial}» "
+                    "y el orden del checklist inicial.",
+                )
 
 
-def _normalizar_checklist_devolucion(prestamo, checklist_devolucion):
-    """Ordena las filas y ancla la condición inicial al checklist de entrega (RN09).
+def _validar_evidencia_devolucion(checklist_devolucion, fotos_checklist):
+    if len(fotos_checklist) != len(checklist_devolucion):
+        raise PrestamoError(
+            "fotos_checklist",
+            "Adjunta una foto por cada fila con daño del checklist de devolución.",
+        )
+    for indice, elemento in enumerate(checklist_devolucion):
+        tiene_dano = elemento["estado"] in ("dano_parcial", "dano_total")
+        nombre = str(elemento.get("elemento", "")).strip()
+        observacion = str(elemento.get("observacion", "")).strip()
+        foto = fotos_checklist[indice]
+        if tiene_dano and not observacion:
+            raise PrestamoError(
+                "checklist",
+                f"El elemento «{nombre}» requiere una observación porque reporta daño.",
+            )
+        if tiene_dano and foto is None:
+            raise PrestamoError(
+                "fotos_checklist",
+                f"El elemento «{nombre}» requiere una foto porque reporta daño.",
+            )
+        if foto is not None:
+            try:
+                validar_foto_checklist(foto)
+            except ValidationError as error:
+                raise PrestamoError(
+                    "fotos_checklist",
+                    f"La foto del elemento «{nombre}» no es válida: {error.messages[0]}",
+                ) from error
 
-    La comparación de daños se apoya en la condición registrada al entregar;
-    el estado devuelto es siempre el que informó el gestor en esta operación.
-    """
-    condiciones_iniciales = {
-        str(item.get("elemento", "")).strip().lower(): str(item.get("condicion", "")).strip()
-        for item in prestamo.checklist_inicial or []
-        if isinstance(item, dict)
-    }
+
+def _normalizar_checklist_devolucion(checklist_devolucion):
+    """Normaliza el estado y la observación de cada fila devuelta."""
     normalizado = []
     for item in checklist_devolucion:
         elemento = str(item.get("elemento", "")).strip()
         normalizado.append(
             {
                 "elemento": elemento,
-                "condicion": condiciones_iniciales.get(
-                    elemento.lower(),
-                    str(item.get("condicion", "")).strip(),
-                ),
                 "estado": item["estado"],
                 "observacion": str(item.get("observacion", "")).strip(),
             }
@@ -473,8 +827,8 @@ def estimar_devolucion(*, prestamo_id, checklist_devolucion, fecha_devolucion=No
     """Resumen de sanciones sin persistir nada: misma fuentes que el registro."""
     prestamo = _obtener_prestamo_para_devolucion(prestamo_id)
     _validar_estado_devoluble(prestamo)
-    _validar_checklist_devolucion(checklist_devolucion)
-    checklist = _normalizar_checklist_devolucion(prestamo, checklist_devolucion)
+    _validar_checklist_devolucion(checklist_devolucion, prestamo)
+    checklist = _normalizar_checklist_devolucion(checklist_devolucion)
     fecha_devolucion = fecha_devolucion or timezone.now()
     return _calcular_resultado(prestamo, checklist, fecha_devolucion)
 
@@ -491,6 +845,7 @@ def registrar_devolucion(
     *,
     prestamo_id,
     checklist_devolucion,
+    fotos_checklist=None,
     realizado_por,
     fecha_devolucion=None,
 ):
@@ -501,8 +856,11 @@ def registrar_devolucion(
     """
     prestamo = _obtener_prestamo_para_devolucion(prestamo_id, bloquear=True)
     _validar_estado_devoluble(prestamo)
-    _validar_checklist_devolucion(checklist_devolucion)
-    checklist = _normalizar_checklist_devolucion(prestamo, checklist_devolucion)
+    _validar_checklist_devolucion(checklist_devolucion, prestamo)
+    if fotos_checklist is None:
+        fotos_checklist = [None] * len(checklist_devolucion)
+    _validar_evidencia_devolucion(checklist_devolucion, fotos_checklist)
+    checklist = _normalizar_checklist_devolucion(checklist_devolucion)
     fecha_devolucion = fecha_devolucion or timezone.now()
 
     resultado = _calcular_resultado(prestamo, checklist, fecha_devolucion)
@@ -519,16 +877,25 @@ def registrar_devolucion(
         material.estado = "disponible"
         material.save(update_fields=("estado", "updated_at"))
 
-    instancia_prestada = material.instancias.filter(estado="prestado").first()
-    if instancia_prestada:
-        if resultado["hay_dano"]:
-            instancia_prestada.estado = "en_mantenimiento"
-            instancia_prestada.observaciones = (
-                f"Devuelto con {resultado['dano']} en préstamo #{prestamo.id}."
-            )
-        else:
-            instancia_prestada.estado = "disponible"
-        instancia_prestada.save(update_fields=("estado", "observaciones", "updated_at"))
+    estado_final_instancia = "en_mantenimiento" if resultado["hay_dano"] else "disponible"
+    observaciones_instancia = (
+        f"Devuelto con {resultado['dano']} en préstamo #{prestamo.id}."
+        if resultado["hay_dano"]
+        else None
+    )
+    try:
+        servicios_inventario.registrar_devolucion_instancia(
+            material.id,
+            instancia_id=prestamo.instancia_id,
+            estado_final=estado_final_instancia,
+            observaciones=observaciones_instancia,
+        )
+    except servicios_inventario.InventarioError as error:
+        raise PrestamoError(
+            error.campo,
+            error.mensaje,
+            status_code=error.status_code,
+        ) from error
 
     devolucion = Devolucion.objects.create(
         prestamo=prestamo,
@@ -537,6 +904,29 @@ def registrar_devolucion(
         checklist_devolucion=checklist,
         resultado=resultado,
     )
-    if resultado["hay_dano"]:
-        _generar_reporte_de_dano(devolucion)
+    fotos_guardadas = []
+    try:
+        for indice, (elemento, foto) in enumerate(zip(checklist, fotos_checklist)):
+            if foto is None:
+                continue
+            foto_modelo = FotoChecklist(
+                prestamo=prestamo,
+                fase="final",
+                indice=indice,
+                elemento=elemento["elemento"],
+                imagen=foto,
+            )
+            try:
+                foto_modelo.save()
+            except Exception:
+                if foto_modelo.imagen.name:
+                    foto_modelo.imagen.storage.delete(foto_modelo.imagen.name)
+                raise
+            fotos_guardadas.append((foto_modelo.imagen.storage, foto_modelo.imagen.name))
+        if resultado["hay_dano"]:
+            _generar_reporte_de_dano(devolucion)
+    except Exception:
+        for almacenamiento, nombre in fotos_guardadas:
+            almacenamiento.delete(nombre)
+        raise
     return devolucion

@@ -250,6 +250,20 @@ class InstanciaMaterial(models.Model):
         verbose_name="Estado físico",
         help_text="Condición física de este ejemplar (ej. Excelente, Bueno, Desgaste leve).",
     )
+    color = models.CharField(
+        max_length=30,
+        blank=True,
+        default="",
+        verbose_name="Color del ejemplar",
+        help_text="Color propio de esta unidad; si queda vacío, se muestra el color del material.",
+    )
+    foto = models.ImageField(
+        upload_to=ruta_foto,
+        blank=True,
+        validators=[validar_foto],
+        verbose_name="Foto del ejemplar",
+        help_text="Imagen del ejemplar: JPG, PNG o WEBP, hasta 5 MB.",
+    )
     observaciones = models.TextField(
         blank=True,
         default="",

@@ -1,12 +1,30 @@
 export const TAMANO_PAGINA_HISTORIAL = 25
 
-export function construirRutaHistorial({ estado = 'todos', pagina = 1 } = {}) {
+export function iniciarCargaHistorial(consultaActual) {
+  return {
+    cargando: true,
+    error: '',
+    datos: consultaActual?.datos ?? null,
+  }
+}
+
+export function obtenerPrestamoAdyacente(prestamos, prestamoId, direccion) {
+  if (!Array.isArray(prestamos) || !['anterior', 'siguiente'].includes(direccion)) return null
+  const indice = prestamos.findIndex((prestamo) => prestamo.id === prestamoId)
+  if (indice < 0) return null
+
+  const indiceAdyacente = indice + (direccion === 'anterior' ? -1 : 1)
+  return prestamos[indiceAdyacente] || null
+}
+
+export function construirRutaHistorial({ estado = 'todos', pagina = 1, dni = '' } = {}) {
   const parametros = new URLSearchParams({
     page: String(pagina),
     page_size: String(TAMANO_PAGINA_HISTORIAL),
   })
 
   if (estado && estado !== 'todos') parametros.set('estado', estado)
+  if (dni) parametros.set('dni', dni)
 
   return `/prestamos/historial/?${parametros.toString()}`
 }

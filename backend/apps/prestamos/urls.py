@@ -1,7 +1,11 @@
 from django.urls import path
 
 from apps.prestamos.views import (
+    DetalleHistorialPrestamoView,
     DetallePrestamoParaDevolucionView,
+    BuscarPrestatariosView,
+    DescargarDocumentoGarantiaView,
+    DescargarFotoChecklistView,
     EstimarDevolucionView,
     HistorialPrestamosView,
     ListarReportesDevolucionView,
@@ -13,7 +17,17 @@ from apps.prestamos.views import (
 
 urlpatterns = [
     path("prestamos/", RegistrarPrestamoView.as_view(), name="registrar-prestamo"),
+    path(
+        "prestamos/prestatarios/",
+        BuscarPrestatariosView.as_view(),
+        name="buscar-prestatarios-prestamo",
+    ),
     path("prestamos/historial/", HistorialPrestamosView.as_view(), name="historial-prestamos"),
+    path(
+        "prestamos/<int:prestamo_id>/historial/",
+        DetalleHistorialPrestamoView.as_view(),
+        name="detalle-historial-prestamo",
+    ),
     path("prestamos/mis-prestamos/", MisPrestamosView.as_view(), name="mis-prestamos"),
     path(
         "prestamos/devoluciones/reportes/",
@@ -24,6 +38,16 @@ urlpatterns = [
         "prestamos/devoluciones/<int:devolucion_id>/reporte/",
         ReporteDevolucionView.as_view(),
         name="reporte-devolucion",
+    ),
+    path(
+        "prestamos/<int:prestamo_id>/garantia/<str:tipo>/",
+        DescargarDocumentoGarantiaView.as_view(),
+        name="descargar-documento-garantia",
+    ),
+    path(
+        "prestamos/<int:prestamo_id>/checklist/<str:fase>/<int:indice>/foto/",
+        DescargarFotoChecklistView.as_view(),
+        name="foto-checklist",
     ),
     path(
         "prestamos/<int:prestamo_id>/devolucion/estimar/",

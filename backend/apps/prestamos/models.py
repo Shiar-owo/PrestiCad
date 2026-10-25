@@ -1,12 +1,20 @@
 import uuid
 from pathlib import Path
 
-from django.core.validators import MinValueValidator
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils import timezone
 
 from apps.inventario.models import Material
-from apps.prestamos.constants import ESTADOS_PRESTAMO
+from apps.prestamos.constants import (
+    ESTADOS_GARANTIA,
+    ESTADOS_PRESTAMO,
+    FASES_FOTO_CHECKLIST,
+    MAXIMO_DIAS_PRESTAMO,
+    TIPOS_GARANTIA,
+)
+from apps.prestamos.storage import obtener_almacenamiento_garantias
+from apps.prestamos.validators import validar_foto_checklist
 from apps.usuarios.models import Usuario
 
 
@@ -19,6 +27,17 @@ def ruta_reporte(instance, filename):
     """
     extension = Path(filename).suffix.lower() or ".pdf"
     return f"devoluciones/{timezone.now():%Y/%m}/{uuid.uuid4().hex[:12]}{extension}"
+
+
+def ruta_documento_garantia(instance, filename):
+    """Genera una ruta privada que no conserva el nombre original del archivo."""
+    return f"garantias/{timezone.now():%Y/%m}/{uuid.uuid4().hex}.pdf"
+
+
+def ruta_foto_checklist(instance, filename):
+    """Genera una ruta privada y aleatoria para la foto de un checklist."""
+    extension = Path(filename).suffix.lower() or ".jpg"
+    return f"checklists/{timezone.now():%Y/%m}/{uuid.uuid4().hex}{extension}"
 
 
 class Prestamo(models.Model):
@@ -34,6 +53,13 @@ class Prestamo(models.Model):
         on_delete=models.PROTECT,
         related_name="prestamos",
     )
+    instancia = models.ForeignKey(
+        "inventario.InstanciaMaterial",
+        on_delete=models.PROTECT,
+        related_name="prestamos",
+        null=True,
+        blank=True,
+    )
     registrado_por = models.ForeignKey(
         Usuario,
         on_delete=models.PROTECT,
@@ -42,7 +68,7 @@ class Prestamo(models.Model):
     fecha_entrega = models.DateTimeField(default=timezone.now)
     fecha_limite = models.DateTimeField()
     tiempo_prestamo_dias = models.PositiveIntegerField(
-        validators=[MinValueValidator(1)],
+        validators=[MinValueValidator(1), MaxValueValidator(MAXIMO_DIAS_PRESTAMO)],
     )
     estado = models.CharField(
         max_length=20,
@@ -50,8 +76,6 @@ class Prestamo(models.Model):
         default="activo",
     )
     checklist_inicial = models.JSONField(default=list)
-    garantia_documento_identidad_recibido = models.BooleanField(default=False)
-    garantia_compromiso_firmado_recibido = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -75,10 +99,92 @@ class Prestamo(models.Model):
     def garantia_completa(self):
         if not self.requiere_garantia:
             return True
-        return (
-            self.garantia_documento_identidad_recibido
-            and self.garantia_compromiso_firmado_recibido
+        try:
+            garantia = self.garantia
+        except Garantia.DoesNotExist:
+            return False
+        return bool(
+            garantia.estado == "registrada"
+            and garantia.documento_identidad
+            and garantia.compromiso_responsabilidad
         )
+
+
+class Garantia(models.Model):
+    """Documentos que respaldan un préstamo de material de alto valor."""
+
+    prestamo = models.OneToOneField(
+        Prestamo,
+        on_delete=models.PROTECT,
+        related_name="garantia",
+    )
+    tipo = models.CharField(
+        max_length=40,
+        choices=TIPOS_GARANTIA,
+        default="documento_y_compromiso",
+    )
+    estado = models.CharField(
+        max_length=20,
+        choices=ESTADOS_GARANTIA,
+        default="pendiente",
+    )
+    documento_identidad = models.FileField(
+        upload_to=ruta_documento_garantia,
+        storage=obtener_almacenamiento_garantias,
+        blank=True,
+        null=True,
+        verbose_name="Documento de identidad (PDF)",
+    )
+    compromiso_responsabilidad = models.FileField(
+        upload_to=ruta_documento_garantia,
+        storage=obtener_almacenamiento_garantias,
+        blank=True,
+        null=True,
+        verbose_name="Compromiso de responsabilidad (PDF)",
+    )
+    fecha_registro = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Garantía"
+        verbose_name_plural = "Garantías"
+
+    def __str__(self):
+        return f"Garantía del préstamo {self.prestamo_id}"
+
+
+class FotoChecklist(models.Model):
+    """Foto privada asociada a un elemento y fase de inspección del préstamo."""
+
+    prestamo = models.ForeignKey(
+        Prestamo,
+        on_delete=models.CASCADE,
+        related_name="fotos_checklist",
+    )
+    fase = models.CharField(max_length=10, choices=FASES_FOTO_CHECKLIST)
+    indice = models.PositiveSmallIntegerField()
+    elemento = models.CharField(max_length=100)
+    imagen = models.ImageField(
+        upload_to=ruta_foto_checklist,
+        storage=obtener_almacenamiento_garantias,
+        validators=[validar_foto_checklist],
+        verbose_name="Foto del checklist",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Foto de checklist"
+        verbose_name_plural = "Fotos de checklist"
+        ordering = ["indice"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=("prestamo", "fase", "indice"),
+                name="prest_foto_check_fase_indice_uniq",
+            ),
+        ]
+
+    def __str__(self):
+        return f"Foto {self.elemento} del checklist {self.fase} del préstamo {self.prestamo_id}"
 
 
 class Devolucion(models.Model):

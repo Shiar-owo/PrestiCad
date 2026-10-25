@@ -10,11 +10,13 @@ import {
 } from '../constantes/catalogo'
 import MaterialForm from '../components/MaterialForm'
 import FichaTecnicaModal from '../components/FichaTecnicaModal'
+import ConfirmacionDobleEliminacion from '../components/ConfirmacionDobleEliminacion'
 import Boton from '../components/ui/Boton'
 import Tarjeta from '../components/ui/Tarjeta'
 import Skeleton from '../components/ui/Skeleton'
 import ErrorAlerta from '../components/ui/ErrorAlerta'
 import EstadoVacio from '../components/ui/EstadoVacio'
+import { obtenerCodigoInstancia } from '../inventario/eliminacionMaterial'
 
 function Materiales() {
   useTituloPagina('Inventario')
@@ -25,6 +27,7 @@ function Materiales() {
   const [materialEnEdicion, setMaterialEnEdicion] = useState(null)
   const [materialFicha, setMaterialFicha] = useState(null)
   const [cambiandoEstado, setCambiandoEstado] = useState(null)
+  const [registroAEliminar, setRegistroAEliminar] = useState(null)
 
   useEffect(() => {
     cargarMateriales()
@@ -64,6 +67,27 @@ function Materiales() {
     await cargarMateriales()
   }
 
+  async function actualizarFichaTrasAgregarInstancias() {
+    try {
+      const materialActualizado = await api.get(`/materiales/${materialFicha.id}/`)
+      setMaterialFicha(materialActualizado)
+    } catch {
+      setError('Los ejemplares se agregaron, pero no se pudo actualizar la ficha.')
+    }
+    await cargarMateriales()
+  }
+
+  async function confirmarEliminacion() {
+    if (registroAEliminar.tipo === 'material') {
+      await api.delete(`/materiales/${registroAEliminar.material.id}/`)
+    } else {
+      await api.delete(`/instancias/${registroAEliminar.instancia.id}/`)
+    }
+    setRegistroAEliminar(null)
+    setMaterialFicha(null)
+    await cargarMateriales()
+  }
+
   // El cambio de estado viaja como un PATCH con un solo campo (HU04 criterio 8).
   // La actualización es optimista: si el backend la rechaza, se revierte.
   async function cambiarEstado(material, nuevoEstado) {
@@ -93,6 +117,10 @@ function Materiales() {
     }
   }
 
+  const codigoInstanciaAEliminar = registroAEliminar?.tipo === 'instancia'
+    ? obtenerCodigoInstancia(registroAEliminar.instancia)
+    : ''
+
   return (
     <section>
       <header className="mb-5 flex flex-wrap items-center justify-between gap-3">
@@ -113,6 +141,7 @@ function Materiales() {
 
       {mostrarFormulario && (
         <MaterialForm
+          key={materialEnEdicion?.id || 'nuevo'}
           material={materialEnEdicion}
           onGuardado={manejarGuardado}
           onCancelar={cerrarFormulario}
@@ -215,6 +244,14 @@ function Materiales() {
                         >
                           Editar
                         </Boton>
+                        <Boton
+                          variante="peligro"
+                          tamanio="pequeno"
+                          tipo="button"
+                          onClick={() => setRegistroAEliminar({ tipo: 'material', material })}
+                        >
+                          Eliminar
+                        </Boton>
                       </div>
                     </td>
                   </tr>
@@ -229,6 +266,28 @@ function Materiales() {
         <FichaTecnicaModal
           material={materialFicha}
           onCerrar={() => setMaterialFicha(null)}
+          onEliminarInstancia={(instancia) => setRegistroAEliminar({
+            tipo: 'instancia',
+            material: materialFicha,
+            instancia,
+          })}
+          onAgregarInstancias={actualizarFichaTrasAgregarInstancias}
+        />
+      )}
+
+      {registroAEliminar && (
+        <ConfirmacionDobleEliminacion
+          titulo={registroAEliminar.tipo === 'material'
+            ? `Eliminar material ${registroAEliminar.material.nombre}`
+            : `Eliminar ejemplar ${codigoInstanciaAEliminar}`}
+          descripcion={registroAEliminar.tipo === 'material'
+            ? `Se eliminarán el material ${registroAEliminar.material.codigo_inventario}, sus ${registroAEliminar.material.instancias?.length || registroAEliminar.material.stock} ejemplares y sus fotos.`
+            : `Se eliminará el ejemplar ${codigoInstanciaAEliminar} del material ${registroAEliminar.material.nombre}.`}
+          codigoConfirmacion={registroAEliminar.tipo === 'material'
+            ? registroAEliminar.material.codigo_inventario
+            : codigoInstanciaAEliminar}
+          onConfirmar={confirmarEliminacion}
+          onCancelar={() => setRegistroAEliminar(null)}
         />
       )}
     </section>

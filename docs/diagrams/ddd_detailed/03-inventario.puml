@@ -213,6 +213,8 @@ note bottom of Material
   • <b>stock</b>: sincronizado automáticamente con total de instancias.
   • <b>resumen_estados</b>: disponibilidad en tiempo real para catálogo.
   • Endpoints: `/api/materiales/<id>/instancias/` y `/api/instancias/<id>/`
+  • La lista de instancias admite `?estado=disponible` para elegir el ejemplar
+    disponible al registrar un préstamo.
 end note
 
 @enduml

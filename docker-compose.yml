@@ -29,6 +29,8 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile.dev
+    environment:
+      VITE_GARANTIA_TAMANO_MAXIMO_BYTES: ${GARANTIA_TAMANO_MAXIMO_BYTES:-5242880}
     volumes:
       - ./frontend:/app
       - /app/node_modules

@@ -1,8 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { api, ErrorApi } from '../api/client'
 import {
   calcularFechaLimiteEstimada,
+  evaluarCambioDuracion,
+  mapearErroresFotoChecklist,
+  obtenerElementosSinFoto,
   validarFormularioPrestamo,
 } from '../validacionesPrestamo'
 import useTituloPagina from '../hooks/useTituloPagina'
@@ -12,14 +15,28 @@ import Tarjeta from '../components/ui/Tarjeta'
 import Skeleton from '../components/ui/Skeleton'
 import ErrorAlerta from '../components/ui/ErrorAlerta'
 import EstadoVacio from '../components/ui/EstadoVacio'
+import SubidaDocumentoPDF from '../components/prestamos/SubidaDocumentoPDF'
+import SelectorPrestatario from '../components/prestamos/SelectorPrestatario'
+import AdvertenciaModal from '../components/ui/AdvertenciaModal'
+import { TAMANO_MAXIMO_GARANTIA_MB } from '../constantes/garantia'
+import {
+  DURACION_MAXIMA_PRESTAMO_DIAS,
+  TAMANO_MAXIMO_FOTO_CHECKLIST_MB,
+} from '../constantes/checklistPrestamo'
+import { construirSolicitudPrestamo } from '../prestamos/solicitudPrestamo'
+import {
+  crearOpcionesInstancia,
+  obtenerInstanciaSeleccionada,
+} from '../prestamos/instanciasPrestamo'
 
 const FORMULARIO_INICIAL = {
   dni: '',
   materialId: '',
+  instanciaId: '',
   dias: '7',
-  checklist: [{ elemento: '', condicion: '', observacion: '' }],
-  documentoIdentidadRecibido: false,
-  compromisoFirmadoRecibido: false,
+  checklist: [{ elemento: '', observacion: '', foto: null, fotoPrevia: '' }],
+  documentoIdentidad: null,
+  compromisoResponsabilidad: null,
 }
 
 const NIVEL_TIER = { restringido: 0, estandar: 1, avanzado: 2 }
@@ -54,16 +71,28 @@ const OPCIONES_MATERIAL = (materiales) => [
 function RegistrarPrestamo() {
   useTituloPagina('Registrar entrega')
   const [materiales, setMateriales] = useState([])
+  const [instancias, setInstancias] = useState([])
   const [formulario, setFormulario] = useState(FORMULARIO_INICIAL)
   const [cargando, setCargando] = useState(true)
+  const [cargandoInstancias, setCargandoInstancias] = useState(false)
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
+  const [errorInstancias, setErrorInstancias] = useState('')
   const [errores, setErrores] = useState({})
   const [prestamoCreado, setPrestamoCreado] = useState(null)
   const [perfilPrestatario, setPerfilPrestatario] = useState(null)
   const [dniPerfilVerificado, setDniPerfilVerificado] = useState('')
   const [consultandoPerfil, setConsultandoPerfil] = useState(false)
   const [errorPerfil, setErrorPerfil] = useState('')
+  const [elementosSinFoto, setElementosSinFoto] = useState(null)
+  const referenciaFormulario = useRef(null)
+  const referenciasFotos = useRef([])
+  const urlsTemporales = useRef(new Set())
+
+  useEffect(() => () => {
+    urlsTemporales.current.forEach((url) => URL.revokeObjectURL(url))
+    urlsTemporales.current.clear()
+  }, [])
 
   useEffect(() => {
     cargarMateriales()
@@ -100,6 +129,35 @@ function RegistrarPrestamo() {
     return () => { vigente = false }
   }, [formulario.dni])
 
+  useEffect(() => {
+    let cancelado = false
+    setInstancias([])
+    setErrorInstancias('')
+
+    if (!formulario.materialId) {
+      setCargandoInstancias(false)
+      return () => {
+        cancelado = true
+      }
+    }
+
+    setCargandoInstancias(true)
+    api.get(`/materiales/${formulario.materialId}/instancias/?estado=disponible`)
+      .then((resultado) => {
+        if (!cancelado) setInstancias(resultado)
+      })
+      .catch(() => {
+        if (!cancelado) setErrorInstancias('No se pudieron cargar las instancias disponibles.')
+      })
+      .finally(() => {
+        if (!cancelado) setCargandoInstancias(false)
+      })
+
+    return () => {
+      cancelado = true
+    }
+  }, [formulario.materialId])
+
   async function cargarMateriales() {
     setCargando(true)
     setError('')
@@ -117,6 +175,10 @@ function RegistrarPrestamo() {
 
   const materialSeleccionado = materiales.find(
     (material) => String(material.id) === String(formulario.materialId),
+  )
+  const instanciaSeleccionada = obtenerInstanciaSeleccionada(
+    instancias,
+    formulario.instanciaId,
   )
   const fechaLimiteEstimada = useMemo(
     () => calcularFechaLimiteEstimada(formulario.dias),
@@ -141,14 +203,49 @@ function RegistrarPrestamo() {
     const camposError = {
       dni: 'dni',
       materialId: 'material',
+      instanciaId: 'instancia_id',
       dias: 'dias',
-      documentoIdentidadRecibido: 'garantia_documento_identidad_recibido',
-      compromisoFirmadoRecibido: 'garantia_compromiso_firmado_recibido',
+      documentoIdentidad: 'documento_identidad',
+      compromisoResponsabilidad: 'compromiso_responsabilidad',
     }
-    setFormulario((actual) => ({ ...actual, [campo]: valor }))
-    setErrores((actual) => ({ ...actual, [camposError[campo] || campo]: undefined }))
+    setFormulario((actual) => ({
+      ...actual,
+      [campo]: valor,
+      ...(campo === 'materialId'
+        ? {
+            instanciaId: '',
+            documentoIdentidad: null,
+            compromisoResponsabilidad: null,
+          }
+        : {}),
+    }))
+    setErrores((actual) => ({
+      ...actual,
+      [camposError[campo] || campo]: undefined,
+      ...(campo === 'materialId'
+        ? {
+            instancia_id: undefined,
+            documento_identidad: undefined,
+            compromiso_responsabilidad: undefined,
+          }
+        : {}),
+    }))
+    if (campo === 'materialId') {
+      setInstancias([])
+      setCargandoInstancias(Boolean(valor))
+      setErrorInstancias('')
+    }
     setError('')
     setPrestamoCreado(null)
+  }
+
+  function cambiarDuracion(duracion) {
+    const cambio = evaluarCambioDuracion(duracion, formulario.dias)
+    if (cambio.error) {
+      setErrores((actual) => ({ ...actual, dias: cambio.error }))
+      return
+    }
+    actualizar('dias', cambio.valor)
   }
 
   function actualizarChecklist(indice, campo, valor) {
@@ -161,14 +258,54 @@ function RegistrarPrestamo() {
     setErrores((actual) => ({ ...actual, checklist: undefined }))
   }
 
+  function cambiarFotoChecklist(indice, archivo) {
+    const filaActual = formulario.checklist[indice]
+    if (filaActual?.fotoPrevia) {
+      URL.revokeObjectURL(filaActual.fotoPrevia)
+      urlsTemporales.current.delete(filaActual.fotoPrevia)
+    }
+    const fotoPrevia = archivo ? URL.createObjectURL(archivo) : ''
+    if (fotoPrevia) urlsTemporales.current.add(fotoPrevia)
+    if (referenciasFotos.current[indice]) referenciasFotos.current[indice].value = ''
+    setFormulario((actual) => ({
+      ...actual,
+      checklist: actual.checklist.map((item, posicion) => (
+        posicion === indice ? { ...item, foto: archivo, fotoPrevia } : item
+      )),
+    }))
+    setErrores((actual) => ({
+      ...actual,
+      fotosChecklist: { ...actual.fotosChecklist, [indice]: undefined },
+    }))
+  }
+
+  function enfocarPrimerError() {
+    window.requestAnimationFrame(() => {
+      const control = referenciaFormulario.current?.querySelector('[aria-invalid="true"]')
+      if (!control) return
+      control.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      control.focus({ preventScroll: true })
+    })
+  }
+
+  function cerrarAdvertenciaFotos() {
+    setElementosSinFoto(null)
+    enfocarPrimerError()
+  }
+
   function agregarElementoChecklist() {
     setFormulario((actual) => ({
       ...actual,
-      checklist: [...actual.checklist, { elemento: '', condicion: '', observacion: '' }],
+      checklist: [...actual.checklist, { elemento: '', observacion: '', foto: null, fotoPrevia: '' }],
     }))
   }
 
   function quitarElementoChecklist(indice) {
+    const fila = formulario.checklist[indice]
+    if (fila?.fotoPrevia) {
+      URL.revokeObjectURL(fila.fotoPrevia)
+      urlsTemporales.current.delete(fila.fotoPrevia)
+    }
     setFormulario((actual) => ({
       ...actual,
       checklist: actual.checklist.filter((_, posicion) => posicion !== indice),
@@ -182,36 +319,73 @@ function RegistrarPrestamo() {
     const datosValidacion = {
       dni: formulario.dni,
       material: materialSeleccionado,
+      instanciaId: formulario.instanciaId,
       dias: formulario.dias,
       checklist: formulario.checklist,
-      documentoIdentidadRecibido: formulario.documentoIdentidadRecibido,
-      compromisoFirmadoRecibido: formulario.compromisoFirmadoRecibido,
+      documentoIdentidad: formulario.documentoIdentidad,
+      compromisoResponsabilidad: formulario.compromisoResponsabilidad,
     }
     const validacion = validarFormularioPrestamo(datosValidacion)
     setErrores(validacion)
     setError('')
     setPrestamoCreado(null)
-    if (Object.keys(validacion).length > 0) return
+    const fotosFaltantes = obtenerElementosSinFoto(formulario.checklist)
+    setElementosSinFoto(fotosFaltantes.length > 0 ? fotosFaltantes : null)
+    if (Object.keys(validacion).length > 0) {
+      if (fotosFaltantes.length === 0) enfocarPrimerError()
+      return
+    }
 
     setGuardando(true)
     try {
-      const respuesta = await api.post('/prestamos/', {
-        dni_prestatario: formulario.dni.trim(),
-        material_id: materialSeleccionado.id,
-        tiempo_prestamo_dias: Number(formulario.dias),
-        checklist_inicial: formulario.checklist.map((item) => ({
-          elemento: item.elemento.trim(),
-          condicion: item.condicion.trim(),
-          observacion: item.observacion.trim(),
-        })),
-        garantia_documento_identidad_recibido: formulario.documentoIdentidadRecibido,
-        garantia_compromiso_firmado_recibido: formulario.compromisoFirmadoRecibido,
+      const solicitud = construirSolicitudPrestamo({
+        dni: formulario.dni,
+        material: materialSeleccionado,
+        instanciaId: formulario.instanciaId,
+        dias: formulario.dias,
+        checklist: formulario.checklist,
+        documentoIdentidad: formulario.documentoIdentidad,
+        compromisoResponsabilidad: formulario.compromisoResponsabilidad,
       })
+      const respuesta = await api.post('/prestamos/', solicitud)
       setPrestamoCreado(respuesta)
+      formulario.checklist.forEach((item) => {
+        if (item.fotoPrevia) {
+          URL.revokeObjectURL(item.fotoPrevia)
+          urlsTemporales.current.delete(item.fotoPrevia)
+        }
+      })
       setFormulario(FORMULARIO_INICIAL)
       await cargarMateriales()
     } catch (errorApi) {
-      setError(mensajeApi(errorApi))
+      const erroresApi = errorApi instanceof ErrorApi ? errorApi.datos : null
+      const camposApi = {
+        dni_prestatario: 'dni',
+        instancia_id: 'instancia_id',
+        tiempo_prestamo_dias: 'dias',
+        documento_identidad: 'documento_identidad',
+        compromiso_responsabilidad: 'compromiso_responsabilidad',
+      }
+      const erroresDeCampo = Object.fromEntries(
+        Object.entries(camposApi)
+          .filter(([campo]) => erroresApi?.[campo])
+          .map(([campo, destino]) => [
+            destino,
+            Array.isArray(erroresApi[campo]) ? erroresApi[campo][0] : String(erroresApi[campo]),
+          ]),
+      )
+      const erroresFotosApi = mapearErroresFotoChecklist(erroresApi?.fotos_checklist)
+      if (Object.keys(erroresDeCampo).length > 0 || Object.keys(erroresFotosApi).length > 0) {
+        setErrores((actual) => ({
+          ...actual,
+          ...erroresDeCampo,
+          fotosChecklist: { ...actual.fotosChecklist, ...erroresFotosApi },
+        }))
+        setError('')
+        enfocarPrimerError()
+      } else {
+        setError(mensajeApi(errorApi))
+      }
     } finally {
       setGuardando(false)
     }
@@ -262,16 +436,13 @@ function RegistrarPrestamo() {
 
       {!cargando && materiales.length > 0 && (
         <Tarjeta className="p-6">
-          <form onSubmit={registrar} noValidate className="grid gap-5">
-            <Campo
+          <form ref={referenciaFormulario} onSubmit={registrar} noValidate className="grid gap-5">
+            <SelectorPrestatario
               etiqueta="DNI del prestatario"
               valor={formulario.dni}
-              onCambio={(evento) => actualizar('dni', evento.target.value)}
+              onCambio={(valor) => actualizar('dni', valor)}
               error={errores.dni}
-              ayuda="Al completar el DNI se consultará la reputación del prestatario."
-              inputMode="numeric"
-              autoComplete="off"
-              maxLength={8}
+              ayuda="Al completar o seleccionar el DNI se consultará la reputación del prestatario."
               requerido
             />
             <Campo
@@ -312,12 +483,103 @@ function RegistrarPrestamo() {
               </div>
             )}
             <Campo
+              etiqueta="Instancia disponible"
+              opciones={crearOpcionesInstancia(instancias, cargandoInstancias)}
+              valor={formulario.instanciaId}
+              onCambio={(evento) => actualizar('instanciaId', evento.target.value)}
+              error={errores.instancia_id}
+              ayuda={!materialSeleccionado
+                ? 'Selecciona primero el material.'
+                : cargandoInstancias
+                  ? 'Consultando sus instancias disponibles.'
+                  : errorInstancias
+                    ? 'No se pudo consultar el inventario de instancias.'
+                    : instancias.length > 0
+                      ? 'El código identifica el ejemplar físico que se entregará.'
+                      : 'No hay instancias disponibles para este material.'}
+              deshabilitado={!materialSeleccionado || cargandoInstancias || instancias.length === 0}
+              requerido
+            />
+            {instanciaSeleccionada && (
+              <section
+                className="grid gap-4 rounded-xl border border-acento-300 bg-acento-50/50 p-4 dark:border-acento-700/60 dark:bg-acento-500/10 sm:grid-cols-[minmax(9rem,12rem)_1fr]"
+                aria-labelledby="titulo-ficha-instancia-prestamo"
+              >
+                <div className="flex min-h-36 items-center justify-center overflow-hidden rounded-lg border border-borde bg-superficie">
+                  {instanciaSeleccionada.foto ? (
+                    <img
+                      src={instanciaSeleccionada.foto}
+                      alt={`Foto del ejemplar ${instanciaSeleccionada.codigo_ejemplar}`}
+                      className="h-full max-h-48 w-full object-contain p-2"
+                    />
+                  ) : (
+                    <p className="p-4 text-center text-sm text-texto-suave">
+                      Este ejemplar no tiene fotografía individual.
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <h3 id="titulo-ficha-instancia-prestamo" className="font-bold text-texto">
+                    Ficha del ejemplar seleccionado
+                  </h3>
+                  <p className="mt-1 text-sm text-texto-suave">
+                    {materialSeleccionado?.nombre || 'Material'} · Código de inventario:{' '}
+                    {materialSeleccionado?.codigo_inventario || 'No registrado'}
+                  </p>
+                  <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+                    <div>
+                      <dt className="font-semibold text-texto">Código de ejemplar</dt>
+                      <dd className="break-words text-texto-suave">{instanciaSeleccionada.codigo_ejemplar}</dd>
+                    </div>
+                    <div>
+                      <dt className="font-semibold text-texto">Estado</dt>
+                      <dd className="text-texto-suave">
+                        {instanciaSeleccionada.estado_display || instanciaSeleccionada.estado || 'No registrado'}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="font-semibold text-texto">Número de serie</dt>
+                      <dd className="break-words text-texto-suave">
+                        {instanciaSeleccionada.numero_serie || 'No registrado'}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="font-semibold text-texto">Color</dt>
+                      <dd className="text-texto-suave">{instanciaSeleccionada.color || 'No registrado'}</dd>
+                    </div>
+                    <div>
+                      <dt className="font-semibold text-texto">Estado físico</dt>
+                      <dd className="text-texto-suave">{instanciaSeleccionada.estado_fisico || 'No registrado'}</dd>
+                    </div>
+                    <div>
+                      <dt className="font-semibold text-texto">Ubicación</dt>
+                      <dd className="text-texto-suave">{instanciaSeleccionada.ubicacion || 'No registrada'}</dd>
+                    </div>
+                    <div className="sm:col-span-2">
+                      <dt className="font-semibold text-texto">Observaciones</dt>
+                      <dd className="break-words text-texto-suave">
+                        {instanciaSeleccionada.observaciones || 'Sin observaciones'}
+                      </dd>
+                    </div>
+                  </dl>
+                </div>
+              </section>
+            )}
+            {errorInstancias && <ErrorAlerta mensaje={errorInstancias} />}
+            {materialSeleccionado && !cargandoInstancias && !errorInstancias && instancias.length === 0 && (
+              <EstadoVacio
+                titulo="Sin instancias disponibles"
+                mensaje="Este material no tiene ejemplares disponibles para prestar."
+              />
+            )}
+            <Campo
               etiqueta="Duración del préstamo (días)"
               tipo="number"
               min="1"
+              max={DURACION_MAXIMA_PRESTAMO_DIAS}
               step="1"
               valor={formulario.dias}
-              onCambio={(evento) => actualizar('dias', evento.target.value)}
+              onCambio={(evento) => cambiarDuracion(evento.target.value)}
               error={errores.dias}
               requerido
             />
@@ -330,23 +592,18 @@ function RegistrarPrestamo() {
             )}
 
             <fieldset className="grid gap-4 rounded-xl border border-borde p-4">
-              <legend className="px-2 text-sm font-bold text-texto">
-                Checklist del estado inicial
-              </legend>
+              <legend className="px-2 text-sm font-bold text-texto">Checklist del estado inicial</legend>
+              <p className="text-xs text-texto-suave">
+                Cada elemento debe tener una foto JPG, PNG o WEBP. Tamaño máximo: {TAMANO_MAXIMO_FOTO_CHECKLIST_MB} MB.
+              </p>
               {formulario.checklist.map((item, indice) => (
-                <div key={`checklist-${indice}`} className="relative grid gap-4 rounded-lg border border-borde p-4 sm:grid-cols-3">
+                <div key={`checklist-${indice}`} className="relative grid gap-4 rounded-lg border border-borde p-4 sm:grid-cols-2">
                   <Campo
                     etiqueta="Elemento"
                     valor={item.elemento}
                     onCambio={(evento) => actualizarChecklist(indice, 'elemento', evento.target.value)}
+                    aria-invalid={Boolean(errores.checklist && !item.elemento.trim())}
                     maxLength={100}
-                    requerido
-                  />
-                  <Campo
-                    etiqueta="Condición"
-                    valor={item.condicion}
-                    onCambio={(evento) => actualizarChecklist(indice, 'condicion', evento.target.value)}
-                    maxLength={500}
                     requerido
                   />
                   <Campo
@@ -355,6 +612,48 @@ function RegistrarPrestamo() {
                     onCambio={(evento) => actualizarChecklist(indice, 'observacion', evento.target.value)}
                     maxLength={500}
                   />
+                  <div className="grid gap-2 sm:col-span-2">
+                    <label className="text-sm font-semibold text-texto" htmlFor={`foto-checklist-${indice}`}>
+                      Foto del elemento <span aria-hidden="true" className="text-error">*</span>
+                    </label>
+                    <input
+                      ref={(elemento) => { referenciasFotos.current[indice] = elemento }}
+                      id={`foto-checklist-${indice}`}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+                      aria-invalid={Boolean(errores.fotosChecklist?.[indice])}
+                      aria-describedby={errores.fotosChecklist?.[indice]
+                        ? `foto-checklist-${indice}-ayuda foto-checklist-${indice}-error`
+                        : `foto-checklist-${indice}-ayuda`}
+                      className="block w-full text-sm text-texto file:mr-3 file:rounded-lg file:border-0 file:bg-superficie-alta file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-texto"
+                      onChange={(evento) => cambiarFotoChecklist(indice, evento.target.files?.[0] || null)}
+                    />
+                    <p id={`foto-checklist-${indice}-ayuda`} className="text-xs text-texto-suave">
+                      Formatos permitidos: JPG, PNG y WEBP.
+                    </p>
+                    {errores.fotosChecklist?.[indice] && (
+                      <p id={`foto-checklist-${indice}-error`} className="text-xs text-error" role="alert">
+                        {errores.fotosChecklist[indice]}
+                      </p>
+                    )}
+                    {item.fotoPrevia && (
+                      <div className="flex flex-wrap items-start gap-3">
+                        <img
+                          src={item.fotoPrevia}
+                          alt={`Vista previa de ${item.elemento || `elemento ${indice + 1}`}`}
+                          className="h-28 w-28 rounded-lg border border-borde bg-superficie object-contain p-1"
+                        />
+                        <Boton
+                          variante="secundario"
+                          tamanio="pequeno"
+                          tipo="button"
+                          onClick={() => cambiarFotoChecklist(indice, null)}
+                        >
+                          Quitar foto
+                        </Boton>
+                      </div>
+                    )}
+                  </div>
                   {formulario.checklist.length > 1 && (
                     <Boton
                       variante="secundario"
@@ -375,43 +674,43 @@ function RegistrarPrestamo() {
             </fieldset>
 
             {materialSeleccionado?.es_alto_valor && (
-              <fieldset className="grid gap-3 rounded-xl border border-acento-300 bg-acento-50/50 p-4 dark:border-acento-700/60 dark:bg-acento-500/10">
+              <fieldset
+                key={formulario.materialId}
+                className="grid gap-3 rounded-xl border border-acento-300 bg-acento-50/50 p-4 dark:border-acento-700/60 dark:bg-acento-500/10"
+              >
                 <legend className="px-2 text-sm font-bold text-acento-800 dark:text-acento-300">
                   Garantía obligatoria para material de alto valor
                 </legend>
                 <p className="text-xs text-texto-suave">
-                  Verifica presencialmente los documentos. El sistema guarda constancia de recepción,
-                  no copias de documentos personales.
+                  Adjunta ambos documentos en PDF. Se almacenarán de forma privada y solo gestión
+                  autorizada podrá descargarlos. Tamaño máximo: {TAMANO_MAXIMO_GARANTIA_MB} MB.
                 </p>
-                <label className="flex items-start gap-2 text-sm text-texto">
-                  <input
-                    type="checkbox"
-                    checked={formulario.documentoIdentidadRecibido}
-                    onChange={(evento) => actualizar('documentoIdentidadRecibido', evento.target.checked)}
-                    className="mt-0.5 size-4 accent-marca-600"
-                  />
-                  Documento de identidad recibido y revisado
-                </label>
-                {errores.garantia_documento_identidad_recibido && (
-                  <ErrorAlerta mensaje={errores.garantia_documento_identidad_recibido} />
-                )}
-                <label className="flex items-start gap-2 text-sm text-texto">
-                  <input
-                    type="checkbox"
-                    checked={formulario.compromisoFirmadoRecibido}
-                    onChange={(evento) => actualizar('compromisoFirmadoRecibido', evento.target.checked)}
-                    className="mt-0.5 size-4 accent-marca-600"
-                  />
-                  Compromiso de responsabilidad firmado y recibido
-                </label>
-                {errores.garantia_compromiso_firmado_recibido && (
-                  <ErrorAlerta mensaje={errores.garantia_compromiso_firmado_recibido} />
-                )}
+                <SubidaDocumentoPDF
+                  etiqueta="Documento de identidad (PDF)"
+                  archivo={formulario.documentoIdentidad}
+                  onCambio={(archivo) => actualizar('documentoIdentidad', archivo)}
+                  error={errores.documento_identidad}
+                  ayuda={`Solo se acepta application/pdf, hasta ${TAMANO_MAXIMO_GARANTIA_MB} MB.`}
+                />
+                <SubidaDocumentoPDF
+                  etiqueta="Carta de responsabilidad (PDF)"
+                  archivo={formulario.compromisoResponsabilidad}
+                  onCambio={(archivo) => actualizar('compromisoResponsabilidad', archivo)}
+                  error={errores.compromiso_responsabilidad}
+                  ayuda={`Solo se acepta application/pdf, hasta ${TAMANO_MAXIMO_GARANTIA_MB} MB.`}
+                />
               </fieldset>
             )}
 
             <div className="flex flex-wrap gap-2">
-              <Boton tipo="submit" cargando={guardando} deshabilitado={bloqueadoPorElegibilidad}>
+              <Boton
+                tipo="submit"
+                cargando={guardando}
+                deshabilitado={bloqueadoPorElegibilidad || Boolean(
+                  materialSeleccionado?.es_alto_valor
+                  && (!formulario.documentoIdentidad || !formulario.compromisoResponsabilidad)
+                )}
+              >
                 Confirmar entrega
               </Boton>
               <Boton
@@ -425,6 +724,14 @@ function RegistrarPrestamo() {
             </div>
           </form>
         </Tarjeta>
+      )}
+      {elementosSinFoto && (
+        <AdvertenciaModal
+          titulo="Faltan fotos del checklist"
+          descripcion="Adjunta una foto para cada uno de estos elementos antes de continuar:"
+          mensajes={elementosSinFoto.map(({ elemento }) => elemento)}
+          onCerrar={cerrarAdvertenciaFotos}
+        />
       )}
     </section>
   )

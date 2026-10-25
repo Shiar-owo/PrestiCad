@@ -1,16 +1,21 @@
+import json
 import re
 
 from django.conf import settings
 from rest_framework import serializers
 
 from apps.compartido.serializers import RechazarCamposNoPermitidosMixin
-from apps.prestamos.constants import ESTADOS_CHECKLIST_DEVOLUCION
-from apps.prestamos.models import Devolucion, Prestamo
+from apps.prestamos.constants import (
+    ESTADOS_CHECKLIST_DEVOLUCION,
+    MAXIMO_DIAS_PRESTAMO,
+    MINIMO_DIGITOS_BUSQUEDA_PRESTATARIO,
+)
+from apps.prestamos.models import Devolucion, Garantia, Prestamo
+from apps.prestamos.validators import validar_foto_checklist, validar_pdf_garantia
 
 
 class ChecklistInicialItemSerializer(serializers.Serializer):
     elemento = serializers.CharField(max_length=100)
-    condicion = serializers.CharField(max_length=500)
     observacion = serializers.CharField(
         max_length=500,
         required=False,
@@ -33,10 +38,49 @@ class ChecklistInicialItemSerializer(serializers.Serializer):
             raise serializers.ValidationError("Describe el elemento inspeccionado.")
         return value.strip()
 
-    def validate_condicion(self, value):
-        if not value.strip():
-            raise serializers.ValidationError("Describe la condición inicial.")
-        return value.strip()
+class BusquedaPrestatarioSerializer(serializers.Serializer):
+    """Valida el prefijo de DNI usado para sugerir prestatarios al gestor."""
+
+    dni = serializers.CharField(max_length=8, allow_blank=False, trim_whitespace=True)
+
+    def validate_dni(self, value):
+        minimo = MINIMO_DIGITOS_BUSQUEDA_PRESTATARIO
+        if not re.fullmatch(rf"\d{{{minimo},8}}", value):
+            raise serializers.ValidationError(
+                f"El DNI de búsqueda debe contener entre {minimo} y 8 dígitos."
+            )
+        return value
+
+
+class FiltroHistorialPrestamosSerializer(serializers.Serializer):
+    """Valida el DNI completo opcional del filtro de historial global."""
+
+    dni = serializers.CharField(max_length=8, allow_blank=False, trim_whitespace=True)
+
+    def validate_dni(self, value):
+        if not re.fullmatch(r"\d{8}", value):
+            raise serializers.ValidationError(
+                "El DNI debe tener exactamente 8 dígitos numéricos."
+            )
+        return value
+
+
+class ActualizarDocumentoGarantiaSerializer(serializers.Serializer):
+    """Valida el reemplazo o eliminación de un documento PDF de garantía."""
+
+    archivo = serializers.FileField(
+        required=False,
+        allow_empty_file=False,
+        validators=[validar_pdf_garantia],
+    )
+    eliminar = serializers.BooleanField(required=False, default=False)
+
+    def validate(self, attrs):
+        if bool(attrs.get("archivo")) == attrs["eliminar"]:
+            raise serializers.ValidationError(
+                "Adjunta un PDF para reemplazar o indica que deseas eliminar el documento."
+            )
+        return attrs
 
 
 class RegistrarPrestamoSerializer(
@@ -45,10 +89,99 @@ class RegistrarPrestamoSerializer(
 ):
     dni_prestatario = serializers.CharField(max_length=8)
     material_id = serializers.UUIDField()
-    tiempo_prestamo_dias = serializers.IntegerField(min_value=1)
+    instancia_id = serializers.UUIDField(required=False)
+    tiempo_prestamo_dias = serializers.IntegerField(
+        min_value=1,
+        max_value=MAXIMO_DIAS_PRESTAMO,
+        error_messages={
+            "min_value": "El tiempo de préstamo debe ser al menos un día.",
+            "max_value": f"La duración máxima del préstamo es de {MAXIMO_DIAS_PRESTAMO} días.",
+        },
+    )
     checklist_inicial = ChecklistInicialItemSerializer(many=True, allow_empty=False)
-    garantia_documento_identidad_recibido = serializers.BooleanField(default=False)
-    garantia_compromiso_firmado_recibido = serializers.BooleanField(default=False)
+    fotos_checklist = serializers.ListField(
+        child=serializers.ImageField(validators=[validar_foto_checklist]),
+        write_only=True,
+        required=False,
+    )
+    documento_identidad = serializers.FileField(
+        required=False,
+        validators=[validar_pdf_garantia],
+    )
+    compromiso_responsabilidad = serializers.FileField(
+        required=False,
+        validators=[validar_pdf_garantia],
+    )
+
+    def to_internal_value(self, data):
+        checklist = data.get("checklist_inicial") if hasattr(data, "get") else None
+        if isinstance(checklist, str):
+            try:
+                checklist = json.loads(checklist)
+            except (TypeError, ValueError) as error:
+                raise serializers.ValidationError({
+                    "checklist_inicial": "El checklist inicial debe ser una lista JSON válida.",
+                }) from error
+            if hasattr(data, "getlist"):
+                data = {campo: data.get(campo) for campo in data.keys()}
+            else:
+                data = dict(data)
+            data["checklist_inicial"] = checklist
+        if isinstance(checklist, list):
+            if hasattr(data, "keys"):
+                datos = {
+                    campo: data.get(campo)
+                    for campo in data.keys()
+                }
+            else:
+                datos = dict(data)
+            fotos = [datos.get(f"foto_checklist_{indice}") for indice in range(len(checklist))]
+            for indice in range(len(checklist)):
+                datos.pop(f"foto_checklist_{indice}", None)
+            indices_sin_foto = [
+                indice
+                for indice, foto in enumerate(fotos)
+                if foto is None
+            ]
+            if indices_sin_foto:
+                errores = {
+                    indice: [
+                        (
+                            f'El elemento «{str(checklist[indice].get("elemento", "")).strip()}» '
+                            "requiere una foto."
+                            if isinstance(checklist[indice], dict)
+                            else f"La fila {indice + 1} requiere una foto."
+                        )
+                    ]
+                    for indice in indices_sin_foto
+                }
+                raise serializers.ValidationError({"fotos_checklist": errores})
+            datos["fotos_checklist"] = fotos
+            data = datos
+        return super().to_internal_value(data)
+
+    def validate(self, attrs):
+        datos_iniciales = self.initial_data
+        archivos_permitidos = {
+            f"foto_checklist_{indice}"
+            for indice in range(len(attrs["checklist_inicial"]))
+        }
+        if hasattr(datos_iniciales, "keys"):
+            self.initial_data = {
+                campo: datos_iniciales.get(campo)
+                for campo in datos_iniciales.keys()
+                if campo not in archivos_permitidos
+            }
+        try:
+            super().validate(attrs)
+        finally:
+            self.initial_data = datos_iniciales
+
+        if len(attrs.get("fotos_checklist", [])) != len(attrs["checklist_inicial"]):
+            raise serializers.ValidationError({
+                "fotos_checklist": "Adjunta una foto por cada elemento del checklist inicial.",
+            })
+        return attrs
 
     def validate_dni_prestatario(self, value):
         dni = value.strip()
@@ -66,8 +199,12 @@ class PrestamoRegistroSerializer(serializers.ModelSerializer):
         source="material.codigo_inventario",
         read_only=True,
     )
+    instancia_id = serializers.UUIDField(read_only=True, allow_null=True)
+    codigo_ejemplar = serializers.SerializerMethodField()
     requiere_garantia = serializers.BooleanField(read_only=True)
     garantia_completa = serializers.BooleanField(read_only=True)
+    garantia_documento_identidad_cargado = serializers.SerializerMethodField()
+    garantia_compromiso_responsabilidad_cargado = serializers.SerializerMethodField()
 
     class Meta:
         model = Prestamo
@@ -78,32 +215,47 @@ class PrestamoRegistroSerializer(serializers.ModelSerializer):
             "material_id",
             "material_nombre",
             "material_codigo",
+            "instancia_id",
+            "codigo_ejemplar",
             "fecha_entrega",
             "fecha_limite",
             "tiempo_prestamo_dias",
             "estado",
             "checklist_inicial",
             "requiere_garantia",
-            "garantia_documento_identidad_recibido",
-            "garantia_compromiso_firmado_recibido",
+            "garantia_documento_identidad_cargado",
+            "garantia_compromiso_responsabilidad_cargado",
             "garantia_completa",
         )
 
     def get_usuario_nombre(self, prestamo):
         return f"{prestamo.usuario.nombre} {prestamo.usuario.apellido}".strip()
 
+    def get_codigo_ejemplar(self, prestamo):
+        if prestamo.instancia_id is None:
+            return None
+        return prestamo.instancia.codigo_ejemplar
+
+    def _obtener_garantia(self, prestamo):
+        try:
+            return prestamo.garantia
+        except Garantia.DoesNotExist:
+            return None
+
+    def get_garantia_documento_identidad_cargado(self, prestamo):
+        garantia = self._obtener_garantia(prestamo)
+        return bool(garantia and garantia.documento_identidad)
+
+    def get_garantia_compromiso_responsabilidad_cargado(self, prestamo):
+        garantia = self._obtener_garantia(prestamo)
+        return bool(garantia and garantia.compromiso_responsabilidad)
+
 
 class ChecklistDevolucionItemSerializer(serializers.Serializer):
-    """Fila del checklist de devolución contrastada contra la entrega (RN09)."""
+    """Estado devuelto de una fila del checklist inicial (RN09)."""
 
     elemento = serializers.CharField(max_length=100)
     estado = serializers.ChoiceField(choices=ESTADOS_CHECKLIST_DEVOLUCION)
-    condicion = serializers.CharField(
-        max_length=500,
-        required=False,
-        allow_blank=True,
-        default="",
-    )
     observacion = serializers.CharField(
         max_length=500,
         required=False,
@@ -131,9 +283,57 @@ class DevolucionIngresoSerializer(
     RechazarCamposNoPermitidosMixin,
     serializers.Serializer,
 ):
-    """Entrada común de estimación y registro de la devolución (HU11)."""
+    """Entrada JSON de estimación y multipart de registro de devolución."""
 
     checklist = ChecklistDevolucionItemSerializer(many=True, allow_empty=False)
+    fotos_checklist = serializers.ListField(
+        child=serializers.ImageField(
+            allow_null=True,
+            validators=[validar_foto_checklist],
+        ),
+        required=False,
+        write_only=True,
+    )
+
+    def to_internal_value(self, data):
+        checklist = data.get("checklist") if hasattr(data, "get") else None
+        if isinstance(checklist, str):
+            try:
+                checklist = json.loads(checklist)
+            except (TypeError, ValueError) as error:
+                raise serializers.ValidationError({
+                    "checklist": "El checklist debe ser una lista JSON válida.",
+                }) from error
+
+        if isinstance(checklist, list):
+            datos = {campo: data.get(campo) for campo in data.keys()}
+            fotos = [
+                datos.pop(f"foto_checklist_{indice}", None)
+                for indice in range(len(checklist))
+            ]
+            datos["checklist"] = checklist
+            datos["fotos_checklist"] = fotos
+            data = datos
+
+        return super().to_internal_value(data)
+
+    def validate(self, attrs):
+        datos_originales = self.initial_data
+        checklist = attrs.get("checklist", [])
+        campos_foto = {
+            f"foto_checklist_{indice}"
+            for indice in range(len(checklist))
+        }
+        if hasattr(datos_originales, "keys"):
+            self.initial_data = {
+                campo: datos_originales.get(campo)
+                for campo in datos_originales.keys()
+                if campo not in campos_foto
+            }
+        try:
+            return super().validate(attrs)
+        finally:
+            self.initial_data = datos_originales
 
 
 def url_reporte_publica(devolucion):

@@ -2,11 +2,10 @@ import { useContext } from 'react'
 import { Link } from 'react-router'
 import {
   ArrowUpRight,
-  FileText,
+  ClipboardList,
   Gauge,
   History,
   Package,
-  PackagePlus,
   Search,
   ShieldCheck,
   UserCircle,
@@ -40,28 +39,16 @@ const ACCESOS = {
   ],
   gestor: [
     {
+      etiqueta: 'Gestionar Préstamos',
+      a: '/panel/gestion-prestamos',
+      descripcion: 'Registrar préstamo, registrar devolución, historial y reportes',
+      icono: ClipboardList,
+    },
+    {
       etiqueta: 'Gestión de inventario',
       a: '/panel/inventario',
       descripcion: 'Alta, edición y estado de los materiales',
       icono: Package,
-    },
-    {
-      etiqueta: 'Registrar entrega',
-      a: '/panel/prestamo',
-      descripcion: 'Entrega de material con checklist y garantía',
-      icono: PackagePlus,
-    },
-    {
-      etiqueta: 'Historial de préstamos',
-      a: '/panel/historial',
-      descripcion: 'Consulta y filtrado del historial',
-      icono: History,
-    },
-    {
-      etiqueta: 'Reportes de daños',
-      a: '/panel/reportes',
-      descripcion: 'Listado y descarga de reportes PDF',
-      icono: FileText,
     },
     {
       etiqueta: 'Vista catálogo',
@@ -72,22 +59,16 @@ const ACCESOS = {
   ],
   administrador: [
     {
+      etiqueta: 'Gestionar Préstamos',
+      a: '/panel/gestion-prestamos',
+      descripcion: 'Historial de préstamos, reportes y opciones de préstamos',
+      icono: ClipboardList,
+    },
+    {
       etiqueta: 'Gestión de inventario',
       a: '/panel/inventario',
       descripcion: 'Alta, edición y estado de los materiales',
       icono: Package,
-    },
-    {
-      etiqueta: 'Historial de préstamos',
-      a: '/panel/historial',
-      descripcion: 'Consulta y filtrado del historial',
-      icono: History,
-    },
-    {
-      etiqueta: 'Reportes de daños',
-      a: '/panel/reportes',
-      descripcion: 'Listado y descarga de reportes PDF',
-      icono: FileText,
     },
     {
       etiqueta: 'Gestionar roles',

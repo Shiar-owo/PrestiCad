@@ -13,6 +13,10 @@ import HistorialPrestamos from '../prestamos/HistorialPrestamos'
 import Materiales from '../pages/Materiales'
 import RegistrarPrestamo from '../pages/RegistrarPrestamo'
 import DevolucionPrestamo from '../pages/DevolucionPrestamo'
+import SeleccionarPrestamoDevolucion from '../pages/SeleccionarPrestamoDevolucion'
+import GestionarPrestamos, {
+  SeccionGestionPrestamosLayout,
+} from '../pages/GestionarPrestamos'
 import ReportesDanos from '../pages/ReportesDanos'
 import PerfilUsuario from '../pages/PerfilUsuario'
 import UsuariosRoles from '../pages/UsuariosRoles'
@@ -87,37 +91,40 @@ function Rutas() {
           }
         />
         <Route
-          path="prestamo"
-          element={
-            <RequerirRol roles={['gestor']}>
-              <RegistrarPrestamo />
-            </RequerirRol>
-          }
-        />
-        <Route
-          path="devolucion/:prestamoId"
-          element={
-            <RequerirRol roles={['gestor']}>
-              <DevolucionPrestamo />
-            </RequerirRol>
-          }
-        />
-        <Route
-          path="historial"
           element={
             <RequerirRol roles={['gestor', 'administrador']}>
-              <HistorialPrestamos />
+              <SeccionGestionPrestamosLayout />
             </RequerirRol>
           }
-        />
-        <Route
-          path="reportes"
-          element={
-            <RequerirRol roles={['gestor', 'administrador']}>
-              <ReportesDanos />
-            </RequerirRol>
-          }
-        />
+        >
+          <Route path="gestion-prestamos" element={<GestionarPrestamos />} />
+          <Route
+            path="prestamo"
+            element={
+              <RequerirRol roles={['gestor']}>
+                <RegistrarPrestamo />
+              </RequerirRol>
+            }
+          />
+          <Route
+            path="devolucion"
+            element={
+              <RequerirRol roles={['gestor']}>
+                <SeleccionarPrestamoDevolucion />
+              </RequerirRol>
+            }
+          />
+          <Route
+            path="devolucion/:prestamoId"
+            element={
+              <RequerirRol roles={['gestor']}>
+                <DevolucionPrestamo />
+              </RequerirRol>
+            }
+          />
+          <Route path="historial" element={<HistorialPrestamos />} />
+          <Route path="reportes" element={<ReportesDanos />} />
+        </Route>
       </Route>
 
       <Route

@@ -888,6 +888,14 @@ class HistorialPrestamosAPITestCase(APITestCase):
         vencido.refresh_from_db()
         self.assertEqual(vencido.estado, "activo")
 
+        devolubles = self.client.get(self.URL, {"estado": "devoluble"})
+        self.assertEqual(devolubles.status_code, 200)
+        self.assertEqual(devolubles.json()["count"], 2)
+        self.assertEqual(
+            [item["estado"] for item in devolubles.json()["results"]],
+            ["vencido", "activo"],
+        )
+
         invalida = self.client.get(self.URL, {"estado": "inexistente"})
         self.assertEqual(invalida.status_code, 400)
 

@@ -27,6 +27,25 @@ const OPCIONES_ESTADO_INICIAL_EJEMPLAR = [
   { valor: 'en_mantenimiento', etiqueta: 'En mantenimiento' },
 ]
 
+const ETIQUETAS_CAMPOS_ERROR = {
+  nombre: 'Nombre',
+  codigo_inventario: 'Código de inventario',
+  tipo: 'Tipo',
+  stock: 'Stock',
+  estado: 'Estado',
+  estado_inicial_ejemplares: 'Estado inicial de los ejemplares',
+  foto: 'Foto',
+  formulario: 'Registro',
+}
+
+function convertirErroresALista(error) {
+  if (Array.isArray(error)) return error.flatMap(convertirErroresALista)
+  if (error && typeof error === 'object') {
+    return Object.values(error).flatMap(convertirErroresALista)
+  }
+  return [String(error)]
+}
+
 const DATOS_INICIALES = {
   nombre: '',
   descripcion: '',
@@ -110,6 +129,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
   const [errores, setErrores] = useState({})
   const [enviando, setEnviando] = useState(false)
   const [mensajeExito, setMensajeExito] = useState('')
+  const [mostrarErroresEmergente, setMostrarErroresEmergente] = useState(false)
 
   useEffect(() => {
     if (!material) {
@@ -130,6 +150,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
     setVistaPrevia(material?.foto || '')
     setErrores({})
     setMensajeExito('')
+    setMostrarErroresEmergente(false)
   }, [material])
 
   // El cleanup corre con la URL anterior a la que `vistaPrevia` va a tomar, y
@@ -223,14 +244,13 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
     const erroresApi = {}
     for (const campo of Object.keys(datosError)) {
       if (campo === 'detail') {
-        erroresApi.formulario = String(datosError[campo])
+        erroresApi.formulario = convertirErroresALista(datosError[campo]).join(' | ')
         continue
       }
-      erroresApi[campo] = Array.isArray(datosError[campo])
-        ? datosError[campo][0]
-        : String(datosError[campo])
+      erroresApi[campo] = convertirErroresALista(datosError[campo]).join(' | ')
     }
     setErrores(erroresApi)
+    setMostrarErroresEmergente(true)
   }
 
   async function manejarEnvio(evento) {
@@ -239,6 +259,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
     const erroresFormulario = validar(datos, esEdicion, archivoFoto)
     setErrores(erroresFormulario)
     if (Object.keys(erroresFormulario).length > 0) {
+      setMostrarErroresEmergente(true)
       return
     }
 
@@ -256,6 +277,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
         esEdicion ? 'Material actualizado correctamente.' : 'Material registrado correctamente.',
       )
       setErrores({})
+      setMostrarErroresEmergente(false)
       setArchivoFoto(null)
       setVistaPrevia(material?.foto || '')
       if (!esEdicion) {
@@ -268,9 +290,11 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
       if (error instanceof ErrorApi && error.datos) {
         mostrarErroresDelBackend(error.datos)
       } else {
-        setErrores({
+        const erroresConexion = {
           formulario: 'No se pudo conectar con el servidor. Inténtalo de nuevo.',
-        })
+        }
+        setErrores(erroresConexion)
+        setMostrarErroresEmergente(true)
       }
     } finally {
       setEnviando(false)
@@ -289,6 +313,44 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
         <p className="mb-4 text-sm font-semibold text-marca-700 dark:text-marca-300" role="status">
           {mensajeExito}
         </p>
+      )}
+
+      {mostrarErroresEmergente && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onMouseDown={(evento) => {
+            if (evento.target === evento.currentTarget) setMostrarErroresEmergente(false)
+          }}
+        >
+          <section
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="errores-registro-material-titulo"
+            className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-borde bg-white p-6 shadow-xl dark:bg-superficie"
+          >
+            <h3 id="errores-registro-material-titulo" className="text-lg font-bold text-error">
+              No se pudo {esEdicion ? 'guardar los cambios' : 'registrar el material'}
+            </h3>
+            <p className="mt-1 text-sm text-texto-suave">Corrige estos problemas e inténtalo de nuevo:</p>
+            <ul className="mt-4 list-disc space-y-2 pl-5 text-sm text-texto">
+              {Object.entries(errores).flatMap(([campo, mensaje]) => {
+                const etiqueta = ETIQUETAS_CAMPOS_ERROR[campo]
+                  || campo.replaceAll('_', ' ')
+                return String(mensaje).split(' | ').filter(Boolean).map((detalle, indice) => (
+                  <li key={`${campo}-${indice}`}>
+                    {campo !== 'formulario' && <strong>{etiqueta}: </strong>}
+                    {detalle}
+                  </li>
+                ))
+              })}
+            </ul>
+            <div className="mt-6 flex justify-end">
+              <Boton tipo="button" onClick={() => setMostrarErroresEmergente(false)}>
+                Entendido
+              </Boton>
+            </div>
+          </section>
+        </div>
       )}
 
       <Tarjeta className="p-6">

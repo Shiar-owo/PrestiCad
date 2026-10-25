@@ -31,6 +31,31 @@ const CAMPOS_PUNTOS = [
   { campo: 'deduccion_dano_total', etiqueta: 'Deducción por daño total' },
 ]
 
+const OPCIONES_ESTADO_INICIAL_EJEMPLAR = [
+  { valor: 'disponible', etiqueta: 'Disponible' },
+  { valor: 'en_mantenimiento', etiqueta: 'En mantenimiento' },
+]
+
+const ETIQUETAS_CAMPOS_ERROR = {
+  nombre: 'Nombre',
+  codigo_inventario: 'Código de inventario',
+  codigo_ejemplar: 'Código de ejemplar',
+  tipo: 'Tipo',
+  stock: 'Cantidad de ejemplares',
+  estado: 'Estado',
+  estado_inicial_ejemplares: 'Estado inicial del ejemplar',
+  foto: 'Foto',
+  formulario: 'Registro',
+}
+
+function convertirErroresALista(error) {
+  if (Array.isArray(error)) return error.flatMap(convertirErroresALista)
+  if (error && typeof error === 'object') {
+    return Object.values(error).flatMap(convertirErroresALista)
+  }
+  return [String(error)]
+}
+
 const DATOS_INICIALES = {
   nombre: '',
   descripcion: '',
@@ -47,11 +72,12 @@ const DATOS_INICIALES = {
   ubicacion: '',
   foto: null,
   vistaPreviaFoto: '',
-  tier_minimo_requerido: '',
-  bonificacion_tiempo: '',
-  deduccion_tardanza: '',
-  deduccion_dano_parcial: '',
-  deduccion_dano_total: '',
+  tier_minimo_requerido: 'estandar',
+  bonificacion_tiempo: '5',
+  deduccion_tardanza: '10',
+  deduccion_dano_parcial: '30',
+  deduccion_dano_total: '60',
+  estado_inicial_ejemplares: 'disponible',
   costo_reparacion: '',
   costo_reposicion: '',
   estado: 'disponible',
@@ -125,6 +151,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
   const [erroresFilas, setErroresFilas] = useState({})
   const [enviando, setEnviando] = useState(false)
   const [mensajeExito, setMensajeExito] = useState('')
+  const [mostrarErroresEmergente, setMostrarErroresEmergente] = useState(false)
 
   useEffect(() => () => {
     urlsTemporales.current.forEach((url) => URL.revokeObjectURL(url))
@@ -226,6 +253,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
       cuerpo.stock = Number(datos.stock)
       cuerpo.numero_serie = datos.numero_serie.trim()
       cuerpo.estado_fisico = datos.estado_fisico.trim()
+      cuerpo.estado_inicial_ejemplares = datos.estado_inicial_ejemplares
     }
 
     if (datos.tier_minimo_requerido) {
@@ -272,21 +300,18 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
     for (const campo of Object.keys(datosError)) {
       if (campo === 'detail' || campo === 'indice') {
         if (campo === 'indice') continue
-        erroresApi.formulario = String(datosError[campo])
+        erroresApi.formulario = convertirErroresALista(datosError[campo]).join(' | ')
         continue
       }
       if (campo === 'instancias') {
-        erroresApi.formulario = Array.isArray(datosError[campo])
-          ? datosError[campo][0]
-          : String(datosError[campo])
+        erroresApi.formulario = convertirErroresALista(datosError[campo]).join(' | ')
         continue
       }
-      erroresApi[campo] = Array.isArray(datosError[campo])
-        ? datosError[campo][0]
-        : String(datosError[campo])
+      erroresApi[campo] = convertirErroresALista(datosError[campo]).join(' | ')
     }
     setErrores(erroresApi)
     setErroresFilas(erroresDeFila)
+    setMostrarErroresEmergente(true)
   }
 
   async function manejarEnvio(evento) {
@@ -294,7 +319,6 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
     if (enviandoRef.current) return
 
     const erroresFormulario = validar(datos)
-    setErrores(erroresFormulario)
     let erroresDeFila = {}
     if (!esEdicion && datos.modo !== 'unico') {
       if (ejemplares.length < 2 || ejemplares.length > 50) {
@@ -318,8 +342,10 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
         erroresDeFila[indice] = { ...(erroresDeFila[indice] || {}), foto: mensaje }
       })
     }
+    setErrores(erroresFormulario)
     setErroresFilas(erroresDeFila)
     if (Object.keys(erroresFormulario).length > 0 || Object.keys(erroresDeFila).length > 0) {
+      setMostrarErroresEmergente(true)
       return
     }
 
@@ -345,6 +371,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
       )
       setErrores({})
       setErroresFilas({})
+      setMostrarErroresEmergente(false)
       if (!esEdicion) {
         liberarVistaPrevia(datos.vistaPreviaFoto)
         liberarVistasDeFilas(ejemplares)
@@ -361,12 +388,30 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
         setErrores({
           formulario: 'No se pudo conectar con el servidor. Inténtalo de nuevo.',
         })
+        setMostrarErroresEmergente(true)
       }
     } finally {
       enviandoRef.current = false
       setEnviando(false)
     }
   }
+
+  const mensajesErroresEmergente = [
+    ...Object.entries(errores).flatMap(([campo, mensaje]) =>
+      String(mensaje).split(' | ').filter(Boolean).map((detalle) => ({
+        campo: ETIQUETAS_CAMPOS_ERROR[campo] || campo.replaceAll('_', ' '),
+        detalle,
+      })),
+    ),
+    ...Object.entries(erroresFilas).flatMap(([indice, erroresFila]) =>
+      Object.entries(erroresFila).flatMap(([campo, mensaje]) =>
+        String(mensaje).split(' | ').filter(Boolean).map((detalle) => ({
+          campo: `Ejemplar ${Number(indice) + 1} · ${ETIQUETAS_CAMPOS_ERROR[campo] || campo.replaceAll('_', ' ')}`,
+          detalle,
+        })),
+      ),
+    ),
+  ]
 
   if (esEdicion && alcanceEdicion && alcanceEdicion !== 'general') {
     return (
@@ -412,12 +457,49 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
         <h3 className="text-lg font-bold text-texto">
           {esEdicion ? `Editar material: ${material.nombre}` : 'Registrar material'}
         </h3>
+        <p className="mt-1 text-xs text-texto-suave">
+          <span className="text-error" aria-hidden="true">*</span> Campos obligatorios.
+        </p>
       </header>
 
       {mensajeExito && (
         <p className="mb-4 text-sm font-semibold text-marca-700 dark:text-marca-300" role="status">
           {mensajeExito}
         </p>
+      )}
+
+      {mostrarErroresEmergente && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onMouseDown={(evento) => {
+            if (evento.target === evento.currentTarget) setMostrarErroresEmergente(false)
+          }}
+        >
+          <section
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="errores-registro-material-titulo"
+            className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-borde bg-white p-6 shadow-xl dark:bg-superficie"
+          >
+            <h3 id="errores-registro-material-titulo" className="text-lg font-bold text-error">
+              No se pudo {esEdicion ? 'guardar los cambios' : 'registrar el material'}
+            </h3>
+            <p className="mt-1 text-sm text-texto-suave">Corrige estos problemas e inténtalo de nuevo:</p>
+            <ul className="mt-4 list-disc space-y-2 pl-5 text-sm text-texto">
+              {mensajesErroresEmergente.map(({ campo, detalle }, indice) => (
+                <li key={`${campo}-${indice}`}>
+                  {campo !== 'Registro' && <strong>{campo}: </strong>}
+                  {detalle}
+                </li>
+              ))}
+            </ul>
+            <div className="mt-6 flex justify-end">
+              <Boton tipo="button" onClick={() => setMostrarErroresEmergente(false)}>
+                Entendido
+              </Boton>
+            </div>
+          </section>
+        </div>
       )}
 
       <Tarjeta className="p-6">
@@ -431,6 +513,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
               onCambio={(evento) => actualizar('nombre', evento.target.value)}
               error={errores.nombre}
               maxLength={150}
+              requerido
             />
             <Campo
               etiqueta="Código de inventario"
@@ -438,6 +521,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
               onCambio={(evento) => actualizar('codigo_inventario', evento.target.value)}
               error={errores.codigo_inventario}
               maxLength={30}
+              requerido
             />
             <Campo
               etiqueta="Descripción"
@@ -452,6 +536,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
               opciones={OPCIONES_TIPO}
               valor={datos.tipo}
               onCambio={(evento) => actualizar('tipo', evento.target.value)}
+              requerido
             />
             {!esEdicion && (
               <Campo
@@ -489,6 +574,15 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
                   }
                 }}
                 error={errores.stock}
+              />
+            )}
+            {!esEdicion && datos.modo === 'unico' && (
+              <Campo
+                etiqueta="Estado inicial del ejemplar"
+                opciones={OPCIONES_ESTADO_INICIAL_EJEMPLAR}
+                valor={datos.estado_inicial_ejemplares}
+                onCambio={(evento) => actualizar('estado_inicial_ejemplares', evento.target.value)}
+                requerido
               />
             )}
           </div>
@@ -619,9 +713,16 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
                         onCambio={(evento) => actualizarFila(indice, 'color', evento.target.value)}
                         maxLength={30}
                       />
+                      <Campo
+                        etiqueta="Estado inicial del ejemplar"
+                        opciones={OPCIONES_ESTADO_INICIAL_EJEMPLAR}
+                        valor={fila.estado}
+                        onCambio={(evento) => actualizarFila(indice, 'estado', evento.target.value)}
+                        requerido
+                      />
                       {datos.modo === 'detalle' && (
                         <Campo
-                          etiqueta="Estado físico"
+                          etiqueta="Estado físico (descripción)"
                           valor={fila.estado_fisico}
                           onCambio={(evento) => actualizarFila(indice, 'estado_fisico', evento.target.value)}
                           maxLength={100}

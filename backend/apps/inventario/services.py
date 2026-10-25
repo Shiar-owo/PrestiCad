@@ -11,6 +11,7 @@ from django.db import IntegrityError, transaction
 from django.db.models.deletion import ProtectedError
 
 from apps.inventario.constants import (
+    ESTADOS_INICIALES_INSTANCIA,
     ESTADOS_INSTANCIA,
     ESTADOS_MATERIAL,
     MAXIMO_EJEMPLARES_REGISTRO,
@@ -199,6 +200,7 @@ def registrar_material(
     deduccion_dano_total=None,
     costo_reparacion=None,
     costo_reposicion=None,
+    estado_inicial_ejemplares="disponible",
     modo=None,
     ubicacion="",
     instancias=None,
@@ -209,8 +211,7 @@ def registrar_material(
     - El código de inventario es único en el sistema (criterio 4) y se
       normaliza a mayúsculas para que "inv-01" y "INV-01" sean el mismo
       material.
-    - El estado inicial siempre es "Disponible" (criterio 6): no se acepta
-      como parámetro.
+    - Cada ejemplar inicia disponible o en mantenimiento.
     - Se pueden registrar varias unidades del mismo material (criterio 5).
     - Los parámetros de reputación no informados se completan con los valores
       por defecto configurables (criterio 3, T04.04).
@@ -232,6 +233,12 @@ def registrar_material(
         raise InventarioError("nombre", "El nombre del material es obligatorio.")
     if stock < 1:
         raise InventarioError("stock", "El stock debe ser al menos 1 unidad.")
+    estados_iniciales_validos = {clave for clave, _ in ESTADOS_INICIALES_INSTANCIA}
+    if not isinstance(estado_inicial_ejemplares, str) or estado_inicial_ejemplares not in estados_iniciales_validos:
+        raise InventarioError(
+            "estado_inicial_ejemplares",
+            "El estado inicial de los ejemplares no es válido.",
+        )
     filas = list(instancias or [])
     if modo == "unico":
         stock = 1
@@ -240,6 +247,7 @@ def registrar_material(
             "numero_serie": numero_serie,
             "estado_fisico": estado_fisico or "Operativo",
             "ubicacion": ubicacion,
+            "estado": estado_inicial_ejemplares,
         }]
     elif modo is None:
         filas = [
@@ -248,6 +256,7 @@ def registrar_material(
                 "numero_serie": f"{numero_serie}-{i:02d}" if numero_serie and stock > 1 else numero_serie,
                 "estado_fisico": estado_fisico or "Operativo",
                 "ubicacion": "",
+                "estado": estado_inicial_ejemplares,
             }
             for i in range(1, stock + 1)
         ]
@@ -271,14 +280,21 @@ def registrar_material(
             raise InventarioError("instancias", "La fila debe ser un objeto válido.", indice=indice)
         if modo in ("lote", None):
             codigo_fila = fila["codigo_ejemplar"] if modo is None else f"{codigo}-{indice + 1:02d}"
-            estado_fila = estado_fisico or "Operativo"
+            estado_fisico_fila = estado_fisico or "Operativo"
             ubicacion_fila = fila.get("ubicacion") or ubicacion
         else:
             codigo_fila = str(fila.get("codigo_ejemplar", "")).strip()
             if not codigo_fila:
                 raise InventarioError("codigo_ejemplar", "El código del ejemplar es obligatorio.", indice=indice)
-            estado_fila = fila.get("estado_fisico", "Operativo")
+            estado_fisico_fila = fila.get("estado_fisico", "Operativo")
             ubicacion_fila = fila.get("ubicacion", "")
+        estado_fila = fila.get("estado", estado_inicial_ejemplares)
+        if not isinstance(estado_fila, str) or estado_fila not in estados_iniciales_validos:
+            raise InventarioError(
+                "estado",
+                "El estado inicial del ejemplar no es válido.",
+                indice=indice,
+            )
         clave = codigo_fila.casefold()
         if clave in codigos:
             raise InventarioError(
@@ -305,7 +321,8 @@ def registrar_material(
         filas_preparadas.append({
             "codigo_ejemplar": codigo_fila,
             "numero_serie": fila.get("numero_serie", ""),
-            "estado_fisico": estado_fila,
+            "estado_fisico": estado_fisico_fila,
+            "estado": estado_fila,
             "ubicacion": ubicacion_fila,
             "observaciones": fila.get("observaciones", ""),
             "foto": foto_fila,
@@ -318,6 +335,11 @@ def registrar_material(
         "codigo_inventario": codigo,
         "tipo": tipo,
         "stock": stock,
+        "estado": (
+            "en_mantenimiento"
+            if filas_preparadas and all(fila["estado"] == "en_mantenimiento" for fila in filas_preparadas)
+            else "disponible"
+        ),
         "es_alto_valor": es_alto_valor,
         "marca": marca.strip(),
         "modelo": modelo.strip(),
@@ -354,7 +376,7 @@ def registrar_material(
                 material=material,
                 codigo_ejemplar=fila["codigo_ejemplar"],
                 numero_serie=fila["numero_serie"],
-                estado="disponible",
+                estado=fila["estado"],
                 estado_fisico=fila["estado_fisico"] or "Operativo",
                 color=fila["color"],
                 observaciones=fila["observaciones"],

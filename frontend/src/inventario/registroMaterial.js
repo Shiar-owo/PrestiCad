@@ -8,6 +8,7 @@ export function crearEjemplar(idLocal) {
     codigo_ejemplar: '',
     numero_serie: '',
     color: '',
+    estado: 'disponible',
     foto: null,
     vistaPrevia: '',
     estado_fisico: 'Operativo',
@@ -58,6 +59,7 @@ export function validarFotosEjemplares(ejemplares) {
 
 function camposDeEjemplar(ejemplar, modo) {
   const campos = {
+    estado: ejemplar.estado || 'disponible',
     numero_serie: ejemplar.numero_serie || '',
     color: ejemplar.color || '',
     observaciones: ejemplar.observaciones || '',
@@ -92,6 +94,7 @@ export function construirCuerpoRegistroMaterial({ modo, datos, ejemplares = [] }
     cuerpo.numero_serie = datos.numero_serie || ''
     cuerpo.estado_fisico = datos.estado_fisico || fila.estado_fisico || 'Operativo'
     cuerpo.ubicacion = datos.ubicacion || fila.ubicacion || ''
+    cuerpo.estado_inicial_ejemplares = fila.estado || datos.estado_inicial_ejemplares || 'disponible'
     return construirCuerpoConFotos(cuerpo, [], datos.foto)
   }
 

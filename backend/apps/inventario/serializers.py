@@ -10,6 +10,7 @@ from rest_framework import serializers
 
 from apps.compartido.serializers import RechazarCamposNoPermitidosMixin
 from apps.inventario.constants import (
+    ESTADOS_INICIALES_INSTANCIA,
     ESTADOS_INSTANCIA,
     ESTADOS_MATERIAL,
     MODOS_REGISTRO_MATERIAL,
@@ -174,6 +175,12 @@ class InstanciaMaterialCreacionSerializer(InstanciaMaterialModificacionSerialize
     """Contrato para el alta de una instancia, que exige su código único."""
 
     codigo_ejemplar = serializers.CharField(max_length=50, required=True)
+    estado = serializers.ChoiceField(
+        choices=ESTADOS_INICIALES_INSTANCIA,
+        required=False,
+        default="disponible",
+        error_messages={"invalid_choice": "El estado inicial del ejemplar no es válido."},
+    )
 
 
 class MaterialSerializer(serializers.ModelSerializer):
@@ -269,6 +276,12 @@ class MaterialRegistroSerializer(RechazarCamposNoPermitidosMixin, serializers.Mo
         error_messages={"invalid_choice": "Tipo de material inválido."},
     )
     stock = serializers.IntegerField(required=False, min_value=1, error_messages=MENSAJES_STOCK)
+    estado_inicial_ejemplares = serializers.ChoiceField(
+        choices=ESTADOS_INICIALES_INSTANCIA,
+        required=False,
+        default="disponible",
+        error_messages={"invalid_choice": "El estado inicial de los ejemplares no es válido."},
+    )
     modo = serializers.ChoiceField(
         choices=MODOS_REGISTRO_MATERIAL,
         required=False,
@@ -300,6 +313,7 @@ class MaterialRegistroSerializer(RechazarCamposNoPermitidosMixin, serializers.Mo
             "codigo_inventario",
             "tipo",
             "stock",
+            "estado_inicial_ejemplares",
             "modo",
             "ubicacion",
             "instancias",

@@ -14,12 +14,13 @@ from rest_framework.views import APIView
 from apps.usuarios import services
 from apps.usuarios.authentication import AutenticacionSesionUsuario
 from apps.usuarios.models import Usuario
-from apps.usuarios.permissions import EsAdministrador
+from apps.usuarios.permissions import EsAdministrador, EsGestorAlmacen
 from apps.usuarios.serializers import (
     ActualizarPerfilSerializer,
     CambioRolSerializer,
     LoginSerializer,
     PerfilUsuarioSerializer,
+    PerfilElegibilidadPrestamoSerializer,
     SesionUsuarioSerializer,
     UsuarioListaSerializer,
     UsuarioRegistroSerializer,
@@ -112,6 +113,21 @@ class UsuarioListCreateView(ListCreateAPIView):
         except services.UsuariosError as error:
             return Response({error.campo: [error.mensaje]}, status=status.HTTP_409_CONFLICT)
         return Response(UsuarioSerializer(usuario).data, status=status.HTTP_201_CREATED)
+
+
+class PerfilElegibilidadPrestamoView(APIView):
+    """GET /api/usuarios/elegibilidad-prestamo/?dni=... para el gestor."""
+
+    permission_classes = [EsGestorAlmacen]
+
+    def get(self, request):
+        dni = request.query_params.get("dni", "").strip()
+        if len(dni) != 8 or not dni.isdigit():
+            return Response({"dni": ["El DNI debe tener exactamente 8 dígitos numéricos."]}, status=400)
+        usuario = Usuario.objects.select_related("rol").filter(dni=dni).first()
+        if usuario is None:
+            return Response({"detail": "No existe un usuario registrado con ese DNI."}, status=404)
+        return Response(PerfilElegibilidadPrestamoSerializer(usuario).data)
 
 
 class UsuarioRolView(RetrieveUpdateAPIView):

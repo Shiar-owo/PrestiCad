@@ -37,7 +37,7 @@ const DATOS_INICIALES = {
   // `foto` no vive aquí: es un archivo, no un valor de texto. Se maneja aparte
   // con `archivoFoto` (lo nuevo que elige el gestor) y `vistaPrevia` (la
   // imagen que se muestra, que al editar es la que ya tenía guardada).
-  tier_minimo_requerido: '',
+  tier_minimo_requerido: 'estandar',
   bonificacion_tiempo: '5',
   deduccion_tardanza: '10',
   deduccion_dano_parcial: '30',
@@ -418,10 +418,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
           <div className="grid gap-4 sm:grid-cols-2">
             <Campo
               etiqueta="Tier mínimo requerido"
-              opciones={[
-                { valor: '', etiqueta: 'Sin especificar' },
-                ...OPCIONES_TIER,
-              ]}
+              opciones={OPCIONES_TIER}
               valor={datos.tier_minimo_requerido}
               onCambio={(evento) => actualizar('tier_minimo_requerido', evento.target.value)}
             />

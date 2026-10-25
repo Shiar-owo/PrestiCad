@@ -22,6 +22,9 @@ const FORMULARIO_INICIAL = {
   compromisoFirmadoRecibido: false,
 }
 
+const NIVEL_TIER = { restringido: 0, estandar: 1, avanzado: 2 }
+const ETIQUETA_TIER = { restringido: 'Restringido', estandar: 'Estándar', avanzado: 'Avanzado' }
+
 function mensajeApi(error) {
   const datos = error instanceof ErrorApi ? error.datos : null
   if (datos?.detail) return datos.detail
@@ -57,10 +60,45 @@ function RegistrarPrestamo() {
   const [error, setError] = useState('')
   const [errores, setErrores] = useState({})
   const [prestamoCreado, setPrestamoCreado] = useState(null)
+  const [perfilPrestatario, setPerfilPrestatario] = useState(null)
+  const [dniPerfilVerificado, setDniPerfilVerificado] = useState('')
+  const [consultandoPerfil, setConsultandoPerfil] = useState(false)
+  const [errorPerfil, setErrorPerfil] = useState('')
 
   useEffect(() => {
     cargarMateriales()
   }, [])
+
+  useEffect(() => {
+    const dni = formulario.dni.trim()
+    setPerfilPrestatario(null)
+    setDniPerfilVerificado('')
+    setErrorPerfil('')
+    if (!/^\d{8}$/.test(dni)) {
+      setConsultandoPerfil(false)
+      return undefined
+    }
+
+    let vigente = true
+    setConsultandoPerfil(true)
+    api.get(`/usuarios/elegibilidad-prestamo/?dni=${dni}`)
+      .then((perfil) => {
+        if (vigente) {
+          setPerfilPrestatario(perfil)
+          setDniPerfilVerificado(dni)
+        }
+      })
+      .catch((errorApi) => {
+        if (!vigente) return
+        const datos = errorApi instanceof ErrorApi ? errorApi.datos : null
+        setErrorPerfil(datos?.detail || 'No se pudo verificar el perfil. Inténtalo otra vez.')
+      })
+      .finally(() => {
+        if (vigente) setConsultandoPerfil(false)
+      })
+
+    return () => { vigente = false }
+  }, [formulario.dni])
 
   async function cargarMateriales() {
     setCargando(true)
@@ -83,6 +121,20 @@ function RegistrarPrestamo() {
   const fechaLimiteEstimada = useMemo(
     () => calcularFechaLimiteEstimada(formulario.dias),
     [formulario.dias],
+  )
+  const perfilVerificadoActual = dniPerfilVerificado === formulario.dni.trim()
+    ? perfilPrestatario
+    : null
+  const tierCumple = Boolean(
+    perfilVerificadoActual && materialSeleccionado
+    && NIVEL_TIER[perfilVerificadoActual.reputacion_tier] >= NIVEL_TIER[materialSeleccionado.tier_minimo_requerido],
+  )
+  const perfilHabilitado = perfilVerificadoActual?.rol === 'prestatario' && perfilVerificadoActual?.estado === 'activo'
+  const verificacionPendiente = /^\d{8}$/.test(formulario.dni.trim())
+    && (consultandoPerfil || !perfilVerificadoActual && !errorPerfil)
+  const bloqueadoPorElegibilidad = Boolean(
+    materialSeleccionado && /^\d{8}$/.test(formulario.dni.trim())
+    && (verificacionPendiente || errorPerfil || !perfilVerificadoActual || !perfilHabilitado || !tierCumple),
   )
 
   function actualizar(campo, valor) {
@@ -126,6 +178,7 @@ function RegistrarPrestamo() {
 
   async function registrar(evento) {
     evento.preventDefault()
+    if (bloqueadoPorElegibilidad) return
     const datosValidacion = {
       dni: formulario.dni,
       material: materialSeleccionado,
@@ -215,7 +268,7 @@ function RegistrarPrestamo() {
               valor={formulario.dni}
               onCambio={(evento) => actualizar('dni', evento.target.value)}
               error={errores.dni}
-              ayuda="El sistema verificará que el usuario esté activo y cumpla el Tier requerido."
+              ayuda="Al completar el DNI se consultará la reputación del prestatario."
               inputMode="numeric"
               autoComplete="off"
               maxLength={8}
@@ -229,6 +282,35 @@ function RegistrarPrestamo() {
               error={errores.material}
               requerido
             />
+            {consultandoPerfil && (
+              <p className="text-sm text-texto-suave" role="status">Consultando perfil y reputación…</p>
+            )}
+            {errorPerfil && <ErrorAlerta mensaje={errorPerfil} />}
+            {perfilVerificadoActual && (
+              <div
+                className={`rounded-xl border p-4 text-sm ${
+                  perfilHabilitado && (!materialSeleccionado || tierCumple)
+                    ? 'border-marca-200 bg-marca-50 text-marca-800 dark:border-marca-700/60 dark:bg-marca-500/15 dark:text-marca-300'
+                    : 'border-red-300 bg-red-50 text-red-800 dark:border-red-700/60 dark:bg-red-500/10 dark:text-red-300'
+                }`}
+                role="status"
+                aria-live="polite"
+              >
+                <p className="font-semibold">{perfilVerificadoActual.nombre} {perfilVerificadoActual.apellido}</p>
+                <p>
+                  Reputación: {perfilVerificadoActual.reputacion_puntaje} puntos · Tier{' '}
+                  {ETIQUETA_TIER[perfilVerificadoActual.reputacion_tier] || perfilVerificadoActual.reputacion_tier}
+                </p>
+                {!perfilHabilitado && <p className="mt-1 font-semibold">El usuario no está habilitado para recibir préstamos.</p>}
+                {materialSeleccionado && (
+                  <p className="mt-1">
+                    Tier requerido: {ETIQUETA_TIER[materialSeleccionado.tier_minimo_requerido] || materialSeleccionado.tier_minimo_requerido}.
+                    {' '}{!tierCumple && <strong>No cumple el requisito; el registro está bloqueado.</strong>}
+                    {tierCumple && perfilHabilitado && <strong> Cumple el requisito.</strong>}
+                  </p>
+                )}
+              </div>
+            )}
             <Campo
               etiqueta="Duración del préstamo (días)"
               tipo="number"
@@ -329,7 +411,7 @@ function RegistrarPrestamo() {
             )}
 
             <div className="flex flex-wrap gap-2">
-              <Boton tipo="submit" cargando={guardando}>
+              <Boton tipo="submit" cargando={guardando} deshabilitado={bloqueadoPorElegibilidad}>
                 Confirmar entrega
               </Boton>
               <Boton

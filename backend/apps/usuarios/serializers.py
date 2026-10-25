@@ -138,6 +138,16 @@ class PerfilUsuarioSerializer(serializers.Serializer):
     reputacion_tier = serializers.CharField()
 
 
+class PerfilElegibilidadPrestamoSerializer(serializers.ModelSerializer):
+    """Datos mínimos del prestatario para verificar un préstamo."""
+
+    rol = serializers.SlugRelatedField(slug_field="nombre", read_only=True)
+
+    class Meta:
+        model = Usuario
+        fields = ("nombre", "apellido", "rol", "estado", "reputacion_puntaje", "reputacion_tier")
+
+
 class ActualizarPerfilSerializer(RechazarCamposNoPermitidosMixin, serializers.Serializer):
     """Valida únicamente los campos editables del perfil."""
 

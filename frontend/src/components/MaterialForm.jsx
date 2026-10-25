@@ -292,6 +292,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
               onCambio={(evento) => actualizar('nombre', evento.target.value)}
               error={errores.nombre}
               maxLength={150}
+              requerido
             />
             <Campo
               etiqueta="Código de inventario"
@@ -299,6 +300,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
               onCambio={(evento) => actualizar('codigo_inventario', evento.target.value)}
               error={errores.codigo_inventario}
               maxLength={30}
+              requerido
             />
             <Campo
               etiqueta="Descripción"
@@ -313,6 +315,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
               opciones={OPCIONES_TIPO}
               valor={datos.tipo}
               onCambio={(evento) => actualizar('tipo', evento.target.value)}
+              requerido
             />
             {esEdicion && (
               <Campo
@@ -331,6 +334,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
               valor={datos.stock}
               onCambio={(evento) => actualizar('stock', evento.target.value)}
               error={errores.stock}
+              requerido
             />
           </div>
 

@@ -22,6 +22,11 @@ const CAMPOS_PUNTOS = [
   { campo: 'deduccion_dano_total', etiqueta: 'Deducción por daño total' },
 ]
 
+const OPCIONES_ESTADO_INICIAL_EJEMPLAR = [
+  { valor: 'disponible', etiqueta: 'Disponible' },
+  { valor: 'en_mantenimiento', etiqueta: 'En mantenimiento' },
+]
+
 const DATOS_INICIALES = {
   nombre: '',
   descripcion: '',
@@ -99,6 +104,7 @@ function EncabezadoSeccion({ children }) {
 function MaterialForm({ material, onGuardado, onCancelar }) {
   const esEdicion = Boolean(material)
   const [datos, setDatos] = useState(DATOS_INICIALES)
+  const [estadoInicialEjemplares, setEstadoInicialEjemplares] = useState('disponible')
   const [archivoFoto, setArchivoFoto] = useState(null)
   const [vistaPrevia, setVistaPrevia] = useState('')
   const [errores, setErrores] = useState({})
@@ -120,6 +126,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
       })
     }
     setArchivoFoto(null)
+    setEstadoInicialEjemplares('disponible')
     setVistaPrevia(material?.foto || '')
     setErrores({})
     setMensajeExito('')
@@ -168,6 +175,10 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
       estado_fisico: datos.estado_fisico.trim(),
       costo_reparacion: datos.costo_reparacion === '' ? null : Number(datos.costo_reparacion),
       costo_reposicion: datos.costo_reposicion === '' ? null : Number(datos.costo_reposicion),
+    }
+
+    if (!esEdicion) {
+      cuerpo.estado_inicial_ejemplares = estadoInicialEjemplares
     }
 
     if (datos.tier_minimo_requerido) {
@@ -335,6 +346,15 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
               error={errores.stock}
               requerido
             />
+            {!esEdicion && (
+              <Campo
+                etiqueta="Estado inicial de los ejemplares"
+                opciones={OPCIONES_ESTADO_INICIAL_EJEMPLAR}
+                valor={estadoInicialEjemplares}
+                onCambio={(evento) => setEstadoInicialEjemplares(evento.target.value)}
+                requerido
+              />
+            )}
           </div>
 
           <label className="flex items-center gap-2 text-sm font-semibold text-texto">

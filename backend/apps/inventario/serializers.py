@@ -8,6 +8,7 @@ from rest_framework import serializers
 
 from apps.compartido.serializers import RechazarCamposNoPermitidosMixin
 from apps.inventario.constants import (
+    ESTADOS_INICIALES_INSTANCIA,
     ESTADOS_INSTANCIA,
     ESTADOS_MATERIAL,
     TIPOS_MATERIAL,
@@ -139,6 +140,17 @@ class InstanciaMaterialModificacionSerializer(
         )
 
 
+class InstanciaMaterialRegistroSerializer(InstanciaMaterialModificacionSerializer):
+    """Alta de ejemplar: solo puede iniciar disponible o en mantenimiento."""
+
+    estado = serializers.ChoiceField(
+        choices=ESTADOS_INICIALES_INSTANCIA,
+        required=False,
+        default="disponible",
+        error_messages={"invalid_choice": "El estado inicial del ejemplar no es válido."},
+    )
+
+
 class MaterialSerializer(serializers.ModelSerializer):
     """Contrato de salida JSON del inventario."""
 
@@ -217,8 +229,8 @@ class MaterialSerializer(serializers.ModelSerializer):
 class MaterialRegistroSerializer(RechazarCamposNoPermitidosMixin, serializers.ModelSerializer):
     """Contrato de entrada del endpoint POST /api/materiales.
 
-    - `estado` NO forma parte del contrato: el material nace 'Disponible'
-      (HU04 criterio 6) y su cambio de estado se hace por la edición.
+    - `estado` NO forma parte del contrato: se deriva del estado inicial elegido
+      para los ejemplares. Prestado y reservado se asignan desde sus flujos.
     - La unicidad de `codigo_inventario` NO se valida aquí: la delega al
       servicio para devolver un 409 Conflict en lugar de un 400.
     - Los parámetros de reputación son opcionales; si no llegan, el servicio
@@ -232,6 +244,12 @@ class MaterialRegistroSerializer(RechazarCamposNoPermitidosMixin, serializers.Mo
         error_messages={"invalid_choice": "Tipo de material inválido."},
     )
     stock = serializers.IntegerField(required=False, min_value=1, error_messages=MENSAJES_STOCK)
+    estado_inicial_ejemplares = serializers.ChoiceField(
+        choices=ESTADOS_INICIALES_INSTANCIA,
+        required=False,
+        default="disponible",
+        error_messages={"invalid_choice": "El estado inicial de los ejemplares no es válido."},
+    )
     tier_minimo_requerido = serializers.ChoiceField(
         choices=TIERS,
         required=False,
@@ -255,6 +273,7 @@ class MaterialRegistroSerializer(RechazarCamposNoPermitidosMixin, serializers.Mo
             "codigo_inventario",
             "tipo",
             "stock",
+            "estado_inicial_ejemplares",
             "es_alto_valor",
             *CAMPOS_FICHA_Y_REPUTACION,
         )

@@ -21,6 +21,13 @@ ESTADOS_INSTANCIA = [
     ("de_baja", "De Baja"),
 ]
 
+# Estados permitidos al registrar ejemplares nuevos. Préstamo y reserva se
+# asignan desde sus flujos operativos, no durante el alta del inventario.
+ESTADOS_INICIALES_INSTANCIA = [
+    ("disponible", "Disponible"),
+    ("en_mantenimiento", "En mantenimiento"),
+]
+
 # Mapeo de Tiers de materiales accesibles según el Tier de reputación del usuario (RN03, HU05)
 TIERS_ACCESIBLES = {
     "restringido": ("restringido",),

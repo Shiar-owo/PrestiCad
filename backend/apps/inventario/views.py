@@ -18,6 +18,7 @@ from apps.inventario.models import InstanciaMaterial, Material
 from apps.inventario.permissions import EsGestorOAdministrador
 from apps.inventario.serializers import (
     InstanciaMaterialModificacionSerializer,
+    InstanciaMaterialRegistroSerializer,
     InstanciaMaterialSerializer,
     MaterialActualizacionSerializer,
     MaterialRegistroSerializer,
@@ -144,7 +145,7 @@ class InstanciaMaterialListCreateView(ListCreateAPIView):
 
     def get_serializer_class(self):
         if self.request.method == "POST":
-            return InstanciaMaterialModificacionSerializer
+            return InstanciaMaterialRegistroSerializer
         return InstanciaMaterialSerializer
 
     def get_queryset(self):

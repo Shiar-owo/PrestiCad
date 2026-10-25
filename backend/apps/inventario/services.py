@@ -10,6 +10,7 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 
 from apps.inventario.constants import (
+    ESTADOS_INICIALES_INSTANCIA,
     ESTADOS_INSTANCIA,
     ESTADOS_MATERIAL,
     TIERS_ACCESIBLES,
@@ -192,6 +193,7 @@ def registrar_material(
     tipo,
     descripcion="",
     stock=1,
+    estado_inicial_ejemplares="disponible",
     es_alto_valor=False,
     marca="",
     modelo="",
@@ -213,8 +215,7 @@ def registrar_material(
     - El código de inventario es único en el sistema (criterio 4) y se
       normaliza a mayúsculas para que "inv-01" y "INV-01" sean el mismo
       material.
-    - El estado inicial siempre es "Disponible" (criterio 6): no se acepta
-      como parámetro.
+    - Los ejemplares nuevos empiezan disponibles o en mantenimiento.
     - Se pueden registrar varias unidades del mismo material (criterio 5).
     - Los parámetros de reputación no informados se completan con los valores
       por defecto configurables (criterio 3, T04.04).
@@ -232,6 +233,12 @@ def registrar_material(
         raise InventarioError("nombre", "El nombre del material es obligatorio.")
     if stock < 1:
         raise InventarioError("stock", "El stock debe ser al menos 1 unidad.")
+    estados_iniciales_validos = {clave for clave, _ in ESTADOS_INICIALES_INSTANCIA}
+    if estado_inicial_ejemplares not in estados_iniciales_validos:
+        raise InventarioError(
+            "estado_inicial_ejemplares",
+            "El estado inicial de los ejemplares no es válido.",
+        )
     if foto is not None:
         validar_foto(foto)
 
@@ -241,6 +248,7 @@ def registrar_material(
         "codigo_inventario": codigo,
         "tipo": tipo,
         "stock": stock,
+        "estado": estado_inicial_ejemplares,
         "es_alto_valor": es_alto_valor,
         "marca": marca.strip(),
         "modelo": modelo.strip(),
@@ -286,7 +294,7 @@ def registrar_material(
                 material=material,
                 codigo_ejemplar=codigo_ejemplar,
                 numero_serie=num_serie or "",
-                estado="disponible",
+                estado=estado_inicial_ejemplares,
                 estado_fisico=material.estado_fisico or "Operativo",
                 observaciones="",
                 ubicacion="",

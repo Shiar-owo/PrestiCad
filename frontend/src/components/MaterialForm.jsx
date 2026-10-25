@@ -14,8 +14,7 @@ import Boton from './ui/Boton'
 import Tarjeta from './ui/Tarjeta'
 import ErrorAlerta from './ui/ErrorAlerta'
 
-// Parámetros de reputación en puntos: si se blanks, el backend aplica los
-// valores por defecto configurados (HU04 criterio 3).
+// Valores por defecto actuales del sistema para materiales nuevos (HU04 criterio 3).
 const CAMPOS_PUNTOS = [
   { campo: 'bonificacion_tiempo', etiqueta: 'Bonificación por tiempo' },
   { campo: 'deduccion_tardanza', etiqueta: 'Deducción por tardanza' },
@@ -39,10 +38,10 @@ const DATOS_INICIALES = {
   // con `archivoFoto` (lo nuevo que elige el gestor) y `vistaPrevia` (la
   // imagen que se muestra, que al editar es la que ya tenía guardada).
   tier_minimo_requerido: '',
-  bonificacion_tiempo: '',
-  deduccion_tardanza: '',
-  deduccion_dano_parcial: '',
-  deduccion_dano_total: '',
+  bonificacion_tiempo: '5',
+  deduccion_tardanza: '10',
+  deduccion_dano_parcial: '30',
+  deduccion_dano_total: '60',
   costo_reparacion: '',
   costo_reposicion: '',
   estado: 'disponible',
@@ -413,8 +412,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
           <EncabezadoSeccion>Parámetros de reputación</EncabezadoSeccion>
 
           <p className="text-xs text-texto-suave">
-            Los parámetros en blanco usan los valores por defecto del sistema. Los puntos
-            van de 0 a 500.
+            Rango de reputación permitido: 0 a 500 puntos.
           </p>
 
           <div className="grid gap-4 sm:grid-cols-2">

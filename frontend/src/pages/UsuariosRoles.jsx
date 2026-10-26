@@ -11,7 +11,6 @@ import BadgeEstado from '../components/ui/BadgeEstado'
 import Boton from '../components/ui/Boton'
 
 const OPCIONES_ROL = [
-  { valor: 'prestatario', etiqueta: 'Prestatario' },
   { valor: 'gestor', etiqueta: 'Gestor de Almacén' },
   { valor: 'administrador', etiqueta: 'Administrador' },
 ]
@@ -22,7 +21,10 @@ const ETIQUETAS_TIPO = {
   administrativo: 'Administrativo',
 }
 
-const ETIQUETAS_ROL = Object.fromEntries(OPCIONES_ROL.map(({ valor, etiqueta }) => [valor, etiqueta]))
+const ETIQUETAS_ROL = {
+  prestatario: 'Prestatario',
+  ...Object.fromEntries(OPCIONES_ROL.map(({ valor, etiqueta }) => [valor, etiqueta])),
+}
 const ETIQUETAS_TIER = {
   avanzado: 'Avanzado',
   estandar: 'Estándar',
@@ -116,13 +118,17 @@ function UsuariosRoles() {
                     <td className="px-4 py-3">{usuario.email}</td>
                     <td className="px-4 py-3">{usuario.tipo}</td>
                     <td className="px-4 py-3">
-                      <Campo
-                        opciones={OPCIONES_ROL}
-                        valor={usuario.rol}
-                        onCambio={(evento) => cambiarRol(usuario.id, evento.target.value)}
-                        deshabilitado={guardandoId === usuario.id}
-                        className="w-48"
-                      />
+                      {usuario.rol === 'prestatario' ? (
+                        <span className="text-sm font-medium">{ETIQUETAS_ROL.prestatario}</span>
+                      ) : (
+                        <Campo
+                          opciones={OPCIONES_ROL}
+                          valor={usuario.rol}
+                          onCambio={(evento) => cambiarRol(usuario.id, evento.target.value)}
+                          deshabilitado={guardandoId === usuario.id}
+                          className="w-48"
+                        />
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       {usuario.estado === 'activo' ? (

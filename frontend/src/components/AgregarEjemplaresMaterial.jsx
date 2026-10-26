@@ -12,6 +12,11 @@ import Campo from './ui/Campo'
 import ErrorAlerta from './ui/ErrorAlerta'
 import Tarjeta from './ui/Tarjeta'
 
+const OPCIONES_ESTADO_INICIAL_EJEMPLAR = [
+  { valor: 'disponible', etiqueta: 'Disponible' },
+  { valor: 'en_mantenimiento', etiqueta: 'En mantenimiento' },
+]
+
 function obtenerMensajeError(error) {
   if (!(error instanceof ErrorApi) || !error.datos) {
     return 'No se pudieron agregar los ejemplares. Inténtalo de nuevo.'
@@ -132,7 +137,8 @@ function AgregarEjemplaresMaterial({ material, onGuardado, onCancelar }) {
           <div>
             <h5 className="font-semibold text-texto">Agregar ejemplares</h5>
             <p className="mt-1 text-xs text-texto-suave">
-              Puedes agregar de uno a 50. Cada código debe ser único.
+              Puedes agregar de uno a 50. Cada código debe ser único.{' '}
+              <span className="text-error" aria-hidden="true">*</span> Campos obligatorios.
             </p>
           </div>
           <Campo
@@ -143,6 +149,7 @@ function AgregarEjemplaresMaterial({ material, onGuardado, onCancelar }) {
             min={1}
             max={50}
             step={1}
+            requerido
             className="w-28"
           />
         </div>
@@ -165,6 +172,13 @@ function AgregarEjemplaresMaterial({ material, onGuardado, onCancelar }) {
                   requerido
                 />
                 <Campo
+                  etiqueta="Estado inicial del ejemplar"
+                  opciones={OPCIONES_ESTADO_INICIAL_EJEMPLAR}
+                  valor={fila.estado || 'disponible'}
+                  onCambio={(evento) => actualizarFila(indice, 'estado', evento.target.value)}
+                  requerido
+                />
+                <Campo
                   etiqueta="Número de serie"
                   valor={fila.numero_serie}
                   onCambio={(evento) => actualizarFila(indice, 'numero_serie', evento.target.value)}
@@ -177,7 +191,7 @@ function AgregarEjemplaresMaterial({ material, onGuardado, onCancelar }) {
                   maxLength={30}
                 />
                 <Campo
-                  etiqueta="Estado físico"
+                  etiqueta="Estado físico (descripción)"
                   valor={fila.estado_fisico}
                   onCambio={(evento) => actualizarFila(indice, 'estado_fisico', evento.target.value)}
                   maxLength={100}

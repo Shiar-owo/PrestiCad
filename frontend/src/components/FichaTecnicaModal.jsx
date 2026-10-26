@@ -141,13 +141,6 @@ function FichaTecnicaModal({ material, onCerrar, onEliminarInstancia, onAgregarI
 
             <div className="flex flex-col justify-between gap-3">
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-texto-suave">
-                    Estado operativo:
-                  </span>
-                  <BadgeEstado estado={ficha.estado} />
-                </div>
-
                 <div className="rounded-xl border border-borde bg-superficie p-3">
                   <span className="text-xs font-semibold uppercase tracking-wider text-texto-suave">
                     Disponibilidad en almacén:

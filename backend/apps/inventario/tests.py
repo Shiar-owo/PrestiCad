@@ -1776,6 +1776,40 @@ class InstanciaMaterialAPITestCase(ConMediaTemporal, APITestCase):
         self.assertEqual(instancia.color, "Verde")
         self.assertEqual(instancia.observaciones, "Punta de prueba dañada")
 
+    def test_no_permite_cambiar_manualmente_estado_de_instancia_prestada_o_reservada(self):
+        self._autenticar("gestor.inst.bloqueada@unsa.edu.pe", "gestor")
+        instancia = self.material.instancias.first()
+        instancia.estado = "prestado"
+        instancia.save(update_fields=["estado"])
+
+        respuesta = self.client.patch(
+            f"/api/instancias/{instancia.id}/",
+            {"estado": "disponible"},
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, 409)
+        instancia.refresh_from_db()
+        self.assertEqual(instancia.estado, "prestado")
+
+    def test_cambiar_estado_general_propaga_solo_a_instancias_disponibles_o_mantenimiento(self):
+        self._autenticar("gestor.estado.general@unsa.edu.pe", "gestor")
+        instancias = list(self.material.instancias.order_by("codigo_ejemplar"))
+        instancias[0].estado = "prestado"
+        instancias[0].save(update_fields=["estado"])
+
+        respuesta = self.client.patch(
+            f"/api/materiales/{self.material.id}/",
+            {"estado": "en_mantenimiento"},
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        instancias[0].refresh_from_db()
+        instancias[1].refresh_from_db()
+        self.assertEqual(instancias[0].estado, "prestado")
+        self.assertEqual(instancias[1].estado, "en_mantenimiento")
+
     def test_actualizar_foto_de_instancia_reemplaza_y_borra_la_anterior(self):
         self._autenticar("gestor.foto.inst@unsa.edu.pe", "gestor")
         instancia = self.material.instancias.first()

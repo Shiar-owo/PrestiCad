@@ -8,16 +8,26 @@ import ErrorAlerta from './ui/ErrorAlerta'
 import Tarjeta from './ui/Tarjeta'
 
 const CAMPOS_MASIVOS = [
-  { campo: 'estado_fisico', etiqueta: 'Estado físico' },
   { campo: 'color', etiqueta: 'Color' },
   { campo: 'ubicacion', etiqueta: 'Estante o ubicación' },
   { campo: 'observaciones', etiqueta: 'Observaciones' },
 ]
 
+const OPCIONES_ESTADO_MANUAL = [
+  { valor: 'disponible', etiqueta: 'Disponible' },
+  { valor: 'en_mantenimiento', etiqueta: 'En mantenimiento' },
+]
+
+const ETIQUETAS_ESTADO_BLOQUEADO = {
+  prestado: 'Prestado',
+  reservado: 'Reservado',
+}
+
 function crearDatosInstancia(instancia) {
   return {
     codigo_ejemplar: instancia?.codigo_ejemplar || '',
     numero_serie: instancia?.numero_serie || '',
+    estado: instancia?.estado || 'disponible',
     estado_fisico: instancia?.estado_fisico || '',
     color: instancia?.color || '',
     ubicacion: instancia?.ubicacion || '',
@@ -41,7 +51,6 @@ function EditorInstanciasMaterial({ material, alcance, onCambiarAlcance, onGuard
   const [vistaPrevia, setVistaPrevia] = useState('')
   const [quitarFoto, setQuitarFoto] = useState(false)
   const [valoresMasivos, setValoresMasivos] = useState({
-    estado_fisico: '',
     color: '',
     ubicacion: '',
     observaciones: '',
@@ -101,6 +110,9 @@ function EditorInstanciasMaterial({ material, alcance, onCambiarAlcance, onGuard
     setError('')
     try {
       const campos = { ...datos }
+      if (['prestado', 'reservado'].includes(instancia.estado)) {
+        delete campos.estado
+      }
       if (foto) {
         const formulario = new FormData()
         Object.entries(campos).forEach(([campo, valor]) => formulario.append(campo, valor))
@@ -155,6 +167,15 @@ function EditorInstanciasMaterial({ material, alcance, onCambiarAlcance, onGuard
   }
 
   const esMasivo = alcance === 'todas'
+  const estadoBloqueado = ['prestado', 'reservado'].includes(instancia?.estado)
+  const opcionesEstadoInstancia = estadoBloqueado
+    ? [
+      {
+        valor: instancia.estado,
+        etiqueta: instancia.estado_display || ETIQUETAS_ESTADO_BLOQUEADO[instancia.estado] || instancia.estado,
+      },
+    ]
+    : OPCIONES_ESTADO_MANUAL
 
   return (
     <section>
@@ -168,6 +189,11 @@ function EditorInstanciasMaterial({ material, alcance, onCambiarAlcance, onGuard
               ? 'Marca los campos que se aplicarán a todos. Los demás datos individuales se conservarán.'
               : 'Selecciona el ejemplar y modifica solo sus datos individuales.'}
           </p>
+          {!esMasivo && (
+            <p className="mt-1 text-xs text-texto-suave">
+              <span className="text-error" aria-hidden="true">*</span> Campos obligatorios.
+            </p>
+          )}
         </div>
         <Boton tipo="button" variante="fantasma" onClick={onCambiarAlcance}>
           Cambiar alcance
@@ -231,12 +257,57 @@ function EditorInstanciasMaterial({ material, alcance, onCambiarAlcance, onGuard
                 ))}
               </select>
             </label>
-            <Campo etiqueta="Código de ejemplar" valor={datos.codigo_ejemplar} maxLength={50} onCambio={(evento) => setDatos((actuales) => ({ ...actuales, codigo_ejemplar: evento.target.value }))} />
-            <Campo etiqueta="Número de serie" valor={datos.numero_serie} maxLength={80} onCambio={(evento) => setDatos((actuales) => ({ ...actuales, numero_serie: evento.target.value }))} />
-            <Campo etiqueta="Estado físico" valor={datos.estado_fisico} maxLength={100} onCambio={(evento) => setDatos((actuales) => ({ ...actuales, estado_fisico: evento.target.value }))} />
-            <Campo etiqueta="Color del ejemplar" valor={datos.color} maxLength={30} onCambio={(evento) => setDatos((actuales) => ({ ...actuales, color: evento.target.value }))} />
-            <Campo etiqueta="Estante o ubicación" valor={datos.ubicacion} maxLength={100} onCambio={(evento) => setDatos((actuales) => ({ ...actuales, ubicacion: evento.target.value }))} />
-            <Campo etiqueta="Observaciones" tipo="area" valor={datos.observaciones} onCambio={(evento) => setDatos((actuales) => ({ ...actuales, observaciones: evento.target.value }))} />
+            <Campo
+              etiqueta="Código de ejemplar"
+              valor={datos.codigo_ejemplar}
+              maxLength={50}
+              requerido
+              onCambio={(evento) => setDatos((actuales) => ({ ...actuales, codigo_ejemplar: evento.target.value }))}
+            />
+            <Campo
+              etiqueta="Estado"
+              opciones={opcionesEstadoInstancia}
+              valor={datos.estado}
+              deshabilitado={estadoBloqueado}
+              requerido={!estadoBloqueado}
+              ayuda={
+                estadoBloqueado
+                  ? 'No se puede modificar manualmente un ejemplar Prestado o Reservado; debe seguir su procedimiento correspondiente para volver a Disponible.'
+                  : ''
+              }
+              onCambio={(evento) => setDatos((actuales) => ({ ...actuales, estado: evento.target.value }))}
+            />
+            <Campo
+              etiqueta="Número de serie"
+              valor={datos.numero_serie}
+              maxLength={80}
+              onCambio={(evento) => setDatos((actuales) => ({ ...actuales, numero_serie: evento.target.value }))}
+            />
+            <Campo
+              etiqueta="Estado físico (descripción)"
+              valor={datos.estado_fisico}
+              maxLength={100}
+              onCambio={(evento) => setDatos((actuales) => ({ ...actuales, estado_fisico: evento.target.value }))}
+            />
+            <Campo
+              etiqueta="Color del ejemplar"
+              valor={datos.color}
+              maxLength={30}
+              onCambio={(evento) => setDatos((actuales) => ({ ...actuales, color: evento.target.value }))}
+            />
+            <Campo
+              etiqueta="Estante o ubicación"
+              valor={datos.ubicacion}
+              maxLength={100}
+              onCambio={(evento) => setDatos((actuales) => ({ ...actuales, ubicacion: evento.target.value }))}
+            />
+            <Campo
+              etiqueta="Observaciones"
+              tipo="area"
+              valor={datos.observaciones}
+              className="sm:col-span-2"
+              onCambio={(evento) => setDatos((actuales) => ({ ...actuales, observaciones: evento.target.value }))}
+            />
             <div className="grid gap-2 sm:col-span-2">
               <span className="text-sm font-semibold text-texto">Foto de este ejemplar</span>
               {error && <p className="text-xs text-error">{error}</p>}

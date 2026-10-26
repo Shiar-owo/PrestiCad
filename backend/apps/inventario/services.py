@@ -441,6 +441,10 @@ def actualizar_material(material_id, **campos):
 
     if "estado" in campos:
         _verificar_estado(campos["estado"])
+        if campos["estado"] in ("disponible", "en_mantenimiento"):
+            material.instancias.filter(
+                estado__in=("disponible", "en_mantenimiento")
+            ).update(estado=campos["estado"])
 
     if "nombre" in campos:
         campos["nombre"] = campos["nombre"].strip()
@@ -524,6 +528,21 @@ def _verificar_estado(estado):
     estados_validos = {clave for clave, _ in ESTADOS_MATERIAL}
     if estado not in estados_validos:
         raise InventarioError("estado", "El estado del material no es válido.")
+
+
+def _sincronizar_estado_material_desde_instancias(material):
+    """Sincroniza `material.estado` según los estados actuales de sus ejemplares."""
+    estados = set(material.instancias.values_list("estado", flat=True))
+    if not estados:
+        return
+    if "disponible" in estados:
+        material.estado = "disponible"
+    elif estados == {"en_mantenimiento"}:
+        material.estado = "en_mantenimiento"
+    elif "prestado" in estados:
+        material.estado = "prestado"
+    elif "reservado" in estados:
+        material.estado = "reservado"
 
 
 def _eliminar_foto(storage, nombre):
@@ -786,7 +805,8 @@ def crear_instancias_material(material_id, filas):
             instancias_creadas.append(instancia_en_proceso)
 
         material.stock = max(material.stock, material.instancias.count())
-        material.save(update_fields=["stock", "updated_at"])
+        _sincronizar_estado_material_desde_instancias(material)
+        material.save(update_fields=["stock", "estado", "updated_at"])
         return instancias_creadas
     except Exception as error:
         archivos_guardados = [
@@ -828,6 +848,18 @@ def actualizar_instancia_material(instancia_id, **campos):
         estados_validos = {clave for clave, _ in ESTADOS_INSTANCIA}
         if estado not in estados_validos:
             raise InventarioError("estado", "El estado de la instancia no es válido.")
+        if estado != instancia.estado:
+            if instancia.estado in ("prestado", "reservado"):
+                raise InventarioError(
+                    "estado",
+                    f"No se puede cambiar manualmente el estado de un ejemplar '{instancia.get_estado_display()}'.",
+                    status_code=409,
+                )
+            if estado not in ("disponible", "en_mantenimiento"):
+                raise InventarioError(
+                    "estado",
+                    "Solo se puede cambiar manualmente el estado hacia 'Disponible' o 'En Mantenimiento'.",
+                )
         instancia.estado = estado
 
     if campos.get("foto") is not None:
@@ -843,6 +875,9 @@ def actualizar_instancia_material(instancia_id, **campos):
         instancia.foto = campos["foto"]
 
     instancia.save()
+    if "estado" in campos:
+        _sincronizar_estado_material_desde_instancias(instancia.material)
+        instancia.material.save(update_fields=["estado", "updated_at"])
 
     foto_nueva = instancia.foto.name if instancia.foto else None
     if foto_anterior and foto_anterior != foto_nueva:

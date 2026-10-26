@@ -3,6 +3,7 @@ import { Link, NavLink, useLocation } from 'react-router'
 import { Menu, Moon, Sun, X } from 'lucide-react'
 
 import SesionContext from '../../contextos/SesionContext'
+import { esRutaGestionPrestamos } from '../../prestamos/navegacionPrestamos'
 import MenuUsuario from './MenuUsuario'
 
 function claseEnlace({ isActive }) {
@@ -57,6 +58,14 @@ function Encabezado({ tema, onAlternarTema }) {
               <NavLink to="/panel" end className={claseEnlace}>
                 Inicio
               </NavLink>
+              {['gestor', 'administrador'].includes(usuario.rol) && (
+                <Link
+                  to="/panel/gestion-prestamos"
+                  className={claseEnlace({ isActive: esRutaGestionPrestamos(pathname) })}
+                >
+                  Gestionar préstamos
+                </Link>
+              )}
               {usuario.rol === 'administrador' && (
                 <NavLink to="/admin/roles" className={claseEnlace}>
                   Gestionar roles
@@ -130,6 +139,14 @@ function Encabezado({ tema, onAlternarTema }) {
                 <EnlaceMovil to="/panel" activo={pathname === '/panel'}>
                   Inicio
                 </EnlaceMovil>
+                {['gestor', 'administrador'].includes(usuario.rol) && (
+                  <EnlaceMovil
+                    to="/panel/gestion-prestamos"
+                    activo={esRutaGestionPrestamos(pathname)}
+                  >
+                    Gestionar préstamos
+                  </EnlaceMovil>
+                )}
                 {usuario.rol === 'administrador' && (
                   <EnlaceMovil to="/admin/roles" activo={pathname === '/admin/roles'}>
                     Gestionar roles

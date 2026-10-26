@@ -145,7 +145,9 @@ def consultar_prestamos_usuario(usuario_id, ahora=None):
 def consultar_historial_prestamos(ahora=None, estado=None, dni=None):
     """Lista global de préstamos para consulta histórica de gestión."""
     prestamos = _consultar_prestamos_con_estado(ahora=ahora).select_related("usuario")
-    if estado is not None:
+    if estado == "devoluble":
+        prestamos = prestamos.filter(estado_consulta__in=("activo", "vencido"))
+    elif estado is not None:
         prestamos = prestamos.filter(estado_consulta=estado)
     if dni is not None:
         prestamos = prestamos.filter(usuario__dni=dni)

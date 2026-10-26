@@ -128,7 +128,7 @@ class HistorialPrestamosView(GenericAPIView):
             dni = None
 
         estado = request.query_params.get("estado")
-        estados_validos = dict(ESTADOS_PRESTAMO)
+        estados_validos = set(dict(ESTADOS_PRESTAMO)) | {"devoluble"}
         if estado is not None and estado not in estados_validos:
             return Response(
                 {"estado": ["El estado de préstamo no es válido."]},

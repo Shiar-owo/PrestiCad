@@ -7,7 +7,7 @@ import {
   validarNombre,
   validarPuntosReputacion,
 } from '../validaciones'
-import { OPCIONES_ESTADO, OPCIONES_TIER, OPCIONES_TIPO } from '../constantes/catalogo'
+import { OPCIONES_TIER, OPCIONES_TIPO } from '../constantes/catalogo'
 import {
   construirCuerpoRegistroMaterial,
   crearEjemplares,
@@ -20,6 +20,7 @@ import Campo from './ui/Campo'
 import Boton from './ui/Boton'
 import Tarjeta from './ui/Tarjeta'
 import ErrorAlerta from './ui/ErrorAlerta'
+import AgregarEjemplaresMaterial from './AgregarEjemplaresMaterial'
 import EditorInstanciasMaterial from './EditorInstanciasMaterial'
 
 // Parámetros de reputación en puntos: si se blanks, el backend aplica los
@@ -83,12 +84,30 @@ const DATOS_INICIALES = {
   estado: 'disponible',
 }
 
+function obtenerEstadoGeneralInicial(material) {
+  if (!material) return 'disponible'
+  const instancias = Array.isArray(material.instancias) ? material.instancias : []
+  const estadosElegibles = new Set(
+    instancias
+      .filter((inst) => ['disponible', 'en_mantenimiento'].includes(inst.estado))
+      .map((inst) => inst.estado),
+  )
+  if (estadosElegibles.size > 1) {
+    return ''
+  }
+  if (estadosElegibles.has('en_mantenimiento') || material.estado === 'en_mantenimiento') {
+    return 'en_mantenimiento'
+  }
+  return 'disponible'
+}
+
 function crearDatosIniciales(material) {
   return {
     ...DATOS_INICIALES,
     ...Object.fromEntries(
       Object.entries(DATOS_INICIALES).map(([campo, inicial]) => [campo, material?.[campo] ?? inicial]),
     ),
+    estado: obtenerEstadoGeneralInicial(material),
     modo: 'unico',
     foto: null,
     vistaPreviaFoto: material?.foto || '',
@@ -152,6 +171,8 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
   const [enviando, setEnviando] = useState(false)
   const [mensajeExito, setMensajeExito] = useState('')
   const [mostrarErroresEmergente, setMostrarErroresEmergente] = useState(false)
+  const [estadoGeneralModificado, setEstadoGeneralModificado] = useState(false)
+  const [estadoPendienteConfirmacion, setEstadoPendienteConfirmacion] = useState(null)
 
   useEffect(() => () => {
     urlsTemporales.current.forEach((url) => URL.revokeObjectURL(url))
@@ -266,11 +287,23 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
       }
     }
 
-    if (esEdicion) {
+    if (esEdicion && estadoGeneralModificado && ['disponible', 'en_mantenimiento'].includes(datos.estado)) {
       cuerpo.estado = datos.estado
     }
 
     return cuerpo
+  }
+
+  function solicitarCambioEstadoGeneral(nuevoEstado) {
+    if (!['disponible', 'en_mantenimiento'].includes(nuevoEstado)) return
+    setEstadoPendienteConfirmacion(nuevoEstado)
+  }
+
+  function confirmarCambioEstadoGeneral() {
+    if (!estadoPendienteConfirmacion) return
+    actualizar('estado', estadoPendienteConfirmacion)
+    setEstadoGeneralModificado(true)
+    setEstadoPendienteConfirmacion(null)
   }
 
   // Sin foto nueva se manda el objeto de siempre (JSON). Con foto, todo tiene
@@ -413,6 +446,31 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
     ),
   ]
 
+  if (esEdicion && alcanceEdicion === 'agregar') {
+    return (
+      <section>
+        <header className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-bold text-texto">
+              Añadir nueva existencia: {material.nombre}
+            </h3>
+            <p className="mt-1 text-sm text-texto-suave">
+              Registra nuevos ejemplares físicos para este material del catálogo.
+            </p>
+          </div>
+          <Boton tipo="button" variante="fantasma" onClick={() => setAlcanceEdicion(null)}>
+            Cambiar alcance
+          </Boton>
+        </header>
+        <AgregarEjemplaresMaterial
+          material={material}
+          onGuardado={onGuardado}
+          onCancelar={() => setAlcanceEdicion(null)}
+        />
+      </section>
+    )
+  }
+
   if (esEdicion && alcanceEdicion && alcanceEdicion !== 'general') {
     return (
       <EditorInstanciasMaterial
@@ -433,7 +491,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
           <h3 className="text-lg font-bold text-texto">Editar material: {material.nombre}</h3>
           <p className="mt-1 text-sm text-texto-suave">Elige qué información quieres modificar. El material tiene {cantidad} ejemplar{cantidad === 1 ? '' : 'es'}.</p>
         </header>
-        <Tarjeta className="grid gap-3 p-6 sm:grid-cols-3">
+        <Tarjeta className="grid gap-3 p-6 sm:grid-cols-2">
           <Boton tipo="button" variante="secundario" onClick={() => setAlcanceEdicion('general')}>
             Datos generales
           </Boton>
@@ -443,7 +501,10 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
           <Boton tipo="button" variante="secundario" onClick={() => setAlcanceEdicion('todas')}>
             Aplicar campos a todos
           </Boton>
-          <Boton tipo="button" variante="fantasma" className="sm:col-span-3" onClick={onCancelar}>
+          <Boton tipo="button" variante="secundario" onClick={() => setAlcanceEdicion('agregar')}>
+            Añadir nueva existencia
+          </Boton>
+          <Boton tipo="button" variante="fantasma" className="sm:col-span-2" onClick={onCancelar}>
             Cancelar
           </Boton>
         </Tarjeta>
@@ -451,21 +512,107 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
     )
   }
 
+  const instanciasMaterial = Array.isArray(material?.instancias) ? material.instancias : []
+  const instanciasBloqueadas = instanciasMaterial.filter((inst) =>
+    ['prestado', 'reservado'].includes(inst.estado),
+  )
+  const instanciasModificables = instanciasMaterial.filter((inst) =>
+    ['disponible', 'en_mantenimiento'].includes(inst.estado),
+  )
+  const opcionesEstadoGeneral = datos.estado === ''
+    ? [
+      { valor: '', etiqueta: 'Mixto (disponibles y en mantenimiento)' },
+      ...OPCIONES_ESTADO_INICIAL_EJEMPLAR,
+    ]
+    : OPCIONES_ESTADO_INICIAL_EJEMPLAR
+
   return (
     <section>
-      <header className="mb-5">
-        <h3 className="text-lg font-bold text-texto">
-          {esEdicion ? `Editar material: ${material.nombre}` : 'Registrar material'}
-        </h3>
-        <p className="mt-1 text-xs text-texto-suave">
-          <span className="text-error" aria-hidden="true">*</span> Campos obligatorios.
-        </p>
+      <header className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="text-lg font-bold text-texto">
+            {esEdicion ? `Editar material: ${material.nombre}` : 'Registrar material'}
+          </h3>
+          <p className="mt-1 text-xs text-texto-suave">
+            <span className="text-error" aria-hidden="true">*</span> Campos obligatorios.
+          </p>
+        </div>
+        {esEdicion && (
+          <Boton tipo="button" variante="fantasma" onClick={() => setAlcanceEdicion(null)}>
+            Cambiar alcance
+          </Boton>
+        )}
       </header>
 
       {mensajeExito && (
         <p className="mb-4 text-sm font-semibold text-marca-700 dark:text-marca-300" role="status">
           {mensajeExito}
         </p>
+      )}
+
+      {estadoPendienteConfirmacion && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onMouseDown={(evento) => {
+            if (evento.target === evento.currentTarget) setEstadoPendienteConfirmacion(null)
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="confirmar-estado-general-titulo"
+            className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-borde bg-white p-6 shadow-xl dark:bg-superficie"
+          >
+            <h3 id="confirmar-estado-general-titulo" className="text-lg font-bold text-texto">
+              Confirmar cambio de estado general
+            </h3>
+            <p className="mt-2 text-sm text-texto">
+              ¿De verdad quieres cambiar el estado general de <strong>{material.nombre}</strong> a{' '}
+              <strong>
+                {estadoPendienteConfirmacion === 'en_mantenimiento' ? 'En mantenimiento' : 'Disponible'}
+              </strong>
+              ?
+            </p>
+            <p className="mt-2 text-sm text-texto-suave">
+              {instanciasModificables.length > 0
+                ? `Este cambio se aplicará al guardar a ${instanciasModificables.length} ejemplar${instanciasModificables.length === 1 ? '' : 'es'} que actualmente está${instanciasModificables.length === 1 ? '' : 'n'} en estado Disponible o En mantenimiento.`
+                : 'Actualmente no hay ejemplares en estado Disponible o En mantenimiento que puedan ser modificados manualmente.'}
+            </p>
+
+            {instanciasBloqueadas.length > 0 && (
+              <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3.5 text-xs text-amber-900 dark:border-amber-700/60 dark:bg-amber-950/40 dark:text-amber-200">
+                <p className="font-bold">
+                  Atención: {instanciasBloqueadas.length} ejemplar{instanciasBloqueadas.length === 1 ? '' : 'es'} en estado Prestado o Reservado no será{instanciasBloqueadas.length === 1 ? '' : 'n'} modificado{instanciasBloqueadas.length === 1 ? '' : 's'}
+                </p>
+                <p className="mt-1">
+                  Por regla de negocio, las instancias en estado <strong>Prestado</strong> o{' '}
+                  <strong>Reservado</strong> deben seguir su procedimiento correspondiente (registro de
+                  devolución o gestión de reserva) para volver a estar en <strong>Disponible</strong>.
+                </p>
+                <ul className="mt-2 list-disc space-y-0.5 pl-4 font-mono">
+                  {instanciasBloqueadas.map((inst) => (
+                    <li key={inst.id}>
+                      {inst.codigo_ejemplar} ({inst.estado_display || (inst.estado === 'prestado' ? 'Prestado' : 'Reservado')})
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
+              <Boton
+                tipo="button"
+                variante="secundario"
+                onClick={() => setEstadoPendienteConfirmacion(null)}
+              >
+                Cancelar
+              </Boton>
+              <Boton tipo="button" onClick={confirmarCambioEstadoGeneral}>
+                Sí, cambiar estado
+              </Boton>
+            </div>
+          </section>
+        </div>
       )}
 
       {mostrarErroresEmergente && (
@@ -553,10 +700,15 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
             {esEdicion && (
               <Campo
                 etiqueta="Estado"
-                opciones={OPCIONES_ESTADO}
+                opciones={opcionesEstadoGeneral}
                 valor={datos.estado}
-                onCambio={(evento) => actualizar('estado', evento.target.value)}
+                onCambio={(evento) => solicitarCambioEstadoGeneral(evento.target.value)}
                 error={errores.estado}
+                ayuda={
+                  estadoGeneralModificado
+                    ? `Cambio confirmado: al guardar, los ejemplares elegibles pasarán a "${datos.estado === 'en_mantenimiento' ? 'En mantenimiento' : 'Disponible'}".`
+                    : 'Cambiar el estado general afectará a los ejemplares disponibles o en mantenimiento.'
+                }
               />
             )}
             {!esEdicion && datos.modo !== 'unico' && (

@@ -311,7 +311,7 @@ class InstanciaMaterialDetailView(RetrieveUpdateDestroyAPIView):
                 {error.campo: [error.mensaje]},
                 status=(
                     status.HTTP_409_CONFLICT
-                    if error.campo == "codigo_ejemplar"
+                    if error.campo == "codigo_ejemplar" or error.status_code == 409
                     else status.HTTP_400_BAD_REQUEST
                 ),
             )

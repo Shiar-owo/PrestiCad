@@ -3,14 +3,13 @@ import { Box, FileText } from 'lucide-react'
 import { ETIQUETAS_TIER, ETIQUETAS_TIPO } from '../constantes/catalogo'
 import Boton from './ui/Boton'
 import Tarjeta from './ui/Tarjeta'
-import BadgeEstado from './ui/BadgeEstado'
 
 function TarjetaMaterial({ material, onSeleccionar }) {
   const tipoLegible = ETIQUETAS_TIPO[material.tipo] || material.tipo
   const tierLegible = ETIQUETAS_TIER[material.tier_minimo_requerido] || material.tier_minimo_requerido
 
   const unidades = material.unidades_disponibles ?? material.stock ?? 0
-  const hayDisponibilidad = material.estado === 'disponible' && unidades > 0
+  const hayDisponibilidad = unidades > 0
   const especificacionesBreves = [material.marca, material.modelo].filter(Boolean).join(' • ')
 
   function manejarClick() {
@@ -46,11 +45,6 @@ function TarjetaMaterial({ material, onSeleccionar }) {
           />
         ) : (
           <Box aria-hidden="true" className="size-12 text-texto-suave" />
-        )}
-        {material.estado && (
-          <span className="absolute right-2 top-2">
-            <BadgeEstado estado={material.estado} />
-          </span>
         )}
       </div>
 

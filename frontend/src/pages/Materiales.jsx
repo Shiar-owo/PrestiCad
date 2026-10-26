@@ -1,12 +1,10 @@
 import { useEffect, useState } from 'react'
 
-import { api, ErrorApi } from '../api/client'
+import { api } from '../api/client'
 import useTituloPagina from '../hooks/useTituloPagina'
 import {
-  ETIQUETAS_ESTADO,
   ETIQUETAS_TIER,
   ETIQUETAS_TIPO,
-  OPCIONES_ESTADO,
 } from '../constantes/catalogo'
 import MaterialForm from '../components/MaterialForm'
 import FichaTecnicaModal from '../components/FichaTecnicaModal'
@@ -26,7 +24,6 @@ function Materiales() {
   const [mostrarFormulario, setMostrarFormulario] = useState(false)
   const [materialEnEdicion, setMaterialEnEdicion] = useState(null)
   const [materialFicha, setMaterialFicha] = useState(null)
-  const [cambiandoEstado, setCambiandoEstado] = useState(null)
   const [registroAEliminar, setRegistroAEliminar] = useState(null)
 
   useEffect(() => {
@@ -88,35 +85,6 @@ function Materiales() {
     await cargarMateriales()
   }
 
-  // El cambio de estado viaja como un PATCH con un solo campo (HU04 criterio 8).
-  // La actualización es optimista: si el backend la rechaza, se revierte.
-  async function cambiarEstado(material, nuevoEstado) {
-    if (nuevoEstado === material.estado) {
-      return
-    }
-
-    setError('')
-    setMateriales((actuales) =>
-      actuales.map((m) => (m.id === material.id ? { ...m, estado: nuevoEstado } : m)),
-    )
-    setCambiandoEstado(material.id)
-
-    try {
-      await api.patch(`/materiales/${material.id}/`, { estado: nuevoEstado })
-    } catch (errorApi) {
-      setMateriales((actuales) =>
-        actuales.map((m) => (m.id === material.id ? { ...m, estado: material.estado } : m)),
-      )
-      if (errorApi instanceof ErrorApi && errorApi.status === 403) {
-        setError('No tienes permiso para cambiar el estado de los materiales.')
-      } else {
-        setError('No se pudo cambiar el estado del material.')
-      }
-    } finally {
-      setCambiandoEstado(null)
-    }
-  }
-
   const codigoInstanciaAEliminar = registroAEliminar?.tipo === 'instancia'
     ? obtenerCodigoInstancia(registroAEliminar.instancia)
     : ''
@@ -173,7 +141,6 @@ function Materiales() {
                   <th className="px-4 py-3 font-semibold">Stock</th>
                   <th className="px-4 py-3 font-semibold">Disponibles</th>
                   <th className="px-4 py-3 font-semibold">Tier mínimo</th>
-                  <th className="px-4 py-3 font-semibold">Estado</th>
                   <th className="px-4 py-3 font-semibold">Acciones</th>
                 </tr>
               </thead>
@@ -207,24 +174,6 @@ function Materiales() {
                     <td className="px-4 py-3">{material.unidades_disponibles}</td>
                     <td className="px-4 py-3">
                       {ETIQUETAS_TIER[material.tier_minimo_requerido] || material.tier_minimo_requerido}
-                    </td>
-                    <td className="px-4 py-3">
-                      <select
-                        value={material.estado}
-                        disabled={cambiandoEstado === material.id}
-                        onChange={(e) => cambiarEstado(material, e.target.value)}
-                        className="rounded-lg border border-borde bg-white px-2 py-1.5 text-sm text-texto dark:bg-superficie"
-                      >
-                        {OPCIONES_ESTADO.map((opcion) => (
-                          <option
-                            key={opcion.valor}
-                            value={opcion.valor}
-                            className="bg-white text-texto dark:bg-superficie"
-                          >
-                            {opcion.etiqueta}
-                          </option>
-                        ))}
-                      </select>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">

@@ -24,7 +24,10 @@ MAXIMO_PRESTATARIOS_SUGERIDOS = 10
 
 # Límites del registro de entrega (HU09).
 MAXIMO_DIAS_PRESTAMO = 30
-TAMANO_MAXIMO_FOTO_CHECKLIST_BYTES = 5 * 1024 * 1024
+TAMANO_MAXIMO_FOTO_CHECKLIST_BYTES = 4 * 1024 * 1024
+# Vercel limita el cuerpo completo del rewrite a ~4.5 MB, así que la suma de
+# todos los archivos de una misma petición no puede superar este valor.
+TAMANO_MAXIMO_SOLICITUD_BYTES = 4 * 1024 * 1024
 FORMATOS_FOTO_CHECKLIST_PERMITIDOS = frozenset({"image/jpeg", "image/png", "image/webp"})
 EXTENSIONES_FOTO_CHECKLIST_PERMITIDAS = frozenset({".jpg", ".jpeg", ".png", ".webp"})
 

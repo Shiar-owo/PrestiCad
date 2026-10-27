@@ -98,7 +98,7 @@ class Material(models.Model):
         blank=True,
         validators=[validar_foto],
         verbose_name="Foto del material",
-        help_text="Imagen del material: JPG, PNG o WEBP, hasta 5 MB.",
+        help_text="Imagen del material: JPG, PNG o WEBP, hasta 4 MB.",
     )
 
     # Parámetros de reputación por objeto (value object `AtributosReputacion`,
@@ -262,7 +262,7 @@ class InstanciaMaterial(models.Model):
         blank=True,
         validators=[validar_foto],
         verbose_name="Foto del ejemplar",
-        help_text="Imagen del ejemplar: JPG, PNG o WEBP, hasta 5 MB.",
+        help_text="Imagen del ejemplar: JPG, PNG o WEBP, hasta 4 MB.",
     )
     observaciones = models.TextField(
         blank=True,

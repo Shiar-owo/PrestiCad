@@ -9,9 +9,20 @@ from apps.prestamos.constants import (
     ESTADOS_CHECKLIST_DEVOLUCION,
     MAXIMO_DIAS_PRESTAMO,
     MINIMO_DIGITOS_BUSQUEDA_PRESTATARIO,
+    TAMANO_MAXIMO_SOLICITUD_BYTES,
 )
 from apps.prestamos.models import Devolucion, Garantia, Prestamo
 from apps.prestamos.validators import validar_foto_checklist, validar_pdf_garantia
+
+
+def _validar_tamano_total_archivos(archivos):
+    total = sum(getattr(archivo, "size", 0) for archivo in archivos if archivo)
+    if total > TAMANO_MAXIMO_SOLICITUD_BYTES:
+        raise serializers.ValidationError({
+            "archivos": [
+                "El total de archivos de la solicitud no debe superar 4 MB."
+            ],
+        })
 
 
 class ChecklistInicialItemSerializer(serializers.Serializer):
@@ -181,6 +192,11 @@ class RegistrarPrestamoSerializer(
             raise serializers.ValidationError({
                 "fotos_checklist": "Adjunta una foto por cada elemento del checklist inicial.",
             })
+        _validar_tamano_total_archivos([
+            attrs.get("documento_identidad"),
+            attrs.get("compromiso_responsabilidad"),
+            *attrs.get("fotos_checklist", []),
+        ])
         return attrs
 
     def validate_dni_prestatario(self, value):
@@ -331,9 +347,11 @@ class DevolucionIngresoSerializer(
                 if campo not in campos_foto
             }
         try:
-            return super().validate(attrs)
+            resultado = super().validate(attrs)
         finally:
             self.initial_data = datos_originales
+        _validar_tamano_total_archivos(resultado.get("fotos_checklist", []))
+        return resultado
 
 
 def url_reporte_publica(devolucion):

@@ -65,7 +65,7 @@ InstanciaMaterial               Reserva
 >
 > La ficha técnica incluye `foto`, un `ImageField` opcional (no una URL escrita
 > a mano). En desarrollo se guarda en `MEDIA_ROOT` y en producción en
-> Cloudinary; los formatos admitidos son JPEG, PNG y WEBP de hasta 5 MB.
+> Cloudinary; los formatos admitidos son JPEG, PNG y WEBP de hasta 4 MB.
 
 ---
 

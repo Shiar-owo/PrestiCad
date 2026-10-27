@@ -215,7 +215,7 @@ def registrar_material(
     - Se pueden registrar varias unidades del mismo material (criterio 5).
     - Los parámetros de reputación no informados se completan con los valores
       por defecto configurables (criterio 3, T04.04).
-    - La foto es opcional y se valida antes de guardar: hasta 5 MB y en JPG,
+    - La foto es opcional y se valida antes de guardar: hasta 4 MB y en JPG,
       PNG o WEBP (criterio 1).
 
     Eleva `InventarioError` si el código ya está registrado o `ValidationError`

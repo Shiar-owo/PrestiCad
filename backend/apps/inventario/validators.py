@@ -7,16 +7,16 @@ corre los validadores del modelo durante `is_valid()`.
 """
 from django.core.exceptions import ValidationError
 
-# 5 MB. Es un límite del requisito, no una opción de despliegue, así que no
+# 4 MB. Es un límite del requisito, no una opción de despliegue, así que no
 # vive en `settings`.
-TAMANIO_MAXIMO = 5 * 1024 * 1024
+TAMANIO_MAXIMO = 4 * 1024 * 1024
 
 # El `content_type` lo declara el navegador, así que por sí solo no prueba
 # nada; el `ImageField` abre el archivo con Pillow y descarta un archivo que
 # no sea una imagen de verdad. Esta lista acota los formatos admitidos.
 FORMATOS_PERMITIDOS = frozenset({"image/jpeg", "image/png", "image/webp"})
 
-MENSAJE_TAMANIO = "La foto no debe pesar más de 5 MB."
+MENSAJE_TAMANIO = "La foto no debe pesar más de 4 MB."
 MENSAJE_FORMATO = "La foto debe estar en formato JPG, PNG o WEBP."
 
 

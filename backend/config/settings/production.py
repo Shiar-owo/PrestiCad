@@ -23,7 +23,19 @@ if not SECRET_KEY:
         "con una clave de ejemplo."
     )
 
-ALLOWED_HOSTS = [h for h in os.getenv("DJANGO_ALLOWED_HOSTS", "").split(",") if h]
+ALLOWED_HOSTS = [
+    h.strip().removeprefix("https://").removeprefix("http://").rstrip("/")
+    for h in os.getenv("DJANGO_ALLOWED_HOSTS", "").split(",")
+    if h.strip()
+]
+
+# Render inyecta automáticamente RENDER_EXTERNAL_HOSTNAME con el subdominio del servicio (ej. presticad.onrender.com).
+render_host = os.getenv("RENDER_EXTERNAL_HOSTNAME")
+if render_host:
+    render_host_limpio = render_host.strip().removeprefix("https://").removeprefix("http://").rstrip("/")
+    if render_host_limpio and render_host_limpio not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(render_host_limpio)
+
 if not ALLOWED_HOSTS:
     raise ImproperlyConfigured(
         "Define DJANGO_ALLOWED_HOSTS en el entorno de producción con los "
@@ -48,12 +60,26 @@ else:
 
 # El proyecto es un frontend más una API, así que el origen del SPA hay que
 # declararlo: dejarlo vacío rompe el navegador en silencio.
-CORS_ALLOWED_ORIGINS = [o for o in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",") if o]
+CORS_ALLOWED_ORIGINS = [
+    o.strip().rstrip("/")
+    for o in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",")
+    if o.strip()
+]
 if not CORS_ALLOWED_ORIGINS:
     raise ImproperlyConfigured(
         "Define CORS_ALLOWED_ORIGINS en el entorno de producción con el origen "
         "del frontend."
     )
+
+csrf_env = os.getenv("CSRF_TRUSTED_ORIGINS")
+if csrf_env:
+    CSRF_TRUSTED_ORIGINS = [
+        o.strip().rstrip("/")
+        for o in csrf_env.split(",")
+        if o.strip()
+    ]
+else:
+    CSRF_TRUSTED_ORIGINS = list(CORS_ALLOWED_ORIGINS)
 
 # El proxy de la plataforma termina TLS y Django corre detrás, así que hay que
 # declararlo para que `request.is_secure()` refleje la conexión real.

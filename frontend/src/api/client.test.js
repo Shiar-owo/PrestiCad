@@ -146,6 +146,31 @@ describe('api', () => {
       await expect(api.get('/materiales/')).rejects.toMatchObject({ status: 500, datos: null })
     })
 
+    it('lanza ErrorApi si una respuesta 200 no es JSON (ej. HTML por fallback de SPA)', async () => {
+      globalThis.fetch = vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => {
+          throw new SyntaxError('Unexpected token < in JSON at position 0')
+        },
+      }))
+
+      await expect(api.get('/materiales/')).rejects.toMatchObject({ status: 200, datos: null })
+    })
+
+    it('devuelve null cuando la respuesta es 204 No Content sin intentar parsear JSON', async () => {
+      const jsonMock = vi.fn()
+      globalThis.fetch = vi.fn(async () => ({
+        ok: true,
+        status: 204,
+        json: jsonMock,
+      }))
+
+      const resultado = await api.delete('/materiales/1/')
+      expect(resultado).toBeNull()
+      expect(jsonMock).not.toHaveBeenCalled()
+    })
+
     it('lanza ErrorApi con estado 0 cuando no hay red', async () => {
       globalThis.fetch = vi.fn(async () => {
         throw new TypeError('Failed to fetch')

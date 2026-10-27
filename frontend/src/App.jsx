@@ -5,6 +5,7 @@ import './estilos.css'
 import useTema from './hooks/useTema'
 import SesionContext from './contextos/SesionContext'
 import Encabezado from './components/layout/Encabezado'
+import ErrorBoundary from './components/ErrorBoundary'
 import Rutas from './router/rutas'
 
 function App() {
@@ -41,7 +42,9 @@ function App() {
   return (
     <SesionContext.Provider value={valorContexto}>
       <Encabezado tema={tema} onAlternarTema={alternarTema} />
-      <Rutas />
+      <ErrorBoundary>
+        <Rutas />
+      </ErrorBoundary>
     </SesionContext.Provider>
   )
 }

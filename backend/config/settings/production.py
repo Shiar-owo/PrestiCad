@@ -2,8 +2,8 @@
 
 La seleccionan `wsgi.py` y `asgi.py` por defecto. Ningún dato crítico tiene
 aquí un valor por defecto: si falta, Django no arranca en lugar de arrancar
-abierto. La configuración real de producción (imágenes en Cloudinary) se
-agrega en un commit posterior.
+abierto. Las imágenes públicas y los documentos privados de garantía viven en
+Cloudinary.
 """
 import os
 from pathlib import Path
@@ -30,6 +30,11 @@ if not ALLOWED_HOSTS:
         "dominios que sirven la API."
     )
 
+# Neon y la mayoría de PostgreSQL gestionados exigen TLS.
+DATABASES["default"]["OPTIONS"] = {
+    "sslmode": os.getenv("POSTGRES_SSLMODE", "require"),
+}
+
 ruta_garantias = os.getenv("GARANTIAS_STORAGE_ROOT")
 if ruta_garantias:
     if not Path(ruta_garantias).is_absolute():
@@ -41,8 +46,8 @@ if ruta_garantias:
 else:
     GARANTIAS_STORAGE_ROOT = None
 
-# El proyecto es un frontend servido por nginx más una API, así que el origen
-# del SPA hay que declararlo: dejarlo vacío rompe el navegador en silencio.
+# El proyecto es un frontend más una API, así que el origen del SPA hay que
+# declararlo: dejarlo vacío rompe el navegador en silencio.
 CORS_ALLOWED_ORIGINS = [o for o in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",") if o]
 if not CORS_ALLOWED_ORIGINS:
     raise ImproperlyConfigured(
@@ -50,8 +55,8 @@ if not CORS_ALLOWED_ORIGINS:
         "del frontend."
     )
 
-# nginx termina TLS y Django corre detrás, así que hay que declararlo para que
-# `request.is_secure()` refleje la conexión real.
+# El proxy de la plataforma termina TLS y Django corre detrás, así que hay que
+# declararlo para que `request.is_secure()` refleje la conexión real.
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 # Las cookies de sesión y CSRF solo viajan por HTTPS. No se activa

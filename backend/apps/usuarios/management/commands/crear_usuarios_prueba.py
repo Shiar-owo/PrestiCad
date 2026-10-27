@@ -6,7 +6,6 @@ from django.core.management.base import BaseCommand, CommandError
 from apps.usuarios.models import Credencial, Rol, Usuario
 
 
-CONTRASENA_PRUEBA = "PresticadDemo2026!"
 USUARIOS_PRUEBA = (
     {
         "email": "prestatario@presticad.test",
@@ -36,11 +35,21 @@ USUARIOS_PRUEBA = (
 
 
 class Command(BaseCommand):
-    help = "Crea las cuentas de prueba compartidas (solo en DEBUG)."
+    help = "Crea las cuentas de prueba compartidas (DEBUG o CREAR_USUARIOS_PRUEBA=true)."
 
     def handle(self, *args, **options):
-        if not settings.DEBUG:
-            raise CommandError("Las cuentas de prueba solo se pueden crear con DEBUG=True.")
+        if not (settings.DEBUG or settings.CREAR_USUARIOS_PRUEBA):
+            raise CommandError(
+                "Define CREAR_USUARIOS_PRUEBA=true para crear las cuentas de prueba."
+            )
+
+        contrasena = settings.CONTRASENA_USUARIOS_PRUEBA
+        if not contrasena:
+            if not settings.DEBUG:
+                raise CommandError(
+                    "Define CONTRASENA_USUARIOS_PRUEBA para crear las cuentas de prueba."
+                )
+            contrasena = "PresticadDemo2026!"
 
         creados = 0
         for datos in USUARIOS_PRUEBA:
@@ -61,7 +70,7 @@ class Command(BaseCommand):
                 email=usuario.email,
                 defaults={
                     "usuario": usuario,
-                    "password_hash": make_password(CONTRASENA_PRUEBA),
+                    "password_hash": make_password(contrasena),
                 },
             )
             if usuario_creado or credencial_creada:

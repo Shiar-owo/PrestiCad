@@ -334,7 +334,7 @@ def _crear_garantia_registrada(prestamo, documento_identidad, compromiso_respons
 
 
 def obtener_documento_garantia(prestamo_id, tipo):
-    """Abre el documento indicado sin exponer su ruta de almacenamiento."""
+    """Obtiene la URL firmada del documento indicado sin exponer su ruta de almacenamiento."""
     campos = {
         "documento-identidad": ("documento_identidad", "documento-identidad"),
         "compromiso": ("compromiso_responsabilidad", "compromiso-responsabilidad"),
@@ -372,15 +372,15 @@ def obtener_documento_garantia(prestamo_id, tipo):
             status_code=404,
         )
     try:
-        documento.open("rb")
-    except (FileNotFoundError, OSError) as error:
+        url_firmada = documento.url
+    except (FileNotFoundError, OSError, ValueError) as error:
         raise PrestamoError(
             nombre_campo,
             "El archivo del documento de garantía no existe.",
             status_code=404,
         ) from error
 
-    return documento, f"{nombre_descarga}-prestamo-{prestamo.pk}.pdf"
+    return url_firmada, f"{nombre_descarga}-prestamo-{prestamo.pk}.pdf"
 
 
 @transaction.atomic
@@ -478,7 +478,7 @@ def consultar_detalle_historial_prestamo(prestamo_id, ahora=None):
 
 
 def obtener_foto_checklist(prestamo_id, fase, indice):
-    """Abre una foto de checklist para su entrega mediante endpoint protegido."""
+    """Obtiene la URL firmada de una foto de checklist para su entrega mediante endpoint protegido."""
     try:
         foto = FotoChecklist.objects.get(
             prestamo_id=prestamo_id,
@@ -492,7 +492,7 @@ def obtener_foto_checklist(prestamo_id, fase, indice):
             status_code=404,
         ) from error
     try:
-        return foto.imagen.open("rb"), Path(foto.imagen.name).name
+        return foto.imagen.url, Path(foto.imagen.name).name
     except OSError as error:
         raise PrestamoError(
             "foto_checklist",

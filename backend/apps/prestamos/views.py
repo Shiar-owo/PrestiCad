@@ -1,6 +1,6 @@
 from mimetypes import guess_type
 
-from django.http import FileResponse
+from django.http import FileResponse, HttpResponseRedirect
 from rest_framework import status
 from rest_framework.generics import GenericAPIView
 from rest_framework.pagination import PageNumberPagination
@@ -163,13 +163,11 @@ class DescargarDocumentoGarantiaView(APIView):
 
     def get(self, request, prestamo_id, tipo):
         try:
-            archivo, nombre = obtener_documento_garantia(prestamo_id, tipo)
+            url_firmada, nombre = obtener_documento_garantia(prestamo_id, tipo)
         except PrestamoError as error:
             return _respuesta_error(error)
 
-        respuesta = FileResponse(archivo, content_type="application/pdf")
-        respuesta["Content-Disposition"] = f'inline; filename="{nombre}"'
-        return respuesta
+        return HttpResponseRedirect(url_firmada)
 
     def patch(self, request, prestamo_id, tipo):
         serializer = ActualizarDocumentoGarantiaSerializer(data=request.data)
@@ -199,16 +197,11 @@ class DescargarFotoChecklistView(APIView):
 
     def get(self, request, prestamo_id, fase, indice):
         try:
-            archivo, nombre = obtener_foto_checklist(prestamo_id, fase, indice)
+            url_firmada, nombre = obtener_foto_checklist(prestamo_id, fase, indice)
         except PrestamoError as error:
             return _respuesta_error(error)
 
-        respuesta = FileResponse(
-            archivo,
-            content_type=guess_type(nombre)[0] or "application/octet-stream",
-        )
-        respuesta["Content-Disposition"] = f'inline; filename="{nombre}"'
-        return respuesta
+        return HttpResponseRedirect(url_firmada)
 
 
 class DetalleHistorialPrestamoView(APIView):

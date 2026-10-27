@@ -31,12 +31,15 @@ if not ALLOWED_HOSTS:
     )
 
 ruta_garantias = os.getenv("GARANTIAS_STORAGE_ROOT")
-if not ruta_garantias or not Path(ruta_garantias).is_absolute():
-    raise ImproperlyConfigured(
-        "Define GARANTIAS_STORAGE_ROOT como ruta absoluta de un volumen "
-        "privado y persistente para los documentos de garantía."
-    )
-GARANTIAS_STORAGE_ROOT = Path(ruta_garantias)
+if ruta_garantias:
+    if not Path(ruta_garantias).is_absolute():
+        raise ImproperlyConfigured(
+            "Define GARANTIAS_STORAGE_ROOT como ruta absoluta de un volumen "
+            "privado y persistente para los documentos de garantía."
+        )
+    GARANTIAS_STORAGE_ROOT = Path(ruta_garantias)
+else:
+    GARANTIAS_STORAGE_ROOT = None
 
 # El proyecto es un frontend servido por nginx más una API, así que el origen
 # del SPA hay que declararlo: dejarlo vacío rompe el navegador en silencio.
@@ -87,7 +90,6 @@ STORAGES = {
         "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
     },
     "garantias": {
-        "BACKEND": "apps.prestamos.storage.AlmacenamientoPrivadoGarantias",
-        "OPTIONS": {"location": GARANTIAS_STORAGE_ROOT},
+        "BACKEND": "apps.prestamos.storage.AlmacenamientoPrivadoGarantiasCloudinary",
     },
 }

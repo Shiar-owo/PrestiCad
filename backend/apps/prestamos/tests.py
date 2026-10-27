@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 import json
 import tempfile
+import unittest
 from datetime import timedelta
 from io import BytesIO
 from pathlib import Path
@@ -30,6 +31,7 @@ from apps.prestamos.models import (
     Prestamo,
     ruta_documento_garantia,
 )
+from apps.prestamos import storage as almacenamiento_prestamos
 from apps.prestamos.constants import TAMANO_MAXIMO_FOTO_CHECKLIST_BYTES
 from apps.prestamos.serializers import RegistrarPrestamoSerializer
 from apps.prestamos.validators import (
@@ -96,6 +98,47 @@ def crear_pdf(nombre):
         b"%PDF-1.7\ncontenido de prueba",
         content_type="application/pdf",
     )
+
+
+class AlmacenamientoPresticadCloudinaryTestCase(SimpleTestCase):
+    """El storage de producción separa PDFs raw de imágenes y conserva el prefijo."""
+
+    @unittest.skipUnless(
+        almacenamiento_prestamos.AlmacenamientoPresticadCloudinary is not None,
+        "Cloudinary no está instalado en este entorno.",
+    )
+    def test_detecta_tipo_de_recurso_por_extension(self):
+        storage = almacenamiento_prestamos.AlmacenamientoPresticadCloudinary()
+
+        for nombre in ("reporte.pdf", "garantia.DOC", "archivo.docx", "nota.txt"):
+            with self.subTest(nombre=nombre):
+                self.assertEqual(storage._get_resource_type(nombre), "raw")
+
+        for nombre in ("foto.jpg", "foto.jpeg", "foto.png", "foto.webp"):
+            with self.subTest(nombre=nombre):
+                self.assertEqual(storage._get_resource_type(nombre), "image")
+
+    @unittest.skipUnless(
+        almacenamiento_prestamos.AlmacenamientoPrivadoGarantiasCloudinary is not None,
+        "Cloudinary no está instalado en este entorno.",
+    )
+    def test_url_privada_usa_prefijo_y_tipo_de_recurso(self):
+        storage = almacenamiento_prestamos.AlmacenamientoPrivadoGarantiasCloudinary()
+        with patch.object(storage, "_get_prefix", return_value="Presticad"):
+            with patch.object(
+                almacenamiento_prestamos,
+                "cloudinary_url",
+                return_value=("https://res.cloudinary.com/demo/raw/upload/Presticad/reporte.pdf", {}),
+            ) as crear_url:
+                url = storage.url("reporte.pdf")
+
+        self.assertIn("Presticad/reporte.pdf", url)
+        crear_url.assert_called_once_with(
+            "Presticad/reporte.pdf",
+            resource_type="raw",
+            type="upload",
+            secure=True,
+        )
 
 
 @contextmanager
@@ -1191,8 +1234,8 @@ class RegistrarPrestamoAPITestCase(APITestCase):
             self.assertNotIn("condicion", item)
             self.assertTrue(item["foto_url"])
             foto = self.client.get(item["foto_url"])
-            self.assertEqual(foto.status_code, 302)
-            self.assertTrue(foto["Location"].endswith(".png"))
+            self.assertEqual(foto.status_code, 200)
+            self.assertEqual(foto["Content-Type"], "image/png")
 
     def test_post_falla_si_falta_foto_de_un_elemento(self):
         self._iniciar_sesion(self.gestor)
@@ -1449,10 +1492,11 @@ class DescargarGarantiaAPITestCase(APITestCase):
                     self._iniciar_sesion(usuario)
                     respuesta = self.client.get(url)
 
-                    self.assertEqual(respuesta.status_code, 302)
-                    self.assertTrue(respuesta["Location"])
-                    self.assertTrue(respuesta["Location"].endswith(".pdf"))
-                    self.assertNotIn("dni-original", respuesta["Location"])
+                    # En desarrollo (FileSystemStorage con URL privada) la vista
+                    # sirve el PDF directamente: 200 con Content-Type application/pdf.
+                    self.assertEqual(respuesta.status_code, 200)
+                    self.assertEqual(respuesta["Content-Type"], "application/pdf")
+                    self.assertNotIn("dni-original", respuesta.get("Content-Disposition", ""))
 
             respuesta_publica = self.client.get(
                 f"/media/{garantia.documento_identidad.name}"
@@ -1620,6 +1664,86 @@ class DescargarGarantiaAPITestCase(APITestCase):
             self.URL.format(prestamo_id=prestamo.id, tipo="compromiso")
         )
         self.assertEqual(sin_documento.status_code, 404)
+
+
+class DescargarFotoChecklistAPITestCase(APITestCase):
+    """DescargarFotoChecklistView: acceso autorizado y servicio de imágenes locales."""
+
+    URL = "/api/prestamos/{prestamo_id}/checklist/{fase}/{indice}/foto/"
+
+    def setUp(self):
+        self.gestor = crear_usuario("gestor-foto@unsa.edu.pe", "20001001", rol="gestor")
+        self.administrador = crear_usuario(
+            "admin-foto@unsa.edu.pe", "20001002", rol="administrador"
+        )
+        self.prestatario = crear_usuario("presta-foto@unsa.edu.pe", "20001003")
+        self.material = crear_material(codigo_inventario="FOTO-CHECK-001")
+
+    def _iniciar_sesion(self, usuario):
+        sesion = self.client.session
+        sesion[CLAVE_SESION_USUARIO_ID] = usuario.id
+        sesion[CLAVE_SESION_ULTIMA_ACTIVIDAD] = timezone.now().isoformat()
+        sesion.save()
+
+    def _registrar_prestamo_con_fotos(self):
+        with patch.object(
+            FotoChecklist._meta.get_field("imagen"),
+            "storage",
+            _ALMACENAMIENTO_FOTOS_TEST,
+        ):
+            return registrar_prestamo(
+                dni_prestatario=self.prestatario.dni,
+                material_id=self.material.id,
+                tiempo_prestamo_dias=5,
+                checklist_inicial=CHECKLIST,
+                registrado_por=self.gestor,
+                fotos_checklist=[crear_foto_checklist(), crear_foto_checklist()],
+            )
+
+    def test_gestor_y_administrador_y_titular_obtienen_la_foto(self):
+        prestamo = self._registrar_prestamo_con_fotos()
+        url = self.URL.format(prestamo_id=prestamo.id, fase="inicial", indice=0)
+
+        for usuario in (self.prestatario, self.gestor, self.administrador):
+            with self.subTest(rol=usuario.rol.nombre):
+                self._iniciar_sesion(usuario)
+                with patch.object(
+                    FotoChecklist._meta.get_field("imagen"),
+                    "storage",
+                    _ALMACENAMIENTO_FOTOS_TEST,
+                ):
+                    respuesta = self.client.get(url)
+
+                # En desarrollo el storage local no genera URL absoluta:
+                # la vista sirve el archivo directamente (200 FileResponse).
+                self.assertEqual(respuesta.status_code, 200)
+                self.assertIn("image/", respuesta["Content-Type"])
+
+    def test_sin_sesion_responde_403(self):
+        prestamo = self._registrar_prestamo_con_fotos()
+        url = self.URL.format(prestamo_id=prestamo.id, fase="inicial", indice=0)
+
+        respuesta = self.client.get(url)
+
+        self.assertEqual(respuesta.status_code, 403)
+
+    def test_otro_prestatario_responde_403(self):
+        prestamo = self._registrar_prestamo_con_fotos()
+        url = self.URL.format(prestamo_id=prestamo.id, fase="inicial", indice=0)
+        otro = crear_usuario("otro-foto@unsa.edu.pe", "20001004")
+        self._iniciar_sesion(otro)
+
+        respuesta = self.client.get(url)
+
+        self.assertEqual(respuesta.status_code, 403)
+
+    def test_foto_inexistente_responde_404(self):
+        self._iniciar_sesion(self.gestor)
+        url = self.URL.format(prestamo_id=99999, fase="inicial", indice=0)
+
+        respuesta = self.client.get(url)
+
+        self.assertEqual(respuesta.status_code, 404)
 
 
 class DevolucionBaseTestCase(TestCase):
@@ -2418,7 +2542,7 @@ class DevolucionAPITestCase(DevolucionBaseTestCase):
 
         self.assertEqual(respuesta.status_code, 404)
 
-    def test_get_reporte_como_administrador_responde_403(self):
+    def test_get_reporte_como_administrador_responde_200(self):
         self._iniciar_sesion(self.gestor)
         creacion = self._post_multipart()
         devolucion_id = creacion.json()["devolucion_id"]
@@ -2426,7 +2550,8 @@ class DevolucionAPITestCase(DevolucionBaseTestCase):
 
         respuesta = self.client.get(f"/api/prestamos/devoluciones/{devolucion_id}/reporte/")
 
-        self.assertEqual(respuesta.status_code, 403)
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta["Content-Type"], "application/pdf")
 
 
 class ReportesDevolucionAPITestCase(DevolucionBaseTestCase):

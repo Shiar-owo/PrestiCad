@@ -163,11 +163,31 @@ class DescargarDocumentoGarantiaView(APIView):
 
     def get(self, request, prestamo_id, tipo):
         try:
-            url_firmada, nombre = obtener_documento_garantia(prestamo_id, tipo)
+            documento, nombre = obtener_documento_garantia(prestamo_id, tipo)
         except PrestamoError as error:
             return _respuesta_error(error)
 
-        return HttpResponseRedirect(url_firmada)
+        # En producción (Cloudinary) documento.url es una URL absoluta; redirigir.
+        # En desarrollo (FileSystemStorage privado) url() lanza ValueError: abrir
+        # el archivo directamente y servirlo mediante FileResponse.
+        try:
+            url = documento.url
+        except ValueError:
+            url = None
+
+        if url and url.startswith(("http://", "https://")):
+            return HttpResponseRedirect(url)
+
+        try:
+            archivo = documento.open("rb")
+        except (FileNotFoundError, OSError):
+            return Response(
+                {"detail": "El archivo del documento de garantía no existe."},
+                status=404,
+            )
+        respuesta = FileResponse(archivo, content_type="application/pdf")
+        respuesta["Content-Disposition"] = f'inline; filename="{nombre}"'
+        return respuesta
 
     def patch(self, request, prestamo_id, tipo):
         serializer = ActualizarDocumentoGarantiaSerializer(data=request.data)
@@ -197,11 +217,32 @@ class DescargarFotoChecklistView(APIView):
 
     def get(self, request, prestamo_id, fase, indice):
         try:
-            url_firmada, nombre = obtener_foto_checklist(prestamo_id, fase, indice)
+            imagen, nombre = obtener_foto_checklist(prestamo_id, fase, indice)
         except PrestamoError as error:
             return _respuesta_error(error)
 
-        return HttpResponseRedirect(url_firmada)
+        # En producción (Cloudinary) imagen.url es una URL absoluta; redirigir.
+        # En desarrollo (FileSystemStorage privado) url() lanza ValueError: abrir
+        # el archivo directamente y servirlo mediante FileResponse.
+        try:
+            url = imagen.url
+        except ValueError:
+            url = None
+
+        if url and url.startswith(("http://", "https://")):
+            return HttpResponseRedirect(url)
+
+        content_type = guess_type(nombre)[0] or "application/octet-stream"
+        try:
+            archivo = imagen.open("rb")
+        except (FileNotFoundError, OSError):
+            return Response(
+                {"detail": "La foto del checklist no existe."},
+                status=404,
+            )
+        respuesta = FileResponse(archivo, content_type=content_type)
+        respuesta["Content-Disposition"] = f'inline; filename="{nombre}"'
+        return respuesta
 
 
 class DetalleHistorialPrestamoView(APIView):
@@ -295,7 +336,8 @@ class RegistrarDevolucionView(APIView):
 class ReporteDevolucionView(APIView):
     """GET /api/prestamos/devoluciones/{id}/reporte/ — descarga el PDF (RN10)."""
 
-    permission_classes = [EsGestorDeAlmacen]
+    # Tanto gestores como administradores tienen acceso a los reportes de daños.
+    permission_classes = [EsGestorOAdministrador]
 
     def get(self, request, devolucion_id):
         devolucion = Devolucion.objects.filter(pk=devolucion_id).first()
@@ -310,7 +352,23 @@ class ReporteDevolucionView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        archivo = devolucion.reporte.open("rb")
+        # En producción (Cloudinary) el reporte está en la CDN; redirigir a la URL.
+        # En desarrollo el archivo está en disco; servirlo directamente.
+        try:
+            url = devolucion.reporte.url
+        except (ValueError, OSError):
+            url = None
+
+        if url and url.startswith(("http://", "https://")):
+            return HttpResponseRedirect(url)
+
+        try:
+            archivo = devolucion.reporte.open("rb")
+        except (FileNotFoundError, OSError, ValueError):
+            return Response(
+                {"detail": "El archivo del reporte de daños no existe."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
         respuesta = FileResponse(archivo, content_type="application/pdf")
         respuesta["Content-Disposition"] = (
             f'attachment; filename="reporte-dano-prestamo-{devolucion.prestamo_id}.pdf"'

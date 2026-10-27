@@ -15,7 +15,7 @@ def validar_foto_checklist(archivo):
     """Valida tamaño, extensión y MIME; ImageField valida que sea una imagen real."""
     if archivo.size > TAMANO_MAXIMO_FOTO_CHECKLIST_BYTES:
         raise ValidationError(
-            "La foto del checklist no debe pesar más de 5 MB.",
+            "La foto del checklist no debe pesar más de 4 MB.",
             code="foto_muy_grande",
         )
     if Path(archivo.name).suffix.lower() not in EXTENSIONES_FOTO_CHECKLIST_PERMITIDAS:

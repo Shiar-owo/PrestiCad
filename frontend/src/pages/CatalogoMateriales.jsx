@@ -31,7 +31,7 @@ function CatalogoMateriales({ onSeleccionarMaterial }) {
 
       const queryString = params.toString() ? `?${params.toString()}` : ''
       const datos = await api.get(`/materiales/buscar/${queryString}`)
-      setMateriales(datos)
+      setMateriales(Array.isArray(datos) ? datos : [])
     } catch {
       setError('No se pudo cargar la lista de materiales. Por favor, inténtalo nuevamente.')
     } finally {

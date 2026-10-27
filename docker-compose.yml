@@ -5,6 +5,8 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -30,7 +32,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile.dev
     environment:
-      VITE_GARANTIA_TAMANO_MAXIMO_BYTES: ${GARANTIA_TAMANO_MAXIMO_BYTES:-5242880}
+      VITE_GARANTIA_TAMANO_MAXIMO_BYTES: ${GARANTIA_TAMANO_MAXIMO_BYTES:-4194304}
     volumes:
       - ./frontend:/app
       - /app/node_modules

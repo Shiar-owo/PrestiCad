@@ -200,6 +200,28 @@ class AlmacenamientoGarantiaTestCase(SimpleTestCase):
         self.assertEqual(serializer.validated_data["checklist_inicial"], CHECKLIST)
         self.assertEqual(len(serializer.validated_data["fotos_checklist"]), 2)
 
+    def test_serializer_rechaza_total_de_archivos_mayor_a_4_mb(self):
+        contenido = b"%PDF-" + b"x" * (2 * 1024 * 1024)
+        datos = {
+            "dni_prestatario": "12345678",
+            "material_id": "00000000-0000-0000-0000-000000000001",
+            "tiempo_prestamo_dias": "5",
+            "checklist_inicial": json.dumps(CHECKLIST),
+            "foto_checklist_0": crear_foto_checklist(),
+            "foto_checklist_1": crear_foto_checklist(),
+            "documento_identidad": SimpleUploadedFile(
+                "dni.pdf", contenido, content_type="application/pdf"
+            ),
+            "compromiso_responsabilidad": SimpleUploadedFile(
+                "compromiso.pdf", contenido, content_type="application/pdf"
+            ),
+        }
+
+        serializer = RegistrarPrestamoSerializer(data=datos)
+
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("4 MB", str(serializer.errors["archivos"]))
+
     def test_serializer_rechaza_condicion_en_el_checklist_inicial(self):
         datos = {
             "dni_prestatario": "12345678",
@@ -1169,8 +1191,8 @@ class RegistrarPrestamoAPITestCase(APITestCase):
             self.assertNotIn("condicion", item)
             self.assertTrue(item["foto_url"])
             foto = self.client.get(item["foto_url"])
-            self.assertEqual(foto.status_code, 200)
-            self.assertEqual(foto["Content-Type"], "image/png")
+            self.assertEqual(foto.status_code, 302)
+            self.assertTrue(foto["Location"].endswith(".png"))
 
     def test_post_falla_si_falta_foto_de_un_elemento(self):
         self._iniciar_sesion(self.gestor)
@@ -1427,14 +1449,10 @@ class DescargarGarantiaAPITestCase(APITestCase):
                     self._iniciar_sesion(usuario)
                     respuesta = self.client.get(url)
 
-                    self.assertEqual(respuesta.status_code, 200)
-                    self.assertEqual(respuesta["Content-Type"], "application/pdf")
-                    self.assertIn("inline;", respuesta["Content-Disposition"])
-                    self.assertIn("documento-identidad-prestamo-", respuesta["Content-Disposition"])
-                    self.assertEqual(
-                        b"".join(respuesta.streaming_content),
-                        b"%PDF-1.7\ncontenido de prueba",
-                    )
+                    self.assertEqual(respuesta.status_code, 302)
+                    self.assertTrue(respuesta["Location"])
+                    self.assertTrue(respuesta["Location"].endswith(".pdf"))
+                    self.assertNotIn("dni-original", respuesta["Location"])
 
             respuesta_publica = self.client.get(
                 f"/media/{garantia.documento_identidad.name}"

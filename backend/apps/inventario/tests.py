@@ -61,10 +61,10 @@ def imagen_en_memoria(formato="JPEG", nombre=None):
 
 
 def imagen_sobre_el_limite():
-    """Imagen que supera los 5 MB.
+    """Imagen que supera los 4 MB.
 
     Se rellena de bytes aleatorios porque no comprimen: un PNG de 1400x1400
-    ocupa más de 5 MB y se genera en un instante.
+    ocupa más de 4 MB y se genera en un instante.
     """
     lado = 1400
     imagen = Image.frombytes("RGB", (lado, lado), os.urandom(lado * lado * 3))
@@ -1088,7 +1088,7 @@ class FotoMaterialServiceTestCase(ConMediaTemporal):
                 foto=imagen_sobre_el_limite(),
             )
 
-        self.assertIn("5 MB", str(contexto.exception))
+        self.assertIn("4 MB", str(contexto.exception))
         self.assertEqual(Material.objects.count(), 0)
 
     def test_rechaza_formato_no_permitido(self):
@@ -1160,8 +1160,8 @@ class ValidarFotoTestCase(SimpleTestCase):
     def test_acepta_un_archivo_dentro_de_los_limites(self):
         validar_foto(imagen_en_memoria())
 
-    def test_el_limite_es_de_5_mb(self):
-        self.assertEqual(TAMANIO_MAXIMO, 5 * 1024 * 1024)
+    def test_el_limite_es_de_4_mb(self):
+        self.assertEqual(TAMANIO_MAXIMO, 4 * 1024 * 1024)
 
     def test_rechaza_lo_que_pesa_mas(self):
         with self.assertRaises(ValidationError):
@@ -1242,7 +1242,7 @@ class FotoContratoEntradaTestCase(SimpleTestCase):
         )
 
         self.assertFalse(serializer.is_valid())
-        self.assertIn("5 MB", str(serializer.errors["foto"]))
+        self.assertIn("4 MB", str(serializer.errors["foto"]))
 
     def test_alta_rechaza_formato_no_permitido(self):
         serializer = MaterialRegistroSerializer(

@@ -9,6 +9,8 @@ function ResultadosMateriales({
   error = '',
   onSeleccionarMaterial,
 }) {
+  const listaMateriales = Array.isArray(materiales) ? materiales : []
+
   if (cargando) {
     return (
       <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3" role="status" aria-live="polite">
@@ -23,7 +25,7 @@ function ResultadosMateriales({
     return <ErrorAlerta mensaje={error} className="mt-6" />
   }
 
-  if (materiales.length === 0) {
+  if (listaMateriales.length === 0) {
     return (
       <div className="mt-6">
         <EstadoVacio
@@ -37,12 +39,12 @@ function ResultadosMateriales({
   return (
     <section className="mt-6" aria-label="Resultados de materiales">
       <p className="mb-4 text-sm text-texto-suave">
-        Mostrando <strong className="text-texto">{materiales.length}</strong>{' '}
-        {materiales.length === 1 ? 'material encontrado' : 'materiales encontrados'}
+        Mostrando <strong className="text-texto">{listaMateriales.length}</strong>{' '}
+        {listaMateriales.length === 1 ? 'material encontrado' : 'materiales encontrados'}
       </p>
 
       <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-        {materiales.map((material) => (
+        {listaMateriales.map((material) => (
           <TarjetaMaterial
             key={material.id}
             material={material}

@@ -805,7 +805,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
             {errores.foto ? (
               <p className="text-xs text-error">{errores.foto}</p>
             ) : (
-              <p className="text-xs text-texto-suave">JPG, PNG o WEBP, hasta 5 MB. Opcional.</p>
+              <p className="text-xs text-texto-suave">JPG, PNG o WEBP, hasta 4 MB. Opcional.</p>
             )}
             <input
               type="file"

@@ -35,7 +35,7 @@ function Materiales() {
     setError('')
     try {
       const datos = await api.get('/materiales/')
-      setMateriales(datos)
+      setMateriales(Array.isArray(datos) ? datos : [])
     } catch {
       setError('No se pudo cargar la lista de materiales.')
     } finally {

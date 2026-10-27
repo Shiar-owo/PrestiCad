@@ -47,7 +47,8 @@ function UsuariosRoles() {
     setCargando(true)
     setError('')
     try {
-      setUsuarios(await api.get('/usuarios/'))
+      const datos = await api.get('/usuarios/')
+      setUsuarios(Array.isArray(datos) ? datos : [])
     } catch (fallo) {
       setError(fallo.status === 403
         ? 'Solo un administrador puede gestionar roles.'

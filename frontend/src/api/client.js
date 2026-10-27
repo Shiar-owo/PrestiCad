@@ -47,10 +47,15 @@ async function peticion(ruta, opciones = {}) {
   }
 
   let datos = null
-  try {
-    datos = await respuesta.json()
-  } catch {
-    datos = null
+  if (respuesta.status !== 204) {
+    try {
+      datos = await respuesta.json()
+    } catch {
+      datos = null
+      if (respuesta.ok) {
+        throw new ErrorApi(respuesta.status, null)
+      }
+    }
   }
   if (!respuesta.ok) throw new ErrorApi(respuesta.status, datos)
   return datos

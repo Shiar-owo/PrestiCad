@@ -17,6 +17,7 @@ import {
   serializarChecklistDevolucion,
   validarChecklistDevolucion,
 } from '../validacionesDevolucion'
+import { validarTamanoSolicitud } from '../prestamos/tamanoSolicitud'
 import { ETIQUETAS_TIER } from '../constantes/roles'
 import Campo from '../components/ui/Campo'
 import Boton from '../components/ui/Boton'
@@ -306,9 +307,15 @@ function DevolucionPrestamo() {
     setGuardando(true)
     setErrorEnvio('')
     try {
+      const formulario = construirFormularioDevolucion(filas)
+      const errorTamano = validarTamanoSolicitud(formulario)
+      if (errorTamano) {
+        setErrorEnvio(errorTamano)
+        return
+      }
       const respuesta = await api.post(
         `/prestamos/${prestamoId}/devolucion/`,
-        construirFormularioDevolucion(filas),
+        formulario,
       )
       setResultado(respuesta)
       setEtapa('exito')
@@ -723,7 +730,7 @@ function DevolucionPrestamo() {
                       id={`foto-devolucion-${indice}-ayuda`}
                       className="text-xs leading-relaxed text-texto-suave"
                     >
-                      Adjunta una foto JPG, PNG o WEBP de hasta 5 MB.
+                      Adjunta una foto JPG, PNG o WEBP de hasta 4 MB.
                     </p>
                     {errores.filas?.[indice]?.foto && (
                       <p className="text-xs text-error" role="alert">

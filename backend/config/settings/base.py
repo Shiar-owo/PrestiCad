@@ -10,8 +10,12 @@ GARANTIAS_STORAGE_ROOT = Path(
     os.getenv("GARANTIAS_STORAGE_ROOT", BASE_DIR / "privado" / "garantias")
 )
 GARANTIA_TAMANO_MAXIMO_BYTES = int(
-    os.getenv("GARANTIA_TAMANO_MAXIMO_BYTES", str(5 * 1024 * 1024))
+    os.getenv("GARANTIA_TAMANO_MAXIMO_BYTES", str(4 * 1024 * 1024))
 )
+CREAR_USUARIOS_PRUEBA = os.getenv(
+    "CREAR_USUARIOS_PRUEBA", "false"
+).strip().lower() in {"1", "true", "yes", "si", "sí"}
+CONTRASENA_USUARIOS_PRUEBA = os.getenv("CONTRASENA_USUARIOS_PRUEBA", "")
 
 INSTALLED_APPS = [
     "django.contrib.admin",

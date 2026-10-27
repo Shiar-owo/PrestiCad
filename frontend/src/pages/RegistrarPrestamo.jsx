@@ -24,6 +24,7 @@ import {
   TAMANO_MAXIMO_FOTO_CHECKLIST_MB,
 } from '../constantes/checklistPrestamo'
 import { construirSolicitudPrestamo } from '../prestamos/solicitudPrestamo'
+import { validarTamanoSolicitud } from '../prestamos/tamanoSolicitud'
 import {
   crearOpcionesInstancia,
   obtenerInstanciaSeleccionada,
@@ -347,6 +348,11 @@ function RegistrarPrestamo() {
         documentoIdentidad: formulario.documentoIdentidad,
         compromisoResponsabilidad: formulario.compromisoResponsabilidad,
       })
+      const errorTamano = validarTamanoSolicitud(solicitud)
+      if (errorTamano) {
+        setError(errorTamano)
+        return
+      }
       const respuesta = await api.post('/prestamos/', solicitud)
       setPrestamoCreado(respuesta)
       formulario.checklist.forEach((item) => {

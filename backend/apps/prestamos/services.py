@@ -334,7 +334,12 @@ def _crear_garantia_registrada(prestamo, documento_identidad, compromiso_respons
 
 
 def obtener_documento_garantia(prestamo_id, tipo):
-    """Obtiene la URL firmada del documento indicado sin exponer su ruta de almacenamiento."""
+    """Obtiene el FieldFile del documento de garantía sin exponer su ruta de almacenamiento.
+
+    Devuelve el objeto FieldFile (con su storage configurado) y el nombre de
+    descarga.  La vista decide cómo servirlo: en producción (Cloudinary)
+    redirigirá a la URL remota; en desarrollo abrirá el archivo localmente.
+    """
     campos = {
         "documento-identidad": ("documento_identidad", "documento-identidad"),
         "compromiso": ("compromiso_responsabilidad", "compromiso-responsabilidad"),
@@ -371,16 +376,8 @@ def obtener_documento_garantia(prestamo_id, tipo):
             "El documento de garantía solicitado no está disponible.",
             status_code=404,
         )
-    try:
-        url_firmada = documento.url
-    except (FileNotFoundError, OSError, ValueError) as error:
-        raise PrestamoError(
-            nombre_campo,
-            "El archivo del documento de garantía no existe.",
-            status_code=404,
-        ) from error
 
-    return url_firmada, f"{nombre_descarga}-prestamo-{prestamo.pk}.pdf"
+    return documento, f"{nombre_descarga}-prestamo-{prestamo.pk}.pdf"
 
 
 @transaction.atomic
@@ -478,7 +475,12 @@ def consultar_detalle_historial_prestamo(prestamo_id, ahora=None):
 
 
 def obtener_foto_checklist(prestamo_id, fase, indice):
-    """Obtiene la URL firmada de una foto de checklist para su entrega mediante endpoint protegido."""
+    """Obtiene el FieldFile de la foto del checklist para su entrega mediante endpoint protegido.
+
+    Devuelve el objeto FieldFile (con su storage configurado) y el nombre del
+    archivo para que la vista decida cómo servirlo: en producción (Cloudinary)
+    redirigirá a la URL remota; en desarrollo abrirá el archivo localmente.
+    """
     try:
         foto = FotoChecklist.objects.get(
             prestamo_id=prestamo_id,
@@ -491,14 +493,15 @@ def obtener_foto_checklist(prestamo_id, fase, indice):
             "No existe la foto indicada del checklist.",
             status_code=404,
         ) from error
-    try:
-        return foto.imagen.url, Path(foto.imagen.name).name
-    except OSError as error:
+
+    if not foto.imagen:
         raise PrestamoError(
             "foto_checklist",
-            "No se pudo abrir la foto del checklist.",
+            "La foto del checklist no está disponible.",
             status_code=404,
-        ) from error
+        )
+
+    return foto.imagen, Path(foto.imagen.name).name
 
 
 @transaction.atomic

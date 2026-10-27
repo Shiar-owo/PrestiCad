@@ -108,14 +108,16 @@ CLOUDINARY_STORAGE = {
     "API_KEY": CLOUDINARY_API_KEY,
     "API_SECRET": CLOUDINARY_API_SECRET,
     "SECURE": True,
-    # El paquete usa MEDIA_URL como prefijo del nombre remoto si no se indica
-    # otra cosa, y dejaría la ruta local horneada en el nombre del asset.
-    "PREFIX": "",
+    # Todos los assets del proyecto viven dentro de esta carpeta en Cloudinary.
+    # Se puede sobreescribir con CLOUDINARY_PREFIX en el entorno de producción.
+    "PREFIX": os.getenv("CLOUDINARY_PREFIX", "Presticad"),
 }
 
 STORAGES = {
     "default": {
-        "BACKEND": "cloudinary_storage.storage.MediaCloudinaryStorage",
+        # Storage con detección automática de resource_type (image/raw) para que
+        # PDFs de reportes se suban como 'raw' y las fotos como 'image'.
+        "BACKEND": "apps.prestamos.storage.AlmacenamientoPresticadCloudinary",
     },
     "staticfiles": {
         "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",

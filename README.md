@@ -76,9 +76,9 @@ Servicios:
 - **backend** — API en `http://localhost:8000`; ejecuta las migraciones al arrancar.
 - **frontend** — SPA en `http://localhost:5173`; proxy `/api` → backend.
 
-### Cuentas compartidas para pruebas
+### Datos de prueba
 
-Al iniciar el backend en desarrollo, se crean automáticamente tres cuentas de prueba. Todas usan la contraseña `PresticadDemo2026!`:
+Al iniciar el backend en desarrollo, se crean automáticamente tres cuentas iniciales. Todas usan la contraseña `PresticadDemo2026!`:
 
 | Rol | Correo |
 |-----|--------|
@@ -87,6 +87,26 @@ Al iniciar el backend en desarrollo, se crean automáticamente tres cuentas de p
 | Gestor de Almacén | `gestor@presticad.test` |
 
 La creación es idempotente: si las cuentas ya existen, no se restablecen sus contraseñas ni roles. Estas credenciales públicas son solo para desarrollo local; nunca deben usarse en producción.
+
+#### Modo 1: solo cuentas iniciales
+
+No se necesita ejecutar otro comando. Al arrancar, el backend crea las cuentas de prestatario, administrador y gestor. En una base vacía, el inventario y los préstamos permanecen vacíos.
+
+#### Modo 2: escenario completo de demostración
+
+Con el backend en ejecución, carga usuarios con distintos niveles de reputación, materiales y ejemplares con imágenes, préstamos activos, una garantía pendiente y un historial de devolución con tardanza y daño parcial:
+
+```bash
+docker compose exec backend python manage.py cargar_datos_demo
+```
+
+El comando es repetible y usa la contraseña `PresticadDemo2026!` para las cuentas demo. Copia las imágenes de ejemplo a `backend/media/demo/`. Para recrear los préstamos demo y sus devoluciones y garantías asociadas, ejecuta:
+
+```bash
+docker compose exec backend python manage.py cargar_datos_demo --reiniciar
+```
+
+El comando `crear_usuarios_prueba` solo crea las cuentas iniciales; no borra datos ya existentes. Para probar el modo de solo cuentas desde cero, usa una base de datos vacía.
 
 Tests:
 

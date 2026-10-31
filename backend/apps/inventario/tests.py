@@ -8,7 +8,9 @@ from pathlib import Path
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import SimpleTestCase, TestCase, override_settings
+from django.db import connection
+from django.db.migrations.executor import MigrationExecutor
+from django.test import SimpleTestCase, TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 from PIL import Image
 from rest_framework.test import APITestCase
@@ -1601,6 +1603,7 @@ class InstanciaMaterialModelTestCase(TestCase):
             self.assertEqual(inst.estado, "disponible")
             self.assertEqual(inst.estado_fisico, "Operativo")
 
+
     def test_resumen_estados_de_material(self):
         mat = registrar_material(
             nombre="Arduino Mega",
@@ -1620,6 +1623,45 @@ class InstanciaMaterialModelTestCase(TestCase):
         self.assertEqual(resumen["prestado"], 1)
         self.assertEqual(resumen["en_mantenimiento"], 1)
         self.assertEqual(resumen["reservado"], 0)
+
+
+class MigracionCondicionFisicaInstanciaTestCase(TransactionTestCase):
+    """La nueva columna conserva la condición que ya tenía cada ejemplar."""
+
+    migrate_from = ("inventario", "0007_alter_instanciamaterial_foto_alter_material_foto")
+    migrate_to = ("inventario", "0008_instanciamaterial_condicion_fisica")
+
+    def setUp(self):
+        executor = MigrationExecutor(connection)
+        executor.migrate([self.migrate_from])
+        aplicaciones_anteriores = executor.loader.project_state([self.migrate_from]).apps
+        MaterialAnterior = aplicaciones_anteriores.get_model("inventario", "Material")
+        InstanciaAnterior = aplicaciones_anteriores.get_model("inventario", "InstanciaMaterial")
+        material = MaterialAnterior.objects.create(
+            nombre="Material de migración",
+            codigo_inventario="MIG-COND-01",
+            tipo="objeto",
+        )
+        InstanciaAnterior.objects.create(
+            material=material,
+            codigo_ejemplar="MIG-COND-01-01",
+            estado_fisico="Desgaste leve",
+        )
+
+        executor = MigrationExecutor(connection)
+        executor.migrate([self.migrate_to])
+        self.aplicaciones_nuevas = executor.loader.project_state([self.migrate_to]).apps
+
+    def tearDown(self):
+        executor = MigrationExecutor(connection)
+        executor.migrate(executor.loader.graph.leaf_nodes())
+        super().tearDown()
+
+    def test_copia_el_valor_existente_a_condicion_fisica(self):
+        InstanciaNueva = self.aplicaciones_nuevas.get_model("inventario", "InstanciaMaterial")
+        instancia = InstanciaNueva.objects.get(codigo_ejemplar="MIG-COND-01-01")
+
+        self.assertEqual(instancia.condicion_fisica, "Desgaste leve")
 
 
 class InstanciaMaterialAPITestCase(ConMediaTemporal, APITestCase):

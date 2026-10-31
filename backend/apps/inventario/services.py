@@ -339,12 +339,13 @@ def registrar_material(
         })
 
     estado_material = estado
-    if modo == "detalle":
-        if filas_preparadas:
-            if all(fila["estado"] == "en_mantenimiento" for fila in filas_preparadas):
-                estado_material = "en_mantenimiento"
-            elif all(fila["estado"] == "disponible" for fila in filas_preparadas):
-                estado_material = "disponible"
+    if modo in ("unico", "lote"):
+        estado_material = estado_inicial_ejemplares
+    elif modo == "detalle" and filas_preparadas:
+        if all(fila["estado"] == "en_mantenimiento" for fila in filas_preparadas):
+            estado_material = "en_mantenimiento"
+        elif all(fila["estado"] == "disponible" for fila in filas_preparadas):
+            estado_material = "disponible"
 
     campos = {
         "nombre": nombre,

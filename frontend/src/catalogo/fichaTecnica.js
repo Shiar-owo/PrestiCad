@@ -44,7 +44,8 @@ export function obtenerDatosFichaTecnica(material) {
     modelo: material.modelo?.trim() || 'No especificado',
     numeroSerie: material.numero_serie?.trim() || 'No registrado',
     color: material.color?.trim() || 'No especificado',
-    estadoFisico: material.estado_fisico?.trim() || 'No especificado',
+    estadoFisico:
+      ETIQUETAS_ESTADO[material.estado] || material.estado || 'No especificado',
 
     // Reglas de negocio y reputación
     tierMinimo: material.tier_minimo_requerido || 'estandar',

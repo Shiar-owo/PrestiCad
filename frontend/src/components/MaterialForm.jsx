@@ -9,6 +9,8 @@ import {
 } from '../validaciones'
 import { OPCIONES_TIER, OPCIONES_TIPO } from '../constantes/catalogo'
 import {
+  MAXIMO_EJEMPLARES_REGISTRO,
+  codigoEjemplarPorDefecto,
   construirCuerpoRegistroMaterial,
   crearEjemplares,
   mapearErroresPorFila,
@@ -44,7 +46,7 @@ const ETIQUETAS_CAMPOS_ERROR = {
   tipo: 'Tipo',
   stock: 'Cantidad de ejemplares',
   estado: 'Estado',
-  estado_inicial_ejemplares: 'Estado inicial del ejemplar',
+  estado_inicial_ejemplares: 'Estado',
   foto: 'Foto',
   formulario: 'Registro',
 }
@@ -69,8 +71,9 @@ const DATOS_INICIALES = {
   modelo: '',
   numero_serie: '',
   color: '',
-  estado_fisico: '',
+  estado_fisico: 'Operativo',
   ubicacion: '',
+  observaciones: '',
   foto: null,
   vistaPreviaFoto: '',
   tier_minimo_requerido: 'estandar',
@@ -166,6 +169,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
   const [ejemplares, setEjemplares] = useState(() =>
     material ? [] : crearEjemplares(1, () => `ejemplar-${++contadorIds.current}`),
   )
+  const [cantidadEjemplares, setCantidadEjemplares] = useState('1')
   const [errores, setErrores] = useState({})
   const [erroresFilas, setErroresFilas] = useState({})
   const [enviando, setEnviando] = useState(false)
@@ -196,32 +200,96 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
     filas.forEach((fila) => liberarVistaPrevia(fila.vistaPrevia))
   }
 
-  function redimensionarFilas(cantidad) {
-    const siguiente = redimensionarEjemplares(
+  function redimensionarFilas(cantidad, modo = datos.modo) {
+    const filasRedimensionadas = redimensionarEjemplares(
       ejemplares,
       cantidad,
       () => `ejemplar-${++contadorIds.current}`,
     )
+    const siguiente = modo === 'detalle'
+      ? filasRedimensionadas.map((fila, indice) => ({
+        ...fila,
+        codigo_ejemplar: fila.codigo_ejemplar || codigoEjemplarPorDefecto(datos.codigo_inventario, indice),
+        color: fila.color || datos.color,
+        estado_fisico: fila.estado_fisico || 'Operativo',
+      }))
+      : filasRedimensionadas
     const idsConservados = new Set(siguiente.map((fila) => fila.id))
     liberarVistasDeFilas(ejemplares.filter((fila) => !idsConservados.has(fila.id)))
     setEjemplares(siguiente)
     setErroresFilas({})
+    return siguiente
   }
 
   function cambiarModo(modo) {
     const cantidad = modo === 'unico' ? 1 : Math.max(ejemplares.length, 2)
-    redimensionarFilas(cantidad)
+    redimensionarFilas(cantidad, modo)
+    setCantidadEjemplares(String(cantidad))
+    setErrores((previos) => ({ ...previos, stock: '' }))
     actualizar('modo', modo)
   }
 
+  function cambiarCantidadEjemplares(valor) {
+    setCantidadEjemplares(valor)
+    const cantidad = Number(valor)
+    const cantidadValida = valor !== ''
+      && Number.isInteger(cantidad)
+      && cantidad >= 2
+      && cantidad <= MAXIMO_EJEMPLARES_REGISTRO
+
+    setErrores((previos) => ({
+      ...previos,
+      stock: cantidadValida
+        ? ''
+        : `Ingresa un número entero entre 2 y ${MAXIMO_EJEMPLARES_REGISTRO}.`,
+    }))
+
+    if (cantidadValida) redimensionarFilas(cantidad)
+  }
+
   function actualizar(campo, valor) {
+    if (!esEdicion && datos.modo === 'detalle' && campo === 'estado') {
+      setEjemplares(ejemplares.map((fila) => ({ ...fila, estado: valor })))
+    }
+    if (!esEdicion && datos.modo === 'detalle' && ['codigo_inventario', 'color'].includes(campo)) {
+      setEjemplares(ejemplares.map((fila, indice) => {
+        if (campo === 'codigo_inventario') {
+          const codigoAnterior = codigoEjemplarPorDefecto(datos.codigo_inventario, indice)
+          if (!fila.codigo_ejemplar || fila.codigo_ejemplar === codigoAnterior) {
+            return { ...fila, codigo_ejemplar: codigoEjemplarPorDefecto(valor, indice) }
+          }
+        }
+        if (campo === 'color' && (!fila.color || fila.color === datos.color)) {
+          return { ...fila, color: valor }
+        }
+        return fila
+      }))
+    }
     setDatos((previos) => ({ ...previos, [campo]: valor }))
   }
 
   function actualizarFila(indice, campo, valor) {
-    setEjemplares(ejemplares.map((fila, posicion) =>
+    if (!esEdicion && datos.modo === 'detalle' && campo === 'estado') {
+      const filasActualizadas = ejemplares.map((fila, posicion) =>
+        posicion === indice ? { ...fila, estado: valor } : fila,
+      )
+      setEjemplares(filasActualizadas)
+      if (filasActualizadas.length > 0) {
+        const todasDisponibles = filasActualizadas.every((fila) => fila.estado === 'disponible')
+        const todasEnMantenimiento = filasActualizadas.every((fila) => fila.estado === 'en_mantenimiento')
+        if (todasDisponibles || todasEnMantenimiento) {
+          setDatos((previos) => ({
+            ...previos,
+            estado: todasEnMantenimiento ? 'en_mantenimiento' : 'disponible',
+          }))
+        }
+      }
+      return
+    }
+    const filasActualizadas = ejemplares.map((fila, posicion) =>
       posicion === indice ? { ...fila, [campo]: valor } : fila,
-    ))
+    )
+    setEjemplares(filasActualizadas)
   }
 
   function manejarArchivoFoto(evento) {
@@ -275,6 +343,9 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
       cuerpo.numero_serie = datos.numero_serie.trim()
       cuerpo.estado_fisico = datos.estado_fisico.trim()
       cuerpo.estado_inicial_ejemplares = datos.estado_inicial_ejemplares
+      if (datos.modo === 'detalle') {
+        cuerpo.estado = datos.estado
+      }
     }
 
     if (datos.tier_minimo_requerido) {
@@ -354,8 +425,13 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
     const erroresFormulario = validar(datos)
     let erroresDeFila = {}
     if (!esEdicion && datos.modo !== 'unico') {
-      if (ejemplares.length < 2 || ejemplares.length > 50) {
-        erroresFormulario.stock = 'Registra entre 2 y 50 ejemplares.'
+      const cantidad = Number(cantidadEjemplares)
+      if (cantidadEjemplares === ''
+        || !Number.isInteger(cantidad)
+        || cantidad < 2
+        || cantidad > MAXIMO_EJEMPLARES_REGISTRO
+        || cantidad !== ejemplares.length) {
+        erroresFormulario.stock = `Ingresa un número entero entre 2 y ${MAXIMO_EJEMPLARES_REGISTRO}.`
       }
       const erroresCodigo = datos.modo === 'detalle' ? validarCodigosDuplicados(ejemplares) : []
       if (datos.modo === 'detalle') {
@@ -390,13 +466,19 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
         ? construirCuerpo()
         : construirCuerpoRegistroMaterial({
           modo: datos.modo,
-          datos: { ...construirCampos(), foto: datos.foto, ubicacion: datos.ubicacion },
+          datos: {
+            ...construirCampos(),
+            foto: datos.foto,
+            ubicacion: datos.ubicacion,
+            observaciones: datos.observaciones,
+          },
           ejemplares,
         })
+      let resultadoRegistro = null
       if (esEdicion) {
         await api.put(`/materiales/${material.id}/`, cuerpo)
       } else {
-        await api.post('/materiales/', cuerpo)
+        resultadoRegistro = await api.post('/materiales/', cuerpo)
       }
 
       setMensajeExito(
@@ -412,7 +494,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
         setEjemplares(crearEjemplares(1, () => `ejemplar-${++contadorIds.current}`))
       }
       if (onGuardado) {
-        onGuardado()
+        onGuardado(resultadoRegistro ? { material: resultadoRegistro, modo: datos.modo } : null)
       }
     } catch (error) {
       if (error instanceof ErrorApi && error.datos) {
@@ -653,7 +735,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
         <form onSubmit={manejarEnvio} noValidate className="grid gap-4">
           {errores.formulario && <ErrorAlerta mensaje={errores.formulario} />}
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid items-start gap-4 sm:grid-cols-2">
             <Campo
               etiqueta="Nombre"
               valor={datos.nombre}
@@ -671,7 +753,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
               requerido
             />
             <Campo
-              etiqueta="Descripción"
+              etiqueta={esEdicion ? 'Descripción' : 'Descripción (opcional)'}
               tipo="area"
               valor={datos.descripcion}
               onCambio={(evento) => actualizar('descripcion', evento.target.value)}
@@ -687,7 +769,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
             />
             {!esEdicion && (
               <Campo
-                etiqueta="Modo de registro"
+                etiqueta="Modo de registro (opcional)"
                 opciones={[
                   { valor: 'unico', etiqueta: 'Único' },
                   { valor: 'lote', etiqueta: 'Lote idéntico' },
@@ -697,18 +779,23 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
                 onCambio={(evento) => cambiarModo(evento.target.value)}
               />
             )}
-            {esEdicion && (
+            {(esEdicion || (!esEdicion && datos.modo === 'detalle')) && (
               <Campo
                 etiqueta="Estado"
                 opciones={opcionesEstadoGeneral}
                 valor={datos.estado}
-                onCambio={(evento) => solicitarCambioEstadoGeneral(evento.target.value)}
+                onCambio={(evento) => esEdicion
+                  ? solicitarCambioEstadoGeneral(evento.target.value)
+                  : actualizar('estado', evento.target.value)}
                 error={errores.estado}
-                ayuda={
-                  estadoGeneralModificado
+                ayuda={esEdicion
+                  ? estadoGeneralModificado
                     ? `Cambio confirmado: al guardar, los ejemplares elegibles pasarán a "${datos.estado === 'en_mantenimiento' ? 'En mantenimiento' : 'Disponible'}".`
                     : 'Cambiar el estado general afectará a los ejemplares disponibles o en mantenimiento.'
-                }
+                  : datos.estado === 'en_mantenimiento'
+                    ? 'Todas las instancias están En mantenimiento y sus estados no se pueden modificar.'
+                    : 'Todas las instancias inician Disponibles; puedes poner algunas En mantenimiento. Si todas quedan así, el material también cambiará a En mantenimiento.'}
+                requerido={!esEdicion}
               />
             )}
             {!esEdicion && datos.modo !== 'unico' && (
@@ -716,21 +803,18 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
                 etiqueta="Cantidad de ejemplares"
                 tipo="number"
                 min="2"
-                max="50"
+                max={MAXIMO_EJEMPLARES_REGISTRO}
                 step="1"
-                valor={ejemplares.length}
-                onCambio={(evento) => {
-                  const cantidad = Number(evento.target.value)
-                  if (Number.isInteger(cantidad) && cantidad >= 2 && cantidad <= 50) {
-                    redimensionarFilas(cantidad)
-                  }
-                }}
+                valor={cantidadEjemplares}
+                ayuda={`Rango permitido: 2–${MAXIMO_EJEMPLARES_REGISTRO} ejemplares.`}
+                onCambio={(evento) => cambiarCantidadEjemplares(evento.target.value)}
                 error={errores.stock}
+                requerido
               />
             )}
-            {!esEdicion && datos.modo === 'unico' && (
+            {!esEdicion && ['unico', 'lote'].includes(datos.modo) && (
               <Campo
-                etiqueta="Estado inicial del ejemplar"
+                etiqueta="Estado"
                 opciones={OPCIONES_ESTADO_INICIAL_EJEMPLAR}
                 valor={datos.estado_inicial_ejemplares}
                 onCambio={(evento) => actualizar('estado_inicial_ejemplares', evento.target.value)}
@@ -746,37 +830,39 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
               onChange={(evento) => actualizar('es_alto_valor', evento.target.checked)}
               className="size-4 rounded border-borde accent-marca-600"
             />
-            ¿Es de alto valor?
+            {esEdicion ? '¿Es de alto valor?' : '¿Es de alto valor? (opcional)'}
           </label>
 
           <EncabezadoSeccion>Ficha técnica</EncabezadoSeccion>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Campo
-              etiqueta="Marca"
+              etiqueta={esEdicion ? 'Marca' : 'Marca (opcional)'}
               valor={datos.marca}
               onCambio={(evento) => actualizar('marca', evento.target.value)}
               maxLength={60}
             />
             <Campo
-              etiqueta="Modelo"
+              etiqueta={esEdicion ? 'Modelo' : 'Modelo (opcional)'}
               valor={datos.modelo}
               onCambio={(evento) => actualizar('modelo', evento.target.value)}
               maxLength={60}
             />
-            {(!esEdicion && datos.modo === 'unico') && (
+            {(!esEdicion && ['unico', 'lote'].includes(datos.modo)) && (
               <Campo
-                etiqueta="Número de serie"
+                etiqueta="Número de serie (opcional)"
                 valor={datos.numero_serie}
                 onCambio={(evento) => actualizar('numero_serie', evento.target.value)}
-                maxLength={50}
+                maxLength={datos.modo === 'lote' ? 80 : 50}
               />
             )}
             <Campo
               etiqueta={!esEdicion && datos.modo === 'unico'
-                ? 'Color del ejemplar'
+                ? 'Color del ejemplar (opcional)'
                 : !esEdicion
-                  ? 'Color general (predeterminado)'
+                  ? datos.modo === 'lote'
+                    ? 'Color de los ejemplares (opcional)'
+                    : 'Color predeterminado de ejemplares (opcional)'
                   : 'Color del material'}
               valor={datos.color}
               onCambio={(evento) => actualizar('color', evento.target.value)}
@@ -784,7 +870,9 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
             />
             {(!esEdicion && ['unico', 'lote'].includes(datos.modo)) && (
               <Campo
-                etiqueta="Estado físico"
+                etiqueta={datos.modo === 'unico'
+                  ? 'Condición física (opcional)'
+                  : 'Condición física de los ejemplares (opcional)'}
                 valor={datos.estado_fisico}
                 onCambio={(evento) => actualizar('estado_fisico', evento.target.value)}
                 maxLength={50}
@@ -792,20 +880,42 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
             )}
             {!esEdicion && ['unico', 'lote'].includes(datos.modo) && (
               <Campo
-                etiqueta={datos.modo === 'lote' ? 'Estante por defecto' : 'Estante'}
+                etiqueta={datos.modo === 'lote' ? 'Estante por defecto (opcional)' : 'Estante (opcional)'}
                 valor={datos.ubicacion}
                 onCambio={(evento) => actualizar('ubicacion', evento.target.value)}
                 maxLength={100}
               />
             )}
+            {!esEdicion && datos.modo === 'lote' && (
+              <Campo
+                etiqueta="Observaciones de los ejemplares (opcional)"
+                tipo="area"
+                valor={datos.observaciones}
+                onCambio={(evento) => actualizar('observaciones', evento.target.value)}
+                rows={2}
+              />
+            )}
+            {!esEdicion && datos.modo === 'unico' && (
+              <Campo
+                etiqueta="Observaciones del ejemplar (opcional)"
+                tipo="area"
+                valor={datos.observaciones}
+                onCambio={(evento) => actualizar('observaciones', evento.target.value)}
+                rows={2}
+              />
+            )}
           </div>
 
           <div className="grid gap-1">
-            <span className="text-sm font-semibold text-texto">Foto del material</span>
+            <span className="text-sm font-semibold text-texto">
+              {esEdicion ? 'Foto del material' : 'Foto del material (opcional)'}
+            </span>
             {errores.foto ? (
               <p className="text-xs text-error">{errores.foto}</p>
             ) : (
-              <p className="text-xs text-texto-suave">JPG, PNG o WEBP, hasta 4 MB. Opcional.</p>
+              <p className="text-xs text-texto-suave">
+                JPG, PNG o WEBP, hasta 4 MB.{esEdicion ? ' Opcional.' : ''}
+              </p>
             )}
             <input
               type="file"
@@ -827,11 +937,9 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
             )}
           </div>
 
-          {!esEdicion && datos.modo !== 'unico' && (
+          {!esEdicion && datos.modo === 'detalle' && (
             <>
-              <EncabezadoSeccion>
-                {datos.modo === 'lote' ? 'Datos de cada ejemplar' : 'Detalle de los ejemplares'}
-              </EncabezadoSeccion>
+              <EncabezadoSeccion>Detalle de los ejemplares</EncabezadoSeccion>
               <div className="grid gap-4">
                 {ejemplares.map((fila, indice) => (
                   <Tarjeta key={fila.id} className="grid gap-4 border border-borde p-4">
@@ -854,7 +962,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
                         />
                       )}
                       <Campo
-                        etiqueta="Número de serie"
+                        etiqueta="Número de serie (opcional)"
                         valor={fila.numero_serie}
                         onCambio={(evento) => actualizarFila(indice, 'numero_serie', evento.target.value)}
                         maxLength={80}
@@ -866,28 +974,29 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
                         maxLength={30}
                       />
                       <Campo
-                        etiqueta="Estado inicial del ejemplar"
+                        etiqueta="Estado del ejemplar"
                         opciones={OPCIONES_ESTADO_INICIAL_EJEMPLAR}
                         valor={fila.estado}
+                        deshabilitado={datos.estado === 'en_mantenimiento'}
                         onCambio={(evento) => actualizarFila(indice, 'estado', evento.target.value)}
                         requerido
                       />
                       {datos.modo === 'detalle' && (
                         <Campo
-                          etiqueta="Estado físico (descripción)"
+                          etiqueta="Condición física (opcional)"
                           valor={fila.estado_fisico}
                           onCambio={(evento) => actualizarFila(indice, 'estado_fisico', evento.target.value)}
                           maxLength={100}
                         />
                       )}
                       <Campo
-                        etiqueta={datos.modo === 'lote' ? 'Estante (opcional)' : 'Estante'}
+                        etiqueta="Estante (opcional)"
                         valor={fila.ubicacion}
                         onCambio={(evento) => actualizarFila(indice, 'ubicacion', evento.target.value)}
                         maxLength={100}
                       />
                       <Campo
-                        etiqueta={datos.modo === 'detalle' ? 'Descripción individual' : 'Observaciones'}
+                        etiqueta={datos.modo === 'detalle' ? 'Descripción individual (opcional)' : 'Observaciones (opcional)'}
                         tipo="area"
                         valor={fila.observaciones}
                         onCambio={(evento) => actualizarFila(indice, 'observaciones', evento.target.value)}
@@ -932,7 +1041,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Campo
-              etiqueta="Tier mínimo requerido"
+              etiqueta={esEdicion ? 'Tier mínimo requerido' : 'Tier mínimo (opcional)'}
               opciones={[
                 { valor: '', etiqueta: 'Sin especificar' },
                 ...OPCIONES_TIER,
@@ -943,7 +1052,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
             {CAMPOS_PUNTOS.map(({ campo, etiqueta }) => (
               <Campo
                 key={campo}
-                etiqueta={etiqueta}
+                etiqueta={esEdicion ? etiqueta : `${etiqueta} (opcional)`}
                 tipo="number"
                 min="0"
                 max="500"

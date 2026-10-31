@@ -261,8 +261,8 @@ class MaterialSerializer(serializers.ModelSerializer):
 class MaterialRegistroSerializer(RechazarCamposNoPermitidosMixin, serializers.ModelSerializer):
     """Contrato de entrada del endpoint POST /api/materiales.
 
-    - `estado` NO forma parte del contrato: el material nace 'Disponible'
-      (HU04 criterio 6) y su cambio de estado se hace por la edición.
+    - `estado` define el estado inicial del material, independiente del estado
+      inicial de sus ejemplares.
     - La unicidad de `codigo_inventario` NO se valida aquí: la delega al
       servicio para devolver un 409 Conflict en lugar de un 400.
     - Los parámetros de reputación son opcionales; si no llegan, el servicio
@@ -274,6 +274,12 @@ class MaterialRegistroSerializer(RechazarCamposNoPermitidosMixin, serializers.Mo
     tipo = serializers.ChoiceField(
         choices=TIPOS_MATERIAL,
         error_messages={"invalid_choice": "Tipo de material inválido."},
+    )
+    estado = serializers.ChoiceField(
+        choices=ESTADOS_INICIALES_INSTANCIA,
+        required=False,
+        default="disponible",
+        error_messages={"invalid_choice": "El estado inicial del material no es válido."},
     )
     stock = serializers.IntegerField(required=False, min_value=1, error_messages=MENSAJES_STOCK)
     estado_inicial_ejemplares = serializers.ChoiceField(
@@ -289,6 +295,7 @@ class MaterialRegistroSerializer(RechazarCamposNoPermitidosMixin, serializers.Mo
         error_messages={"invalid_choice": "Modo de registro inválido."},
     )
     ubicacion = serializers.CharField(required=False, allow_blank=True, default="")
+    observaciones = serializers.CharField(required=False, allow_blank=True, default="")
     instancias = InstanciasJSONField(required=False)
     tier_minimo_requerido = serializers.ChoiceField(
         choices=TIERS,
@@ -312,10 +319,12 @@ class MaterialRegistroSerializer(RechazarCamposNoPermitidosMixin, serializers.Mo
             "descripcion",
             "codigo_inventario",
             "tipo",
+            "estado",
             "stock",
             "estado_inicial_ejemplares",
             "modo",
             "ubicacion",
+            "observaciones",
             "instancias",
             "es_alto_valor",
             *CAMPOS_FICHA_Y_REPUTACION,

@@ -284,7 +284,7 @@ function EditorInstanciasMaterial({ material, alcance, onCambiarAlcance, onGuard
               onCambio={(evento) => setDatos((actuales) => ({ ...actuales, numero_serie: evento.target.value }))}
             />
             <Campo
-              etiqueta="Estado físico (descripción)"
+              etiqueta="Condición física"
               valor={datos.estado_fisico}
               maxLength={100}
               onCambio={(evento) => setDatos((actuales) => ({ ...actuales, estado_fisico: evento.target.value }))}

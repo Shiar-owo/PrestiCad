@@ -74,7 +74,7 @@
 
 | # | Criterio de aceptación |
 |---|------------------------|
-| 1 | El formulario permite registrar: nombre, descripción, categoría (Equipo/Libro/Objeto), estado inicial (Disponible), código/identificador único |
+| 1 | El formulario permite registrar: nombre, descripción, categoría (Equipo/Libro/Objeto), estado inicial del material (Disponible por defecto; también puede registrarse En Mantenimiento), código/identificador único |
 | 2 | Se pueden parametrizar por objeto: Tier mínimo requerido, bonificación por devolución a tiempo, deducción por tardanza, deducción por daño parcial, deducción por daño total |
 | 3 | Si no se parametrizan los valores de reputación, el sistema aplica valores por defecto configurables |
 | 4 | El código/identificador del material es único en el sistema |

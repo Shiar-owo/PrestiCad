@@ -184,6 +184,7 @@ def registrar_material(
     nombre,
     codigo_inventario,
     tipo,
+    estado="disponible",
     descripcion="",
     stock=1,
     es_alto_valor=False,
@@ -203,6 +204,7 @@ def registrar_material(
     estado_inicial_ejemplares="disponible",
     modo=None,
     ubicacion="",
+    observaciones="",
     instancias=None,
 ):
     """Registra un material en el inventario.
@@ -234,6 +236,8 @@ def registrar_material(
     if stock < 1:
         raise InventarioError("stock", "El stock debe ser al menos 1 unidad.")
     estados_iniciales_validos = {clave for clave, _ in ESTADOS_INICIALES_INSTANCIA}
+    if not isinstance(estado, str) or estado not in estados_iniciales_validos:
+        raise InventarioError("estado", "El estado inicial del material no es válido.")
     if not isinstance(estado_inicial_ejemplares, str) or estado_inicial_ejemplares not in estados_iniciales_validos:
         raise InventarioError(
             "estado_inicial_ejemplares",
@@ -247,6 +251,7 @@ def registrar_material(
             "numero_serie": numero_serie,
             "estado_fisico": estado_fisico or "Operativo",
             "ubicacion": ubicacion,
+            "observaciones": observaciones,
             "estado": estado_inicial_ejemplares,
         }]
     elif modo is None:
@@ -289,6 +294,8 @@ def registrar_material(
             estado_fisico_fila = fila.get("estado_fisico", "Operativo")
             ubicacion_fila = fila.get("ubicacion", "")
         estado_fila = fila.get("estado", estado_inicial_ejemplares)
+        if modo == "detalle" and estado == "en_mantenimiento":
+            estado_fila = "en_mantenimiento"
         if not isinstance(estado_fila, str) or estado_fila not in estados_iniciales_validos:
             raise InventarioError(
                 "estado",
@@ -306,6 +313,8 @@ def registrar_material(
                 "codigo_ejemplar", "El código del ejemplar ya está registrado.", status_code=409, indice=indice
             )
         foto_fila = fila.get("foto")
+        if foto_fila is None and modo in ("unico", "lote"):
+            foto_fila = foto
         color_fila = fila.get("color", "")
         if not isinstance(color_fila, str):
             raise InventarioError("color", "El color del ejemplar debe ser texto.", indice=indice)
@@ -329,17 +338,22 @@ def registrar_material(
             "color": color_fila.strip(),
         })
 
+    estado_material = estado
+    if modo in ("unico", "lote"):
+        estado_material = estado_inicial_ejemplares
+    elif modo == "detalle" and filas_preparadas:
+        if all(fila["estado"] == "en_mantenimiento" for fila in filas_preparadas):
+            estado_material = "en_mantenimiento"
+        elif all(fila["estado"] == "disponible" for fila in filas_preparadas):
+            estado_material = "disponible"
+
     campos = {
         "nombre": nombre,
         "descripcion": descripcion.strip(),
         "codigo_inventario": codigo,
         "tipo": tipo,
         "stock": stock,
-        "estado": (
-            "en_mantenimiento"
-            if filas_preparadas and all(fila["estado"] == "en_mantenimiento" for fila in filas_preparadas)
-            else "disponible"
-        ),
+        "estado": estado_material,
         "es_alto_valor": es_alto_valor,
         "marca": marca.strip(),
         "modelo": modelo.strip(),

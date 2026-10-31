@@ -2,6 +2,11 @@ import { validarFoto } from '../validaciones'
 
 export const MAXIMO_EJEMPLARES_REGISTRO = 50
 
+export function codigoEjemplarPorDefecto(codigoInventario, indice) {
+  const base = String(codigoInventario || '').trim().toUpperCase() || 'CODIGO'
+  return `${base}-${String(indice + 1).padStart(2, '0')}`
+}
+
 export function crearEjemplar(idLocal) {
   return {
     id: idLocal,
@@ -57,7 +62,17 @@ export function validarFotosEjemplares(ejemplares) {
   })
 }
 
-function camposDeEjemplar(ejemplar, modo) {
+function camposDeEjemplar(ejemplar, modo, datos, indice) {
+  if (modo === 'lote') {
+    return {
+      estado: datos.estado_inicial_ejemplares || 'disponible',
+      numero_serie: ejemplar.numero_serie || datos.numero_serie || '',
+      color: ejemplar.color || datos.color || '',
+      observaciones: ejemplar.observaciones || datos.observaciones || '',
+      ubicacion: ejemplar.ubicacion || datos.ubicacion || '',
+    }
+  }
+
   const campos = {
     estado: ejemplar.estado || 'disponible',
     numero_serie: ejemplar.numero_serie || '',
@@ -66,7 +81,7 @@ function camposDeEjemplar(ejemplar, modo) {
     ubicacion: ejemplar.ubicacion || '',
   }
   if (modo === 'detalle') {
-    campos.codigo_ejemplar = ejemplar.codigo_ejemplar.trim()
+    campos.codigo_ejemplar = (ejemplar.codigo_ejemplar || codigoEjemplarPorDefecto(datos.codigo_inventario, indice)).trim()
     campos.estado_fisico = ejemplar.estado_fisico || 'Operativo'
   }
   return campos
@@ -82,6 +97,7 @@ export function construirCuerpoRegistroMaterial({ modo, datos, ejemplares = [] }
     delete compartidos.numero_serie
     if (modo === 'detalle') delete compartidos.estado_fisico
   }
+  delete compartidos.observaciones
 
   const cuerpo = {
     ...compartidos,
@@ -93,12 +109,13 @@ export function construirCuerpoRegistroMaterial({ modo, datos, ejemplares = [] }
     const fila = filas[0] || {}
     cuerpo.numero_serie = datos.numero_serie || ''
     cuerpo.estado_fisico = datos.estado_fisico || fila.estado_fisico || 'Operativo'
+    cuerpo.observaciones = datos.observaciones || ''
     cuerpo.ubicacion = datos.ubicacion || fila.ubicacion || ''
-    cuerpo.estado_inicial_ejemplares = fila.estado || datos.estado_inicial_ejemplares || 'disponible'
+    cuerpo.estado_inicial_ejemplares = datos.estado_inicial_ejemplares || fila.estado || 'disponible'
     return construirCuerpoConFotos(cuerpo, [], datos.foto)
   }
 
-  cuerpo.instancias = filas.map((fila) => camposDeEjemplar(fila, modo))
+  cuerpo.instancias = filas.map((fila, indice) => camposDeEjemplar(fila, modo, datos, indice))
   return construirCuerpoConFotos(
     cuerpo,
     filas.map((fila) => fila.foto),

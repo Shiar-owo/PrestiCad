@@ -100,7 +100,7 @@ Con el backend en ejecución, carga usuarios con distintos niveles de reputació
 docker compose exec backend python manage.py cargar_datos_demo
 ```
 
-El comando es repetible y usa la contraseña `PresticadDemo2026!` para las cuentas demo. Copia las imágenes de ejemplo a `backend/media/demo/`. Para recrear los préstamos demo y sus devoluciones y garantías asociadas, ejecuta:
+El inventario de ejemplo contiene una laptop con Windows 11, unas gafas de realidad virtual Meta Quest 2, una calculadora científica Casio y el libro *C++ Programming Language*. El comando es repetible y usa la contraseña `PresticadDemo2026!` para las cuentas demo. Copia las imágenes de ejemplo a `backend/media/inventario/`. Para recrear los préstamos demo y sus devoluciones y garantías asociadas, ejecuta:
 
 ```bash
 docker compose exec backend python manage.py cargar_datos_demo --reiniciar

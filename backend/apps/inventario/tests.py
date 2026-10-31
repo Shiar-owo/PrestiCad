@@ -1033,7 +1033,7 @@ class FotoMaterialServiceTestCase(ConMediaTemporal):
 
         self.assertFalse(material.foto)
 
-    def test_la_foto_se_guarda_bajo_materiales_con_fecha_y_token(self):
+    def test_la_foto_se_guarda_bajo_inventario_con_fecha_y_token(self):
         material = registrar_material(
             nombre="Cable HDMI",
             codigo_inventario="OBJ-001",
@@ -1042,7 +1042,7 @@ class FotoMaterialServiceTestCase(ConMediaTemporal):
         )
 
         partes = material.foto.name.split("/")
-        self.assertEqual(partes[0], "materiales")
+        self.assertEqual(partes[0], "inventario")
         self.assertRegex(partes[1], r"^\d{4}$")
         self.assertRegex(partes[2], r"^\d{2}$")
         self.assertTrue(partes[3].endswith(".jpg"), material.foto.name)

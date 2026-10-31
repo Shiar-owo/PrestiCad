@@ -34,7 +34,7 @@ PUNTOS_MAXIMO = 500
 
 
 def ruta_foto(instance, filename):
-    """Destino de la foto dentro del storage: `materiales/<año>/<mes>/<token>.<ext>`.
+    """Destino de la foto: `inventario/<año>/<mes>/<token>.<ext>`.
 
     El token aleatorio evita que dos materiales con el mismo nombre de archivo
     se pisen: conservar el nombre original haría que el segundo sobrescribiera
@@ -43,7 +43,7 @@ def ruta_foto(instance, filename):
     deduplica.
     """
     extension = Path(filename).suffix.lower() or ".jpg"
-    return f"materiales/{timezone.now():%Y/%m}/{uuid.uuid4().hex[:12]}{extension}"
+    return f"inventario/{timezone.now():%Y/%m}/{uuid.uuid4().hex[:12]}{extension}"
 
 
 class Material(models.Model):

@@ -306,6 +306,8 @@ def registrar_material(
                 "codigo_ejemplar", "El código del ejemplar ya está registrado.", status_code=409, indice=indice
             )
         foto_fila = fila.get("foto")
+        if foto_fila is None and modo in ("unico", "lote"):
+            foto_fila = foto
         color_fila = fila.get("color", "")
         if not isinstance(color_fila, str):
             raise InventarioError("color", "El color del ejemplar debe ser texto.", indice=indice)

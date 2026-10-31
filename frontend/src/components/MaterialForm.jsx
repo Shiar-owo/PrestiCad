@@ -450,10 +450,11 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
           },
           ejemplares,
         })
+      let resultadoRegistro = null
       if (esEdicion) {
         await api.put(`/materiales/${material.id}/`, cuerpo)
       } else {
-        await api.post('/materiales/', cuerpo)
+        resultadoRegistro = await api.post('/materiales/', cuerpo)
       }
 
       setMensajeExito(
@@ -469,7 +470,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
         setEjemplares(crearEjemplares(1, () => `ejemplar-${++contadorIds.current}`))
       }
       if (onGuardado) {
-        onGuardado()
+        onGuardado(resultadoRegistro ? { material: resultadoRegistro, modo: datos.modo } : null)
       }
     } catch (error) {
       if (error instanceof ErrorApi && error.datos) {

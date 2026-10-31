@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { api } from '../api/client'
 import useTituloPagina from '../hooks/useTituloPagina'
 import {
+  ETIQUETAS_ESTADO,
   ETIQUETAS_TIER,
   ETIQUETAS_TIPO,
 } from '../constantes/catalogo'
@@ -16,6 +17,25 @@ import ErrorAlerta from '../components/ui/ErrorAlerta'
 import EstadoVacio from '../components/ui/EstadoVacio'
 import { obtenerCodigoInstancia } from '../inventario/eliminacionMaterial'
 
+const ETIQUETAS_MODO_REGISTRO = {
+  unico: 'Único',
+  lote: 'Lote idéntico',
+  detalle: 'Por detalle',
+}
+
+function DatoResumen({ etiqueta, valor }) {
+  let valorVisible = valor
+  if (typeof valor === 'boolean') valorVisible = valor ? 'Sí' : 'No'
+  else if (valor === null || valor === undefined || valor === '') valorVisible = '—'
+
+  return (
+    <div className="min-w-0">
+      <dt className="text-xs font-semibold uppercase tracking-wide text-texto-suave">{etiqueta}</dt>
+      <dd className="mt-1 break-words text-sm text-texto">{valorVisible}</dd>
+    </div>
+  )
+}
+
 function Materiales() {
   useTituloPagina('Inventario')
   const [materiales, setMateriales] = useState([])
@@ -23,6 +43,7 @@ function Materiales() {
   const [error, setError] = useState('')
   const [mostrarFormulario, setMostrarFormulario] = useState(false)
   const [materialEnEdicion, setMaterialEnEdicion] = useState(null)
+  const [resumenRegistro, setResumenRegistro] = useState(null)
   const [materialFicha, setMaterialFicha] = useState(null)
   const [registroAEliminar, setRegistroAEliminar] = useState(null)
 
@@ -45,11 +66,13 @@ function Materiales() {
 
   function abrirFormularioAlta() {
     setMaterialEnEdicion(null)
+    setResumenRegistro(null)
     setMostrarFormulario(true)
   }
 
   function abrirFormularioEdicion(material) {
     setMaterialEnEdicion(material)
+    setResumenRegistro(null)
     setMostrarFormulario(true)
   }
 
@@ -58,7 +81,8 @@ function Materiales() {
     setMaterialEnEdicion(null)
   }
 
-  async function manejarGuardado() {
+  async function manejarGuardado(resultadoRegistro) {
+    setResumenRegistro(resultadoRegistro || null)
     setMostrarFormulario(false)
     setMaterialEnEdicion(null)
     await cargarMateriales()
@@ -88,6 +112,10 @@ function Materiales() {
   const codigoInstanciaAEliminar = registroAEliminar?.tipo === 'instancia'
     ? obtenerCodigoInstancia(registroAEliminar.instancia)
     : ''
+  const materialRegistrado = resumenRegistro?.material
+  const instanciasRegistradas = Array.isArray(materialRegistrado?.instancias)
+    ? materialRegistrado.instancias
+    : []
 
   return (
     <section>
@@ -106,6 +134,105 @@ function Materiales() {
       </header>
 
       {error && <ErrorAlerta mensaje={error} className="mb-4" />}
+
+      {!mostrarFormulario && resumenRegistro && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="resumen-registro-material-titulo"
+            className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-xl border border-borde bg-white p-6 shadow-xl dark:bg-superficie"
+          >
+            <header className="border-b border-borde pb-4">
+              <h3 id="resumen-registro-material-titulo" className="text-lg font-bold text-marca-700 dark:text-marca-300">
+                Material registrado correctamente
+              </h3>
+              <p className="mt-2 text-sm text-texto">
+                <strong>{materialRegistrado.nombre}</strong> · Código de inventario:{' '}
+                <code className="font-mono">{materialRegistrado.codigo_inventario}</code>
+              </p>
+            </header>
+
+            <dl className="mt-4 grid gap-3 rounded-lg border border-borde bg-superficie-alta p-4 sm:grid-cols-2 lg:grid-cols-4">
+              <DatoResumen
+                etiqueta="Tipo"
+                valor={ETIQUETAS_TIPO[materialRegistrado.tipo] || materialRegistrado.tipo}
+              />
+              <DatoResumen
+                etiqueta="Estado"
+                valor={ETIQUETAS_ESTADO[materialRegistrado.estado] || materialRegistrado.estado}
+              />
+              <DatoResumen
+                etiqueta="Modo de registro"
+                valor={ETIQUETAS_MODO_REGISTRO[resumenRegistro.modo] || resumenRegistro.modo}
+              />
+              <DatoResumen etiqueta="Total de instancias" valor={instanciasRegistradas.length} />
+              <DatoResumen etiqueta="Marca" valor={materialRegistrado.marca} />
+              <DatoResumen etiqueta="Modelo" valor={materialRegistrado.modelo} />
+              <DatoResumen etiqueta="Color" valor={materialRegistrado.color} />
+              <DatoResumen etiqueta="Alto valor" valor={materialRegistrado.es_alto_valor} />
+            </dl>
+
+            {materialRegistrado.descripcion && (
+              <p className="mt-3 text-sm text-texto">
+                <strong>Descripción:</strong> {materialRegistrado.descripcion}
+              </p>
+            )}
+
+            <section className="mt-5">
+              <h4 className="border-b border-borde pb-2 text-sm font-bold text-texto">
+                Detalle de instancias
+              </h4>
+              <div className="mt-3 overflow-x-auto rounded-lg border border-borde">
+                <table className="min-w-full divide-y divide-borde text-left text-xs">
+                  <thead className="bg-superficie-alta uppercase tracking-wide text-texto-suave">
+                    <tr>
+                      <th className="px-3 py-2 font-semibold">Código</th>
+                      <th className="px-3 py-2 font-semibold">N.º de serie</th>
+                      <th className="px-3 py-2 font-semibold">Estado</th>
+                      <th className="px-3 py-2 font-semibold">Condición física</th>
+                      <th className="px-3 py-2 font-semibold">Color</th>
+                      <th className="px-3 py-2 font-semibold">Ubicación</th>
+                      <th className="px-3 py-2 font-semibold">Observaciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-borde">
+                    {instanciasRegistradas.length > 0 ? instanciasRegistradas.map((instancia) => (
+                      <tr key={instancia.id || instancia.codigo_ejemplar} className="align-top text-texto">
+                        <td className="whitespace-nowrap px-3 py-2 font-mono font-semibold">
+                          {instancia.codigo_ejemplar || '—'}
+                        </td>
+                        <td className="px-3 py-2">{instancia.numero_serie || '—'}</td>
+                        <td className="px-3 py-2">{instancia.estado_display || instancia.estado || '—'}</td>
+                        <td className="px-3 py-2">{instancia.estado_fisico || '—'}</td>
+                        <td className="px-3 py-2">
+                          {(['unico', 'lote'].includes(resumenRegistro.modo)
+                            ? materialRegistrado.color
+                            : instancia.color) || '—'}
+                        </td>
+                        <td className="px-3 py-2">{instancia.ubicacion || '—'}</td>
+                        <td className="px-3 py-2">{instancia.observaciones || '—'}</td>
+                      </tr>
+                    )) : (
+                      <tr>
+                        <td colSpan={7} className="px-3 py-4 text-center text-texto-suave">
+                          No hay instancias para mostrar.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <footer className="mt-5 flex justify-end">
+              <Boton tipo="button" onClick={() => setResumenRegistro(null)}>
+                Cerrar
+              </Boton>
+            </footer>
+          </section>
+        </div>
+      )}
 
       {mostrarFormulario && (
         <MaterialForm

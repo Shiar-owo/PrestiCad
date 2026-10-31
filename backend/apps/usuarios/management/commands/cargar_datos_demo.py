@@ -20,18 +20,18 @@ FACULTAD = "Escuela Profesional de Ciencia de la Computación"
 
 USUARIOS = (
     {
-        "email": "prestatario@presticad.test", "nombre": "Lucía",
-        "apellido": "Paredes", "dni": "70000001", "tipo": "alumno",
+        "email": "prestatario@presticad.test", "nombre": "Rous",
+        "apellido": "Garay", "dni": "70000001", "tipo": "alumno",
         "rol": "prestatario", "puntaje": 320, "tier": "avanzado",
     },
     {
-        "email": "prestatario.estandar@presticad.test", "nombre": "Marco",
-        "apellido": "Quispe", "dni": "70000004", "tipo": "alumno",
+        "email": "prestatario.estandar@presticad.test", "nombre": "Josué",
+        "apellido": "Rodríguez", "dni": "70000004", "tipo": "alumno",
         "rol": "prestatario", "puntaje": 45, "tier": "estandar",
     },
     {
-        "email": "prestatario.restringido@presticad.test", "nombre": "Ana",
-        "apellido": "Salazar", "dni": "70000005", "tipo": "alumno",
+        "email": "prestatario.restringido@presticad.test", "nombre": "Melissa",
+        "apellido": "Retamozo", "dni": "70000005", "tipo": "alumno",
         "rol": "prestatario", "puntaje": -120, "tier": "restringido",
     },
     {
@@ -133,6 +133,19 @@ class Command(BaseCommand):
             puntaje = datos.pop("puntaje")
             tier = datos.pop("tier")
             email = datos["email"]
+            usuario_existente = Usuario.objects.filter(email=email).first()
+            if usuario_existente:
+                # No cambiamos el DNI de una cuenta que ya existe: podría
+                # pertenecer también a otra persona del entorno local.
+                datos["dni"] = usuario_existente.dni
+            else:
+                dni_solicitado = datos["dni"]
+                datos["dni"] = self._dni_demo_disponible(dni_solicitado)
+                if datos["dni"] != dni_solicitado:
+                    self.stdout.write(self.style.WARNING(
+                        f"El DNI demo {dni_solicitado} ya está ocupado; "
+                        f"se asignará {datos['dni']} a {email}."
+                    ))
             usuario, _ = Usuario.objects.update_or_create(
                 email=email,
                 defaults={
@@ -164,6 +177,15 @@ class Command(BaseCommand):
             "Escenario demo listo: 5 usuarios, 4 materiales y 3 préstamos. "
             f"Contraseña de demostración: {password}"
         ))
+
+    def _dni_demo_disponible(self, dni_preferido):
+        if not Usuario.objects.filter(dni=dni_preferido).exists():
+            return dni_preferido
+        for candidato in range(70000010, 80000000):
+            dni = str(candidato)
+            if not Usuario.objects.filter(dni=dni).exists():
+                return dni
+        raise CommandError("No se encontró un DNI libre para crear las cuentas demo.")
 
     def _copiar_fotos_demo(self):
         directorio_assets = Path(__file__).resolve().parents[3] / "inventario" / "demo_media"

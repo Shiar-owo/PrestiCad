@@ -237,13 +237,6 @@ class InstanciaMaterial(models.Model):
         default="disponible",
         verbose_name="Estado de la instancia",
     )
-    estado_fisico = models.CharField(
-        max_length=100,
-        blank=True,
-        default="Operativo",
-        verbose_name="Estado físico",
-        help_text="Condición física de este ejemplar (ej. Excelente, Bueno, Desgaste leve).",
-    )
     condicion_fisica = models.CharField(
         max_length=100,
         blank=True,

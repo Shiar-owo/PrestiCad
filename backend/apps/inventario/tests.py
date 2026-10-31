@@ -18,6 +18,7 @@ from rest_framework.test import APITestCase
 from apps.inventario.models import InstanciaMaterial, Material
 from apps.inventario.serializers import (
     FotoMaterial,
+    InstanciaMaterialModificacionSerializer,
     MaterialActualizacionSerializer,
     MaterialRegistroSerializer,
     MaterialSerializer,
@@ -614,6 +615,12 @@ class MaterialSerializerContratoTestCase(SimpleTestCase):
                 "estado_fisico": "Operativo",
             }
         )
+
+        self.assertFalse(serializer.is_valid())
+        self.assertEqual(serializer.errors["estado_fisico"], ["Este campo no está permitido."])
+
+    def test_instancia_rechaza_nombre_legado_de_condicion_fisica(self):
+        serializer = InstanciaMaterialModificacionSerializer(data={"estado_fisico": "Bueno"})
 
         self.assertFalse(serializer.is_valid())
         self.assertEqual(serializer.errors["estado_fisico"], ["Este campo no está permitido."])
@@ -1465,7 +1472,6 @@ class RegistroMaterialMultipleAPITestCase(EscenariosDeMaterialApi):
         self.assertEqual(instancia.codigo_ejemplar, "OBJ-001-01")
         self.assertEqual(instancia.estado, "disponible")
         self.assertEqual(instancia.numero_serie, "SER-01")
-        self.assertEqual(instancia.estado_fisico, "Bueno")
         self.assertEqual(instancia.condicion_fisica, "Bueno")
         self.assertEqual(instancia.ubicacion, "Estante A")
         self.assertNotIn("condicion_fisica", respuesta.json())
@@ -1490,7 +1496,6 @@ class RegistroMaterialMultipleAPITestCase(EscenariosDeMaterialApi):
         instancias = list(InstanciaMaterial.objects.order_by("codigo_ejemplar"))
         self.assertEqual([fila.codigo_ejemplar for fila in instancias], ["OBJ-001-01", "OBJ-001-02"])
         self.assertEqual([fila.ubicacion for fila in instancias], ["Estante común", "Estante propio"])
-        self.assertEqual([fila.estado_fisico for fila in instancias], ["Bueno", "Bueno"])
         self.assertEqual([fila.condicion_fisica for fila in instancias], ["Bueno", "Bueno"])
         self.assertEqual([fila.numero_serie for fila in instancias], ["SER-A", "SER-B"])
         self.assertEqual([fila.color for fila in instancias], ["Negro", "Blanco"])
@@ -1504,7 +1509,7 @@ class RegistroMaterialMultipleAPITestCase(EscenariosDeMaterialApi):
                 **self._payload_valido(modo="detalle", stock=2),
                 "instancias": [
                     {"codigo_ejemplar": "UNIDAD-A", "numero_serie": "SER-A", "condicion_fisica": "Bueno", "color": "Azul", "ubicacion": "A1", "observaciones": "Marca lateral"},
-                    {"codigo_ejemplar": "UNIDAD-B", "numero_serie": "SER-B", "estado_fisico": "Regular", "color": "Rojo", "ubicacion": "B2"},
+                    {"codigo_ejemplar": "UNIDAD-B", "numero_serie": "SER-B", "condicion_fisica": "Regular", "color": "Rojo", "ubicacion": "B2"},
                 ],
             },
             format="json",
@@ -1513,14 +1518,12 @@ class RegistroMaterialMultipleAPITestCase(EscenariosDeMaterialApi):
         self.assertEqual(respuesta.status_code, 201, respuesta.content)
         primero = InstanciaMaterial.objects.get(codigo_ejemplar="UNIDAD-A")
         self.assertEqual(primero.numero_serie, "SER-A")
-        self.assertEqual(primero.estado_fisico, "Bueno")
         self.assertEqual(primero.condicion_fisica, "Bueno")
         self.assertEqual(primero.color, "Azul")
         self.assertEqual(primero.ubicacion, "A1")
         self.assertEqual(primero.observaciones, "Marca lateral")
         self.assertEqual(primero.estado, "disponible")
         segundo = InstanciaMaterial.objects.get(codigo_ejemplar="UNIDAD-B")
-        self.assertEqual(segundo.estado_fisico, "Regular")
         self.assertEqual(segundo.condicion_fisica, "Regular")
 
     def test_codigo_repetido_en_payload_indica_fila_y_no_crea_registros(self):
@@ -1642,7 +1645,7 @@ class InstanciaMaterialModelTestCase(TestCase):
         self.assertEqual(codigos, ["LIB-CLRS-01", "LIB-CLRS-02", "LIB-CLRS-03"])
         for inst in mat.instancias.all():
             self.assertEqual(inst.estado, "disponible")
-            self.assertEqual(inst.estado_fisico, "Operativo")
+            self.assertEqual(inst.condicion_fisica, "Operativo")
 
 
     def test_resumen_estados_de_material(self):
@@ -1703,6 +1706,52 @@ class MigracionCondicionFisicaInstanciaTestCase(TransactionTestCase):
         instancia = InstanciaNueva.objects.get(codigo_ejemplar="MIG-COND-01-01")
 
         self.assertEqual(instancia.condicion_fisica, "Desgaste leve")
+
+
+class MigracionEliminarEstadoFisicoInstanciaTestCase(TransactionTestCase):
+    """La migración final conserva datos y puede revertirse sin perderlos."""
+
+    migrate_from = ("inventario", "0009_eliminar_estado_fisico_material")
+    migrate_to = ("inventario", "0010_eliminar_estado_fisico_legado_instancia")
+
+    def setUp(self):
+        executor = MigrationExecutor(connection)
+        executor.migrate([self.migrate_from])
+        aplicaciones_anteriores = executor.loader.project_state([self.migrate_from]).apps
+        MaterialAnterior = aplicaciones_anteriores.get_model("inventario", "Material")
+        InstanciaAnterior = aplicaciones_anteriores.get_model("inventario", "InstanciaMaterial")
+        material = MaterialAnterior.objects.create(
+            nombre="Material de migración final",
+            codigo_inventario="MIG-COND-FINAL",
+            tipo="objeto",
+        )
+        InstanciaAnterior.objects.create(
+            material=material,
+            codigo_ejemplar="MIG-COND-FINAL-01",
+            estado_fisico="Desgaste leve",
+            condicion_fisica="Operativo",
+        )
+
+        executor = MigrationExecutor(connection)
+        executor.migrate([self.migrate_to])
+        self.aplicaciones_nuevas = executor.loader.project_state([self.migrate_to]).apps
+
+    def tearDown(self):
+        executor = MigrationExecutor(connection)
+        executor.migrate(executor.loader.graph.leaf_nodes())
+        super().tearDown()
+
+    def test_migracion_y_reversion_conservan_condicion_fisica(self):
+        InstanciaNueva = self.aplicaciones_nuevas.get_model("inventario", "InstanciaMaterial")
+        instancia_nueva = InstanciaNueva.objects.get(codigo_ejemplar="MIG-COND-FINAL-01")
+        self.assertEqual(instancia_nueva.condicion_fisica, "Desgaste leve")
+
+        executor = MigrationExecutor(connection)
+        executor.migrate([self.migrate_from])
+        aplicaciones_anteriores = executor.loader.project_state([self.migrate_from]).apps
+        InstanciaAnterior = aplicaciones_anteriores.get_model("inventario", "InstanciaMaterial")
+        instancia_anterior = InstanciaAnterior.objects.get(codigo_ejemplar="MIG-COND-FINAL-01")
+        self.assertEqual(instancia_anterior.estado_fisico, "Desgaste leve")
 
 
 class InstanciaMaterialAPITestCase(ConMediaTemporal, APITestCase):
@@ -1798,10 +1847,9 @@ class InstanciaMaterialAPITestCase(ConMediaTemporal, APITestCase):
         self.assertEqual(resp.status_code, 201)
         instancia_creada = InstanciaMaterial.objects.get(codigo_ejemplar="EQ-OSC-01-03")
         self.assertEqual(instancia_creada.color, "Gris")
-        self.assertEqual(instancia_creada.estado_fisico, "Excelente")
         self.assertEqual(instancia_creada.condicion_fisica, "Excelente")
-        self.assertEqual(resp.json()["estado_fisico"], "Excelente")
         self.assertEqual(resp.json()["condicion_fisica"], "Excelente")
+        self.assertNotIn("estado_fisico", resp.json())
         self.assertEqual(resp.json()["color"], "Gris")
         self.material.refresh_from_db()
         self.assertEqual(self.material.stock, 3)
@@ -1865,10 +1913,9 @@ class InstanciaMaterialAPITestCase(ConMediaTemporal, APITestCase):
         instancia.refresh_from_db()
         self.assertEqual(instancia.estado, "en_mantenimiento")
         self.assertEqual(instancia.color, "Verde")
-        self.assertEqual(instancia.estado_fisico, "Desgaste leve")
         self.assertEqual(instancia.condicion_fisica, "Desgaste leve")
-        self.assertEqual(resp.json()["estado_fisico"], "Desgaste leve")
         self.assertEqual(resp.json()["condicion_fisica"], "Desgaste leve")
+        self.assertNotIn("estado_fisico", resp.json())
         self.assertEqual(instancia.observaciones, "Punta de prueba dañada")
 
     def test_no_permite_cambiar_manualmente_estado_de_instancia_prestada_o_reservada(self):

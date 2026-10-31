@@ -248,6 +248,9 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
   }
 
   function actualizar(campo, valor) {
+    if (!esEdicion && datos.modo === 'detalle' && campo === 'estado') {
+      setEjemplares(ejemplares.map((fila) => ({ ...fila, estado: valor })))
+    }
     if (!esEdicion && datos.modo === 'detalle' && ['codigo_inventario', 'color'].includes(campo)) {
       setEjemplares(ejemplares.map((fila, indice) => {
         if (campo === 'codigo_inventario') {
@@ -266,9 +269,27 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
   }
 
   function actualizarFila(indice, campo, valor) {
-    setEjemplares(ejemplares.map((fila, posicion) =>
+    if (!esEdicion && datos.modo === 'detalle' && campo === 'estado') {
+      const filasActualizadas = ejemplares.map((fila, posicion) =>
+        posicion === indice ? { ...fila, estado: valor } : fila,
+      )
+      setEjemplares(filasActualizadas)
+      if (filasActualizadas.length > 0) {
+        const todasDisponibles = filasActualizadas.every((fila) => fila.estado === 'disponible')
+        const todasEnMantenimiento = filasActualizadas.every((fila) => fila.estado === 'en_mantenimiento')
+        if (todasDisponibles || todasEnMantenimiento) {
+          setDatos((previos) => ({
+            ...previos,
+            estado: todasEnMantenimiento ? 'en_mantenimiento' : 'disponible',
+          }))
+        }
+      }
+      return
+    }
+    const filasActualizadas = ejemplares.map((fila, posicion) =>
       posicion === indice ? { ...fila, [campo]: valor } : fila,
-    ))
+    )
+    setEjemplares(filasActualizadas)
   }
 
   function manejarArchivoFoto(evento) {
@@ -322,6 +343,9 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
       cuerpo.numero_serie = datos.numero_serie.trim()
       cuerpo.estado_fisico = datos.estado_fisico.trim()
       cuerpo.estado_inicial_ejemplares = datos.estado_inicial_ejemplares
+      if (datos.modo === 'detalle') {
+        cuerpo.estado = datos.estado
+      }
     }
 
     if (datos.tier_minimo_requerido) {
@@ -755,18 +779,23 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
                 onCambio={(evento) => cambiarModo(evento.target.value)}
               />
             )}
-            {esEdicion && (
+            {(esEdicion || (!esEdicion && datos.modo === 'detalle')) && (
               <Campo
-                etiqueta="Estado"
+                etiqueta={!esEdicion && datos.modo === 'detalle' ? 'Estado del material' : 'Estado'}
                 opciones={opcionesEstadoGeneral}
                 valor={datos.estado}
-                onCambio={(evento) => solicitarCambioEstadoGeneral(evento.target.value)}
+                onCambio={(evento) => esEdicion
+                  ? solicitarCambioEstadoGeneral(evento.target.value)
+                  : actualizar('estado', evento.target.value)}
                 error={errores.estado}
-                ayuda={
-                  estadoGeneralModificado
+                ayuda={esEdicion
+                  ? estadoGeneralModificado
                     ? `Cambio confirmado: al guardar, los ejemplares elegibles pasarán a "${datos.estado === 'en_mantenimiento' ? 'En mantenimiento' : 'Disponible'}".`
                     : 'Cambiar el estado general afectará a los ejemplares disponibles o en mantenimiento.'
-                }
+                  : datos.estado === 'en_mantenimiento'
+                    ? 'Todas las instancias están En mantenimiento y sus estados no se pueden modificar.'
+                    : 'Todas las instancias inician Disponibles; puedes poner algunas En mantenimiento. Si todas quedan así, el material también cambiará a En mantenimiento.'}
+                requerido={!esEdicion}
               />
             )}
             {!esEdicion && datos.modo !== 'unico' && (
@@ -841,7 +870,9 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
             />
             {(!esEdicion && ['unico', 'lote'].includes(datos.modo)) && (
               <Campo
-                etiqueta="Estado físico (opcional)"
+                etiqueta={datos.modo === 'unico'
+                  ? 'Condición física (opcional)'
+                  : 'Condición física de los ejemplares (opcional)'}
                 valor={datos.estado_fisico}
                 onCambio={(evento) => actualizar('estado_fisico', evento.target.value)}
                 maxLength={50}
@@ -937,12 +968,13 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
                         etiqueta="Estado inicial del ejemplar"
                         opciones={OPCIONES_ESTADO_INICIAL_EJEMPLAR}
                         valor={fila.estado}
+                        deshabilitado={datos.estado === 'en_mantenimiento'}
                         onCambio={(evento) => actualizarFila(indice, 'estado', evento.target.value)}
                         requerido
                       />
                       {datos.modo === 'detalle' && (
                         <Campo
-                          etiqueta="Estado físico (descripción, opcional)"
+                          etiqueta="Condición física (opcional)"
                           valor={fila.estado_fisico}
                           onCambio={(evento) => actualizarFila(indice, 'estado_fisico', evento.target.value)}
                           maxLength={100}

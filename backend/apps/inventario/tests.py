@@ -118,7 +118,7 @@ class RegistrarMaterialServiceTestCase(TestCase):
         self.assertEqual(Material.objects.count(), 1)
 
     def test_estado_inicial_es_disponible(self):
-        """HU04 criterio 6: el estado inicial siempre es 'Disponible'."""
+        """HU04 criterio 1: el estado inicial del material es Disponible por defecto."""
         material = registrar_material(**self._datos_validos())
 
         self.assertEqual(material.estado, "disponible")
@@ -503,13 +503,16 @@ class MaterialSerializerContratoTestCase(SimpleTestCase):
         for campo in ("id", "nombre", "codigo_inventario", "estado", "created_at"):
             self.assertIn(campo, data)
 
-    def test_alta_rechaza_estado(self):
+    def test_alta_rechaza_estado_inicial_no_permitido(self):
         serializer = MaterialRegistroSerializer(
             data={"nombre": "Cable", "codigo_inventario": "OBJ-1", "tipo": "objeto", "estado": "prestado"}
         )
 
         self.assertFalse(serializer.is_valid())
-        self.assertEqual(serializer.errors["estado"], ["Este campo no está permitido."])
+        self.assertEqual(
+            serializer.errors["estado"],
+            ["El estado inicial del material no es válido."],
+        )
 
     def test_alta_exige_nombre_codigo_y_tipo(self):
         serializer = MaterialRegistroSerializer(data={})
@@ -582,8 +585,8 @@ class MaterialSerializerContratoTestCase(SimpleTestCase):
         )
 
         self.assertTrue(serializer.is_valid(), serializer.errors)
-        # el estado y las marcas de tiempo no viajan en la entrada
-        self.assertNotIn("estado", serializer.validated_data)
+        # Si no se especifica, el estado del material inicia como Disponible.
+        self.assertEqual(serializer.validated_data["estado"], "disponible")
         self.assertNotIn("unidades_disponibles", serializer.validated_data)
 
     def test_edicion_acepta_estado(self):
@@ -755,8 +758,8 @@ class MaterialesAPITestCase(EscenariosDeMaterialApi):
         self.assertIn("tipo", respuesta.json())
         self.assertEqual(Material.objects.count(), 0)
 
-    def test_registrar_con_estado_responde_400(self):
-        """`estado` no forma parte del contrato de alta (criterio 6)."""
+    def test_registrar_con_estado_inicial_no_permitido_responde_400(self):
+        """El estado Prestado no es válido como estado inicial de un material."""
         self._autenticar("gestor@unsa.edu.pe", "gestor")
 
         respuesta = self.client.post(

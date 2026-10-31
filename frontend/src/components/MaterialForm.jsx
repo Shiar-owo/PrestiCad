@@ -728,7 +728,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
               requerido
             />
             <Campo
-              etiqueta="Descripción"
+              etiqueta={esEdicion ? 'Descripción' : 'Descripción (opcional)'}
               tipo="area"
               valor={datos.descripcion}
               onCambio={(evento) => actualizar('descripcion', evento.target.value)}
@@ -744,7 +744,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
             />
             {!esEdicion && (
               <Campo
-                etiqueta="Modo de registro"
+                etiqueta="Modo de registro (opcional)"
                 opciones={[
                   { valor: 'unico', etiqueta: 'Único' },
                   { valor: 'lote', etiqueta: 'Lote idéntico' },
@@ -779,6 +779,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
                 ayuda={`Rango permitido: 2–${MAXIMO_EJEMPLARES_REGISTRO} ejemplares.`}
                 onCambio={(evento) => cambiarCantidadEjemplares(evento.target.value)}
                 error={errores.stock}
+                requerido
               />
             )}
             {!esEdicion && ['unico', 'lote'].includes(datos.modo) && (
@@ -799,27 +800,27 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
               onChange={(evento) => actualizar('es_alto_valor', evento.target.checked)}
               className="size-4 rounded border-borde accent-marca-600"
             />
-            ¿Es de alto valor?
+            {esEdicion ? '¿Es de alto valor?' : '¿Es de alto valor? (opcional)'}
           </label>
 
           <EncabezadoSeccion>Ficha técnica</EncabezadoSeccion>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Campo
-              etiqueta="Marca"
+              etiqueta={esEdicion ? 'Marca' : 'Marca (opcional)'}
               valor={datos.marca}
               onCambio={(evento) => actualizar('marca', evento.target.value)}
               maxLength={60}
             />
             <Campo
-              etiqueta="Modelo"
+              etiqueta={esEdicion ? 'Modelo' : 'Modelo (opcional)'}
               valor={datos.modelo}
               onCambio={(evento) => actualizar('modelo', evento.target.value)}
               maxLength={60}
             />
             {(!esEdicion && ['unico', 'lote'].includes(datos.modo)) && (
               <Campo
-                etiqueta="Número de serie"
+                etiqueta="Número de serie (opcional)"
                 valor={datos.numero_serie}
                 onCambio={(evento) => actualizar('numero_serie', evento.target.value)}
                 maxLength={datos.modo === 'lote' ? 80 : 50}
@@ -827,9 +828,11 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
             )}
             <Campo
               etiqueta={!esEdicion && datos.modo === 'unico'
-                ? 'Color del ejemplar'
+                ? 'Color del ejemplar (opcional)'
                 : !esEdicion
-                  ? 'Color general (predeterminado)'
+                  ? datos.modo === 'lote'
+                    ? 'Color de los ejemplares (opcional)'
+                    : 'Color predeterminado de ejemplares (opcional)'
                   : 'Color del material'}
               valor={datos.color}
               onCambio={(evento) => actualizar('color', evento.target.value)}
@@ -837,7 +840,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
             />
             {(!esEdicion && ['unico', 'lote'].includes(datos.modo)) && (
               <Campo
-                etiqueta="Estado físico"
+                etiqueta="Estado físico (opcional)"
                 valor={datos.estado_fisico}
                 onCambio={(evento) => actualizar('estado_fisico', evento.target.value)}
                 maxLength={50}
@@ -845,7 +848,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
             )}
             {!esEdicion && ['unico', 'lote'].includes(datos.modo) && (
               <Campo
-                etiqueta={datos.modo === 'lote' ? 'Estante por defecto' : 'Estante'}
+                etiqueta={datos.modo === 'lote' ? 'Estante por defecto (opcional)' : 'Estante (opcional)'}
                 valor={datos.ubicacion}
                 onCambio={(evento) => actualizar('ubicacion', evento.target.value)}
                 maxLength={100}
@@ -853,7 +856,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
             )}
             {!esEdicion && datos.modo === 'lote' && (
               <Campo
-                etiqueta="Observaciones de los ejemplares"
+                etiqueta="Observaciones de los ejemplares (opcional)"
                 tipo="area"
                 valor={datos.observaciones}
                 onCambio={(evento) => actualizar('observaciones', evento.target.value)}
@@ -863,11 +866,15 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
           </div>
 
           <div className="grid gap-1">
-            <span className="text-sm font-semibold text-texto">Foto del material</span>
+            <span className="text-sm font-semibold text-texto">
+              {esEdicion ? 'Foto del material' : 'Foto del material (opcional)'}
+            </span>
             {errores.foto ? (
               <p className="text-xs text-error">{errores.foto}</p>
             ) : (
-              <p className="text-xs text-texto-suave">JPG, PNG o WEBP, hasta 4 MB. Opcional.</p>
+              <p className="text-xs text-texto-suave">
+                JPG, PNG o WEBP, hasta 4 MB.{esEdicion ? ' Opcional.' : ''}
+              </p>
             )}
             <input
               type="file"
@@ -914,7 +921,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
                         />
                       )}
                       <Campo
-                        etiqueta="Número de serie"
+                        etiqueta="Número de serie (opcional)"
                         valor={fila.numero_serie}
                         onCambio={(evento) => actualizarFila(indice, 'numero_serie', evento.target.value)}
                         maxLength={80}
@@ -934,20 +941,20 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
                       />
                       {datos.modo === 'detalle' && (
                         <Campo
-                          etiqueta="Estado físico (descripción)"
+                          etiqueta="Estado físico (descripción, opcional)"
                           valor={fila.estado_fisico}
                           onCambio={(evento) => actualizarFila(indice, 'estado_fisico', evento.target.value)}
                           maxLength={100}
                         />
                       )}
                       <Campo
-                        etiqueta={datos.modo === 'lote' ? 'Estante (opcional)' : 'Estante'}
+                        etiqueta="Estante (opcional)"
                         valor={fila.ubicacion}
                         onCambio={(evento) => actualizarFila(indice, 'ubicacion', evento.target.value)}
                         maxLength={100}
                       />
                       <Campo
-                        etiqueta={datos.modo === 'detalle' ? 'Descripción individual' : 'Observaciones'}
+                        etiqueta={datos.modo === 'detalle' ? 'Descripción individual (opcional)' : 'Observaciones (opcional)'}
                         tipo="area"
                         valor={fila.observaciones}
                         onCambio={(evento) => actualizarFila(indice, 'observaciones', evento.target.value)}
@@ -992,7 +999,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Campo
-              etiqueta="Tier mínimo requerido"
+              etiqueta={esEdicion ? 'Tier mínimo requerido' : 'Tier mínimo (opcional)'}
               opciones={[
                 { valor: '', etiqueta: 'Sin especificar' },
                 ...OPCIONES_TIER,
@@ -1003,7 +1010,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
             {CAMPOS_PUNTOS.map(({ campo, etiqueta }) => (
               <Campo
                 key={campo}
-                etiqueta={etiqueta}
+                etiqueta={esEdicion ? etiqueta : `${etiqueta} (opcional)`}
                 tipo="number"
                 min="0"
                 max="500"

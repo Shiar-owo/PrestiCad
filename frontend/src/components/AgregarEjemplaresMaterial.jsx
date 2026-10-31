@@ -179,31 +179,31 @@ function AgregarEjemplaresMaterial({ material, onGuardado, onCancelar }) {
                   requerido
                 />
                 <Campo
-                  etiqueta="Número de serie"
+                  etiqueta="Número de serie (opcional)"
                   valor={fila.numero_serie}
                   onCambio={(evento) => actualizarFila(indice, 'numero_serie', evento.target.value)}
                   maxLength={80}
                 />
                 <Campo
-                  etiqueta="Color del ejemplar"
+                  etiqueta="Color del ejemplar (opcional)"
                   valor={fila.color}
                   onCambio={(evento) => actualizarFila(indice, 'color', evento.target.value)}
                   maxLength={30}
                 />
                 <Campo
-                  etiqueta="Estado físico (descripción)"
+                  etiqueta="Estado físico (descripción, opcional)"
                   valor={fila.estado_fisico}
                   onCambio={(evento) => actualizarFila(indice, 'estado_fisico', evento.target.value)}
                   maxLength={100}
                 />
                 <Campo
-                  etiqueta="Estante o ubicación"
+                  etiqueta="Estante o ubicación (opcional)"
                   valor={fila.ubicacion}
                   onCambio={(evento) => actualizarFila(indice, 'ubicacion', evento.target.value)}
                   maxLength={100}
                 />
                 <Campo
-                  etiqueta="Observaciones"
+                  etiqueta="Observaciones (opcional)"
                   tipo="area"
                   valor={fila.observaciones}
                   onCambio={(evento) => actualizarFila(indice, 'observaciones', evento.target.value)}

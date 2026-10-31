@@ -44,9 +44,6 @@ export function obtenerDatosFichaTecnica(material) {
     modelo: material.modelo?.trim() || 'No especificado',
     numeroSerie: material.numero_serie?.trim() || 'No registrado',
     color: material.color?.trim() || 'No especificado',
-    estadoFisico:
-      ETIQUETAS_ESTADO[material.estado] || material.estado || 'No especificado',
-
     // Reglas de negocio y reputación
     tierMinimo: material.tier_minimo_requerido || 'estandar',
     tierMinimoLegible:
@@ -71,7 +68,7 @@ export function obtenerDatosFichaTecnica(material) {
         estado: inst.estado || 'disponible',
         estadoLegible:
           ETIQUETAS_ESTADO[inst.estado] || inst.estado_display || inst.estado || 'Disponible',
-        estadoFisico: inst.estado_fisico || 'Operativo',
+        condicionFisica: inst.condicion_fisica || 'Operativo',
         color: inst.color?.trim() || material.color?.trim() || 'No especificado',
         foto: inst.foto || '',
         observaciones: inst.observaciones || '',

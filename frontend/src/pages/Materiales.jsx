@@ -204,7 +204,7 @@ function Materiales() {
                         </td>
                         <td className="px-3 py-2">{instancia.numero_serie || '—'}</td>
                         <td className="px-3 py-2">{instancia.estado_display || instancia.estado || '—'}</td>
-                        <td className="px-3 py-2">{instancia.estado_fisico || '—'}</td>
+                        <td className="px-3 py-2">{instancia.condicion_fisica || '—'}</td>
                         <td className="px-3 py-2">
                           {(['unico', 'lote'].includes(resumenRegistro.modo)
                             ? materialRegistrado.color

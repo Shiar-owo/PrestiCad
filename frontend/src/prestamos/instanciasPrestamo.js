@@ -20,7 +20,7 @@ export function crearOpcionesInstancia(instancias, cargando = false) {
     ...instancias.map((instancia) => {
       const detalles = [
         instancia.numero_serie && `Serie: ${instancia.numero_serie}`,
-        instancia.estado_fisico && `Estado físico: ${instancia.estado_fisico}`,
+        instancia.condicion_fisica && `Condición física: ${instancia.condicion_fisica}`,
       ].filter(Boolean)
 
       return {

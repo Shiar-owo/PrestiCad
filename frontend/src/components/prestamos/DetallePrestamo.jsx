@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { ArrowLeft, ChevronLeft, ChevronRight, RotateCcw, Trash2, Upload } from 'lucide-react'
 
 import { api, ErrorApi } from '../../api/client'
+import { ETIQUETAS_ESTADO } from '../../constantes/catalogo'
 import BadgeEstado from '../ui/BadgeEstado'
 import Boton from '../ui/Boton'
 import ErrorAlerta from '../ui/ErrorAlerta'
@@ -234,8 +235,8 @@ export default function DetallePrestamo({
                 {material?.numero_serie || 'No registrado'}
               </CampoDetalle>
               <CampoDetalle etiqueta="Color general">{material?.color || 'No registrado'}</CampoDetalle>
-              <CampoDetalle etiqueta="Estado físico general">
-                {material?.estado_fisico || 'No registrado'}
+              <CampoDetalle etiqueta="Estado">
+                {ETIQUETAS_ESTADO[material?.estado] || material?.estado || 'No registrado'}
               </CampoDetalle>
               <CampoDetalle etiqueta="Alto valor">
                 {material?.es_alto_valor ? 'Sí' : 'No'}
@@ -279,7 +280,7 @@ export default function DetallePrestamo({
                   </CampoDetalle>
                   <CampoDetalle etiqueta="Número de serie">{instancia.numero_serie || 'No registrado'}</CampoDetalle>
                   <CampoDetalle etiqueta="Color">{instancia.color || 'No registrado'}</CampoDetalle>
-                  <CampoDetalle etiqueta="Estado físico">{instancia.estado_fisico || 'No registrado'}</CampoDetalle>
+                  <CampoDetalle etiqueta="Condición física">{instancia.condicion_fisica || 'No registrado'}</CampoDetalle>
                   <CampoDetalle etiqueta="Ubicación">{instancia.ubicacion || 'No registrada'}</CampoDetalle>
                   <CampoDetalle etiqueta="Observaciones">{instancia.observaciones || 'Sin observaciones'}</CampoDetalle>
                 </dl>

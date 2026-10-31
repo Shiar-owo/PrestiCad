@@ -10,6 +10,7 @@ import {
 import { OPCIONES_TIER, OPCIONES_TIPO } from '../constantes/catalogo'
 import {
   MAXIMO_EJEMPLARES_REGISTRO,
+  codigoEjemplarPorDefecto,
   construirCuerpoRegistroMaterial,
   crearEjemplares,
   mapearErroresPorFila,
@@ -199,21 +200,30 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
     filas.forEach((fila) => liberarVistaPrevia(fila.vistaPrevia))
   }
 
-  function redimensionarFilas(cantidad) {
-    const siguiente = redimensionarEjemplares(
+  function redimensionarFilas(cantidad, modo = datos.modo) {
+    const filasRedimensionadas = redimensionarEjemplares(
       ejemplares,
       cantidad,
       () => `ejemplar-${++contadorIds.current}`,
     )
+    const siguiente = modo === 'detalle'
+      ? filasRedimensionadas.map((fila, indice) => ({
+        ...fila,
+        codigo_ejemplar: fila.codigo_ejemplar || codigoEjemplarPorDefecto(datos.codigo_inventario, indice),
+        color: fila.color || datos.color,
+        estado_fisico: fila.estado_fisico || 'Operativo',
+      }))
+      : filasRedimensionadas
     const idsConservados = new Set(siguiente.map((fila) => fila.id))
     liberarVistasDeFilas(ejemplares.filter((fila) => !idsConservados.has(fila.id)))
     setEjemplares(siguiente)
     setErroresFilas({})
+    return siguiente
   }
 
   function cambiarModo(modo) {
     const cantidad = modo === 'unico' ? 1 : Math.max(ejemplares.length, 2)
-    redimensionarFilas(cantidad)
+    redimensionarFilas(cantidad, modo)
     setCantidadEjemplares(String(cantidad))
     setErrores((previos) => ({ ...previos, stock: '' }))
     actualizar('modo', modo)
@@ -238,6 +248,20 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
   }
 
   function actualizar(campo, valor) {
+    if (!esEdicion && datos.modo === 'detalle' && ['codigo_inventario', 'color'].includes(campo)) {
+      setEjemplares(ejemplares.map((fila, indice) => {
+        if (campo === 'codigo_inventario') {
+          const codigoAnterior = codigoEjemplarPorDefecto(datos.codigo_inventario, indice)
+          if (!fila.codigo_ejemplar || fila.codigo_ejemplar === codigoAnterior) {
+            return { ...fila, codigo_ejemplar: codigoEjemplarPorDefecto(valor, indice) }
+          }
+        }
+        if (campo === 'color' && (!fila.color || fila.color === datos.color)) {
+          return { ...fila, color: valor }
+        }
+        return fila
+      }))
+    }
     setDatos((previos) => ({ ...previos, [campo]: valor }))
   }
 

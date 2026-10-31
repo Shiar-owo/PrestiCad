@@ -2,6 +2,11 @@ import { validarFoto } from '../validaciones'
 
 export const MAXIMO_EJEMPLARES_REGISTRO = 50
 
+export function codigoEjemplarPorDefecto(codigoInventario, indice) {
+  const base = String(codigoInventario || '').trim().toUpperCase() || 'CODIGO'
+  return `${base}-${String(indice + 1).padStart(2, '0')}`
+}
+
 export function crearEjemplar(idLocal) {
   return {
     id: idLocal,
@@ -57,7 +62,7 @@ export function validarFotosEjemplares(ejemplares) {
   })
 }
 
-function camposDeEjemplar(ejemplar, modo, datos) {
+function camposDeEjemplar(ejemplar, modo, datos, indice) {
   if (modo === 'lote') {
     return {
       estado: datos.estado_inicial_ejemplares || 'disponible',
@@ -76,7 +81,7 @@ function camposDeEjemplar(ejemplar, modo, datos) {
     ubicacion: ejemplar.ubicacion || '',
   }
   if (modo === 'detalle') {
-    campos.codigo_ejemplar = ejemplar.codigo_ejemplar.trim()
+    campos.codigo_ejemplar = (ejemplar.codigo_ejemplar || codigoEjemplarPorDefecto(datos.codigo_inventario, indice)).trim()
     campos.estado_fisico = ejemplar.estado_fisico || 'Operativo'
   }
   return campos
@@ -109,7 +114,7 @@ export function construirCuerpoRegistroMaterial({ modo, datos, ejemplares = [] }
     return construirCuerpoConFotos(cuerpo, [], datos.foto)
   }
 
-  cuerpo.instancias = filas.map((fila) => camposDeEjemplar(fila, modo, datos))
+  cuerpo.instancias = filas.map((fila, indice) => camposDeEjemplar(fila, modo, datos, indice))
   return construirCuerpoConFotos(
     cuerpo,
     filas.map((fila) => fila.foto),

@@ -72,6 +72,7 @@ const DATOS_INICIALES = {
   color: '',
   estado_fisico: 'Operativo',
   ubicacion: '',
+  observaciones: '',
   foto: null,
   vistaPreviaFoto: '',
   tier_minimo_requerido: 'estandar',
@@ -417,7 +418,12 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
         ? construirCuerpo()
         : construirCuerpoRegistroMaterial({
           modo: datos.modo,
-          datos: { ...construirCampos(), foto: datos.foto, ubicacion: datos.ubicacion },
+          datos: {
+            ...construirCampos(),
+            foto: datos.foto,
+            ubicacion: datos.ubicacion,
+            observaciones: datos.observaciones,
+          },
           ejemplares,
         })
       if (esEdicion) {
@@ -680,7 +686,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
         <form onSubmit={manejarEnvio} noValidate className="grid gap-4">
           {errores.formulario && <ErrorAlerta mensaje={errores.formulario} />}
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid items-start gap-4 sm:grid-cols-2">
             <Campo
               etiqueta="Nombre"
               valor={datos.nombre}
@@ -751,9 +757,9 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
                 error={errores.stock}
               />
             )}
-            {!esEdicion && datos.modo === 'unico' && (
+            {!esEdicion && ['unico', 'lote'].includes(datos.modo) && (
               <Campo
-                etiqueta="Estado inicial del ejemplar"
+                etiqueta={datos.modo === 'lote' ? 'Estado inicial de los ejemplares' : 'Estado inicial del ejemplar'}
                 opciones={OPCIONES_ESTADO_INICIAL_EJEMPLAR}
                 valor={datos.estado_inicial_ejemplares}
                 onCambio={(evento) => actualizar('estado_inicial_ejemplares', evento.target.value)}
@@ -787,12 +793,12 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
               onCambio={(evento) => actualizar('modelo', evento.target.value)}
               maxLength={60}
             />
-            {(!esEdicion && datos.modo === 'unico') && (
+            {(!esEdicion && ['unico', 'lote'].includes(datos.modo)) && (
               <Campo
                 etiqueta="Número de serie"
                 valor={datos.numero_serie}
                 onCambio={(evento) => actualizar('numero_serie', evento.target.value)}
-                maxLength={50}
+                maxLength={datos.modo === 'lote' ? 80 : 50}
               />
             )}
             <Campo
@@ -819,6 +825,15 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
                 valor={datos.ubicacion}
                 onCambio={(evento) => actualizar('ubicacion', evento.target.value)}
                 maxLength={100}
+              />
+            )}
+            {!esEdicion && datos.modo === 'lote' && (
+              <Campo
+                etiqueta="Observaciones de los ejemplares"
+                tipo="area"
+                valor={datos.observaciones}
+                onCambio={(evento) => actualizar('observaciones', evento.target.value)}
+                rows={2}
               />
             )}
           </div>
@@ -850,11 +865,9 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
             )}
           </div>
 
-          {!esEdicion && datos.modo !== 'unico' && (
+          {!esEdicion && datos.modo === 'detalle' && (
             <>
-              <EncabezadoSeccion>
-                {datos.modo === 'lote' ? 'Datos de cada ejemplar' : 'Detalle de los ejemplares'}
-              </EncabezadoSeccion>
+              <EncabezadoSeccion>Detalle de los ejemplares</EncabezadoSeccion>
               <div className="grid gap-4">
                 {ejemplares.map((fila, indice) => (
                   <Tarjeta key={fila.id} className="grid gap-4 border border-borde p-4">

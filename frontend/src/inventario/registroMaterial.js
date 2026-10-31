@@ -57,7 +57,17 @@ export function validarFotosEjemplares(ejemplares) {
   })
 }
 
-function camposDeEjemplar(ejemplar, modo) {
+function camposDeEjemplar(ejemplar, modo, datos) {
+  if (modo === 'lote') {
+    return {
+      estado: datos.estado_inicial_ejemplares || 'disponible',
+      numero_serie: ejemplar.numero_serie || datos.numero_serie || '',
+      color: ejemplar.color || datos.color || '',
+      observaciones: ejemplar.observaciones || datos.observaciones || '',
+      ubicacion: ejemplar.ubicacion || datos.ubicacion || '',
+    }
+  }
+
   const campos = {
     estado: ejemplar.estado || 'disponible',
     numero_serie: ejemplar.numero_serie || '',
@@ -82,6 +92,7 @@ export function construirCuerpoRegistroMaterial({ modo, datos, ejemplares = [] }
     delete compartidos.numero_serie
     if (modo === 'detalle') delete compartidos.estado_fisico
   }
+  delete compartidos.observaciones
 
   const cuerpo = {
     ...compartidos,
@@ -98,7 +109,7 @@ export function construirCuerpoRegistroMaterial({ modo, datos, ejemplares = [] }
     return construirCuerpoConFotos(cuerpo, [], datos.foto)
   }
 
-  cuerpo.instancias = filas.map((fila) => camposDeEjemplar(fila, modo))
+  cuerpo.instancias = filas.map((fila) => camposDeEjemplar(fila, modo, datos))
   return construirCuerpoConFotos(
     cuerpo,
     filas.map((fila) => fila.foto),

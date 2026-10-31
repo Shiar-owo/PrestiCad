@@ -112,6 +112,7 @@ class MaterialPrestamoHistorialSerializer(serializers.ModelSerializer):
             "descripcion",
             "codigo_inventario",
             "tipo",
+            "estado",
             "es_alto_valor",
             "marca",
             "modelo",

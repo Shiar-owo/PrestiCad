@@ -204,6 +204,7 @@ def registrar_material(
     estado_inicial_ejemplares="disponible",
     modo=None,
     ubicacion="",
+    observaciones="",
     instancias=None,
 ):
     """Registra un material en el inventario.
@@ -250,6 +251,7 @@ def registrar_material(
             "numero_serie": numero_serie,
             "estado_fisico": estado_fisico or "Operativo",
             "ubicacion": ubicacion,
+            "observaciones": observaciones,
             "estado": estado_inicial_ejemplares,
         }]
     elif modo is None:

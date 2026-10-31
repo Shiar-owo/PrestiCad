@@ -295,6 +295,7 @@ class MaterialRegistroSerializer(RechazarCamposNoPermitidosMixin, serializers.Mo
         error_messages={"invalid_choice": "Modo de registro inválido."},
     )
     ubicacion = serializers.CharField(required=False, allow_blank=True, default="")
+    observaciones = serializers.CharField(required=False, allow_blank=True, default="")
     instancias = InstanciasJSONField(required=False)
     tier_minimo_requerido = serializers.ChoiceField(
         choices=TIERS,
@@ -323,6 +324,7 @@ class MaterialRegistroSerializer(RechazarCamposNoPermitidosMixin, serializers.Mo
             "estado_inicial_ejemplares",
             "modo",
             "ubicacion",
+            "observaciones",
             "instancias",
             "es_alto_valor",
             *CAMPOS_FICHA_Y_REPUTACION,

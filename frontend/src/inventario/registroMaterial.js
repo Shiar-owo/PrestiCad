@@ -109,6 +109,7 @@ export function construirCuerpoRegistroMaterial({ modo, datos, ejemplares = [] }
     const fila = filas[0] || {}
     cuerpo.numero_serie = datos.numero_serie || ''
     cuerpo.estado_fisico = datos.estado_fisico || fila.estado_fisico || 'Operativo'
+    cuerpo.observaciones = datos.observaciones || ''
     cuerpo.ubicacion = datos.ubicacion || fila.ubicacion || ''
     cuerpo.estado_inicial_ejemplares = fila.estado || datos.estado_inicial_ejemplares || 'disponible'
     return construirCuerpoConFotos(cuerpo, [], datos.foto)

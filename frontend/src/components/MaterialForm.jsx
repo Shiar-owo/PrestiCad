@@ -46,7 +46,7 @@ const ETIQUETAS_CAMPOS_ERROR = {
   tipo: 'Tipo',
   stock: 'Cantidad de ejemplares',
   estado: 'Estado',
-  estado_inicial_ejemplares: 'Estado inicial del ejemplar',
+  estado_inicial_ejemplares: 'Estado',
   foto: 'Foto',
   formulario: 'Registro',
 }
@@ -781,7 +781,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
             )}
             {(esEdicion || (!esEdicion && datos.modo === 'detalle')) && (
               <Campo
-                etiqueta={!esEdicion && datos.modo === 'detalle' ? 'Estado del material' : 'Estado'}
+                etiqueta="Estado"
                 opciones={opcionesEstadoGeneral}
                 valor={datos.estado}
                 onCambio={(evento) => esEdicion
@@ -814,7 +814,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
             )}
             {!esEdicion && ['unico', 'lote'].includes(datos.modo) && (
               <Campo
-                etiqueta={datos.modo === 'lote' ? 'Estado inicial de los ejemplares' : 'Estado inicial del ejemplar'}
+                etiqueta="Estado"
                 opciones={OPCIONES_ESTADO_INICIAL_EJEMPLAR}
                 valor={datos.estado_inicial_ejemplares}
                 onCambio={(evento) => actualizar('estado_inicial_ejemplares', evento.target.value)}
@@ -895,6 +895,15 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
                 rows={2}
               />
             )}
+            {!esEdicion && datos.modo === 'unico' && (
+              <Campo
+                etiqueta="Observaciones del ejemplar (opcional)"
+                tipo="area"
+                valor={datos.observaciones}
+                onCambio={(evento) => actualizar('observaciones', evento.target.value)}
+                rows={2}
+              />
+            )}
           </div>
 
           <div className="grid gap-1">
@@ -965,7 +974,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
                         maxLength={30}
                       />
                       <Campo
-                        etiqueta="Estado inicial del ejemplar"
+                        etiqueta="Estado del ejemplar"
                         opciones={OPCIONES_ESTADO_INICIAL_EJEMPLAR}
                         valor={fila.estado}
                         deshabilitado={datos.estado === 'en_mantenimiento'}

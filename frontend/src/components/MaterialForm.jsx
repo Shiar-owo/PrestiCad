@@ -70,7 +70,7 @@ const DATOS_INICIALES = {
   modelo: '',
   numero_serie: '',
   color: '',
-  estado_fisico: '',
+  estado_fisico: 'Operativo',
   ubicacion: '',
   foto: null,
   vistaPreviaFoto: '',

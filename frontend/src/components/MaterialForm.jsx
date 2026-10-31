@@ -9,6 +9,7 @@ import {
 } from '../validaciones'
 import { OPCIONES_TIER, OPCIONES_TIPO } from '../constantes/catalogo'
 import {
+  MAXIMO_EJEMPLARES_REGISTRO,
   construirCuerpoRegistroMaterial,
   crearEjemplares,
   mapearErroresPorFila,
@@ -166,6 +167,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
   const [ejemplares, setEjemplares] = useState(() =>
     material ? [] : crearEjemplares(1, () => `ejemplar-${++contadorIds.current}`),
   )
+  const [cantidadEjemplares, setCantidadEjemplares] = useState('1')
   const [errores, setErrores] = useState({})
   const [erroresFilas, setErroresFilas] = useState({})
   const [enviando, setEnviando] = useState(false)
@@ -211,7 +213,27 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
   function cambiarModo(modo) {
     const cantidad = modo === 'unico' ? 1 : Math.max(ejemplares.length, 2)
     redimensionarFilas(cantidad)
+    setCantidadEjemplares(String(cantidad))
+    setErrores((previos) => ({ ...previos, stock: '' }))
     actualizar('modo', modo)
+  }
+
+  function cambiarCantidadEjemplares(valor) {
+    setCantidadEjemplares(valor)
+    const cantidad = Number(valor)
+    const cantidadValida = valor !== ''
+      && Number.isInteger(cantidad)
+      && cantidad >= 2
+      && cantidad <= MAXIMO_EJEMPLARES_REGISTRO
+
+    setErrores((previos) => ({
+      ...previos,
+      stock: cantidadValida
+        ? ''
+        : `Ingresa un número entero entre 2 y ${MAXIMO_EJEMPLARES_REGISTRO}.`,
+    }))
+
+    if (cantidadValida) redimensionarFilas(cantidad)
   }
 
   function actualizar(campo, valor) {
@@ -354,8 +376,13 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
     const erroresFormulario = validar(datos)
     let erroresDeFila = {}
     if (!esEdicion && datos.modo !== 'unico') {
-      if (ejemplares.length < 2 || ejemplares.length > 50) {
-        erroresFormulario.stock = 'Registra entre 2 y 50 ejemplares.'
+      const cantidad = Number(cantidadEjemplares)
+      if (cantidadEjemplares === ''
+        || !Number.isInteger(cantidad)
+        || cantidad < 2
+        || cantidad > MAXIMO_EJEMPLARES_REGISTRO
+        || cantidad !== ejemplares.length) {
+        erroresFormulario.stock = `Ingresa un número entero entre 2 y ${MAXIMO_EJEMPLARES_REGISTRO}.`
       }
       const erroresCodigo = datos.modo === 'detalle' ? validarCodigosDuplicados(ejemplares) : []
       if (datos.modo === 'detalle') {
@@ -716,15 +743,11 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
                 etiqueta="Cantidad de ejemplares"
                 tipo="number"
                 min="2"
-                max="50"
+                max={MAXIMO_EJEMPLARES_REGISTRO}
                 step="1"
-                valor={ejemplares.length}
-                onCambio={(evento) => {
-                  const cantidad = Number(evento.target.value)
-                  if (Number.isInteger(cantidad) && cantidad >= 2 && cantidad <= 50) {
-                    redimensionarFilas(cantidad)
-                  }
-                }}
+                valor={cantidadEjemplares}
+                ayuda={`Rango permitido: 2–${MAXIMO_EJEMPLARES_REGISTRO} ejemplares.`}
+                onCambio={(evento) => cambiarCantidadEjemplares(evento.target.value)}
                 error={errores.stock}
               />
             )}

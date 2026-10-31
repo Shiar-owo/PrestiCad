@@ -36,7 +36,6 @@ CAMPOS_EDITABLES = frozenset(
         "modelo",
         "numero_serie",
         "color",
-        "estado_fisico",
         "foto",
         "tier_minimo_requerido",
         "bonificacion_tiempo",
@@ -57,7 +56,6 @@ CAMPOS_TEXTO = (
     "modelo",
     "numero_serie",
     "color",
-    "estado_fisico",
 )
 
 CODIGO_DUPLICADO_MENSAJE = "El código de inventario ya está registrado."
@@ -192,7 +190,6 @@ def registrar_material(
     modelo="",
     numero_serie="",
     color="",
-    estado_fisico="",
     condicion_fisica="",
     foto=None,
     tier_minimo_requerido=None,
@@ -250,8 +247,8 @@ def registrar_material(
         filas = [{
             "codigo_ejemplar": f"{codigo}-01",
             "numero_serie": numero_serie,
-            "estado_fisico": condicion_fisica or estado_fisico or "Operativo",
-            "condicion_fisica": condicion_fisica or estado_fisico or "Operativo",
+            "estado_fisico": condicion_fisica or "Operativo",
+            "condicion_fisica": condicion_fisica or "Operativo",
             "ubicacion": ubicacion,
             "observaciones": observaciones,
             "estado": estado_inicial_ejemplares,
@@ -261,8 +258,8 @@ def registrar_material(
             {
                 "codigo_ejemplar": f"{codigo}-{i:02d}",
                 "numero_serie": f"{numero_serie}-{i:02d}" if numero_serie and stock > 1 else numero_serie,
-                "estado_fisico": condicion_fisica or estado_fisico or "Operativo",
-                "condicion_fisica": condicion_fisica or estado_fisico or "Operativo",
+                "estado_fisico": condicion_fisica or "Operativo",
+                "condicion_fisica": condicion_fisica or "Operativo",
                 "ubicacion": "",
                 "estado": estado_inicial_ejemplares,
             }
@@ -288,7 +285,7 @@ def registrar_material(
             raise InventarioError("instancias", "La fila debe ser un objeto válido.", indice=indice)
         if modo in ("lote", None):
             codigo_fila = fila["codigo_ejemplar"] if modo is None else f"{codigo}-{indice + 1:02d}"
-            estado_fisico_fila = condicion_fisica or estado_fisico or "Operativo"
+            estado_fisico_fila = condicion_fisica or "Operativo"
             condicion_fisica_fila = estado_fisico_fila
             ubicacion_fila = fila.get("ubicacion") or ubicacion
         else:
@@ -367,7 +364,6 @@ def registrar_material(
         "modelo": modelo.strip(),
         "numero_serie": numero_serie.strip() if modo in ("unico", None) else "",
         "color": color.strip(),
-        "estado_fisico": estado_fisico.strip() if modo in ("unico", "lote", None) else "",
         "foto": foto,
     }
 
@@ -495,7 +491,8 @@ def actualizar_material(material_id, **campos):
                         codigo_ejemplar=cod_ej,
                         numero_serie="",
                         estado="disponible",
-                        estado_fisico=material.estado_fisico or "Operativo",
+                        estado_fisico="Operativo",
+                        condicion_fisica="Operativo",
                         observaciones="",
                         ubicacion="",
                     )

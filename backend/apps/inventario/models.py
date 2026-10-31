@@ -87,12 +87,6 @@ class Material(models.Model):
     modelo = models.CharField(max_length=80, blank=True, default="")
     numero_serie = models.CharField(max_length=50, blank=True, default="")
     color = models.CharField(max_length=30, blank=True, default="")
-    estado_fisico = models.CharField(
-        max_length=50,
-        blank=True,
-        default="",
-        verbose_name="Estado físico",
-    )
     foto = models.ImageField(
         upload_to=ruta_foto,
         blank=True,

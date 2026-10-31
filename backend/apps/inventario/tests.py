@@ -504,6 +504,7 @@ class MaterialSerializerContratoTestCase(SimpleTestCase):
         self.assertEqual(data["unidades_disponibles"], 4)
         for campo in ("id", "nombre", "codigo_inventario", "estado", "created_at"):
             self.assertIn(campo, data)
+        self.assertNotIn("estado_fisico", data)
 
     def test_alta_rechaza_estado_inicial_no_permitido(self):
         serializer = MaterialRegistroSerializer(
@@ -604,6 +605,19 @@ class MaterialSerializerContratoTestCase(SimpleTestCase):
         self.assertTrue(serializer.is_valid(), serializer.errors)
         self.assertEqual(serializer.validated_data["condicion_fisica"], "Bueno")
 
+    def test_alta_rechaza_estado_fisico_como_campo_de_material(self):
+        serializer = MaterialRegistroSerializer(
+            data={
+                "nombre": "Cable",
+                "codigo_inventario": "OBJ-1",
+                "tipo": "objeto",
+                "estado_fisico": "Operativo",
+            }
+        )
+
+        self.assertFalse(serializer.is_valid())
+        self.assertEqual(serializer.errors["estado_fisico"], ["Este campo no está permitido."])
+
     def test_edicion_acepta_estado(self):
         serializer = MaterialActualizacionSerializer(data={"estado": "en_mantenimiento"})
 
@@ -626,6 +640,12 @@ class MaterialSerializerContratoTestCase(SimpleTestCase):
 
         self.assertFalse(serializer.is_valid())
         self.assertEqual(serializer.errors["created_at"], ["Este campo no está permitido."])
+
+    def test_edicion_rechaza_estado_fisico_de_material(self):
+        serializer = MaterialActualizacionSerializer(data={"estado_fisico": "Operativo"})
+
+        self.assertFalse(serializer.is_valid())
+        self.assertEqual(serializer.errors["estado_fisico"], ["Este campo no está permitido."])
 
     def test_edicion_admite_limpiar_costos(self):
         serializer = MaterialActualizacionSerializer(
@@ -1449,6 +1469,7 @@ class RegistroMaterialMultipleAPITestCase(EscenariosDeMaterialApi):
         self.assertEqual(instancia.condicion_fisica, "Bueno")
         self.assertEqual(instancia.ubicacion, "Estante A")
         self.assertNotIn("condicion_fisica", respuesta.json())
+        self.assertNotIn("estado_fisico", respuesta.json())
 
     def test_modo_lote_genera_codigos_y_resuelve_estantes(self):
         respuesta = self.client.post(

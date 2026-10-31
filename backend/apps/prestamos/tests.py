@@ -1038,6 +1038,7 @@ class HistorialPrestamosAPITestCase(APITestCase):
         self.assertEqual(datos["material"]["modelo"], "Modelo de prueba")
         self.assertEqual(datos["material"]["descripcion"], "Ficha técnica del préstamo")
         self.assertEqual(datos["material"]["estado"], prestamo.material.estado)
+        self.assertNotIn("estado_fisico", datos["material"])
         self.assertEqual(datos["instancia"]["codigo_ejemplar"], instancia.codigo_ejemplar)
         self.assertEqual(datos["instancia"]["numero_serie"], "SERIE-DETALLE")
         self.assertEqual(datos["instancia"]["estado_fisico"], "Bueno")

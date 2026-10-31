@@ -118,7 +118,6 @@ class MaterialPrestamoHistorialSerializer(serializers.ModelSerializer):
             "modelo",
             "numero_serie",
             "color",
-            "estado_fisico",
             "foto",
             "tier_minimo_requerido",
             "bonificacion_tiempo",

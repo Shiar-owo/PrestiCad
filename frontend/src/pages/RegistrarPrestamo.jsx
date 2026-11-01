@@ -65,7 +65,7 @@ const OPCIONES_MATERIAL = (materiales) => [
   { valor: '', etiqueta: 'Selecciona un material' },
   ...materiales.map((material) => ({
     valor: String(material.id),
-    etiqueta: `${material.nombre} — ${material.codigo_inventario} (${material.unidades_disponibles} disponibles)`,
+    etiqueta: `${material.nombre} — Código de Material: ${material.codigo_inventario} (${material.unidades_disponibles} disponibles)`,
   })),
 ]
 
@@ -529,12 +529,12 @@ function RegistrarPrestamo() {
                     Ficha del ejemplar seleccionado
                   </h3>
                   <p className="mt-1 text-sm text-texto-suave">
-                    {materialSeleccionado?.nombre || 'Material'} · Código de inventario:{' '}
+                    {materialSeleccionado?.nombre || 'Material'} · Código de Material:{' '}
                     {materialSeleccionado?.codigo_inventario || 'No registrado'}
                   </p>
                   <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
                     <div>
-                      <dt className="font-semibold text-texto">Código de ejemplar</dt>
+                      <dt className="font-semibold text-texto">Código de Ejemplar</dt>
                       <dd className="break-words text-texto-suave">{instanciaSeleccionada.codigo_ejemplar}</dd>
                     </div>
                     <div>

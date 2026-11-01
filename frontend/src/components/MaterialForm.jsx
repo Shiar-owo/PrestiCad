@@ -7,7 +7,7 @@ import {
   validarNombre,
   validarPuntosReputacion,
 } from '../validaciones'
-import { OPCIONES_TIER, OPCIONES_TIPO } from '../constantes/catalogo'
+import { ETIQUETAS_ESTADO, OPCIONES_TIER, OPCIONES_TIPO } from '../constantes/catalogo'
 import {
   MAXIMO_EJEMPLARES_REGISTRO,
   codigoEjemplarPorDefecto,
@@ -87,7 +87,16 @@ const DATOS_INICIALES = {
   estado: 'disponible',
 }
 
-function obtenerEstadoGeneralInicial(material) {
+export function obtenerInstanciasElegiblesEstadoGeneral(material) {
+  if (!Array.isArray(material?.instancias)) return []
+  return material.instancias.filter((inst) => ['disponible', 'en_mantenimiento'].includes(inst.estado))
+}
+
+export function puedeCambiarEstadoGeneral(material) {
+  return obtenerInstanciasElegiblesEstadoGeneral(material).length > 0
+}
+
+export function obtenerEstadoGeneralInicial(material) {
   if (!material) return 'disponible'
   const instancias = Array.isArray(material.instancias) ? material.instancias : []
   const estadosElegibles = new Set(
@@ -97,6 +106,9 @@ function obtenerEstadoGeneralInicial(material) {
   )
   if (estadosElegibles.size > 1) {
     return ''
+  }
+  if (estadosElegibles.size === 0) {
+    return material.estado || 'disponible'
   }
   if (estadosElegibles.has('en_mantenimiento') || material.estado === 'en_mantenimiento') {
     return 'en_mantenimiento'
@@ -161,6 +173,12 @@ function EncabezadoSeccion({ children }) {
 
 function MaterialForm({ material, onGuardado, onCancelar }) {
   const esEdicion = Boolean(material)
+  const instanciasMaterial = Array.isArray(material?.instancias) ? material.instancias : []
+  const instanciasBloqueadas = instanciasMaterial.filter((inst) =>
+    ['prestado', 'reservado'].includes(inst.estado),
+  )
+  const instanciasModificables = obtenerInstanciasElegiblesEstadoGeneral(material)
+  const estadoGeneralBloqueado = esEdicion && !puedeCambiarEstadoGeneral(material)
   const [alcanceEdicion, setAlcanceEdicion] = useState(null)
   const contadorIds = useRef(0)
   const urlsTemporales = useRef(new Set())
@@ -358,7 +376,12 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
       }
     }
 
-    if (esEdicion && estadoGeneralModificado && ['disponible', 'en_mantenimiento'].includes(datos.estado)) {
+    if (
+      esEdicion &&
+      !estadoGeneralBloqueado &&
+      estadoGeneralModificado &&
+      ['disponible', 'en_mantenimiento'].includes(datos.estado)
+    ) {
       cuerpo.estado = datos.estado
     }
 
@@ -366,6 +389,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
   }
 
   function solicitarCambioEstadoGeneral(nuevoEstado) {
+    if (estadoGeneralBloqueado) return
     if (!['disponible', 'en_mantenimiento'].includes(nuevoEstado)) return
     setEstadoPendienteConfirmacion(nuevoEstado)
   }
@@ -594,19 +618,14 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
     )
   }
 
-  const instanciasMaterial = Array.isArray(material?.instancias) ? material.instancias : []
-  const instanciasBloqueadas = instanciasMaterial.filter((inst) =>
-    ['prestado', 'reservado'].includes(inst.estado),
-  )
-  const instanciasModificables = instanciasMaterial.filter((inst) =>
-    ['disponible', 'en_mantenimiento'].includes(inst.estado),
-  )
-  const opcionesEstadoGeneral = datos.estado === ''
-    ? [
-      { valor: '', etiqueta: 'Mixto (disponibles y en mantenimiento)' },
-      ...OPCIONES_ESTADO_INICIAL_EJEMPLAR,
-    ]
-    : OPCIONES_ESTADO_INICIAL_EJEMPLAR
+  const opcionesEstadoGeneral = estadoGeneralBloqueado
+    ? [{ valor: datos.estado, etiqueta: ETIQUETAS_ESTADO[datos.estado] || datos.estado }]
+    : datos.estado === ''
+      ? [
+        { valor: '', etiqueta: 'Mixto (disponibles y en mantenimiento)' },
+        ...OPCIONES_ESTADO_INICIAL_EJEMPLAR,
+      ]
+      : OPCIONES_ESTADO_INICIAL_EJEMPLAR
 
   return (
     <section>
@@ -784,14 +803,17 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
                 etiqueta="Estado"
                 opciones={opcionesEstadoGeneral}
                 valor={datos.estado}
+                deshabilitado={estadoGeneralBloqueado}
                 onCambio={(evento) => esEdicion
                   ? solicitarCambioEstadoGeneral(evento.target.value)
                   : actualizar('estado', evento.target.value)}
                 error={errores.estado}
                 ayuda={esEdicion
-                  ? estadoGeneralModificado
+                  ? estadoGeneralBloqueado
+                    ? `No se puede cambiar el estado general: no hay ejemplares Disponibles o En mantenimiento. El estado actual es ${ETIQUETAS_ESTADO[datos.estado] || datos.estado}.`
+                    : estadoGeneralModificado
                     ? `Cambio confirmado: al guardar, los ejemplares elegibles pasarán a "${datos.estado === 'en_mantenimiento' ? 'En mantenimiento' : 'Disponible'}".`
-                    : 'Cambiar el estado general afectará a los ejemplares disponibles o en mantenimiento.'
+                    : 'Cambiar el estado general afectará solo a los ejemplares Disponibles o En mantenimiento; los Prestados o Reservados conservarán su estado.'
                   : datos.estado === 'en_mantenimiento'
                     ? 'Todas las instancias están En mantenimiento y sus estados no se pueden modificar.'
                     : 'Todas las instancias inician Disponibles; puedes poner algunas En mantenimiento. Si todas quedan así, el material también cambiará a En mantenimiento.'}

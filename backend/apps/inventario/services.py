@@ -256,7 +256,7 @@ def registrar_material(
         filas = [
             {
                 "codigo_ejemplar": f"{codigo}-{i:02d}",
-                "numero_serie": f"{numero_serie}-{i:02d}" if numero_serie and stock > 1 else numero_serie,
+                "numero_serie": numero_serie if stock == 1 else "",
                 "condicion_fisica": condicion_fisica or "Operativo",
                 "ubicacion": "",
                 "estado": estado_inicial_ejemplares,
@@ -327,7 +327,7 @@ def registrar_material(
             raise InventarioError("codigo_ejemplar", "El código admite máximo 50 caracteres.", indice=indice)
         filas_preparadas.append({
             "codigo_ejemplar": codigo_fila,
-            "numero_serie": fila.get("numero_serie", ""),
+            "numero_serie": "" if modo == "lote" else fila.get("numero_serie", ""),
             "condicion_fisica": condicion_fisica_fila,
             "estado": estado_fila,
             "ubicacion": ubicacion_fila,

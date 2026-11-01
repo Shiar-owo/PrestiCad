@@ -772,7 +772,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
               requerido
             />
             <Campo
-              etiqueta={esEdicion ? 'Descripción' : 'Descripción (opcional)'}
+              etiqueta="Descripción (opcional)"
               tipo="area"
               valor={datos.descripcion}
               onCambio={(evento) => actualizar('descripcion', evento.target.value)}
@@ -852,20 +852,20 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
               onChange={(evento) => actualizar('es_alto_valor', evento.target.checked)}
               className="size-4 rounded border-borde accent-marca-600"
             />
-            {esEdicion ? '¿Es de alto valor?' : '¿Es de alto valor? (opcional)'}
+            ¿Es de alto valor? (opcional)
           </label>
 
           <EncabezadoSeccion>Ficha técnica</EncabezadoSeccion>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Campo
-              etiqueta={esEdicion ? 'Marca' : 'Marca (opcional)'}
+              etiqueta="Marca (opcional)"
               valor={datos.marca}
               onCambio={(evento) => actualizar('marca', evento.target.value)}
               maxLength={60}
             />
             <Campo
-              etiqueta={esEdicion ? 'Modelo' : 'Modelo (opcional)'}
+              etiqueta="Modelo (opcional)"
               valor={datos.modelo}
               onCambio={(evento) => actualizar('modelo', evento.target.value)}
               maxLength={60}
@@ -885,7 +885,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
                   ? datos.modo === 'lote'
                     ? 'Color de los ejemplares (opcional)'
                     : 'Color predeterminado de ejemplares (opcional)'
-                  : 'Color del material'}
+                  : 'Color del material (opcional)'}
               valor={datos.color}
               onCambio={(evento) => actualizar('color', evento.target.value)}
               maxLength={30}
@@ -930,13 +930,13 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
 
           <div className="grid gap-1">
             <span className="text-sm font-semibold text-texto">
-              {esEdicion ? 'Foto del material' : 'Foto del material (opcional)'}
+              Foto del material (opcional)
             </span>
             {errores.foto ? (
               <p className="text-xs text-error">{errores.foto}</p>
             ) : (
               <p className="text-xs text-texto-suave">
-                JPG, PNG o WEBP, hasta 4 MB.{esEdicion ? ' Opcional.' : ''}
+                JPG, PNG o WEBP, hasta 4 MB.
               </p>
             )}
             <input
@@ -1063,7 +1063,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Campo
-              etiqueta={esEdicion ? 'Tier mínimo requerido' : 'Tier mínimo (opcional)'}
+              etiqueta={esEdicion ? 'Tier mínimo requerido (opcional)' : 'Tier mínimo (opcional)'}
               opciones={[
                 { valor: '', etiqueta: 'Sin especificar' },
                 ...OPCIONES_TIER,
@@ -1074,7 +1074,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
             {CAMPOS_PUNTOS.map(({ campo, etiqueta }) => (
               <Campo
                 key={campo}
-                etiqueta={esEdicion ? etiqueta : `${etiqueta} (opcional)`}
+                etiqueta={`${etiqueta} (opcional)`}
                 tipo="number"
                 min="0"
                 max="500"

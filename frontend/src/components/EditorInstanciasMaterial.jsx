@@ -225,7 +225,7 @@ function EditorInstanciasMaterial({ material, alcance, onCambiarAlcance, onGuard
                   Aplicar {etiqueta.toLowerCase()}
                 </label>
                 <Campo
-                  etiqueta={etiqueta}
+                  etiqueta={`${etiqueta} (opcional)`}
                   tipo={campo === 'observaciones' ? 'area' : 'text'}
                   valor={valoresMasivos[campo]}
                   deshabilitado={!camposMasivos[campo]}
@@ -278,38 +278,38 @@ function EditorInstanciasMaterial({ material, alcance, onCambiarAlcance, onGuard
               onCambio={(evento) => setDatos((actuales) => ({ ...actuales, estado: evento.target.value }))}
             />
             <Campo
-              etiqueta="Número de serie"
+              etiqueta="Número de serie (opcional)"
               valor={datos.numero_serie}
               maxLength={80}
               onCambio={(evento) => setDatos((actuales) => ({ ...actuales, numero_serie: evento.target.value }))}
             />
             <Campo
-              etiqueta="Condición física"
+              etiqueta="Condición física (opcional)"
               valor={datos.condicion_fisica}
               maxLength={100}
               onCambio={(evento) => setDatos((actuales) => ({ ...actuales, condicion_fisica: evento.target.value }))}
             />
             <Campo
-              etiqueta="Color del ejemplar"
+              etiqueta="Color del ejemplar (opcional)"
               valor={datos.color}
               maxLength={30}
               onCambio={(evento) => setDatos((actuales) => ({ ...actuales, color: evento.target.value }))}
             />
             <Campo
-              etiqueta="Estante o ubicación"
+              etiqueta="Estante o ubicación (opcional)"
               valor={datos.ubicacion}
               maxLength={100}
               onCambio={(evento) => setDatos((actuales) => ({ ...actuales, ubicacion: evento.target.value }))}
             />
             <Campo
-              etiqueta="Observaciones"
+              etiqueta="Observaciones (opcional)"
               tipo="area"
               valor={datos.observaciones}
               className="sm:col-span-2"
               onCambio={(evento) => setDatos((actuales) => ({ ...actuales, observaciones: evento.target.value }))}
             />
             <div className="grid gap-2 sm:col-span-2">
-              <span className="text-sm font-semibold text-texto">Foto de este ejemplar</span>
+              <span className="text-sm font-semibold text-texto">Foto de este ejemplar (opcional)</span>
               {error && <p className="text-xs text-error">{error}</p>}
               <input type="file" accept="image/jpeg,image/png,image/webp" onChange={manejarFoto} className="block w-full text-sm text-texto file:mr-3 file:rounded-lg file:border-0 file:bg-superficie-alta file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-texto" />
               {(vistaPrevia || (!quitarFoto && instancia?.foto)) && (

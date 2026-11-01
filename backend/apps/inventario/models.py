@@ -63,10 +63,10 @@ class Material(models.Model):
 
     nombre = models.CharField(max_length=150)
     descripcion = models.TextField(blank=True, default="")
-    codigo_inventario = models.CharField(
+    codigo_material = models.CharField(
         max_length=30,
         unique=True,
-        verbose_name="Código de inventario",
+        verbose_name="Código de material",
         help_text="Identificador único del material en el inventario.",
     )
 
@@ -157,7 +157,7 @@ class Material(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.nombre} ({self.codigo_inventario})"
+        return f"{self.nombre} ({self.codigo_material})"
 
     def esta_disponible(self):
         """RN01: solo un material en estado 'Disponible' puede prestarse."""

@@ -58,7 +58,7 @@ CAMPOS_TEXTO = (
     "color",
 )
 
-CODIGO_DUPLICADO_MENSAJE = "El código de inventario ya está registrado."
+CODIGO_DUPLICADO_MENSAJE = "El Código de Material ya está registrado."
 
 
 class InventarioError(Exception):
@@ -81,7 +81,7 @@ class MaterialNoEncontradoError(Exception):
 
 
 def normalizar_codigo(codigo):
-    """Normaliza el código de inventario para que la unicidad no dependa de mayúsculas."""
+    """Normaliza el Código de Material para que la unicidad no dependa de mayúsculas."""
     return codigo.strip().upper()
 
 
@@ -208,7 +208,7 @@ def registrar_material(
     """Registra un material en el inventario.
 
     Reglas de negocio (HU04):
-    - El código de inventario es único en el sistema (criterio 4) y se
+    - El Código de Material es único en el sistema (criterio 4) y se
       normaliza a mayúsculas para que "inv-01" y "INV-01" sean el mismo
       material.
     - Cada ejemplar inicia disponible o en mantenimiento.

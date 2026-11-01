@@ -153,7 +153,7 @@ class RegistrarMaterialServiceTestCase(TestCase):
         self.assertEqual(contexto.exception.campo, "codigo_inventario")
         self.assertEqual(
             contexto.exception.mensaje,
-            "El código de inventario ya está registrado.",
+        "El Código de Material ya está registrado.",
         )
         self.assertEqual(Material.objects.count(), 1)
 

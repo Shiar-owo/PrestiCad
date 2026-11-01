@@ -26,9 +26,9 @@ MENSAJES_NOMBRE = {
 }
 
 MENSAJES_CODIGO = {
-    "required": "El código de inventario es obligatorio.",
-    "blank": "El código de inventario es obligatorio.",
-    "max_length": "El código de inventario admite máximo 30 caracteres.",
+    "required": "El Código de Material es obligatorio.",
+    "blank": "El Código de Material es obligatorio.",
+    "max_length": "El Código de Material admite máximo 30 caracteres.",
 }
 
 MENSAJES_STOCK = {

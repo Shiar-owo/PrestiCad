@@ -587,6 +587,7 @@ function RegistrarPrestamo() {
               valor={formulario.dias}
               onCambio={(evento) => cambiarDuracion(evento.target.value)}
               error={errores.dias}
+              ayuda={`Duración permitida: de 1 a ${DURACION_MAXIMA_PRESTAMO_DIAS} días.`}
               requerido
             />
             {fechaLimiteEstimada && (

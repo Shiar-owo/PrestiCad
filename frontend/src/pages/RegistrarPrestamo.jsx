@@ -554,18 +554,12 @@ function RegistrarPrestamo() {
                       <dd className="text-texto-suave">{instanciaSeleccionada.color || 'No registrado'}</dd>
                     </div>
                     <div>
-                      <dt className="font-semibold text-texto">Observaciones</dt>
+                      <dt className="font-semibold text-texto">Observaciones del ejemplar</dt>
                       <dd className="text-texto-suave">{instanciaSeleccionada.observaciones || 'No registrado'}</dd>
                     </div>
                     <div>
                       <dt className="font-semibold text-texto">Ubicación</dt>
                       <dd className="text-texto-suave">{instanciaSeleccionada.ubicacion || 'No registrada'}</dd>
-                    </div>
-                    <div className="sm:col-span-2">
-                      <dt className="font-semibold text-texto">Observaciones</dt>
-                      <dd className="break-words text-texto-suave">
-                        {instanciaSeleccionada.observaciones || 'Sin observaciones'}
-                      </dd>
                     </div>
                   </dl>
                 </div>
@@ -614,7 +608,7 @@ function RegistrarPrestamo() {
                     requerido
                   />
                   <Campo
-                    etiqueta="Observación (opcional)"
+                    etiqueta="Observación del checklist (opcional)"
                     valor={item.observacion}
                     onCambio={(evento) => actualizarChecklist(indice, 'observacion', evento.target.value)}
                     maxLength={500}

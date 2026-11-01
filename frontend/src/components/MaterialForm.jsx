@@ -916,16 +916,6 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
               onCambio={(evento) => actualizar('color', evento.target.value)}
               maxLength={30}
             />
-            {(!esEdicion && ['unico', 'lote'].includes(datos.modo)) && (
-              <Campo
-                etiqueta={datos.modo === 'unico'
-                  ? 'Observaciones (opcional)'
-                  : 'Observaciones de los ejemplares (opcional)'}
-                valor={datos.observaciones}
-                onCambio={(evento) => actualizar('observaciones', evento.target.value)}
-                maxLength={100}
-              />
-            )}
             {!esEdicion && ['unico', 'lote'].includes(datos.modo) && (
               <Campo
                 etiqueta={datos.modo === 'lote' ? 'Estante por defecto (opcional)' : 'Estante (opcional)'}
@@ -1029,14 +1019,6 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
                         onCambio={(evento) => actualizarFila(indice, 'estado', evento.target.value)}
                         requerido
                       />
-                      {datos.modo === 'detalle' && (
-                        <Campo
-                          etiqueta="Observaciones (opcional)"
-                          valor={fila.observaciones}
-                          onCambio={(evento) => actualizarFila(indice, 'observaciones', evento.target.value)}
-                          maxLength={100}
-                        />
-                      )}
                       <Campo
                         etiqueta="Estante (opcional)"
                         valor={fila.ubicacion}

@@ -300,13 +300,6 @@ function EditorInstanciasMaterial({ material, alcance, onCambiarAlcance, onGuard
               maxLength={100}
               onCambio={(evento) => setDatos((actuales) => ({ ...actuales, ubicacion: evento.target.value }))}
             />
-            <Campo
-              etiqueta="Observaciones (opcional)"
-              tipo="area"
-              valor={datos.observaciones}
-              className="sm:col-span-2"
-              onCambio={(evento) => setDatos((actuales) => ({ ...actuales, observaciones: evento.target.value }))}
-            />
             <div className="grid gap-2 sm:col-span-2">
               <span className="text-sm font-semibold text-texto">Foto de este ejemplar (opcional)</span>
               {error && <p className="text-xs text-error">{error}</p>}

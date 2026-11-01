@@ -107,7 +107,7 @@ class RegistrarMaterialServiceTestCase(TestCase):
     """Tests del servicio de alta de materiales (T04.03)."""
 
     def _datos_validos(self, **extra):
-        datos = dict(nombre="Proyector Epson", codigo_inventario="INV-001", tipo="equipo")
+        datos = dict(nombre="Proyector Epson", codigo_material="INV-001", tipo="equipo")
         datos.update(extra)
         return datos
 
@@ -116,7 +116,7 @@ class RegistrarMaterialServiceTestCase(TestCase):
 
         self.assertIsNotNone(material.pk)
         self.assertEqual(material.nombre, "Proyector Epson")
-        self.assertEqual(material.codigo_inventario, "INV-001")
+        self.assertEqual(material.codigo_material, "INV-001")
         self.assertEqual(material.tipo, "equipo")
         self.assertEqual(Material.objects.count(), 1)
 
@@ -139,9 +139,9 @@ class RegistrarMaterialServiceTestCase(TestCase):
         self.assertEqual(material.stock, 12)
 
     def test_normaliza_el_codigo_a_mayusculas_sin_espacios(self):
-        material = registrar_material(**self._datos_validos(codigo_inventario="  inv-001 "))
+        material = registrar_material(**self._datos_validos(codigo_material="  inv-001 "))
 
-        self.assertEqual(material.codigo_inventario, "INV-001")
+        self.assertEqual(material.codigo_material, "INV-001")
 
     def test_codigo_duplicado_devuelve_error_de_negocio(self):
         """HU04 criterio 4: el código de inventario es único."""
@@ -150,7 +150,7 @@ class RegistrarMaterialServiceTestCase(TestCase):
         with self.assertRaises(InventarioError) as contexto:
             registrar_material(**self._datos_validos(nombre="Otro proyector"))
 
-        self.assertEqual(contexto.exception.campo, "codigo_inventario")
+        self.assertEqual(contexto.exception.campo, "codigo_material")
         self.assertEqual(
             contexto.exception.mensaje,
         "El Código de Material ya está registrado.",
@@ -161,7 +161,7 @@ class RegistrarMaterialServiceTestCase(TestCase):
         registrar_material(**self._datos_validos())
 
         with self.assertRaises(InventarioError):
-            registrar_material(**self._datos_validos(nombre="Otro", codigo_inventario="inv-001"))
+            registrar_material(**self._datos_validos(nombre="Otro", codigo_material="inv-001"))
 
         self.assertEqual(Material.objects.count(), 1)
 
@@ -222,7 +222,7 @@ class ActualizarMaterialServiceTestCase(TestCase):
     def setUp(self):
         self.material = registrar_material(
             nombre="Proyector Epson",
-            codigo_inventario="INV-001",
+            codigo_material="INV-001",
             tipo="equipo",
         )
 
@@ -236,30 +236,30 @@ class ActualizarMaterialServiceTestCase(TestCase):
         self.assertEqual(actualizado.stock, 4)
 
     def test_actualiza_el_codigo_y_lo_normaliza(self):
-        actualizado = actualizar_material(self.material.id, codigo_inventario=" inv-009 ")
+        actualizado = actualizar_material(self.material.id, codigo_material=" inv-009 ")
 
-        self.assertEqual(actualizado.codigo_inventario, "INV-009")
+        self.assertEqual(actualizado.codigo_material, "INV-009")
 
     def test_no_permite_ceder_el_codigo_a_otro_material(self):
         otro = registrar_material(
             nombre="Libro de álgebra",
-            codigo_inventario="LIB-001",
+            codigo_material="LIB-001",
             tipo="libro",
         )
 
         with self.assertRaises(InventarioError) as contexto:
-            actualizar_material(self.material.id, codigo_inventario=otro.codigo_inventario)
+            actualizar_material(self.material.id, codigo_material=otro.codigo_material)
 
-        self.assertEqual(contexto.exception.campo, "codigo_inventario")
+        self.assertEqual(contexto.exception.campo, "codigo_material")
         otro.refresh_from_db()
-        self.assertEqual(otro.codigo_inventario, "LIB-001")
+        self.assertEqual(otro.codigo_material, "LIB-001")
 
     def test_permite_mantener_el_mismo_codigo_al_editar_el_material(self):
         actualizado = actualizar_material(
-            self.material.id, codigo_inventario=self.material.codigo_inventario, nombre="Proyector X"
+            self.material.id, codigo_material=self.material.codigo_material, nombre="Proyector X"
         )
 
-        self.assertEqual(actualizado.codigo_inventario, "INV-001")
+        self.assertEqual(actualizado.codigo_material, "INV-001")
         self.assertEqual(actualizado.nombre, "Proyector X")
 
     def test_rechaza_estado_invalido(self):
@@ -327,8 +327,8 @@ class ActualizarMaterialServiceTestCase(TestCase):
         self.assertEqual(material, self.material)
 
     def test_listar_materiales_devuelve_todos_ordenados_por_nombre(self):
-        registrar_material(nombre="Cable HDMI", codigo_inventario="OBJ-001", tipo="objeto")
-        registrar_material(nombre="Libro de álgebra", codigo_inventario="LIB-001", tipo="libro")
+        registrar_material(nombre="Cable HDMI", codigo_material="OBJ-001", tipo="objeto")
+        registrar_material(nombre="Libro de álgebra", codigo_material="LIB-001", tipo="libro")
 
         nombres = [material.nombre for material in listar_materiales()]
 
@@ -344,7 +344,7 @@ class ParametrosReputacionPorDefectoTestCase(TestCase):
 
     def test_aplica_los_defaults_configurados(self):
         material = registrar_material(
-            nombre="Cable HDMI", codigo_inventario="OBJ-001", tipo="objeto"
+            nombre="Cable HDMI", codigo_material="OBJ-001", tipo="objeto"
         )
 
         defaults = settings.MATERIALES_REPUTACION_DEFAULTS
@@ -365,7 +365,7 @@ class ParametrosReputacionPorDefectoTestCase(TestCase):
     )
     def test_los_defaults_son_configurables(self):
         material = registrar_material(
-            nombre="Cable HDMI", codigo_inventario="OBJ-001", tipo="objeto"
+            nombre="Cable HDMI", codigo_material="OBJ-001", tipo="objeto"
         )
 
         self.assertEqual(material.tier_minimo_requerido, "restringido")
@@ -377,7 +377,7 @@ class ParametrosReputacionPorDefectoTestCase(TestCase):
     def test_lo_parametrizado_gana_sobre_el_default(self):
         material = registrar_material(
             nombre="Microscopio",
-            codigo_inventario="EQ-002",
+            codigo_material="EQ-002",
             tipo="equipo",
             bonificacion_tiempo=25,
             deduccion_dano_total=90,
@@ -392,7 +392,7 @@ class ParametrosReputacionPorDefectoTestCase(TestCase):
 
     def test_los_costos_no_tienen_default(self):
         material = registrar_material(
-            nombre="Cable HDMI", codigo_inventario="OBJ-001", tipo="objeto"
+            nombre="Cable HDMI", codigo_material="OBJ-001", tipo="objeto"
         )
 
         self.assertIsNone(material.costo_reparacion)
@@ -426,7 +426,7 @@ class BuscarMaterialesServiceTestCase(TestCase):
     def setUp(self):
         self.mat_laptop = Material.objects.create(
             nombre="Laptop Dell Inspiron",
-            codigo_inventario="EQ-001",
+            codigo_material="EQ-001",
             tipo="equipo",
             estado="disponible",
             tier_minimo_requerido="avanzado",
@@ -434,7 +434,7 @@ class BuscarMaterialesServiceTestCase(TestCase):
         )
         self.mat_libro = Material.objects.create(
             nombre="Libro Cálculo Thomas",
-            codigo_inventario="LIB-001",
+            codigo_material="LIB-001",
             tipo="libro",
             estado="disponible",
             tier_minimo_requerido="restringido",
@@ -442,7 +442,7 @@ class BuscarMaterialesServiceTestCase(TestCase):
         )
         self.mat_cable = Material.objects.create(
             nombre="Cable HDMI 2.0",
-            codigo_inventario="OBJ-001",
+            codigo_material="OBJ-001",
             tipo="objeto",
             estado="en_mantenimiento",
             tier_minimo_requerido="restringido",
@@ -450,7 +450,7 @@ class BuscarMaterialesServiceTestCase(TestCase):
         )
         self.mat_proyector = Material.objects.create(
             nombre="Proyector Epson",
-            codigo_inventario="EQ-002",
+            codigo_material="EQ-002",
             tipo="equipo",
             estado="prestado",
             tier_minimo_requerido="estandar",
@@ -535,13 +535,13 @@ class MaterialSerializerContratoTestCase(SimpleTestCase):
         data = MaterialSerializer(Material(stock=4)).data
 
         self.assertEqual(data["unidades_disponibles"], 4)
-        for campo in ("id", "nombre", "codigo_inventario", "estado", "created_at"):
+        for campo in ("id", "nombre", "codigo_material", "estado", "created_at"):
             self.assertIn(campo, data)
         self.assertNotIn("estado_fisico", data)
 
     def test_alta_rechaza_estado_inicial_no_permitido(self):
         serializer = MaterialRegistroSerializer(
-            data={"nombre": "Cable", "codigo_inventario": "OBJ-1", "tipo": "objeto", "estado": "prestado"}
+            data={"nombre": "Cable", "codigo_material": "OBJ-1", "tipo": "objeto", "estado": "prestado"}
         )
 
         self.assertFalse(serializer.is_valid())
@@ -555,12 +555,12 @@ class MaterialSerializerContratoTestCase(SimpleTestCase):
 
         self.assertFalse(serializer.is_valid())
         self.assertEqual(
-            sorted(serializer.errors), ["codigo_inventario", "nombre", "tipo"]
+            sorted(serializer.errors), ["codigo_material", "nombre", "tipo"]
         )
 
     def test_alta_rechaza_stock_cero(self):
         serializer = MaterialRegistroSerializer(
-            data={"nombre": "Cable", "codigo_inventario": "OBJ-1", "tipo": "objeto", "stock": 0}
+            data={"nombre": "Cable", "codigo_material": "OBJ-1", "tipo": "objeto", "stock": 0}
         )
 
         self.assertFalse(serializer.is_valid())
@@ -568,7 +568,7 @@ class MaterialSerializerContratoTestCase(SimpleTestCase):
 
     def test_alta_rechaza_tipo_invalido(self):
         serializer = MaterialRegistroSerializer(
-            data={"nombre": "Cable", "codigo_inventario": "OBJ-1", "tipo": "edificio"}
+            data={"nombre": "Cable", "codigo_material": "OBJ-1", "tipo": "edificio"}
         )
 
         self.assertFalse(serializer.is_valid())
@@ -578,7 +578,7 @@ class MaterialSerializerContratoTestCase(SimpleTestCase):
         serializer = MaterialRegistroSerializer(
             data={
                 "nombre": "Cable",
-                "codigo_inventario": "OBJ-1",
+                "codigo_material": "OBJ-1",
                 "tipo": "objeto",
                 "tier_minimo_requerido": "basico",
             }
@@ -591,7 +591,7 @@ class MaterialSerializerContratoTestCase(SimpleTestCase):
         serializer = MaterialRegistroSerializer(
             data={
                 "nombre": "Cable",
-                "codigo_inventario": "OBJ-1",
+                "codigo_material": "OBJ-1",
                 "tipo": "objeto",
                 "bonificacion_tiempo": 600,
             }
@@ -602,7 +602,7 @@ class MaterialSerializerContratoTestCase(SimpleTestCase):
 
     def test_alta_rechaza_campos_no_permitidos(self):
         serializer = MaterialRegistroSerializer(
-            data={"nombre": "Cable", "codigo_inventario": "OBJ-1", "tipo": "objeto", "id": "1"}
+            data={"nombre": "Cable", "codigo_material": "OBJ-1", "tipo": "objeto", "id": "1"}
         )
 
         self.assertFalse(serializer.is_valid())
@@ -612,7 +612,7 @@ class MaterialSerializerContratoTestCase(SimpleTestCase):
         serializer = MaterialRegistroSerializer(
             data={
                 "nombre": "Cable",
-                "codigo_inventario": "OBJ-1",
+                "codigo_material": "OBJ-1",
                 "tipo": "objeto",
                 "stock": 3,
                 "bonificacion_tiempo": 20,
@@ -629,7 +629,7 @@ class MaterialSerializerContratoTestCase(SimpleTestCase):
         serializer = MaterialRegistroSerializer(
             data={
                 "nombre": "Cable",
-                "codigo_inventario": "OBJ-1",
+                "codigo_material": "OBJ-1",
                 "tipo": "objeto",
                 "condicion_fisica": "Bueno",
             }
@@ -642,7 +642,7 @@ class MaterialSerializerContratoTestCase(SimpleTestCase):
         serializer = MaterialRegistroSerializer(
             data={
                 "nombre": "Cable",
-                "codigo_inventario": "OBJ-1",
+                "codigo_material": "OBJ-1",
                 "tipo": "objeto",
                 "estado_fisico": "Operativo",
             }
@@ -740,7 +740,7 @@ class EscenariosDeMaterialApi(ConMediaTemporal, APITestCase):
         return f"{self.LIST_URL}{material.id}/"
 
     def _payload_valido(self, **extra):
-        datos = {"nombre": "Cable HDMI", "codigo_inventario": "OBJ-001", "tipo": "objeto"}
+        datos = {"nombre": "Cable HDMI", "codigo_material": "OBJ-001", "tipo": "objeto"}
         datos.update(extra)
         return datos
 
@@ -751,17 +751,17 @@ class MaterialesAPITestCase(EscenariosDeMaterialApi):
     # --- Listado y consulta: públicos ---
 
     def test_listar_materiales_es_publico(self):
-        registrar_material(nombre="Cable HDMI", codigo_inventario="OBJ-001", tipo="objeto")
+        registrar_material(nombre="Cable HDMI", codigo_material="OBJ-001", tipo="objeto")
 
         respuesta = self.client.get(self.LIST_URL)
 
         self.assertEqual(respuesta.status_code, 200)
         self.assertEqual(len(respuesta.json()), 1)
-        self.assertEqual(respuesta.json()[0]["codigo_inventario"], "OBJ-001")
+        self.assertEqual(respuesta.json()[0]["codigo_material"], "OBJ-001")
 
     def test_consultar_material_es_publico(self):
         material = registrar_material(
-            nombre="Cable HDMI", codigo_inventario="OBJ-001", tipo="objeto", stock=3
+            nombre="Cable HDMI", codigo_material="OBJ-001", tipo="objeto", stock=3
         )
 
         respuesta = self.client.get(self._url_detalle(material))
@@ -814,7 +814,7 @@ class MaterialesAPITestCase(EscenariosDeMaterialApi):
 
     def test_registrar_con_codigo_duplicado_responde_409(self):
         self._autenticar("gestor@unsa.edu.pe", "gestor")
-        registrar_material(nombre="Otro", codigo_inventario="OBJ-001", tipo="objeto")
+        registrar_material(nombre="Otro", codigo_material="OBJ-001", tipo="objeto")
 
         respuesta = self.client.post(self.LIST_URL, self._payload_valido(), format="json")
 
@@ -825,7 +825,7 @@ class MaterialesAPITestCase(EscenariosDeMaterialApi):
         self._autenticar("gestor@unsa.edu.pe", "gestor")
 
         respuesta = self.client.post(
-            self.LIST_URL, {"nombre": "", "codigo_inventario": "", "tipo": "x"}, format="json"
+            self.LIST_URL, {"nombre": "", "codigo_material": "", "tipo": "x"}, format="json"
         )
 
         self.assertEqual(respuesta.status_code, 400)
@@ -847,7 +847,7 @@ class MaterialesAPITestCase(EscenariosDeMaterialApi):
 
     def test_editar_sin_sesion_responde_403(self):
         material = registrar_material(
-            nombre="Cable HDMI", codigo_inventario="OBJ-001", tipo="objeto"
+            nombre="Cable HDMI", codigo_material="OBJ-001", tipo="objeto"
         )
 
         respuesta = self.client.patch(
@@ -860,7 +860,7 @@ class MaterialesAPITestCase(EscenariosDeMaterialApi):
 
     def test_patch_cambia_estado_a_en_mantenimiento(self):
         material = registrar_material(
-            nombre="Cable HDMI", codigo_inventario="OBJ-001", tipo="objeto"
+            nombre="Cable HDMI", codigo_material="OBJ-001", tipo="objeto"
         )
         self._autenticar("gestor@unsa.edu.pe", "gestor")
 
@@ -874,7 +874,7 @@ class MaterialesAPITestCase(EscenariosDeMaterialApi):
 
     def test_put_actualiza_los_campos_enviados(self):
         material = registrar_material(
-            nombre="Cable HDMI", codigo_inventario="OBJ-001", tipo="objeto", stock=1
+            nombre="Cable HDMI", codigo_material="OBJ-001", tipo="objeto", stock=1
         )
         self._autenticar("gestor@unsa.edu.pe", "gestor")
 
@@ -882,7 +882,7 @@ class MaterialesAPITestCase(EscenariosDeMaterialApi):
             self._url_detalle(material),
             {
                 "nombre": "Cable HDMI 2m",
-                "codigo_inventario": "OBJ-002",
+                "codigo_material": "OBJ-002",
                 "tipo": "objeto",
                 "stock": 5,
             },
@@ -892,28 +892,28 @@ class MaterialesAPITestCase(EscenariosDeMaterialApi):
         self.assertEqual(respuesta.status_code, 200, respuesta.content)
         material.refresh_from_db()
         self.assertEqual(material.nombre, "Cable HDMI 2m")
-        self.assertEqual(material.codigo_inventario, "OBJ-002")
+        self.assertEqual(material.codigo_material, "OBJ-002")
         self.assertEqual(material.stock, 5)
         self.assertEqual(respuesta.json()["unidades_disponibles"], 5)
 
     def test_editar_con_codigo_duplicado_responde_409(self):
-        registrar_material(nombre="Libro", codigo_inventario="LIB-001", tipo="libro")
+        registrar_material(nombre="Libro", codigo_material="LIB-001", tipo="libro")
         material = registrar_material(
-            nombre="Cable", codigo_inventario="OBJ-001", tipo="objeto"
+            nombre="Cable", codigo_material="OBJ-001", tipo="objeto"
         )
         self._autenticar("gestor@unsa.edu.pe", "gestor")
 
         respuesta = self.client.patch(
-            self._url_detalle(material), {"codigo_inventario": "LIB-001"}, format="json"
+            self._url_detalle(material), {"codigo_material": "LIB-001"}, format="json"
         )
 
         self.assertEqual(respuesta.status_code, 409)
         material.refresh_from_db()
-        self.assertEqual(material.codigo_inventario, "OBJ-001")
+        self.assertEqual(material.codigo_material, "OBJ-001")
 
     def test_editar_con_stock_cero_responde_400(self):
         material = registrar_material(
-            nombre="Cable", codigo_inventario="OBJ-001", tipo="objeto"
+            nombre="Cable", codigo_material="OBJ-001", tipo="objeto"
         )
         self._autenticar("gestor@unsa.edu.pe", "gestor")
 
@@ -942,7 +942,7 @@ class MaterialBuscarAPITestCase(EscenariosDeMaterialApi):
         super().setUp()
         self.mat_laptop = Material.objects.create(
             nombre="Laptop Dell XPS",
-            codigo_inventario="EQ-001",
+            codigo_material="EQ-001",
             tipo="equipo",
             estado="disponible",
             tier_minimo_requerido="avanzado",
@@ -950,7 +950,7 @@ class MaterialBuscarAPITestCase(EscenariosDeMaterialApi):
         )
         self.mat_libro = Material.objects.create(
             nombre="Libro Redes de Computadoras Tanenbaum",
-            codigo_inventario="LIB-001",
+            codigo_material="LIB-001",
             tipo="libro",
             estado="disponible",
             tier_minimo_requerido="restringido",
@@ -958,7 +958,7 @@ class MaterialBuscarAPITestCase(EscenariosDeMaterialApi):
         )
         self.mat_cable = Material.objects.create(
             nombre="Cable Red UTP Cat6",
-            codigo_inventario="OBJ-001",
+            codigo_material="OBJ-001",
             tipo="objeto",
             estado="en_mantenimiento",
             tier_minimo_requerido="restringido",
@@ -966,7 +966,7 @@ class MaterialBuscarAPITestCase(EscenariosDeMaterialApi):
         )
         self.mat_osciloscopio = Material.objects.create(
             nombre="Osciloscopio Digital",
-            codigo_inventario="EQ-002",
+            codigo_material="EQ-002",
             tipo="equipo",
             estado="prestado",
             tier_minimo_requerido="estandar",
@@ -1019,7 +1019,7 @@ class MaterialBuscarAPITestCase(EscenariosDeMaterialApi):
         self.assertEqual(item["tipo"], "libro")
         self.assertEqual(item["estado"], "disponible")
         self.assertEqual(item["unidades_disponibles"], 2)
-        self.assertIn("codigo_inventario", item)
+        self.assertIn("codigo_material", item)
 
     def test_buscar_con_usuario_restringido_devuelve_catalogo_completo(self):
         usuario = self._autenticar("alumno@unsa.edu.pe", "prestatario")
@@ -1095,7 +1095,7 @@ class FotoMaterialServiceTestCase(ConMediaTemporal):
     def test_registra_material_con_foto(self):
         material = registrar_material(
             nombre="Proyector Epson",
-            codigo_inventario="INV-001",
+            codigo_material="INV-001",
             tipo="equipo",
             foto=imagen_en_memoria(),
         )
@@ -1105,7 +1105,7 @@ class FotoMaterialServiceTestCase(ConMediaTemporal):
 
     def test_la_foto_es_opcional(self):
         material = registrar_material(
-            nombre="Cable HDMI", codigo_inventario="OBJ-001", tipo="objeto"
+            nombre="Cable HDMI", codigo_material="OBJ-001", tipo="objeto"
         )
 
         self.assertFalse(material.foto)
@@ -1113,7 +1113,7 @@ class FotoMaterialServiceTestCase(ConMediaTemporal):
     def test_la_foto_se_guarda_bajo_inventario_con_fecha_y_token(self):
         material = registrar_material(
             nombre="Cable HDMI",
-            codigo_inventario="OBJ-001",
+            codigo_material="OBJ-001",
             tipo="objeto",
             foto=imagen_en_memoria("JPEG", "proyector.jpg"),
         )
@@ -1130,13 +1130,13 @@ class FotoMaterialServiceTestCase(ConMediaTemporal):
         """Dos materiales con el mismo archivo no pueden pisarse (criterio 9)."""
         primero = registrar_material(
             nombre="Cable",
-            codigo_inventario="OBJ-001",
+            codigo_material="OBJ-001",
             tipo="objeto",
             foto=imagen_en_memoria("JPEG", "foto.jpg"),
         )
         segundo = registrar_material(
             nombre="Cable de repuesto",
-            codigo_inventario="OBJ-002",
+            codigo_material="OBJ-002",
             tipo="objeto",
             foto=imagen_en_memoria("JPEG", "foto.jpg"),
         )
@@ -1150,7 +1150,7 @@ class FotoMaterialServiceTestCase(ConMediaTemporal):
             with self.subTest(formato=formato):
                 material = registrar_material(
                     nombre=f"Material {formato}",
-                    codigo_inventario=f"OBJ-{indice:03d}",
+                    codigo_material=f"OBJ-{indice:03d}",
                     tipo="objeto",
                     foto=imagen_en_memoria(formato),
                 )
@@ -1160,7 +1160,7 @@ class FotoMaterialServiceTestCase(ConMediaTemporal):
         with self.assertRaises(ValidationError) as contexto:
             registrar_material(
                 nombre="Foto pesada",
-                codigo_inventario="OBJ-001",
+                codigo_material="OBJ-001",
                 tipo="objeto",
                 foto=imagen_sobre_el_limite(),
             )
@@ -1172,7 +1172,7 @@ class FotoMaterialServiceTestCase(ConMediaTemporal):
         with self.assertRaises(ValidationError) as contexto:
             registrar_material(
                 nombre="Foto gif",
-                codigo_inventario="OBJ-001",
+                codigo_material="OBJ-001",
                 tipo="objeto",
                 foto=imagen_en_memoria("GIF"),
             )
@@ -1183,7 +1183,7 @@ class FotoMaterialServiceTestCase(ConMediaTemporal):
     def test_reemplazar_la_foto_borra_la_anterior(self):
         material = registrar_material(
             nombre="Proyector",
-            codigo_inventario="INV-001",
+            codigo_material="INV-001",
             tipo="equipo",
             foto=imagen_en_memoria(),
         )
@@ -1203,7 +1203,7 @@ class FotoMaterialServiceTestCase(ConMediaTemporal):
     def test_editar_sin_tocar_la_foto_no_la_borra(self):
         material = registrar_material(
             nombre="Proyector",
-            codigo_inventario="INV-001",
+            codigo_material="INV-001",
             tipo="equipo",
             foto=imagen_en_memoria(),
         )
@@ -1218,7 +1218,7 @@ class FotoMaterialServiceTestCase(ConMediaTemporal):
     def test_quitar_la_foto_deja_el_material_sin_imagen(self):
         material = registrar_material(
             nombre="Proyector",
-            codigo_inventario="INV-001",
+            codigo_material="INV-001",
             tipo="equipo",
             foto=imagen_en_memoria(),
         )
@@ -1260,7 +1260,7 @@ class FotoSerializadorTestCase(ConMediaTemporal):
     def test_antepone_el_origen_publico_a_la_ruta_local(self):
         material = registrar_material(
             nombre="Proyector",
-            codigo_inventario="INV-001",
+            codigo_material="INV-001",
             tipo="equipo",
             foto=imagen_en_memoria(),
         )
@@ -1275,7 +1275,7 @@ class FotoSerializadorTestCase(ConMediaTemporal):
     def test_sin_foto_devuelve_cadena_vacia(self):
         """El frontend distingue 'no hay foto' con una cadena, no con null."""
         material = registrar_material(
-            nombre="Cable", codigo_inventario="OBJ-001", tipo="objeto"
+            nombre="Cable", codigo_material="OBJ-001", tipo="objeto"
         )
 
         self.assertEqual(MaterialSerializer(material).data["foto"], "")
@@ -1301,7 +1301,7 @@ class FotoContratoEntradaTestCase(SimpleTestCase):
                 serializer = MaterialRegistroSerializer(
                     data={
                         "nombre": "Cable",
-                        "codigo_inventario": "OBJ-1",
+                        "codigo_material": "OBJ-1",
                         "tipo": "objeto",
                         "foto": imagen_en_memoria(formato),
                     }
@@ -1312,7 +1312,7 @@ class FotoContratoEntradaTestCase(SimpleTestCase):
         serializer = MaterialRegistroSerializer(
             data={
                 "nombre": "Cable",
-                "codigo_inventario": "OBJ-1",
+                "codigo_material": "OBJ-1",
                 "tipo": "objeto",
                 "foto": imagen_sobre_el_limite(),
             }
@@ -1325,7 +1325,7 @@ class FotoContratoEntradaTestCase(SimpleTestCase):
         serializer = MaterialRegistroSerializer(
             data={
                 "nombre": "Cable",
-                "codigo_inventario": "OBJ-1",
+                "codigo_material": "OBJ-1",
                 "tipo": "objeto",
                 "foto": imagen_en_memoria("GIF"),
             }
@@ -1338,7 +1338,7 @@ class FotoContratoEntradaTestCase(SimpleTestCase):
         serializer = MaterialRegistroSerializer(
             data={
                 "nombre": "Cable",
-                "codigo_inventario": "OBJ-1",
+                "codigo_material": "OBJ-1",
                 "tipo": "objeto",
                 "foto": SimpleUploadedFile("vacio.jpg", b"", content_type="image/jpeg"),
             }
@@ -1351,7 +1351,7 @@ class FotoContratoEntradaTestCase(SimpleTestCase):
         serializer = MaterialRegistroSerializer(
             data={
                 "nombre": "Cable",
-                "codigo_inventario": "OBJ-1",
+                "codigo_material": "OBJ-1",
                 "tipo": "objeto",
                 "foto": SimpleUploadedFile(
                     "falso.jpg", b"esto no es una imagen", content_type="image/jpeg"
@@ -1364,7 +1364,7 @@ class FotoContratoEntradaTestCase(SimpleTestCase):
 
     def test_la_foto_no_es_obligatoria_en_el_alta(self):
         serializer = MaterialRegistroSerializer(
-            data={"nombre": "Cable", "codigo_inventario": "OBJ-1", "tipo": "objeto"}
+            data={"nombre": "Cable", "codigo_material": "OBJ-1", "tipo": "objeto"}
         )
 
         self.assertTrue(serializer.is_valid(), serializer.errors)
@@ -1452,7 +1452,7 @@ class MaterialesFotoApiTestCase(EscenariosDeMaterialApi):
     def test_patch_reemplaza_la_foto(self):
         material = registrar_material(
             nombre="Proyector",
-            codigo_inventario="INV-001",
+            codigo_material="INV-001",
             tipo="equipo",
             foto=imagen_en_memoria(),
         )
@@ -1574,7 +1574,7 @@ class RegistroMaterialMultipleAPITestCase(EscenariosDeMaterialApi):
         self.assertEqual(InstanciaMaterial.objects.count(), 0)
 
     def test_codigo_existente_indica_fila_y_responde_409(self):
-        existente = registrar_material(nombre="Existente", codigo_inventario="EX-01", tipo="equipo")
+        existente = registrar_material(nombre="Existente", codigo_material="EX-01", tipo="equipo")
         self._autenticar("otro.gestor@unsa.edu.pe", "gestor")
         respuesta = self.client.post(
             self.LIST_URL,
@@ -1668,7 +1668,7 @@ class InstanciaMaterialModelTestCase(TestCase):
     def test_registrar_material_crea_instancias_automaticas(self):
         mat = registrar_material(
             nombre="Libro CLRS",
-            codigo_inventario="LIB-CLRS",
+            codigo_material="LIB-CLRS",
             tipo="libro",
             stock=3,
         )
@@ -1682,7 +1682,7 @@ class InstanciaMaterialModelTestCase(TestCase):
     def test_registrar_lote_no_genera_numeros_de_serie(self):
         mat = registrar_material(
             nombre="Libro CLRS",
-            codigo_inventario="LIB-CLRS-SERIE",
+            codigo_material="LIB-CLRS-SERIE",
             tipo="libro",
             stock=3,
             numero_serie="SERIE-BASE",
@@ -1695,7 +1695,7 @@ class InstanciaMaterialModelTestCase(TestCase):
     def test_resumen_estados_de_material(self):
         mat = registrar_material(
             nombre="Arduino Mega",
-            codigo_inventario="EQ-ARD",
+            codigo_material="EQ-ARD",
             tipo="equipo",
             stock=3,
         )
@@ -1727,7 +1727,7 @@ class MigracionCondicionFisicaInstanciaTestCase(TransactionTestCase):
         InstanciaAnterior = aplicaciones_anteriores.get_model("inventario", "InstanciaMaterial")
         material = MaterialAnterior.objects.create(
             nombre="Material de migración",
-            codigo_inventario="MIG-COND-01",
+            codigo_material="MIG-COND-01",
             tipo="objeto",
         )
         InstanciaAnterior.objects.create(
@@ -1766,7 +1766,7 @@ class MigracionEliminarEstadoFisicoInstanciaTestCase(TransactionTestCase):
         InstanciaAnterior = aplicaciones_anteriores.get_model("inventario", "InstanciaMaterial")
         material = MaterialAnterior.objects.create(
             nombre="Material de migración final",
-            codigo_inventario="MIG-COND-FINAL",
+            codigo_material="MIG-COND-FINAL",
             tipo="objeto",
         )
         InstanciaAnterior.objects.create(
@@ -1808,7 +1808,7 @@ class InstanciaMaterialAPITestCase(ConMediaTemporal, APITestCase):
 
         self.material = registrar_material(
             nombre="Osciloscopio Digital",
-            codigo_inventario="EQ-OSC-01",
+            codigo_material="EQ-OSC-01",
             tipo="equipo",
             stock=2,
         )
@@ -2105,7 +2105,7 @@ class InstanciaMaterialAPITestCase(ConMediaTemporal, APITestCase):
     def test_no_eliminar_por_separado_el_ultimo_ejemplar(self):
         material = registrar_material(
             nombre="Unidad única",
-            codigo_inventario="EQ-UNICO-DELETE",
+            codigo_material="EQ-UNICO-DELETE",
             tipo="equipo",
         )
         self._autenticar("gestor.eliminar.ultimo@unsa.edu.pe", "gestor")

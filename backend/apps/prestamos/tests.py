@@ -303,7 +303,7 @@ def crear_material(**cambios):
     estado = cambios.pop("estado", None)
     datos = {
         "nombre": "Proyector",
-        "codigo_inventario": "EQ-001",
+        "codigo_material": "EQ-001",
         "tipo": "equipo",
         "stock": 1,
     }
@@ -401,7 +401,7 @@ class RegistrarPrestamoServiceTestCase(TestCase):
         self.assertEqual(Prestamo.objects.count(), 0)
 
     def test_registra_la_instancia_especifica_solicitada(self):
-        material = crear_material(codigo_inventario="EQ-ESPECIFICO", stock=2)
+        material = crear_material(codigo_material="EQ-ESPECIFICO", stock=2)
         instancias = list(material.instancias.order_by("codigo_ejemplar"))
 
         prestamo = self._registrar(
@@ -424,7 +424,7 @@ class RegistrarPrestamoServiceTestCase(TestCase):
         self.assertEqual(Prestamo.objects.count(), 0)
 
     def test_rechaza_instancia_de_otro_material(self):
-        otro_material = crear_material(codigo_inventario="EQ-OTRO")
+        otro_material = crear_material(codigo_material="EQ-OTRO")
 
         with self.assertRaises(PrestamoError) as contexto:
             self._registrar(instancia_id=otro_material.instancias.get().id)
@@ -462,7 +462,7 @@ class RegistrarPrestamoServiceTestCase(TestCase):
     def test_agota_y_restaura_disponibilidad_segun_stock_de_unidades(self):
         material = crear_material(
             nombre="Cables",
-            codigo_inventario="OBJ-002",
+            codigo_material="OBJ-002",
             tipo="objeto",
             stock=2,
         )
@@ -497,7 +497,7 @@ class RegistrarPrestamoServiceTestCase(TestCase):
 
     def test_rechaza_tier_insuficiente_sin_cambiar_inventario(self):
         material = crear_material(
-            codigo_inventario="EQ-002",
+            codigo_material="EQ-002",
             tier_minimo_requerido="avanzado",
         )
 
@@ -520,7 +520,7 @@ class RegistrarPrestamoServiceTestCase(TestCase):
         self.assertEqual(Prestamo.objects.count(), 0)
 
     def test_exige_ambos_pdf_para_material_de_alto_valor(self):
-        material = crear_material(codigo_inventario="EQ-003", es_alto_valor=True)
+        material = crear_material(codigo_material="EQ-003", es_alto_valor=True)
 
         with self.assertRaises(PrestamoError) as contexto:
             self._registrar(material_id=material.id)
@@ -557,7 +557,7 @@ class RegistrarPrestamoServiceTestCase(TestCase):
         self.assertEqual(Prestamo.objects.count(), 0)
 
     def test_si_falla_el_registro_de_garantia_no_quedan_archivos_ni_prestamo(self):
-        material = crear_material(codigo_inventario="EQ-004", es_alto_valor=True)
+        material = crear_material(codigo_material="EQ-004", es_alto_valor=True)
         guardar_garantia = Garantia.save
 
         def guardar_y_fallar(garantia, *args, **kwargs):
@@ -582,7 +582,7 @@ class RegistrarPrestamoServiceTestCase(TestCase):
             with self.subTest(estado=estado):
                 material = crear_material(
                     nombre=f"Material {estado}",
-                    codigo_inventario=f"EQ-{estado}",
+                    codigo_material=f"EQ-{estado}",
                     estado=estado,
                 )
                 with self.assertRaises(PrestamoError) as contexto:
@@ -620,7 +620,7 @@ class RegistrarPrestamoConcurrenciaTestCase(TransactionTestCase):
             crear_usuario("concurrencia1@unsa.edu.pe", "10000021"),
             crear_usuario("concurrencia2@unsa.edu.pe", "10000022"),
         ]
-        material = crear_material(codigo_inventario="EQ-CONCURRENCIA")
+        material = crear_material(codigo_material="EQ-CONCURRENCIA")
         instancia_id = material.instancias.get().id
         barrera = Barrier(2)
 
@@ -660,7 +660,7 @@ class ConsultarPrestamosServiceTestCase(TestCase):
         self.otro_prestatario = crear_usuario("otro-consulta@unsa.edu.pe", "10000103")
 
     def _registrar(self, prestatario, codigo):
-        material = crear_material(codigo_inventario=codigo)
+        material = crear_material(codigo_material=codigo)
         return registrar_prestamo(
             dni_prestatario=prestatario.dni,
             material_id=material.id,
@@ -714,7 +714,7 @@ class HistorialPrestamosServiceTestCase(TestCase):
         self.otro_prestatario = crear_usuario("otro-historial@unsa.edu.pe", "10000203")
 
     def _registrar(self, prestatario, codigo):
-        material = crear_material(codigo_inventario=codigo)
+        material = crear_material(codigo_material=codigo)
         return registrar_prestamo(
             dni_prestatario=prestatario.dni,
             material_id=material.id,
@@ -800,7 +800,7 @@ class MisPrestamosAPITestCase(APITestCase):
         sesion.save()
 
     def _crear_prestamo(self, usuario, codigo):
-        material = crear_material(codigo_inventario=codigo)
+        material = crear_material(codigo_material=codigo)
         return registrar_prestamo(
             dni_prestatario=usuario.dni,
             material_id=material.id,
@@ -889,7 +889,7 @@ class HistorialPrestamosAPITestCase(APITestCase):
         sesion.save()
 
     def _crear_prestamo(self, usuario, codigo):
-        material = crear_material(codigo_inventario=codigo)
+        material = crear_material(codigo_material=codigo)
         return registrar_prestamo(
             dni_prestatario=usuario.dni,
             material_id=material.id,
@@ -1175,7 +1175,7 @@ class RegistrarPrestamoAPITestCase(APITestCase):
     def setUp(self):
         self.gestor = crear_usuario("gestor-api@unsa.edu.pe", "20000001", rol="gestor")
         self.prestatario = crear_usuario("prestatario-api@unsa.edu.pe", "20000002")
-        self.material = crear_material(codigo_inventario="API-001")
+        self.material = crear_material(codigo_material="API-001")
 
     def _iniciar_sesion(self, usuario):
         sesion = self.client.session
@@ -1293,7 +1293,7 @@ class RegistrarPrestamoAPITestCase(APITestCase):
     def test_post_multipart_registra_garantia_y_parsea_checklist_json(self):
         self._iniciar_sesion(self.gestor)
         material = crear_material(
-            codigo_inventario="API-ALTO-VALOR",
+            codigo_material="API-ALTO-VALOR",
             es_alto_valor=True,
         )
         instancia = material.instancias.get()
@@ -1325,7 +1325,7 @@ class RegistrarPrestamoAPITestCase(APITestCase):
     def test_post_sin_pdf_rechaza_material_de_alto_valor(self):
         self._iniciar_sesion(self.gestor)
         material = crear_material(
-            codigo_inventario="API-ALTO-SIN-PDF",
+            codigo_material="API-ALTO-SIN-PDF",
             es_alto_valor=True,
         )
 
@@ -1357,7 +1357,7 @@ class RegistrarPrestamoAPITestCase(APITestCase):
     def test_listado_inventario_devuelve_unidades_libres_actualizadas(self):
         material = crear_material(
             nombre="Cables HDMI",
-            codigo_inventario="API-002",
+            codigo_material="API-002",
             tipo="objeto",
             stock=2,
         )
@@ -1469,7 +1469,7 @@ class DescargarGarantiaAPITestCase(APITestCase):
         )
         self.prestatario = crear_usuario("prestatario-garantia@unsa.edu.pe", "20000303")
         self.material = crear_material(
-            codigo_inventario="GARANTIA-API-001",
+            codigo_material="GARANTIA-API-001",
             es_alto_valor=True,
         )
 
@@ -1664,7 +1664,7 @@ class DescargarGarantiaAPITestCase(APITestCase):
         )
         self.assertEqual(inexistente.status_code, 404)
 
-        material_sin_garantia = crear_material(codigo_inventario="GARANTIA-SIN-ARCHIVO")
+        material_sin_garantia = crear_material(codigo_material="GARANTIA-SIN-ARCHIVO")
         prestamo = registrar_prestamo(
             dni_prestatario=self.prestatario.dni,
             material_id=material_sin_garantia.id,
@@ -1689,7 +1689,7 @@ class DescargarFotoChecklistAPITestCase(APITestCase):
             "admin-foto@unsa.edu.pe", "20001002", rol="administrador"
         )
         self.prestatario = crear_usuario("presta-foto@unsa.edu.pe", "20001003")
-        self.material = crear_material(codigo_inventario="FOTO-CHECK-001")
+        self.material = crear_material(codigo_material="FOTO-CHECK-001")
 
     def _iniciar_sesion(self, usuario):
         sesion = self.client.session
@@ -1766,7 +1766,7 @@ class DevolucionBaseTestCase(TestCase):
         self.prestatario = crear_usuario("ana-dev@unsa.edu.pe", "10000022")
         self.material = crear_material(
             nombre="Proyector Dev",
-            codigo_inventario="EQ-101",
+            codigo_material="EQ-101",
             costo_reparacion="40.00",
             costo_reposicion="200.00",
         )
@@ -1977,7 +1977,7 @@ class RegistrarDevolucionServiceTestCase(DevolucionBaseTestCase):
         self.assertEqual(self.material.estado, "disponible")
 
     def test_devuelve_la_instancia_asociada_al_prestamo(self):
-        material = crear_material(codigo_inventario="EQ-DEVOLUCION-EXACTA", stock=2)
+        material = crear_material(codigo_material="EQ-DEVOLUCION-EXACTA", stock=2)
         instancias = list(material.instancias.order_by("codigo_ejemplar"))
         segundo_prestatario = crear_usuario("segundo-dev-exacto@unsa.edu.pe", "10000027")
         primero = registrar_prestamo(
@@ -2153,7 +2153,7 @@ class RegistrarDevolucionServiceTestCase(DevolucionBaseTestCase):
     def test_no_libera_la_unidad_si_quedan_prestamos_activos(self):
         material = crear_material(
             nombre="Laptops",
-            codigo_inventario="EQ-102",
+            codigo_material="EQ-102",
             stock=2,
         )
         segundo = crear_usuario("segundo-dev@unsa.edu.pe", "10000023")
@@ -2596,7 +2596,7 @@ class ReportesDevolucionAPITestCase(DevolucionBaseTestCase):
         sesion.save()
 
     def _devolver_otro_prestamo(self):
-        otro_material = crear_material(codigo_inventario="EQ-REPORTES-OTRO")
+        otro_material = crear_material(codigo_material="EQ-REPORTES-OTRO")
         prestamo = registrar_prestamo(
             dni_prestatario=self.prestatario.dni,
             material_id=otro_material.id,
@@ -2635,7 +2635,7 @@ class ReportesDevolucionAPITestCase(DevolucionBaseTestCase):
         fila = datos["results"][0]
         self.assertEqual(fila["devolucion_id"], self.devolucion.id)
         self.assertEqual(fila["prestamo_id"], self.prestamo.id)
-        self.assertEqual(fila["material_codigo"], self.material.codigo_inventario)
+        self.assertEqual(fila["material_codigo"], self.material.codigo_material)
         self.assertEqual(fila["codigo_ejemplar"], self.prestamo.instancia.codigo_ejemplar)
         self.assertEqual(fila["prestatario_nombre"], "Ana Torres")
         self.assertEqual(fila["gestor_nombre"], "Ana Torres")

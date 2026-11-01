@@ -126,7 +126,6 @@ class InstanciaMaterialSerializer(serializers.ModelSerializer):
             "numero_serie",
             "estado",
             "estado_display",
-            "condicion_fisica",
             "color",
             "foto",
             "observaciones",
@@ -145,7 +144,6 @@ class InstanciaMaterialModificacionSerializer(
     codigo_ejemplar = serializers.CharField(max_length=50, required=False)
     numero_serie = serializers.CharField(max_length=80, required=False, allow_blank=True)
     estado = serializers.ChoiceField(choices=ESTADOS_INSTANCIA, required=False)
-    condicion_fisica = serializers.CharField(max_length=100, required=False, allow_blank=True)
     color = serializers.CharField(max_length=30, required=False, allow_blank=True)
     foto = serializers.ImageField(
         required=False,
@@ -162,7 +160,6 @@ class InstanciaMaterialModificacionSerializer(
             "codigo_ejemplar",
             "numero_serie",
             "estado",
-            "condicion_fisica",
             "color",
             "foto",
             "observaciones",
@@ -296,12 +293,6 @@ class MaterialRegistroSerializer(RechazarCamposNoPermitidosMixin, serializers.Mo
     ubicacion = serializers.CharField(required=False, allow_blank=True, default="")
     observaciones = serializers.CharField(required=False, allow_blank=True, default="")
     instancias = InstanciasJSONField(required=False)
-    condicion_fisica = serializers.CharField(
-        max_length=100,
-        required=False,
-        allow_blank=True,
-        write_only=True,
-    )
     tier_minimo_requerido = serializers.ChoiceField(
         choices=TIERS,
         required=False,
@@ -331,7 +322,6 @@ class MaterialRegistroSerializer(RechazarCamposNoPermitidosMixin, serializers.Mo
             "ubicacion",
             "observaciones",
             "instancias",
-            "condicion_fisica",
             "es_alto_valor",
             *CAMPOS_FICHA_Y_REPUTACION,
         )

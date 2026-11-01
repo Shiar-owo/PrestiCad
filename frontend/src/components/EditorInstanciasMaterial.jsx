@@ -258,7 +258,7 @@ function EditorInstanciasMaterial({ material, alcance, onCambiarAlcance, onGuard
               </select>
             </label>
             <Campo
-              etiqueta="Código de ejemplar"
+              etiqueta="Código de Ejemplar"
               valor={datos.codigo_ejemplar}
               maxLength={50}
               requerido

@@ -148,7 +148,7 @@ function Materiales() {
                 Material registrado correctamente
               </h3>
               <p className="mt-2 text-sm text-texto">
-                <strong>{materialRegistrado.nombre}</strong> · Código de inventario:{' '}
+                <strong>{materialRegistrado.nombre}</strong> · Código de Material:{' '}
                 <code className="font-mono">{materialRegistrado.codigo_inventario}</code>
               </p>
             </header>
@@ -187,7 +187,7 @@ function Materiales() {
                 <table className="min-w-full divide-y divide-borde text-left text-xs">
                   <thead className="bg-superficie-alta uppercase tracking-wide text-texto-suave">
                     <tr>
-                      <th className="px-3 py-2 font-semibold">Código</th>
+                      <th className="px-3 py-2 font-semibold">Código de Ejemplar</th>
                       <th className="px-3 py-2 font-semibold">N.º de serie</th>
                       <th className="px-3 py-2 font-semibold">Estado</th>
                       <th className="px-3 py-2 font-semibold">Condición física</th>
@@ -261,7 +261,7 @@ function Materiales() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-borde text-left text-xs uppercase tracking-wide text-texto-suave">
-                  <th className="px-4 py-3 font-semibold">Código</th>
+                  <th className="px-4 py-3 font-semibold">Código de Material</th>
                   <th className="px-4 py-3 font-semibold">Nombre</th>
                   <th className="px-4 py-3 font-semibold">Foto</th>
                   <th className="px-4 py-3 font-semibold">Tipo</th>

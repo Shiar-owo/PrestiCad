@@ -98,7 +98,7 @@ function FichaTecnicaModal({ material, onCerrar, onEliminarInstancia, onAgregarI
                 {ficha.tipoLegible}
               </span>
               <span className="font-mono text-xs text-texto-suave">
-                Código: {ficha.codigoInventario}
+                Código de Material: {ficha.codigoMaterial}
               </span>
             </div>
             <h3
@@ -279,7 +279,7 @@ function FichaTecnicaModal({ material, onCerrar, onEliminarInstancia, onAgregarI
                     <thead className="border-b border-borde bg-superficie-alta/60 text-xs font-semibold uppercase tracking-wider text-texto-suave">
                       <tr>
                         <th scope="col" className="px-4 py-2.5">Foto</th>
-                        <th scope="col" className="px-4 py-2.5">Código Ejemplar</th>
+                        <th scope="col" className="px-4 py-2.5">Código de Ejemplar</th>
                         <th scope="col" className="px-4 py-2.5">N° de Serie</th>
                         <th scope="col" className="px-4 py-2.5">Estado</th>
                         <th scope="col" className="px-4 py-2.5">Condición Física</th>

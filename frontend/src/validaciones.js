@@ -42,11 +42,11 @@ export function validarPassword(password) {
 
 export function validarCodigoInventario(codigo) {
   if (!codigo.trim()) {
-    return 'El código de inventario es obligatorio.'
+    return 'El Código de Material es obligatorio.'
   }
 
   if (codigo.trim().length > 30) {
-    return 'El código admite máximo 30 caracteres.'
+    return 'El Código de Material admite máximo 30 caracteres.'
   }
 
   return ''

@@ -54,7 +54,9 @@ function TarjetaMaterial({ material, onSeleccionar }) {
             {tipoLegible}
           </span>
           {material.codigo_inventario && (
-            <span className="text-texto-suave">{material.codigo_inventario}</span>
+            <span className="text-texto-suave">
+              <span className="font-semibold">Código de Material:</span> {material.codigo_inventario}
+            </span>
           )}
         </div>
 

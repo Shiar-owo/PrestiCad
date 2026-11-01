@@ -54,7 +54,7 @@ describe('obtenerDatosFichaTecnica', () => {
       id: 'abc-123',
       nombre: 'Osciloscopio Digital 100MHz',
       descripcion: 'Osciloscopio de 2 canales para prácticas de laboratorio.',
-      codigoInventario: 'EQ-OSC-01',
+      codigoMaterial: 'EQ-OSC-01',
       tipo: 'equipo',
       tipoLegible: 'Equipo',
       estado: 'disponible',

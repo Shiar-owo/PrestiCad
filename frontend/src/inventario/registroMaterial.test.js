@@ -3,11 +3,27 @@ import { describe, expect, it } from 'vitest'
 import {
   construirCuerpoRegistroMaterial,
   crearEjemplares,
+  ejemplosCodigosEjemplares,
   mapearErroresPorFila,
   redimensionarEjemplares,
   validarCodigosDuplicados,
   validarFotosEjemplares,
 } from './registroMaterial'
+
+describe('ejemplos de códigos de ejemplar por lote', () => {
+  it('muestra el primer y último código de acuerdo con la cantidad', () => {
+    expect(ejemplosCodigosEjemplares('CAM-1', '8')).toEqual({
+      primero: 'CAM-1-01',
+      ultimo: 'CAM-1-08',
+    })
+  })
+
+  it('no muestra ejemplos cuando la cantidad está fuera del rango de lote', () => {
+    expect(ejemplosCodigosEjemplares('CAM-1', '1')).toBeNull()
+    expect(ejemplosCodigosEjemplares('CAM-1', '51')).toBeNull()
+    expect(ejemplosCodigosEjemplares('', '8')).toBeNull()
+  })
+})
 
 describe('crear y redimensionar ejemplares', () => {
   it('crea filas con identificadores estables y limita la cantidad', () => {

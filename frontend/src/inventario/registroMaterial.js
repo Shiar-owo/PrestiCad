@@ -7,6 +7,22 @@ export function codigoEjemplarPorDefecto(codigoInventario, indice) {
   return `${base}-${String(indice + 1).padStart(2, '0')}`
 }
 
+export function ejemplosCodigosEjemplares(codigoMaterial, cantidad) {
+  const total = Number(cantidad)
+  if (
+    !String(codigoMaterial || '').trim()
+    || !Number.isInteger(total)
+    || total < 2
+    || total > MAXIMO_EJEMPLARES_REGISTRO
+  ) {
+    return null
+  }
+  return {
+    primero: codigoEjemplarPorDefecto(codigoMaterial, 0),
+    ultimo: codigoEjemplarPorDefecto(codigoMaterial, total - 1),
+  }
+}
+
 export function crearEjemplar(idLocal) {
   return {
     id: idLocal,

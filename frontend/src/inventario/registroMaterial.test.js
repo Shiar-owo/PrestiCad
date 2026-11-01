@@ -119,7 +119,7 @@ describe('construirCuerpoRegistroMaterial', () => {
     expect(cuerpo).toBeInstanceOf(FormData)
     expect(cuerpo.get('stock')).toBe('2')
     expect(cuerpo.get('numero_serie')).toBeNull()
-    expect(cuerpo.get('condicion_fisica')).toBeUndefined()
+    expect(cuerpo.get('condicion_fisica')).toBeNull()
     expect(JSON.parse(cuerpo.get('instancias'))[1]).toMatchObject({ color: 'Blanco', ubicacion: 'Estante B' })
     expect(JSON.parse(cuerpo.get('instancias')).every((fila) => !('numero_serie' in fila))).toBe(true)
     expect(cuerpo.get('instancia_foto_1').name).toBe('ejemplar.png')

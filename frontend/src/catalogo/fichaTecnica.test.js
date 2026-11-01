@@ -103,7 +103,7 @@ describe('obtenerDatosFichaTecnica', () => {
           observaciones: 'Excelente',
           color: 'Negro',
           foto: 'https://ejemplo.com/ejemplar-1.jpg',
-          observaciones: 'Estante A-1',
+          observaciones: 'Excelente',
         },
         {
           id: 'inst-2',
@@ -127,11 +127,11 @@ describe('obtenerDatosFichaTecnica', () => {
     expect(ficha.instancias).toHaveLength(2)
     expect(ficha.instancias[0].codigoEjemplar).toBe('LIB-CLRS-01')
     expect(ficha.instancias[0].color).toBe('Negro')
-    expect(ficha.instancias[0].condicionFisica).toBe('Excelente')
+    expect(ficha.instancias[0].observaciones).toBe('Excelente')
     expect(ficha.instancias[0].foto).toBe('https://ejemplo.com/ejemplar-1.jpg')
     expect(ficha.instancias[0].esDisponible).toBe(true)
     expect(ficha.instancias[1].codigoEjemplar).toBe('LIB-CLRS-02')
-    expect(ficha.instancias[1].condicionFisica).toBe('En empastado')
+    expect(ficha.instancias[1].observaciones).toBe('En empastado')
     expect(ficha.instancias[1].color).toBe('Gris general')
     expect(ficha.instancias[1].foto).toBe('')
     expect(ficha.instancias[1].esDisponible).toBe(false)

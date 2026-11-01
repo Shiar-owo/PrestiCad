@@ -1528,7 +1528,7 @@ class RegistroMaterialMultipleAPITestCase(EscenariosDeMaterialApi):
         instancias = list(InstanciaMaterial.objects.order_by("codigo_ejemplar"))
         self.assertEqual([fila.codigo_ejemplar for fila in instancias], ["OBJ-001-01", "OBJ-001-02"])
         self.assertEqual([fila.ubicacion for fila in instancias], ["Estante común", "Estante propio"])
-        self.assertEqual([fila.observaciones for fila in instancias], ["Bueno", "Bueno"])
+        self.assertEqual([fila.observaciones for fila in instancias], ["Con funda", ""])
         self.assertEqual([fila.numero_serie for fila in instancias], ["", ""])
         self.assertEqual([fila.color for fila in instancias], ["Negro", "Blanco"])
         self.assertEqual(instancias[0].observaciones, "Con funda")

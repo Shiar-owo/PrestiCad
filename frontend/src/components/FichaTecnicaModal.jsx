@@ -282,9 +282,9 @@ function FichaTecnicaModal({ material, onCerrar, onEliminarInstancia, onAgregarI
                         <th scope="col" className="px-4 py-2.5">Código de Ejemplar</th>
                         <th scope="col" className="px-4 py-2.5">N° de Serie</th>
                         <th scope="col" className="px-4 py-2.5">Estado</th>
-                        <th scope="col" className="px-4 py-2.5">Condición Física</th>
+                        <th scope="col" className="px-4 py-2.5">Observaciones</th>
                         <th scope="col" className="px-4 py-2.5">Color</th>
-                        <th scope="col" className="px-4 py-2.5">Ubicación / Observaciones</th>
+                        <th scope="col" className="px-4 py-2.5">Ubicación</th>
                         {onEliminarInstancia && (
                           <th scope="col" className="sticky right-0 z-10 whitespace-nowrap border-l border-borde bg-superficie-alta px-4 py-2.5">
                             Acciones
@@ -322,14 +322,13 @@ function FichaTecnicaModal({ material, onCerrar, onEliminarInstancia, onAgregarI
                             <BadgeEstado estado={inst.estado} texto={inst.estadoLegible} />
                           </td>
                           <td className="px-4 py-3 text-texto">
-                            {inst.condicionFisica || 'Operativo'}
+                            {inst.observaciones || 'Sin observaciones'}
                           </td>
                           <td className="px-4 py-3 text-texto">
                             {inst.color || 'No especificado'}
                           </td>
                           <td className="px-4 py-3 text-xs text-texto-suave">
-                            {[inst.ubicacion, inst.observaciones].filter(Boolean).join(' • ') ||
-                              'Sin observaciones'}
+                            {inst.ubicacion || '—'}
                           </td>
                           {onEliminarInstancia && (
                             <td className="sticky right-0 z-[1] border-l border-borde bg-superficie px-4 py-3 group-hover:bg-superficie-alta/40">

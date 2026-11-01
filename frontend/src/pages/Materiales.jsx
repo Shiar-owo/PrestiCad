@@ -193,7 +193,6 @@ function Materiales() {
                       <th className="px-3 py-2 font-semibold">Observaciones</th>
                       <th className="px-3 py-2 font-semibold">Color</th>
                       <th className="px-3 py-2 font-semibold">Ubicación</th>
-                      <th className="px-3 py-2 font-semibold">Observaciones</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-borde">
@@ -211,7 +210,6 @@ function Materiales() {
                             : instancia.color) || '—'}
                         </td>
                         <td className="px-3 py-2">{instancia.ubicacion || '—'}</td>
-                        <td className="px-3 py-2">{instancia.observaciones || '—'}</td>
                       </tr>
                     )) : (
                       <tr>

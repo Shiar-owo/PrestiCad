@@ -108,6 +108,7 @@ describe('construirCuerpoAltaInstancias', () => {
           color: 'Azul',
           estado: 'en_mantenimiento',
           observaciones: 'Sin marcas',
+          ubicacion: '',
         },
         {
           codigo_ejemplar: 'EQ-02',

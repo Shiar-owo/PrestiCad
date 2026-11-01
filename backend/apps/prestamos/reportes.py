@@ -151,8 +151,12 @@ def generar_reporte_dano(devolucion):
         (Paragraph("Préstamo N°", estilos["celda_negrita"]), str(prestamo.pk)),
         (Paragraph("Material", estilos["celda_negrita"]), material.nombre),
         (
-            Paragraph("Código de inventario", estilos["celda_negrita"]),
+            Paragraph("Código de Material", estilos["celda_negrita"]),
             material.codigo_inventario,
+        ),
+        (
+            Paragraph("Código de Ejemplar", estilos["celda_negrita"]),
+            prestamo.instancia.codigo_ejemplar if prestamo.instancia_id else "—",
         ),
         (
             Paragraph("Fecha de entrega", estilos["celda_negrita"]),

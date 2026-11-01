@@ -856,6 +856,12 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
           </label>
 
           <EncabezadoSeccion>Ficha técnica</EncabezadoSeccion>
+          {!esEdicion && datos.modo === 'lote' && (
+            <p role="status" className="-mt-3 mb-4 text-sm text-texto-suave">
+              <span aria-hidden="true" className="mr-1 font-bold text-amber-600 dark:text-amber-400">*</span>
+              Al crear el lote no se asignan números de serie. Después, edita cada ejemplar para añadir el suyo.
+            </p>
+          )}
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Campo
@@ -870,12 +876,12 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
               onCambio={(evento) => actualizar('modelo', evento.target.value)}
               maxLength={60}
             />
-            {(!esEdicion && ['unico', 'lote'].includes(datos.modo)) && (
+            {(!esEdicion && datos.modo === 'unico') && (
               <Campo
                 etiqueta="Número de serie (opcional)"
                 valor={datos.numero_serie}
                 onCambio={(evento) => actualizar('numero_serie', evento.target.value)}
-                maxLength={datos.modo === 'lote' ? 80 : 50}
+                maxLength={50}
               />
             )}
             <Campo

@@ -1529,7 +1529,7 @@ class RegistroMaterialMultipleAPITestCase(EscenariosDeMaterialApi):
         self.assertEqual([fila.codigo_ejemplar for fila in instancias], ["OBJ-001-01", "OBJ-001-02"])
         self.assertEqual([fila.ubicacion for fila in instancias], ["Estante común", "Estante propio"])
         self.assertEqual([fila.condicion_fisica for fila in instancias], ["Bueno", "Bueno"])
-        self.assertEqual([fila.numero_serie for fila in instancias], ["SER-A", "SER-B"])
+        self.assertEqual([fila.numero_serie for fila in instancias], ["", ""])
         self.assertEqual([fila.color for fila in instancias], ["Negro", "Blanco"])
         self.assertEqual(instancias[0].observaciones, "Con funda")
         self.assertTrue(all(fila.estado == "disponible" for fila in instancias))
@@ -1678,6 +1678,18 @@ class InstanciaMaterialModelTestCase(TestCase):
         for inst in mat.instancias.all():
             self.assertEqual(inst.estado, "disponible")
             self.assertEqual(inst.condicion_fisica, "Operativo")
+
+    def test_registrar_lote_no_genera_numeros_de_serie(self):
+        mat = registrar_material(
+            nombre="Libro CLRS",
+            codigo_inventario="LIB-CLRS-SERIE",
+            tipo="libro",
+            stock=3,
+            numero_serie="SERIE-BASE",
+        )
+
+        series = list(mat.instancias.values_list("numero_serie", flat=True))
+        self.assertEqual(series, ["", "", ""])
 
 
     def test_resumen_estados_de_material(self):

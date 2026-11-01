@@ -66,7 +66,6 @@ function camposDeEjemplar(ejemplar, modo, datos, indice) {
   if (modo === 'lote') {
     return {
       estado: datos.estado_inicial_ejemplares || 'disponible',
-      numero_serie: ejemplar.numero_serie || datos.numero_serie || '',
       color: ejemplar.color || datos.color || '',
       observaciones: ejemplar.observaciones || datos.observaciones || '',
       ubicacion: ejemplar.ubicacion || datos.ubicacion || '',

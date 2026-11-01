@@ -212,7 +212,7 @@ class PrestamoRegistroSerializer(serializers.ModelSerializer):
     material_id = serializers.UUIDField(source="material.id", read_only=True)
     material_nombre = serializers.CharField(source="material.nombre", read_only=True)
     material_codigo = serializers.CharField(
-        source="material.codigo_inventario",
+        source="material.codigo_material",
         read_only=True,
     )
     instancia_id = serializers.UUIDField(read_only=True, allow_null=True)
@@ -428,7 +428,7 @@ class ReporteDevolucionSerializer(serializers.ModelSerializer):
         read_only=True,
     )
     material_codigo = serializers.CharField(
-        source="prestamo.material.codigo_inventario",
+        source="prestamo.material.codigo_material",
         read_only=True,
     )
     codigo_ejemplar = serializers.SerializerMethodField()

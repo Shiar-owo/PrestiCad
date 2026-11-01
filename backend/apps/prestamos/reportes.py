@@ -152,7 +152,7 @@ def generar_reporte_dano(devolucion):
         (Paragraph("Material", estilos["celda_negrita"]), material.nombre),
         (
             Paragraph("Código de Material", estilos["celda_negrita"]),
-            material.codigo_inventario,
+            material.codigo_material,
         ),
         (
             Paragraph("Código de Ejemplar", estilos["celda_negrita"]),

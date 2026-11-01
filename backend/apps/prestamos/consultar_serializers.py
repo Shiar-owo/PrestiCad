@@ -51,7 +51,7 @@ class PrestamoConsultaSerializer(serializers.ModelSerializer):
     material_id = serializers.UUIDField(source="material.id", read_only=True)
     material_nombre = serializers.CharField(source="material.nombre", read_only=True)
     material_codigo = serializers.CharField(
-        source="material.codigo_inventario",
+        source="material.codigo_material",
         read_only=True,
     )
     codigo_ejemplar = serializers.SerializerMethodField()
@@ -81,7 +81,7 @@ class PrestamoHistorialSerializer(serializers.ModelSerializer):
     material_id = serializers.UUIDField(source="material.id", read_only=True)
     material_nombre = serializers.CharField(source="material.nombre", read_only=True)
     material_codigo = serializers.CharField(
-        source="material.codigo_inventario",
+        source="material.codigo_material",
         read_only=True,
     )
     codigo_ejemplar = serializers.SerializerMethodField()
@@ -120,7 +120,7 @@ class MaterialPrestamoHistorialSerializer(serializers.ModelSerializer):
         fields = (
             "nombre",
             "descripcion",
-            "codigo_inventario",
+            "codigo_material",
             "tipo",
             "estado",
             "es_alto_valor",
@@ -204,7 +204,7 @@ class PrestamoDevolucionDetalleSerializer(serializers.ModelSerializer):
     material_id = serializers.UUIDField(source="material.id", read_only=True)
     material_nombre = serializers.CharField(source="material.nombre", read_only=True)
     material_codigo = serializers.CharField(
-        source="material.codigo_inventario",
+        source="material.codigo_material",
         read_only=True,
     )
     codigo_ejemplar = serializers.SerializerMethodField()

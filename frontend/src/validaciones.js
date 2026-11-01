@@ -40,7 +40,7 @@ export function validarPassword(password) {
 
 // --- Inventario (HU04) ---
 
-export function validarCodigoInventario(codigo) {
+export function validarCodigoMaterial(codigo) {
   if (!codigo.trim()) {
     return 'El Código de Material es obligatorio.'
   }
@@ -51,6 +51,8 @@ export function validarCodigoInventario(codigo) {
 
   return ''
 }
+
+export const validarCodigoInventario = validarCodigoMaterial
 
 export function validarStock(stock) {
   const valor = Number(stock)

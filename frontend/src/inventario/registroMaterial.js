@@ -96,7 +96,7 @@ function camposDeEjemplar(ejemplar, modo, datos, indice) {
     ubicacion: ejemplar.ubicacion || '',
   }
   if (modo === 'detalle') {
-    campos.codigo_ejemplar = (ejemplar.codigo_ejemplar || codigoEjemplarPorDefecto(datos.codigo_inventario, indice)).trim()
+    campos.codigo_ejemplar = (ejemplar.codigo_ejemplar || codigoEjemplarPorDefecto(datos.codigo_material || datos.codigo_inventario, indice)).trim()
     campos.condicion_fisica = ejemplar.condicion_fisica || 'Operativo'
   }
   return campos

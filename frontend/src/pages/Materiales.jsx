@@ -149,7 +149,7 @@ function Materiales() {
               </h3>
               <p className="mt-2 text-sm text-texto">
                 <strong>{materialRegistrado.nombre}</strong> · Código de Material:{' '}
-                <code className="font-mono">{materialRegistrado.codigo_inventario}</code>
+                <code className="font-mono">{materialRegistrado.codigo_material || materialRegistrado.codigo_inventario}</code>
               </p>
             </header>
 
@@ -274,7 +274,7 @@ function Materiales() {
               <tbody className="divide-y divide-borde">
                 {materiales.map((material) => (
                   <tr key={material.id} className="text-texto">
-                    <td className="px-4 py-3 font-mono text-xs">{material.codigo_inventario}</td>
+                    <td className="px-4 py-3 font-mono text-xs">{material.codigo_material || material.codigo_inventario}</td>
                     <td className="px-4 py-3 font-semibold">{material.nombre}</td>
                     <td className="px-4 py-3">
                       {material.foto ? (
@@ -357,10 +357,10 @@ function Materiales() {
             ? `Eliminar material ${registroAEliminar.material.nombre}`
             : `Eliminar ejemplar ${codigoInstanciaAEliminar}`}
           descripcion={registroAEliminar.tipo === 'material'
-            ? `Se eliminarán el material ${registroAEliminar.material.codigo_inventario}, sus ${registroAEliminar.material.instancias?.length || registroAEliminar.material.stock} ejemplares y sus fotos.`
+            ? `Se eliminarán el material ${registroAEliminar.material.codigo_material || registroAEliminar.material.codigo_inventario}, sus ${registroAEliminar.material.instancias?.length || registroAEliminar.material.stock} ejemplares y sus fotos.`
             : `Se eliminará el ejemplar ${codigoInstanciaAEliminar} del material ${registroAEliminar.material.nombre}.`}
           codigoConfirmacion={registroAEliminar.tipo === 'material'
-            ? registroAEliminar.material.codigo_inventario
+            ? registroAEliminar.material.codigo_material || registroAEliminar.material.codigo_inventario
             : codigoInstanciaAEliminar}
           onConfirmar={confirmarEliminacion}
           onCancelar={() => setRegistroAEliminar(null)}

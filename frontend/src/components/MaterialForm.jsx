@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 
 import { api, ErrorApi } from '../api/client'
 import {
-  validarCodigoInventario,
+  validarCodigoMaterial,
   validarFoto,
   validarNombre,
   validarPuntosReputacion,
@@ -42,7 +42,7 @@ const OPCIONES_ESTADO_INICIAL_EJEMPLAR = [
 
 const ETIQUETAS_CAMPOS_ERROR = {
   nombre: 'Nombre',
-  codigo_inventario: 'Código de Material',
+  codigo_material: 'Código de Material',
   codigo_ejemplar: 'Código de Ejemplar',
   tipo: 'Tipo',
   stock: 'Cantidad de ejemplares',
@@ -63,7 +63,7 @@ function convertirErroresALista(error) {
 const DATOS_INICIALES = {
   nombre: '',
   descripcion: '',
-  codigo_inventario: '',
+  codigo_material: '',
   tipo: 'equipo',
   stock: 1,
   modo: 'unico',
@@ -138,9 +138,9 @@ function validar(datos) {
     errores.nombre = errorNombre
   }
 
-  const errorCodigo = validarCodigoInventario(datos.codigo_inventario)
+  const errorCodigo = validarCodigoMaterial(datos.codigo_material)
   if (errorCodigo) {
-    errores.codigo_inventario = errorCodigo
+    errores.codigo_material = errorCodigo
   }
 
   for (const { campo } of CAMPOS_PUNTOS) {
@@ -228,7 +228,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
     const siguiente = modo === 'detalle'
       ? filasRedimensionadas.map((fila, indice) => ({
         ...fila,
-        codigo_ejemplar: fila.codigo_ejemplar || codigoEjemplarPorDefecto(datos.codigo_inventario, indice),
+        codigo_ejemplar: fila.codigo_ejemplar || codigoEjemplarPorDefecto(datos.codigo_material, indice),
         color: fila.color || datos.color,
         condicion_fisica: fila.condicion_fisica || 'Operativo',
       }))
@@ -270,10 +270,10 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
     if (!esEdicion && datos.modo === 'detalle' && campo === 'estado') {
       setEjemplares(ejemplares.map((fila) => ({ ...fila, estado: valor })))
     }
-    if (!esEdicion && datos.modo === 'detalle' && ['codigo_inventario', 'color'].includes(campo)) {
+    if (!esEdicion && datos.modo === 'detalle' && ['codigo_material', 'color'].includes(campo)) {
       setEjemplares(ejemplares.map((fila, indice) => {
-        if (campo === 'codigo_inventario') {
-          const codigoAnterior = codigoEjemplarPorDefecto(datos.codigo_inventario, indice)
+        if (campo === 'codigo_material') {
+          const codigoAnterior = codigoEjemplarPorDefecto(datos.codigo_material, indice)
           if (!fila.codigo_ejemplar || fila.codigo_ejemplar === codigoAnterior) {
             return { ...fila, codigo_ejemplar: codigoEjemplarPorDefecto(valor, indice) }
           }
@@ -347,7 +347,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
     const cuerpo = {
       nombre: datos.nombre.trim(),
       descripcion: datos.descripcion.trim(),
-      codigo_inventario: datos.codigo_inventario.trim(),
+      codigo_material: datos.codigo_material.trim(),
       tipo: datos.tipo,
       es_alto_valor: datos.es_alto_valor,
       marca: datos.marca.trim(),
@@ -628,7 +628,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
       ]
       : OPCIONES_ESTADO_INICIAL_EJEMPLAR
   const ejemplosCodigoLote = ejemplosCodigosEjemplares(
-    datos.codigo_inventario,
+    datos.codigo_material,
     cantidadEjemplares,
   )
 
@@ -770,17 +770,17 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
             />
             <Campo
               etiqueta="Código de Material"
-              valor={datos.codigo_inventario}
-              onCambio={(evento) => actualizar('codigo_inventario', evento.target.value)}
-              error={errores.codigo_inventario}
+              valor={datos.codigo_material}
+              onCambio={(evento) => actualizar('codigo_material', evento.target.value)}
+              error={errores.codigo_material}
               maxLength={30}
               requerido
             />
             {!esEdicion && datos.modo === 'unico' && (
               <Campo
                 etiqueta="Código de Ejemplar"
-                valor={datos.codigo_inventario.trim()
-                  ? codigoEjemplarPorDefecto(datos.codigo_inventario, 0)
+                valor={datos.codigo_material.trim()
+                  ? codigoEjemplarPorDefecto(datos.codigo_material, 0)
                   : ''}
                 ayuda="Se genera automáticamente para la única unidad registrada."
                 readOnly
@@ -1005,7 +1005,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
                         <Campo
                           etiqueta="Código de Ejemplar"
                           valor={fila.codigo_ejemplar}
-                          placeholder={`${datos.codigo_inventario.trim() || 'CODIGO'}-${String(indice + 1).padStart(2, '0')}`}
+                          placeholder={`${datos.codigo_material.trim() || 'CODIGO'}-${String(indice + 1).padStart(2, '0')}`}
                           onCambio={(evento) => actualizarFila(indice, 'codigo_ejemplar', evento.target.value)}
                           error={erroresFilas[indice]?.codigo_ejemplar}
                           maxLength={50}

@@ -1013,16 +1013,14 @@ class HistorialPrestamosAPITestCase(APITestCase):
         instancia = prestamo.instancia
         instancia.numero_serie = "SERIE-DETALLE"
         instancia.color = "Azul"
-        instancia.condicion_fisica = "Bueno"
-        instancia.ubicacion = "Estante A"
         instancia.observaciones = "Sin accesorios adicionales"
+        instancia.ubicacion = "Estante A"
         instancia.save(
             update_fields=[
                 "numero_serie",
                 "color",
-                "condicion_fisica",
-                "ubicacion",
                 "observaciones",
+                "ubicacion",
             ]
         )
         prestamo.material.marca = "Marca de prueba"
@@ -1043,7 +1041,7 @@ class HistorialPrestamosAPITestCase(APITestCase):
         self.assertNotIn("estado_fisico", datos["material"])
         self.assertEqual(datos["instancia"]["codigo_ejemplar"], instancia.codigo_ejemplar)
         self.assertEqual(datos["instancia"]["numero_serie"], "SERIE-DETALLE")
-        self.assertEqual(datos["instancia"]["condicion_fisica"], "Bueno")
+        self.assertEqual(datos["instancia"]["observaciones"], "Sin accesorios adicionales")
         self.assertNotIn("estado_fisico", datos["instancia"])
         self.assertEqual(datos["instancia"]["color"], "Azul")
         self.assertEqual(datos["instancia"]["ubicacion"], "Estante A")

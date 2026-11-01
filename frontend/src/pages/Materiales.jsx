@@ -190,10 +190,9 @@ function Materiales() {
                       <th className="px-3 py-2 font-semibold">Código de Ejemplar</th>
                       <th className="px-3 py-2 font-semibold">N.º de serie</th>
                       <th className="px-3 py-2 font-semibold">Estado</th>
-                      <th className="px-3 py-2 font-semibold">Condición física</th>
+                      <th className="px-3 py-2 font-semibold">Observaciones</th>
                       <th className="px-3 py-2 font-semibold">Color</th>
                       <th className="px-3 py-2 font-semibold">Ubicación</th>
-                      <th className="px-3 py-2 font-semibold">Observaciones</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-borde">
@@ -204,14 +203,13 @@ function Materiales() {
                         </td>
                         <td className="px-3 py-2">{instancia.numero_serie || '—'}</td>
                         <td className="px-3 py-2">{instancia.estado_display || instancia.estado || '—'}</td>
-                        <td className="px-3 py-2">{instancia.condicion_fisica || '—'}</td>
+                        <td className="px-3 py-2">{instancia.observaciones || '—'}</td>
                         <td className="px-3 py-2">
                           {(['unico', 'lote'].includes(resumenRegistro.modo)
                             ? materialRegistrado.color
                             : instancia.color) || '—'}
                         </td>
                         <td className="px-3 py-2">{instancia.ubicacion || '—'}</td>
-                        <td className="px-3 py-2">{instancia.observaciones || '—'}</td>
                       </tr>
                     )) : (
                       <tr>

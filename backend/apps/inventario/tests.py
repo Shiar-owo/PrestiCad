@@ -625,18 +625,18 @@ class MaterialSerializerContratoTestCase(SimpleTestCase):
         self.assertEqual(serializer.validated_data["estado"], "disponible")
         self.assertNotIn("unidades_disponibles", serializer.validated_data)
 
-    def test_alta_acepta_condicion_fisica_como_entrada(self):
+    def test_alta_acepta_observaciones_como_entrada(self):
         serializer = MaterialRegistroSerializer(
             data={
                 "nombre": "Cable",
                 "codigo_material": "OBJ-1",
                 "tipo": "objeto",
-                "condicion_fisica": "Bueno",
+                "observaciones": "Bueno",
             }
         )
 
         self.assertTrue(serializer.is_valid(), serializer.errors)
-        self.assertEqual(serializer.validated_data["condicion_fisica"], "Bueno")
+        self.assertEqual(serializer.validated_data["observaciones"], "Bueno")
 
     def test_alta_rechaza_estado_fisico_como_campo_de_material(self):
         serializer = MaterialRegistroSerializer(
@@ -651,11 +651,11 @@ class MaterialSerializerContratoTestCase(SimpleTestCase):
         self.assertFalse(serializer.is_valid())
         self.assertEqual(serializer.errors["estado_fisico"], ["Este campo no está permitido."])
 
-    def test_instancia_rechaza_nombre_legado_de_condicion_fisica(self):
-        serializer = InstanciaMaterialModificacionSerializer(data={"estado_fisico": "Bueno"})
+    def test_instancia_acepta_observaciones_como_campo_valido(self):
+        serializer = InstanciaMaterialModificacionSerializer(data={"observaciones": "Bueno"})
 
-        self.assertFalse(serializer.is_valid())
-        self.assertEqual(serializer.errors["estado_fisico"], ["Este campo no está permitido."])
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertEqual(serializer.validated_data["observaciones"], "Bueno")
 
     def test_edicion_acepta_estado(self):
         serializer = MaterialActualizacionSerializer(data={"estado": "en_mantenimiento"})
@@ -1494,7 +1494,7 @@ class RegistroMaterialMultipleAPITestCase(EscenariosDeMaterialApi):
         respuesta = self.client.post(
             self.LIST_URL,
             self._payload_valido(
-                modo="unico", numero_serie="SER-01", condicion_fisica="Bueno", ubicacion="Estante A"
+                modo="unico", numero_serie="SER-01", observaciones="Bueno", ubicacion="Estante A"
             ),
             format="json",
         )
@@ -1504,7 +1504,7 @@ class RegistroMaterialMultipleAPITestCase(EscenariosDeMaterialApi):
         self.assertEqual(instancia.codigo_ejemplar, "OBJ-001-01")
         self.assertEqual(instancia.estado, "disponible")
         self.assertEqual(instancia.numero_serie, "SER-01")
-        self.assertEqual(instancia.condicion_fisica, "Bueno")
+        self.assertEqual(instancia.observaciones, "Bueno")
         self.assertEqual(instancia.ubicacion, "Estante A")
         self.assertNotIn("condicion_fisica", respuesta.json())
         self.assertNotIn("estado_fisico", respuesta.json())
@@ -1514,7 +1514,7 @@ class RegistroMaterialMultipleAPITestCase(EscenariosDeMaterialApi):
             self.LIST_URL,
             {
                 **self._payload_valido(
-                    modo="lote", stock=2, ubicacion="Estante común", condicion_fisica="Bueno"
+                    modo="lote", stock=2, ubicacion="Estante común", observaciones="Bueno"
                 ),
                 "instancias": [
                     {"numero_serie": "SER-A", "color": "Negro", "observaciones": "Con funda"},
@@ -1528,7 +1528,7 @@ class RegistroMaterialMultipleAPITestCase(EscenariosDeMaterialApi):
         instancias = list(InstanciaMaterial.objects.order_by("codigo_ejemplar"))
         self.assertEqual([fila.codigo_ejemplar for fila in instancias], ["OBJ-001-01", "OBJ-001-02"])
         self.assertEqual([fila.ubicacion for fila in instancias], ["Estante común", "Estante propio"])
-        self.assertEqual([fila.condicion_fisica for fila in instancias], ["Bueno", "Bueno"])
+        self.assertEqual([fila.observaciones for fila in instancias], ["Con funda", ""])
         self.assertEqual([fila.numero_serie for fila in instancias], ["", ""])
         self.assertEqual([fila.color for fila in instancias], ["Negro", "Blanco"])
         self.assertEqual(instancias[0].observaciones, "Con funda")
@@ -1540,8 +1540,8 @@ class RegistroMaterialMultipleAPITestCase(EscenariosDeMaterialApi):
             {
                 **self._payload_valido(modo="detalle", stock=2),
                 "instancias": [
-                    {"codigo_ejemplar": "UNIDAD-A", "numero_serie": "SER-A", "condicion_fisica": "Bueno", "color": "Azul", "ubicacion": "A1", "observaciones": "Marca lateral"},
-                    {"codigo_ejemplar": "UNIDAD-B", "numero_serie": "SER-B", "condicion_fisica": "Regular", "color": "Rojo", "ubicacion": "B2"},
+                    {"codigo_ejemplar": "UNIDAD-A", "numero_serie": "SER-A", "color": "Azul", "ubicacion": "A1", "observaciones": "Marca lateral"},
+                    {"codigo_ejemplar": "UNIDAD-B", "numero_serie": "SER-B", "color": "Rojo", "ubicacion": "B2"},
                 ],
             },
             format="json",
@@ -1550,13 +1550,12 @@ class RegistroMaterialMultipleAPITestCase(EscenariosDeMaterialApi):
         self.assertEqual(respuesta.status_code, 201, respuesta.content)
         primero = InstanciaMaterial.objects.get(codigo_ejemplar="UNIDAD-A")
         self.assertEqual(primero.numero_serie, "SER-A")
-        self.assertEqual(primero.condicion_fisica, "Bueno")
+        self.assertEqual(primero.observaciones, "Marca lateral")
         self.assertEqual(primero.color, "Azul")
         self.assertEqual(primero.ubicacion, "A1")
-        self.assertEqual(primero.observaciones, "Marca lateral")
         self.assertEqual(primero.estado, "disponible")
         segundo = InstanciaMaterial.objects.get(codigo_ejemplar="UNIDAD-B")
-        self.assertEqual(segundo.condicion_fisica, "Regular")
+        self.assertEqual(segundo.observaciones, "")
 
     def test_codigo_repetido_en_payload_indica_fila_y_no_crea_registros(self):
         respuesta = self.client.post(
@@ -1677,7 +1676,7 @@ class InstanciaMaterialModelTestCase(TestCase):
         self.assertEqual(codigos, ["LIB-CLRS-01", "LIB-CLRS-02", "LIB-CLRS-03"])
         for inst in mat.instancias.all():
             self.assertEqual(inst.estado, "disponible")
-            self.assertEqual(inst.condicion_fisica, "Operativo")
+            self.assertEqual(inst.observaciones, "")
 
     def test_registrar_lote_no_genera_numeros_de_serie(self):
         mat = registrar_material(
@@ -1881,7 +1880,6 @@ class InstanciaMaterialAPITestCase(ConMediaTemporal, APITestCase):
                 "codigo_ejemplar": "EQ-OSC-01-03",
                 "numero_serie": "SN-998877",
                 "estado": "disponible",
-                "condicion_fisica": "Excelente",
                 "color": "Gris",
                 "observaciones": "Donación con cables de prueba",
                 "ubicacion": "Estante B-4",
@@ -1891,8 +1889,8 @@ class InstanciaMaterialAPITestCase(ConMediaTemporal, APITestCase):
         self.assertEqual(resp.status_code, 201)
         instancia_creada = InstanciaMaterial.objects.get(codigo_ejemplar="EQ-OSC-01-03")
         self.assertEqual(instancia_creada.color, "Gris")
-        self.assertEqual(instancia_creada.condicion_fisica, "Excelente")
-        self.assertEqual(resp.json()["condicion_fisica"], "Excelente")
+        self.assertEqual(instancia_creada.observaciones, "Donación con cables de prueba")
+        self.assertEqual(resp.json()["observaciones"], "Donación con cables de prueba")
         self.assertNotIn("estado_fisico", resp.json())
         self.assertEqual(resp.json()["color"], "Gris")
         self.material.refresh_from_db()
@@ -1948,7 +1946,6 @@ class InstanciaMaterialAPITestCase(ConMediaTemporal, APITestCase):
             {
                 "estado": "en_mantenimiento",
                 "color": "Verde",
-                "condicion_fisica": "Desgaste leve",
                 "observaciones": "Punta de prueba dañada",
             },
             format="json",
@@ -1957,8 +1954,8 @@ class InstanciaMaterialAPITestCase(ConMediaTemporal, APITestCase):
         instancia.refresh_from_db()
         self.assertEqual(instancia.estado, "en_mantenimiento")
         self.assertEqual(instancia.color, "Verde")
-        self.assertEqual(instancia.condicion_fisica, "Desgaste leve")
-        self.assertEqual(resp.json()["condicion_fisica"], "Desgaste leve")
+        self.assertEqual(instancia.observaciones, "Punta de prueba dañada")
+        self.assertEqual(resp.json()["observaciones"], "Punta de prueba dañada")
         self.assertNotIn("estado_fisico", resp.json())
         self.assertEqual(instancia.observaciones, "Punta de prueba dañada")
 

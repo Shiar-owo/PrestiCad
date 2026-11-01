@@ -208,7 +208,7 @@ class InstanciaMaterial(models.Model):
     en préstamo. Cada instancia posee su propia identificación patrimonial
     única (`codigo_ejemplar`), número de serie de fábrica opcional, estado
     operativo (`disponible`, `reservado`, `prestado`, `en_mantenimiento`,
-    `de_baja`), estado físico y observaciones de almacén.
+    `de_baja`) y observaciones de almacén.
     """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -236,13 +236,6 @@ class InstanciaMaterial(models.Model):
         choices=ESTADOS_INSTANCIA,
         default="disponible",
         verbose_name="Estado de la instancia",
-    )
-    condicion_fisica = models.CharField(
-        max_length=100,
-        blank=True,
-        default="Operativo",
-        verbose_name="Condición física",
-        help_text="Condición física de este ejemplar (ej. Excelente, Bueno, Desgaste leve).",
     )
     color = models.CharField(
         max_length=30,

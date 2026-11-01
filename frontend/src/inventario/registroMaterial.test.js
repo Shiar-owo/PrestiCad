@@ -84,7 +84,7 @@ describe('construirCuerpoRegistroMaterial', () => {
         codigo_material: 'EQ-1',
         numero_serie: 'SER-1',
         ubicacion: 'A1',
-        condicion_fisica: 'Bueno',
+        observaciones: 'Bueno',
       },
       ejemplares: [],
     })
@@ -94,7 +94,7 @@ describe('construirCuerpoRegistroMaterial', () => {
       stock: 1,
       numero_serie: 'SER-1',
       ubicacion: 'A1',
-      condicion_fisica: 'Bueno',
+      observaciones: 'Bueno',
     })
     expect(cuerpo).not.toHaveProperty('instancias')
   })
@@ -108,7 +108,7 @@ describe('construirCuerpoRegistroMaterial', () => {
         codigo_material: 'EQ-2',
         ubicacion: 'Estante A',
         numero_serie: 'no-compartir',
-        condicion_fisica: 'Operativo',
+        observaciones: 'Operativo',
       },
       ejemplares: [
         { id: 'a', numero_serie: 'SER-A', color: 'Negro', foto: null, observaciones: 'ok' },
@@ -119,7 +119,7 @@ describe('construirCuerpoRegistroMaterial', () => {
     expect(cuerpo).toBeInstanceOf(FormData)
     expect(cuerpo.get('stock')).toBe('2')
     expect(cuerpo.get('numero_serie')).toBeNull()
-    expect(cuerpo.get('condicion_fisica')).toBe('Operativo')
+    expect(cuerpo.get('condicion_fisica')).toBeNull()
     expect(JSON.parse(cuerpo.get('instancias'))[1]).toMatchObject({ color: 'Blanco', ubicacion: 'Estante B' })
     expect(JSON.parse(cuerpo.get('instancias')).every((fila) => !('numero_serie' in fila))).toBe(true)
     expect(cuerpo.get('instancia_foto_1').name).toBe('ejemplar.png')
@@ -128,16 +128,16 @@ describe('construirCuerpoRegistroMaterial', () => {
   it('construye detalle JSON con códigos y condiciones por fila', () => {
     const cuerpo = construirCuerpoRegistroMaterial({
       modo: 'detalle',
-      datos: { nombre: 'Libro', codigo_material: 'LIB-1', condicion_fisica: 'no-compartir' },
+      datos: { nombre: 'Libro', codigo_material: 'LIB-1', observaciones: 'no-compartir' },
       ejemplares: [{
-        codigo_ejemplar: 'LIB-A', condicion_fisica: 'Bueno', numero_serie: 'S1', color: 'Azul', ubicacion: 'A1', observaciones: 'Nota',
+        codigo_ejemplar: 'LIB-A', numero_serie: 'S1', color: 'Azul', ubicacion: 'A1', observaciones: 'Nota',
       }, {
-        codigo_ejemplar: 'LIB-B', condicion_fisica: 'Regular', color: 'Rojo',
+        codigo_ejemplar: 'LIB-B', color: 'Rojo',
       }],
     })
 
     expect(cuerpo).toMatchObject({ modo: 'detalle', stock: 2 })
-    expect(cuerpo.instancias[0]).toMatchObject({ codigo_ejemplar: 'LIB-A', condicion_fisica: 'Bueno', color: 'Azul', observaciones: 'Nota' })
+    expect(cuerpo.instancias[0]).toMatchObject({ codigo_ejemplar: 'LIB-A', color: 'Azul', observaciones: 'Nota' })
     expect(cuerpo.condicion_fisica).toBeUndefined()
   })
 })

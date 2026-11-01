@@ -31,14 +31,14 @@ describe('crearOpcionesInstancia', () => {
           id: 'unidad-1',
           codigo_ejemplar: 'EQ-01-01',
           numero_serie: 'SERIE-01',
-          condicion_fisica: 'Desgaste leve',
+          observaciones: 'Desgaste leve',
         },
       ]),
     ).toEqual([
       { valor: '', etiqueta: 'Selecciona una instancia' },
       {
         valor: 'unidad-1',
-        etiqueta: 'EQ-01-01 · Serie: SERIE-01 · Condición física: Desgaste leve',
+        etiqueta: 'EQ-01-01 · Serie: SERIE-01 · Observación: Desgaste leve',
       },
     ])
   })
@@ -46,7 +46,7 @@ describe('crearOpcionesInstancia', () => {
   it('muestra solo el código cuando faltan los datos físicos opcionales', () => {
     expect(
       crearOpcionesInstancia([
-        { id: 'unidad-2', codigo_ejemplar: 'EQ-01-02', numero_serie: '', condicion_fisica: '' },
+        { id: 'unidad-2', codigo_ejemplar: 'EQ-01-02', numero_serie: '', observaciones: '' },
       ])[1],
     ).toEqual({ valor: 'unidad-2', etiqueta: 'EQ-01-02' })
   })

@@ -775,6 +775,7 @@ class MisPrestamosAPITestCase(APITestCase):
         "material_id",
         "material_nombre",
         "material_codigo",
+        "codigo_ejemplar",
         "fecha_entrega",
         "fecha_limite",
         "tiempo_prestamo_dias",
@@ -832,6 +833,7 @@ class MisPrestamosAPITestCase(APITestCase):
         self.assertEqual(len(datos), 1)
         self.assertEqual(set(datos[0]), self.CAMPOS_PUBLICOS)
         self.assertEqual(datos[0]["material_codigo"], "MIS-001")
+        self.assertEqual(datos[0]["codigo_ejemplar"], "MIS-001-01")
         self.assertEqual(datos[0]["estado"], "activo")
 
     def test_get_sin_prestamos_devuelve_lista_vacia(self):
@@ -865,6 +867,7 @@ class HistorialPrestamosAPITestCase(APITestCase):
         "material_id",
         "material_nombre",
         "material_codigo",
+        "codigo_ejemplar",
         "fecha_entrega",
         "fecha_limite",
         "tiempo_prestamo_dias",
@@ -927,6 +930,7 @@ class HistorialPrestamosAPITestCase(APITestCase):
         self.assertEqual(len(datos["results"]), 1)
         prestamo = datos["results"][0]
         self.assertEqual(set(prestamo), self.CAMPOS_HISTORIAL)
+        self.assertTrue(prestamo["codigo_ejemplar"])
         self.assertIn(prestamo["prestatario_nombre"], {
             f"{self.prestatario.nombre} {self.prestatario.apellido}",
             f"{self.otro_prestatario.nombre} {self.otro_prestatario.apellido}",
@@ -2632,6 +2636,7 @@ class ReportesDevolucionAPITestCase(DevolucionBaseTestCase):
         self.assertEqual(fila["devolucion_id"], self.devolucion.id)
         self.assertEqual(fila["prestamo_id"], self.prestamo.id)
         self.assertEqual(fila["material_codigo"], self.material.codigo_inventario)
+        self.assertEqual(fila["codigo_ejemplar"], self.prestamo.instancia.codigo_ejemplar)
         self.assertEqual(fila["prestatario_nombre"], "Ana Torres")
         self.assertEqual(fila["gestor_nombre"], "Ana Torres")
         self.assertEqual(fila["dano"], "dano_parcial")

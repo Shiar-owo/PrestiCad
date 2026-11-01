@@ -54,6 +54,7 @@ class PrestamoConsultaSerializer(serializers.ModelSerializer):
         source="material.codigo_inventario",
         read_only=True,
     )
+    codigo_ejemplar = serializers.SerializerMethodField()
     estado = serializers.CharField(source="estado_consulta", read_only=True)
 
     class Meta:
@@ -63,12 +64,16 @@ class PrestamoConsultaSerializer(serializers.ModelSerializer):
             "material_id",
             "material_nombre",
             "material_codigo",
+            "codigo_ejemplar",
             "fecha_entrega",
             "fecha_limite",
             "tiempo_prestamo_dias",
             "estado",
         )
         read_only_fields = fields
+
+    def get_codigo_ejemplar(self, prestamo):
+        return prestamo.instancia.codigo_ejemplar if prestamo.instancia_id else None
 
 
 class PrestamoHistorialSerializer(serializers.ModelSerializer):
@@ -79,6 +84,7 @@ class PrestamoHistorialSerializer(serializers.ModelSerializer):
         source="material.codigo_inventario",
         read_only=True,
     )
+    codigo_ejemplar = serializers.SerializerMethodField()
     estado = serializers.CharField(source="estado_consulta", read_only=True)
 
     class Meta:
@@ -89,6 +95,7 @@ class PrestamoHistorialSerializer(serializers.ModelSerializer):
             "material_id",
             "material_nombre",
             "material_codigo",
+            "codigo_ejemplar",
             "fecha_entrega",
             "fecha_limite",
             "tiempo_prestamo_dias",
@@ -98,6 +105,9 @@ class PrestamoHistorialSerializer(serializers.ModelSerializer):
 
     def get_prestatario_nombre(self, obj):
         return f"{obj.usuario.nombre} {obj.usuario.apellido}".strip()
+
+    def get_codigo_ejemplar(self, prestamo):
+        return prestamo.instancia.codigo_ejemplar if prestamo.instancia_id else None
 
 
 class MaterialPrestamoHistorialSerializer(serializers.ModelSerializer):
@@ -197,6 +207,7 @@ class PrestamoDevolucionDetalleSerializer(serializers.ModelSerializer):
         source="material.codigo_inventario",
         read_only=True,
     )
+    codigo_ejemplar = serializers.SerializerMethodField()
     estado = serializers.CharField(source="estado_consulta", read_only=True)
     checklist_inicial = serializers.SerializerMethodField()
     prestatario_nombre = serializers.SerializerMethodField()
@@ -239,6 +250,7 @@ class PrestamoDevolucionDetalleSerializer(serializers.ModelSerializer):
             "material_id",
             "material_nombre",
             "material_codigo",
+            "codigo_ejemplar",
             "fecha_entrega",
             "fecha_limite",
             "tiempo_prestamo_dias",
@@ -257,6 +269,9 @@ class PrestamoDevolucionDetalleSerializer(serializers.ModelSerializer):
 
     def get_prestatario_nombre(self, obj):
         return f"{obj.usuario.nombre} {obj.usuario.apellido}".strip()
+
+    def get_codigo_ejemplar(self, prestamo):
+        return prestamo.instancia.codigo_ejemplar if prestamo.instancia_id else None
 
     def get_checklist_inicial(self, obj):
         return serializar_checklist_inicial(obj)

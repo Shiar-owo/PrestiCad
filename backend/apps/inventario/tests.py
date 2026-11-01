@@ -1719,7 +1719,12 @@ class MigracionCondicionFisicaInstanciaTestCase(TransactionTestCase):
     migrate_from = ("inventario", "0007_alter_instanciamaterial_foto_alter_material_foto")
     migrate_to = ("inventario", "0008_instanciamaterial_condicion_fisica")
 
+    def _restaurar_migraciones(self):
+        executor = MigrationExecutor(connection)
+        executor.migrate(executor.loader.graph.leaf_nodes())
+
     def setUp(self):
+        self.addCleanup(self._restaurar_migraciones)
         executor = MigrationExecutor(connection)
         executor.migrate([self.migrate_from])
         aplicaciones_anteriores = executor.loader.project_state([self.migrate_from]).apps
@@ -1727,7 +1732,7 @@ class MigracionCondicionFisicaInstanciaTestCase(TransactionTestCase):
         InstanciaAnterior = aplicaciones_anteriores.get_model("inventario", "InstanciaMaterial")
         material = MaterialAnterior.objects.create(
             nombre="Material de migración",
-            codigo_material="MIG-COND-01",
+            codigo_inventario="MIG-COND-01",
             tipo="objeto",
         )
         InstanciaAnterior.objects.create(
@@ -1739,11 +1744,6 @@ class MigracionCondicionFisicaInstanciaTestCase(TransactionTestCase):
         executor = MigrationExecutor(connection)
         executor.migrate([self.migrate_to])
         self.aplicaciones_nuevas = executor.loader.project_state([self.migrate_to]).apps
-
-    def tearDown(self):
-        executor = MigrationExecutor(connection)
-        executor.migrate(executor.loader.graph.leaf_nodes())
-        super().tearDown()
 
     def test_copia_el_valor_existente_a_condicion_fisica(self):
         InstanciaNueva = self.aplicaciones_nuevas.get_model("inventario", "InstanciaMaterial")
@@ -1758,7 +1758,12 @@ class MigracionEliminarEstadoFisicoInstanciaTestCase(TransactionTestCase):
     migrate_from = ("inventario", "0009_eliminar_estado_fisico_material")
     migrate_to = ("inventario", "0010_eliminar_estado_fisico_legado_instancia")
 
+    def _restaurar_migraciones(self):
+        executor = MigrationExecutor(connection)
+        executor.migrate(executor.loader.graph.leaf_nodes())
+
     def setUp(self):
+        self.addCleanup(self._restaurar_migraciones)
         executor = MigrationExecutor(connection)
         executor.migrate([self.migrate_from])
         aplicaciones_anteriores = executor.loader.project_state([self.migrate_from]).apps
@@ -1766,7 +1771,7 @@ class MigracionEliminarEstadoFisicoInstanciaTestCase(TransactionTestCase):
         InstanciaAnterior = aplicaciones_anteriores.get_model("inventario", "InstanciaMaterial")
         material = MaterialAnterior.objects.create(
             nombre="Material de migración final",
-            codigo_material="MIG-COND-FINAL",
+            codigo_inventario="MIG-COND-FINAL",
             tipo="objeto",
         )
         InstanciaAnterior.objects.create(
@@ -1779,11 +1784,6 @@ class MigracionEliminarEstadoFisicoInstanciaTestCase(TransactionTestCase):
         executor = MigrationExecutor(connection)
         executor.migrate([self.migrate_to])
         self.aplicaciones_nuevas = executor.loader.project_state([self.migrate_to]).apps
-
-    def tearDown(self):
-        executor = MigrationExecutor(connection)
-        executor.migrate(executor.loader.graph.leaf_nodes())
-        super().tearDown()
 
     def test_migracion_y_reversion_conservan_condicion_fisica(self):
         InstanciaNueva = self.aplicaciones_nuevas.get_model("inventario", "InstanciaMaterial")

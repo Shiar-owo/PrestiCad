@@ -81,7 +81,7 @@ describe('construirCuerpoRegistroMaterial', () => {
       modo: 'unico',
       datos: {
         nombre: 'Proyector',
-        codigo_inventario: 'EQ-1',
+        codigo_material: 'EQ-1',
         numero_serie: 'SER-1',
         ubicacion: 'A1',
         condicion_fisica: 'Bueno',
@@ -105,7 +105,7 @@ describe('construirCuerpoRegistroMaterial', () => {
       modo: 'lote',
       datos: {
         nombre: 'Cámara',
-        codigo_inventario: 'EQ-2',
+        codigo_material: 'EQ-2',
         ubicacion: 'Estante A',
         numero_serie: 'no-compartir',
         condicion_fisica: 'Operativo',
@@ -128,7 +128,7 @@ describe('construirCuerpoRegistroMaterial', () => {
   it('construye detalle JSON con códigos y condiciones por fila', () => {
     const cuerpo = construirCuerpoRegistroMaterial({
       modo: 'detalle',
-      datos: { nombre: 'Libro', codigo_inventario: 'LIB-1', condicion_fisica: 'no-compartir' },
+      datos: { nombre: 'Libro', codigo_material: 'LIB-1', condicion_fisica: 'no-compartir' },
       ejemplares: [{
         codigo_ejemplar: 'LIB-A', condicion_fisica: 'Bueno', numero_serie: 'S1', color: 'Azul', ubicacion: 'A1', observaciones: 'Nota',
       }, {
@@ -147,6 +147,6 @@ describe('mapearErroresPorFila', () => {
     expect(mapearErroresPorFila({ response: { data: { foto: ['Formato inválido.'], indice: 2 } } })).toEqual({
       2: { campo: 'foto', mensaje: 'Formato inválido.' },
     })
-    expect(mapearErroresPorFila({ response: { data: { codigo_inventario: ['Duplicado.'] } } })).toEqual({})
+    expect(mapearErroresPorFila({ response: { data: { codigo_material: ['Duplicado.'] } } })).toEqual({})
   })
 })

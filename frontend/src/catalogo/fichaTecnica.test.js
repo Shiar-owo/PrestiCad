@@ -28,7 +28,7 @@ describe('obtenerDatosFichaTecnica', () => {
       id: 'abc-123',
       nombre: 'Osciloscopio Digital 100MHz',
       descripcion: 'Osciloscopio de 2 canales para prácticas de laboratorio.',
-      codigo_inventario: 'EQ-OSC-01',
+      codigo_material: 'EQ-OSC-01',
       tipo: 'equipo',
       estado: 'disponible',
       marca: 'Rigol',
@@ -91,7 +91,7 @@ describe('obtenerDatosFichaTecnica', () => {
   it('procesa correctamente la lista de instancias físicas y su estado', () => {
     const materialConInstancias = {
       nombre: 'Libro CLRS',
-      codigo_inventario: 'LIB-CLRS',
+      codigo_material: 'LIB-CLRS',
       stock: 2,
       color: 'Gris general',
       instancias: [
@@ -144,7 +144,7 @@ describe('obtenerDatosFichaTecnica', () => {
     const materialMinimo = {
       id: 'xyz-789',
       nombre: 'Cable Adaptador USB-C',
-      codigo_inventario: 'OBJ-002',
+      codigo_material: 'OBJ-002',
       tipo: 'objeto',
       estado: 'disponible',
     }

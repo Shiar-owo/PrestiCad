@@ -10,7 +10,7 @@ import {
 describe('redimensionarFilasAlta', () => {
   it('sugiere códigos siguientes, conserva filas y genera identificadores nuevos una sola vez', () => {
     const material = {
-      codigo_inventario: 'TAB-01',
+      codigo_material: 'TAB-01',
       stock: 3,
       instancias: [{ codigo_ejemplar: 'TAB-01-04' }],
     }
@@ -35,7 +35,7 @@ describe('redimensionarFilasAlta', () => {
   it('limita la cantidad al máximo y evita códigos ya registrados ignorando mayúsculas', () => {
     let siguienteId = 0
     const material = {
-      codigo_inventario: 'KIT',
+      codigo_material: 'KIT',
       stock: 1,
       instancias: [{ codigo_ejemplar: 'kit-02' }],
     }

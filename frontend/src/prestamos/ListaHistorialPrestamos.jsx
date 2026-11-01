@@ -51,7 +51,8 @@ export default function ListaHistorialPrestamos({
               <BadgeEstado estado={prestamo.estado} />
             </div>
             <p className="mt-1 text-sm text-texto-suave">
-              Prestatario: {prestamo.prestatario_nombre} · Código: {prestamo.material_codigo}
+              Prestatario: {prestamo.prestatario_nombre} · Código de Material: {prestamo.material_codigo}
+              {prestamo.codigo_ejemplar && <> · Código de Ejemplar: {prestamo.codigo_ejemplar}</>}
             </p>
           </button>
         </li>

@@ -223,8 +223,8 @@ export default function DetallePrestamo({
             )}
             <dl className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <CampoDetalle etiqueta="Material">{material?.nombre || prestamo.material_nombre}</CampoDetalle>
-              <CampoDetalle etiqueta="Código de inventario">
-                {material?.codigo_inventario || prestamo.material_codigo}
+              <CampoDetalle etiqueta="Código de Material">
+                {material?.codigo_material || material?.codigo_inventario || prestamo.material_codigo}
               </CampoDetalle>
               <CampoDetalle etiqueta="Descripción">{material?.descripcion || 'Sin descripción'}</CampoDetalle>
               <CampoDetalle etiqueta="Tipo">{material?.tipo || 'No especificado'}</CampoDetalle>
@@ -274,7 +274,7 @@ export default function DetallePrestamo({
                   />
                 )}
                 <dl className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  <CampoDetalle etiqueta="Código de ejemplar">{instancia.codigo_ejemplar}</CampoDetalle>
+                  <CampoDetalle etiqueta="Código de Ejemplar">{instancia.codigo_ejemplar}</CampoDetalle>
                   <CampoDetalle etiqueta="Estado del ejemplar">
                     {instancia.estado_display || instancia.estado}
                   </CampoDetalle>

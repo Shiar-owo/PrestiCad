@@ -28,7 +28,7 @@ CAMPOS_EDITABLES = frozenset(
     {
         "nombre",
         "descripcion",
-        "codigo_inventario",
+        "codigo_material",
         "tipo",
         "estado",
         "es_alto_valor",
@@ -58,7 +58,7 @@ CAMPOS_TEXTO = (
     "color",
 )
 
-CODIGO_DUPLICADO_MENSAJE = "El código de inventario ya está registrado."
+CODIGO_DUPLICADO_MENSAJE = "El Código de Material ya está registrado."
 
 
 class InventarioError(Exception):
@@ -81,7 +81,7 @@ class MaterialNoEncontradoError(Exception):
 
 
 def normalizar_codigo(codigo):
-    """Normaliza el código de inventario para que la unicidad no dependa de mayúsculas."""
+    """Normaliza el Código de Material para que la unicidad no dependa de mayúsculas."""
     return codigo.strip().upper()
 
 
@@ -180,7 +180,7 @@ def buscar_materiales(
 def registrar_material(
     *,
     nombre,
-    codigo_inventario,
+    codigo_material,
     tipo,
     estado="disponible",
     descripcion="",
@@ -208,7 +208,7 @@ def registrar_material(
     """Registra un material en el inventario.
 
     Reglas de negocio (HU04):
-    - El código de inventario es único en el sistema (criterio 4) y se
+    - El Código de Material es único en el sistema (criterio 4) y se
       normaliza a mayúsculas para que "inv-01" y "INV-01" sean el mismo
       material.
     - Cada ejemplar inicia disponible o en mantenimiento.
@@ -221,7 +221,7 @@ def registrar_material(
     Eleva `InventarioError` si el código ya está registrado o `ValidationError`
     si la foto no cumple las restricciones.
     """
-    codigo = normalizar_codigo(codigo_inventario)
+    codigo = normalizar_codigo(codigo_material)
     try:
         _verificar_codigo_disponible(codigo)
     except InventarioError as error:
@@ -348,7 +348,7 @@ def registrar_material(
     campos = {
         "nombre": nombre,
         "descripcion": descripcion.strip(),
-        "codigo_inventario": codigo,
+        "codigo_material": codigo,
         "tipo": tipo,
         "stock": stock,
         "estado": estado_material,
@@ -419,8 +419,8 @@ def registrar_material(
             raise InventarioError(
                 "codigo_ejemplar", "El código del ejemplar ya está registrado.", status_code=409
             ) from exc
-        if isinstance(exc, IntegrityError) and "codigo_inventario" in str(exc):
-            raise InventarioError("codigo_inventario", CODIGO_DUPLICADO_MENSAJE, status_code=409) from exc
+        if isinstance(exc, IntegrityError) and ("codigo_material" in str(exc) or "codigo_inventario" in str(exc)):
+            raise InventarioError("codigo_material", CODIGO_DUPLICADO_MENSAJE, status_code=409) from exc
         raise
 
 
@@ -448,10 +448,10 @@ def actualizar_material(material_id, **campos):
     actualizar_estado_general = "estado" in campos
     estado_general_solicitado = campos.pop("estado", None)
 
-    if "codigo_inventario" in campos:
-        codigo = normalizar_codigo(campos["codigo_inventario"])
+    if "codigo_material" in campos:
+        codigo = normalizar_codigo(campos["codigo_material"])
         _verificar_codigo_disponible(codigo, material.id)
-        campos["codigo_inventario"] = codigo
+        campos["codigo_material"] = codigo
 
     if actualizar_estado_general:
         _verificar_estado(estado_general_solicitado)
@@ -486,10 +486,10 @@ def actualizar_material(material_id, **campos):
             base = conteo_actual
             for i in range(1, diferencia + 1):
                 idx = base + i
-                cod_ej = f"{material.codigo_inventario}-{idx:02d}"
+                cod_ej = f"{material.codigo_material}-{idx:02d}"
                 while InstanciaMaterial.objects.filter(codigo_ejemplar=cod_ej).exists():
                     idx += 1
-                    cod_ej = f"{material.codigo_inventario}-{idx:02d}"
+                    cod_ej = f"{material.codigo_material}-{idx:02d}"
                 nuevas.append(
                     InstanciaMaterial(
                         material=material,
@@ -544,11 +544,11 @@ def cambiar_estado_material(material_id, nuevo_estado):
 
 def _verificar_codigo_disponible(codigo, material_id_actual=None):
     """Lanza `InventarioError` si el código ya pertenece a otro material."""
-    materiales = Material.objects.filter(codigo_inventario__iexact=codigo)
+    materiales = Material.objects.filter(codigo_material__iexact=codigo)
     if material_id_actual is not None:
         materiales = materiales.exclude(pk=material_id_actual)
     if materiales.exists():
-        raise InventarioError("codigo_inventario", CODIGO_DUPLICADO_MENSAJE)
+        raise InventarioError("codigo_material", CODIGO_DUPLICADO_MENSAJE)
 
 
 def _verificar_estado(estado):

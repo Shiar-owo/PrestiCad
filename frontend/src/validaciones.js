@@ -40,17 +40,19 @@ export function validarPassword(password) {
 
 // --- Inventario (HU04) ---
 
-export function validarCodigoInventario(codigo) {
+export function validarCodigoMaterial(codigo) {
   if (!codigo.trim()) {
-    return 'El código de inventario es obligatorio.'
+    return 'El Código de Material es obligatorio.'
   }
 
   if (codigo.trim().length > 30) {
-    return 'El código admite máximo 30 caracteres.'
+    return 'El Código de Material admite máximo 30 caracteres.'
   }
 
   return ''
 }
+
+export const validarCodigoInventario = validarCodigoMaterial
 
 export function validarStock(stock) {
   const valor = Number(stock)

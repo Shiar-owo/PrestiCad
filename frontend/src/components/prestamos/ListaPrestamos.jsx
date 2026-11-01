@@ -57,7 +57,8 @@ export default function ListaPrestamos({ prestamos, onSeleccionar }) {
                   <BadgeEstado estado={prestamo.estado_visible} />
                 </div>
                 <p className="mt-1 text-sm text-texto-suave">
-                  Código: {prestamo.material_codigo}
+                  Código de Material: {prestamo.material_codigo}
+                  {prestamo.codigo_ejemplar && <> · Código de Ejemplar: {prestamo.codigo_ejemplar}</>}
                 </p>
               </button>
             </li>

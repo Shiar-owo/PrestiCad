@@ -120,8 +120,8 @@ class MaterialDetailView(RetrieveUpdateDestroyAPIView):
         try:
             material = services.actualizar_material(material.id, **serializer.validated_data)
         except services.InventarioError as error:
-            # 409: el código de inventario ya pertenece a otro material.
-            codigo_en_uso = error.campo == "codigo_inventario"
+            # 409: el Código de Material ya pertenece a otro material.
+            codigo_en_uso = error.campo == "codigo_material"
             return Response(
                 {error.campo: [error.mensaje]},
                 status=(

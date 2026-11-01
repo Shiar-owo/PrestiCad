@@ -200,7 +200,8 @@ function ReportesDanos() {
                   <td className="px-4 py-3">
                     <span className="block font-semibold">{reporte.material_nombre}</span>
                     <span className="block text-xs text-texto-suave">
-                      {reporte.material_codigo}
+                      Código de Material: {reporte.material_codigo}
+                      {reporte.codigo_ejemplar && <> · Código de Ejemplar: {reporte.codigo_ejemplar}</>}
                     </span>
                   </td>
                   <td className="px-4 py-3">{reporte.prestatario_nombre}</td>

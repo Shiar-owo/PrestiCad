@@ -99,7 +99,7 @@ def _consultar_prestamos_con_estado(ahora=None):
         then=Value(0),
     )
     return (
-        Prestamo.objects.select_related("material")
+        Prestamo.objects.select_related("material", "instancia")
         .annotate(
             estado_consulta=Case(
                 condicion_vencido,
@@ -187,6 +187,7 @@ def consultar_reportes_devolucion(
         .select_related(
             "prestamo",
             "prestamo__material",
+            "prestamo__instancia",
             "prestamo__usuario",
             "realizado_por",
         )

@@ -26,9 +26,9 @@ MENSAJES_NOMBRE = {
 }
 
 MENSAJES_CODIGO = {
-    "required": "El código de inventario es obligatorio.",
-    "blank": "El código de inventario es obligatorio.",
-    "max_length": "El código de inventario admite máximo 30 caracteres.",
+    "required": "El Código de Material es obligatorio.",
+    "blank": "El Código de Material es obligatorio.",
+    "max_length": "El Código de Material admite máximo 30 caracteres.",
 }
 
 MENSAJES_STOCK = {
@@ -197,7 +197,7 @@ class MaterialSerializer(serializers.ModelSerializer):
             "id",
             "nombre",
             "descripcion",
-            "codigo_inventario",
+            "codigo_material",
             "tipo",
             "estado",
             "es_alto_valor",
@@ -262,14 +262,14 @@ class MaterialRegistroSerializer(RechazarCamposNoPermitidosMixin, serializers.Mo
 
     - `estado` define el estado inicial del material, independiente del estado
       inicial de sus ejemplares.
-    - La unicidad de `codigo_inventario` NO se valida aquí: la delega al
+    - La unicidad de `codigo_material` NO se valida aquí: la delega al
       servicio para devolver un 409 Conflict en lugar de un 400.
     - Los parámetros de reputación son opcionales; si no llegan, el servicio
       aplica los valores por defecto configurables (criterio 3).
     """
 
     nombre = serializers.CharField(max_length=150, error_messages=MENSAJES_NOMBRE)
-    codigo_inventario = serializers.CharField(max_length=30, error_messages=MENSAJES_CODIGO)
+    codigo_material = serializers.CharField(max_length=30, error_messages=MENSAJES_CODIGO)
     tipo = serializers.ChoiceField(
         choices=TIPOS_MATERIAL,
         error_messages={"invalid_choice": "Tipo de material inválido."},
@@ -322,7 +322,7 @@ class MaterialRegistroSerializer(RechazarCamposNoPermitidosMixin, serializers.Mo
         fields = (
             "nombre",
             "descripcion",
-            "codigo_inventario",
+            "codigo_material",
             "tipo",
             "estado",
             "stock",
@@ -380,7 +380,7 @@ class MaterialActualizacionSerializer(RechazarCamposNoPermitidosMixin, serialize
     """
 
     nombre = serializers.CharField(max_length=150, required=False, error_messages=MENSAJES_NOMBRE)
-    codigo_inventario = serializers.CharField(
+    codigo_material = serializers.CharField(
         max_length=30, required=False, error_messages=MENSAJES_CODIGO
     )
     tipo = serializers.ChoiceField(
@@ -402,7 +402,7 @@ class MaterialActualizacionSerializer(RechazarCamposNoPermitidosMixin, serialize
         fields = (
             "nombre",
             "descripcion",
-            "codigo_inventario",
+            "codigo_material",
             "tipo",
             "estado",
             "es_alto_valor",

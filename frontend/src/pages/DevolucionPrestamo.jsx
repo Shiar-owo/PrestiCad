@@ -405,7 +405,8 @@ function DevolucionPrestamo() {
             Devolución registrada
           </h2>
           <p className="mt-1 text-sm text-texto-suave">
-            Préstamo #{detalle.id} · {detalle.material_nombre} ({detalle.material_codigo})
+            Préstamo #{detalle.id} · {detalle.material_nombre} · Código de Material: {detalle.material_codigo}
+            {detalle.codigo_ejemplar && <> · Código de Ejemplar: {detalle.codigo_ejemplar}</>}
           </p>
         </header>
 
@@ -462,9 +463,9 @@ function DevolucionPrestamo() {
 
         <Tarjeta className="p-6">
           <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <CampoResumen etiqueta="Material">
-              {detalle.material_nombre} ({detalle.material_codigo})
-            </CampoResumen>
+            <CampoResumen etiqueta="Material">{detalle.material_nombre}</CampoResumen>
+            <CampoResumen etiqueta="Código de Material">{detalle.material_codigo}</CampoResumen>
+            <CampoResumen etiqueta="Código de Ejemplar">{detalle.codigo_ejemplar || '—'}</CampoResumen>
             <CampoResumen etiqueta="Prestatario">
               {detalle.prestatario_nombre} · DNI {detalle.prestatario_dni}
             </CampoResumen>
@@ -631,9 +632,9 @@ function DevolucionPrestamo() {
 
       <Tarjeta className="mb-4 p-6">
         <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <CampoResumen etiqueta="Material">
-            {detalle.material_nombre} ({detalle.material_codigo})
-          </CampoResumen>
+          <CampoResumen etiqueta="Material">{detalle.material_nombre}</CampoResumen>
+          <CampoResumen etiqueta="Código de Material">{detalle.material_codigo}</CampoResumen>
+          <CampoResumen etiqueta="Código de Ejemplar">{detalle.codigo_ejemplar || '—'}</CampoResumen>
           <CampoResumen etiqueta="Prestatario">{detalle.prestatario_nombre}</CampoResumen>
           <CampoResumen etiqueta="Estado">
             <BadgeEstado estado={detalle.estado} />

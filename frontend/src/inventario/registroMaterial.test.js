@@ -3,11 +3,27 @@ import { describe, expect, it } from 'vitest'
 import {
   construirCuerpoRegistroMaterial,
   crearEjemplares,
+  ejemplosCodigosEjemplares,
   mapearErroresPorFila,
   redimensionarEjemplares,
   validarCodigosDuplicados,
   validarFotosEjemplares,
 } from './registroMaterial'
+
+describe('ejemplos de códigos de ejemplar por lote', () => {
+  it('muestra el primer y último código de acuerdo con la cantidad', () => {
+    expect(ejemplosCodigosEjemplares('CAM-1', '8')).toEqual({
+      primero: 'CAM-1-01',
+      ultimo: 'CAM-1-08',
+    })
+  })
+
+  it('no muestra ejemplos cuando la cantidad está fuera del rango de lote', () => {
+    expect(ejemplosCodigosEjemplares('CAM-1', '1')).toBeNull()
+    expect(ejemplosCodigosEjemplares('CAM-1', '51')).toBeNull()
+    expect(ejemplosCodigosEjemplares('', '8')).toBeNull()
+  })
+})
 
 describe('crear y redimensionar ejemplares', () => {
   it('crea filas con identificadores estables y limita la cantidad', () => {
@@ -65,7 +81,7 @@ describe('construirCuerpoRegistroMaterial', () => {
       modo: 'unico',
       datos: {
         nombre: 'Proyector',
-        codigo_inventario: 'EQ-1',
+        codigo_material: 'EQ-1',
         numero_serie: 'SER-1',
         ubicacion: 'A1',
         condicion_fisica: 'Bueno',
@@ -89,7 +105,7 @@ describe('construirCuerpoRegistroMaterial', () => {
       modo: 'lote',
       datos: {
         nombre: 'Cámara',
-        codigo_inventario: 'EQ-2',
+        codigo_material: 'EQ-2',
         ubicacion: 'Estante A',
         numero_serie: 'no-compartir',
         condicion_fisica: 'Operativo',
@@ -112,7 +128,7 @@ describe('construirCuerpoRegistroMaterial', () => {
   it('construye detalle JSON con códigos y condiciones por fila', () => {
     const cuerpo = construirCuerpoRegistroMaterial({
       modo: 'detalle',
-      datos: { nombre: 'Libro', codigo_inventario: 'LIB-1', condicion_fisica: 'no-compartir' },
+      datos: { nombre: 'Libro', codigo_material: 'LIB-1', condicion_fisica: 'no-compartir' },
       ejemplares: [{
         codigo_ejemplar: 'LIB-A', condicion_fisica: 'Bueno', numero_serie: 'S1', color: 'Azul', ubicacion: 'A1', observaciones: 'Nota',
       }, {
@@ -131,6 +147,6 @@ describe('mapearErroresPorFila', () => {
     expect(mapearErroresPorFila({ response: { data: { foto: ['Formato inválido.'], indice: 2 } } })).toEqual({
       2: { campo: 'foto', mensaje: 'Formato inválido.' },
     })
-    expect(mapearErroresPorFila({ response: { data: { codigo_inventario: ['Duplicado.'] } } })).toEqual({})
+    expect(mapearErroresPorFila({ response: { data: { codigo_material: ['Duplicado.'] } } })).toEqual({})
   })
 })

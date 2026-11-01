@@ -212,7 +212,7 @@ class PrestamoRegistroSerializer(serializers.ModelSerializer):
     material_id = serializers.UUIDField(source="material.id", read_only=True)
     material_nombre = serializers.CharField(source="material.nombre", read_only=True)
     material_codigo = serializers.CharField(
-        source="material.codigo_inventario",
+        source="material.codigo_material",
         read_only=True,
     )
     instancia_id = serializers.UUIDField(read_only=True, allow_null=True)
@@ -428,9 +428,10 @@ class ReporteDevolucionSerializer(serializers.ModelSerializer):
         read_only=True,
     )
     material_codigo = serializers.CharField(
-        source="prestamo.material.codigo_inventario",
+        source="prestamo.material.codigo_material",
         read_only=True,
     )
+    codigo_ejemplar = serializers.SerializerMethodField()
     prestatario_nombre = serializers.SerializerMethodField()
     gestor_nombre = serializers.SerializerMethodField()
     dano = serializers.CharField(source="resultado.dano", read_only=True)
@@ -458,6 +459,7 @@ class ReporteDevolucionSerializer(serializers.ModelSerializer):
             "prestamo_id",
             "material_nombre",
             "material_codigo",
+            "codigo_ejemplar",
             "prestatario_nombre",
             "gestor_nombre",
             "fecha_devolucion",
@@ -472,6 +474,10 @@ class ReporteDevolucionSerializer(serializers.ModelSerializer):
     def get_prestatario_nombre(self, devolucion):
         usuario = devolucion.prestamo.usuario
         return f"{usuario.nombre} {usuario.apellido}".strip()
+
+    def get_codigo_ejemplar(self, devolucion):
+        prestamo = devolucion.prestamo
+        return prestamo.instancia.codigo_ejemplar if prestamo.instancia_id else None
 
     def get_gestor_nombre(self, devolucion):
         gestor = devolucion.realizado_por

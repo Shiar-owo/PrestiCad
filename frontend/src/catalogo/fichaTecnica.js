@@ -28,7 +28,7 @@ export function obtenerDatosFichaTecnica(material) {
     id: material.id,
     nombre: material.nombre || 'Material sin nombre',
     descripcion: material.descripcion?.trim() || '',
-    codigoInventario: material.codigo_inventario || '—',
+    codigoMaterial: material.codigo_material || material.codigo_inventario || '—',
     tipo: material.tipo || 'objeto',
     tipoLegible: ETIQUETAS_TIPO[material.tipo] || material.tipo || 'Objeto',
     estado: material.estado || 'disponible',
@@ -63,7 +63,7 @@ export function obtenerDatosFichaTecnica(material) {
         id: inst.id || `inst-${index}`,
         codigoEjemplar:
           inst.codigo_ejemplar ||
-          `${material.codigo_inventario || 'MAT'}-${String(index + 1).padStart(2, '0')}`,
+          `${material.codigo_material || material.codigo_inventario || 'MAT'}-${String(index + 1).padStart(2, '0')}`,
         numeroSerie: inst.numero_serie || '—',
         estado: inst.estado || 'disponible',
         estadoLegible:

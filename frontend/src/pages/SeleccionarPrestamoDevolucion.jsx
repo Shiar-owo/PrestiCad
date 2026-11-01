@@ -193,7 +193,8 @@ export default function SeleccionarPrestamoDevolucion() {
                   <BadgeEstado estado={prestamo.estado} />
                 </div>
                 <p className="text-sm text-texto-suave">
-                  Prestatario: <strong className="font-medium text-texto">{prestamo.prestatario_nombre}</strong> · Código: {prestamo.material_codigo}
+                  Prestatario: <strong className="font-medium text-texto">{prestamo.prestatario_nombre}</strong> · Código de Material: {prestamo.material_codigo}
+                  {prestamo.codigo_ejemplar && <> · Código de Ejemplar: {prestamo.codigo_ejemplar}</>}
                 </p>
                 <p className="text-xs text-texto-suave">
                   Entrega: {fechaLegible(prestamo.fecha_entrega)} · Fecha límite: {fechaLegible(prestamo.fecha_limite)}

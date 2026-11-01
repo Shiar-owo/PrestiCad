@@ -148,8 +148,8 @@ function Materiales() {
                 Material registrado correctamente
               </h3>
               <p className="mt-2 text-sm text-texto">
-                <strong>{materialRegistrado.nombre}</strong> · Código de inventario:{' '}
-                <code className="font-mono">{materialRegistrado.codigo_inventario}</code>
+                <strong>{materialRegistrado.nombre}</strong> · Código de Material:{' '}
+                <code className="font-mono">{materialRegistrado.codigo_material || materialRegistrado.codigo_inventario}</code>
               </p>
             </header>
 
@@ -187,7 +187,7 @@ function Materiales() {
                 <table className="min-w-full divide-y divide-borde text-left text-xs">
                   <thead className="bg-superficie-alta uppercase tracking-wide text-texto-suave">
                     <tr>
-                      <th className="px-3 py-2 font-semibold">Código</th>
+                      <th className="px-3 py-2 font-semibold">Código de Ejemplar</th>
                       <th className="px-3 py-2 font-semibold">N.º de serie</th>
                       <th className="px-3 py-2 font-semibold">Estado</th>
                       <th className="px-3 py-2 font-semibold">Condición física</th>
@@ -261,7 +261,7 @@ function Materiales() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-borde text-left text-xs uppercase tracking-wide text-texto-suave">
-                  <th className="px-4 py-3 font-semibold">Código</th>
+                  <th className="px-4 py-3 font-semibold">Código de Material</th>
                   <th className="px-4 py-3 font-semibold">Nombre</th>
                   <th className="px-4 py-3 font-semibold">Foto</th>
                   <th className="px-4 py-3 font-semibold">Tipo</th>
@@ -274,7 +274,7 @@ function Materiales() {
               <tbody className="divide-y divide-borde">
                 {materiales.map((material) => (
                   <tr key={material.id} className="text-texto">
-                    <td className="px-4 py-3 font-mono text-xs">{material.codigo_inventario}</td>
+                    <td className="px-4 py-3 font-mono text-xs">{material.codigo_material || material.codigo_inventario}</td>
                     <td className="px-4 py-3 font-semibold">{material.nombre}</td>
                     <td className="px-4 py-3">
                       {material.foto ? (
@@ -357,10 +357,10 @@ function Materiales() {
             ? `Eliminar material ${registroAEliminar.material.nombre}`
             : `Eliminar ejemplar ${codigoInstanciaAEliminar}`}
           descripcion={registroAEliminar.tipo === 'material'
-            ? `Se eliminarán el material ${registroAEliminar.material.codigo_inventario}, sus ${registroAEliminar.material.instancias?.length || registroAEliminar.material.stock} ejemplares y sus fotos.`
+            ? `Se eliminarán el material ${registroAEliminar.material.codigo_material || registroAEliminar.material.codigo_inventario}, sus ${registroAEliminar.material.instancias?.length || registroAEliminar.material.stock} ejemplares y sus fotos.`
             : `Se eliminará el ejemplar ${codigoInstanciaAEliminar} del material ${registroAEliminar.material.nombre}.`}
           codigoConfirmacion={registroAEliminar.tipo === 'material'
-            ? registroAEliminar.material.codigo_inventario
+            ? registroAEliminar.material.codigo_material || registroAEliminar.material.codigo_inventario
             : codigoInstanciaAEliminar}
           onConfirmar={confirmarEliminacion}
           onCancelar={() => setRegistroAEliminar(null)}

@@ -31,7 +31,7 @@ export function redimensionarFilasAlta(ejemplares, cantidad, material, generarId
   const total = Math.max(1, Math.min(Number(cantidad) || 1, MAXIMO_EJEMPLARES_REGISTRO))
   if (total <= existentes.length) return existentes.slice(0, total)
 
-  const base = material?.codigo_inventario || 'MAT'
+  const base = material?.codigo_material || material?.codigo_inventario || 'MAT'
   const codigos = [
     ...(material?.instancias || []).map((fila) => fila.codigo_ejemplar),
     ...existentes.map((fila) => fila.codigo_ejemplar),

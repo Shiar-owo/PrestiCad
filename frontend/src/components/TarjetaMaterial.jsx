@@ -53,8 +53,10 @@ function TarjetaMaterial({ material, onSeleccionar }) {
           <span className="font-semibold uppercase tracking-wide text-acento-700 dark:text-acento-300">
             {tipoLegible}
           </span>
-          {material.codigo_inventario && (
-            <span className="text-texto-suave">{material.codigo_inventario}</span>
+          {(material.codigo_material || material.codigo_inventario) && (
+            <span className="text-texto-suave">
+              <span className="font-semibold">Código de Material:</span> {material.codigo_material || material.codigo_inventario}
+            </span>
           )}
         </div>
 

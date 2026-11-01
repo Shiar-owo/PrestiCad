@@ -165,7 +165,7 @@ function AgregarEjemplaresMaterial({ material, onGuardado, onCancelar }) {
               )}
               <div className="grid gap-3 sm:grid-cols-2">
                 <Campo
-                  etiqueta="Código de ejemplar"
+                  etiqueta="Código de Ejemplar"
                   valor={fila.codigo_ejemplar}
                   onCambio={(evento) => actualizarFila(indice, 'codigo_ejemplar', evento.target.value)}
                   maxLength={50}

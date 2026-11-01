@@ -445,17 +445,30 @@ def actualizar_material(material_id, **campos):
             f"Campos no editables: {', '.join(sorted(no_permitidos))}.",
         )
 
+    actualizar_estado_general = "estado" in campos
+    estado_general_solicitado = campos.pop("estado", None)
+
     if "codigo_inventario" in campos:
         codigo = normalizar_codigo(campos["codigo_inventario"])
         _verificar_codigo_disponible(codigo, material.id)
         campos["codigo_inventario"] = codigo
 
-    if "estado" in campos:
-        _verificar_estado(campos["estado"])
-        if campos["estado"] in ("disponible", "en_mantenimiento"):
-            material.instancias.filter(
-                estado__in=("disponible", "en_mantenimiento")
-            ).update(estado=campos["estado"])
+    if actualizar_estado_general:
+        _verificar_estado(estado_general_solicitado)
+        if estado_general_solicitado not in ("disponible", "en_mantenimiento"):
+            raise InventarioError(
+                "estado", "El estado general solo puede cambiarse a 'Disponible' o 'En Mantenimiento'."
+            )
+
+        instancias_elegibles = material.instancias.filter(
+            estado__in=("disponible", "en_mantenimiento")
+        )
+        if not instancias_elegibles.exists():
+            raise InventarioError(
+                "estado",
+                "No se puede cambiar el estado general porque no hay ejemplares Disponibles o En mantenimiento.",
+            )
+        instancias_elegibles.update(estado=estado_general_solicitado)
 
     if "nombre" in campos:
         campos["nombre"] = campos["nombre"].strip()
@@ -507,7 +520,11 @@ def actualizar_material(material_id, **campos):
     for campo, valor in campos.items():
         setattr(material, campo, valor)
 
-    material.save(update_fields=[*campos, "updated_at"])
+    campos_actualizados = [*campos, "updated_at"]
+    if actualizar_estado_general:
+        _sincronizar_estado_material_desde_instancias(material)
+        campos_actualizados.append("estado")
+    material.save(update_fields=campos_actualizados)
 
     if foto_anterior and foto_anterior != material.foto.name:
         storage_foto = material.foto.storage

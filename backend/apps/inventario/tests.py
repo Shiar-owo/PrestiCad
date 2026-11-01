@@ -277,6 +277,38 @@ class ActualizarMaterialServiceTestCase(TestCase):
         self.assertEqual(actualizado.estado, "en_mantenimiento")
         self.assertFalse(actualizado.esta_disponible())
 
+    def test_actualiza_estado_desde_mantenimiento_y_sincroniza_el_material(self):
+        instancia = self.material.instancias.get()
+        instancia.estado = "en_mantenimiento"
+        instancia.save(update_fields=["estado"])
+        self.material.estado = "en_mantenimiento"
+        self.material.save(update_fields=["estado"])
+
+        actualizado = actualizar_material(self.material.id, estado="disponible")
+
+        instancia.refresh_from_db()
+        self.assertEqual(instancia.estado, "disponible")
+        self.assertEqual(actualizado.estado, "disponible")
+
+    def test_rechaza_estado_general_sin_instancias_elegibles(self):
+        instancia = self.material.instancias.get()
+
+        for estado_bloqueado in ("prestado", "reservado"):
+            with self.subTest(estado=estado_bloqueado):
+                instancia.estado = estado_bloqueado
+                instancia.save(update_fields=["estado"])
+                self.material.estado = estado_bloqueado
+                self.material.save(update_fields=["estado"])
+
+                with self.assertRaises(InventarioError) as contexto:
+                    actualizar_material(self.material.id, estado="disponible")
+
+                self.assertEqual(contexto.exception.campo, "estado")
+                instancia.refresh_from_db()
+                self.material.refresh_from_db()
+                self.assertEqual(instancia.estado, estado_bloqueado)
+                self.assertEqual(self.material.estado, estado_bloqueado)
+
     def test_rechaza_campos_no_editables(self):
         with self.assertRaises(InventarioError) as contexto:
             actualizar_material(self.material.id, created_at="2020-01-01T00:00:00Z")
@@ -1951,6 +1983,8 @@ class InstanciaMaterialAPITestCase(ConMediaTemporal, APITestCase):
         instancias[1].refresh_from_db()
         self.assertEqual(instancias[0].estado, "prestado")
         self.assertEqual(instancias[1].estado, "en_mantenimiento")
+        self.material.refresh_from_db()
+        self.assertEqual(self.material.estado, "prestado")
 
     def test_actualizar_foto_de_instancia_reemplaza_y_borra_la_anterior(self):
         self._autenticar("gestor.foto.inst@unsa.edu.pe", "gestor")

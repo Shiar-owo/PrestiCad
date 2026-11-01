@@ -48,7 +48,7 @@ USUARIOS = (
 
 MATERIALES = (
     {
-        "codigo_inventario": "DEMO-LAP-001", "nombre": "Laptop de préstamo",
+        "codigo_material": "DEMO-LAP-001", "nombre": "Laptop de préstamo",
         "descripcion": "Laptop con Windows 11 para actividades académicas.",
         "tipo": "equipo", "marca": "Equipo institucional",
         "modelo": "Laptop con Windows 11",
@@ -61,7 +61,7 @@ MATERIALES = (
         ),
     },
     {
-        "codigo_inventario": "DEMO-VR-001", "nombre": "Gafas de realidad virtual",
+        "codigo_material": "DEMO-VR-001", "nombre": "Gafas de realidad virtual",
         "descripcion": "Visor Meta Quest 2 con dos controles para experiencias de realidad virtual.",
         "tipo": "equipo", "marca": "Meta", "modelo": "Quest 2",
         "numero_serie": "DEMO-META-002", "color": "Blanco",
@@ -72,7 +72,7 @@ MATERIALES = (
         ),
     },
     {
-        "codigo_inventario": "DEMO-CALC-001", "nombre": "Calculadora científica Casio",
+        "codigo_material": "DEMO-CALC-001", "nombre": "Calculadora científica Casio",
         "descripcion": "Calculadora científica para cursos de matemática, física e ingeniería.",
         "tipo": "equipo", "marca": "Casio", "modelo": "fx-991ES PLUS",
         "numero_serie": "DEMO-CAS-991", "color": "Negro",
@@ -84,7 +84,7 @@ MATERIALES = (
         ),
     },
     {
-        "codigo_inventario": "DEMO-LIB-001", "nombre": "C++ Programming Language",
+        "codigo_material": "DEMO-LIB-001", "nombre": "C++ Programming Language",
         "descripcion": "Libro de consulta sobre C++, sus estructuras, funciones y programación orientada a objetos.",
         "tipo": "libro", "marca": "", "modelo": "Edición ilustrativa",
         "numero_serie": "", "color": "Blanco", "estado_fisico": "Bueno",
@@ -220,11 +220,11 @@ class Command(BaseCommand):
             },
         }
         for codigo_anterior, codigo_nuevo in CODIGOS_MATERIALES_DEMO_ANTERIORES.items():
-            material = Material.objects.filter(codigo_inventario=codigo_anterior).first()
-            if material is None or Material.objects.filter(codigo_inventario=codigo_nuevo).exists():
+            material = Material.objects.filter(codigo_material=codigo_anterior).first()
+            if material is None or Material.objects.filter(codigo_material=codigo_nuevo).exists():
                 continue
-            material.codigo_inventario = codigo_nuevo
-            material.save(update_fields=["codigo_inventario"])
+            material.codigo_material = codigo_nuevo
+            material.save(update_fields=["codigo_material"])
             for (
                 codigo_ejemplar_anterior,
                 codigo_ejemplar_nuevo,
@@ -242,7 +242,7 @@ class Command(BaseCommand):
     def _eliminar_materiales_demo_anteriores(self):
         """Retira materiales demo obsoletos si ya no tienen préstamos asociados."""
         for codigo in CODIGOS_MATERIALES_DEMO_ANTERIORES:
-            material = Material.objects.filter(codigo_inventario=codigo).first()
+            material = Material.objects.filter(codigo_material=codigo).first()
             if material is not None and not material.prestamos.exists():
                 material.delete()
 
@@ -250,11 +250,11 @@ class Command(BaseCommand):
         materiales = {}
         for datos in MATERIALES:
             datos = datos.copy()
-            codigo = datos.pop("codigo_inventario")
+            codigo = datos.pop("codigo_material")
             foto = datos.pop("foto")
             ejemplares = datos.pop("ejemplares")
             material, _ = Material.objects.update_or_create(
-                codigo_inventario=codigo,
+                codigo_material=codigo,
                 defaults={**datos, "foto": f"inventario/{foto}", "stock": len(ejemplares)},
             )
             materiales[codigo] = material

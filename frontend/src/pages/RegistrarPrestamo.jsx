@@ -554,8 +554,8 @@ function RegistrarPrestamo() {
                       <dd className="text-texto-suave">{instanciaSeleccionada.color || 'No registrado'}</dd>
                     </div>
                     <div>
-                      <dt className="font-semibold text-texto">Estado físico</dt>
-                      <dd className="text-texto-suave">{instanciaSeleccionada.estado_fisico || 'No registrado'}</dd>
+                      <dt className="font-semibold text-texto">Condición física</dt>
+                      <dd className="text-texto-suave">{instanciaSeleccionada.condicion_fisica || 'No registrado'}</dd>
                     </div>
                     <div>
                       <dt className="font-semibold text-texto">Ubicación</dt>

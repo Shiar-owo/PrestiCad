@@ -16,7 +16,7 @@ export function crearEjemplar(idLocal) {
     estado: 'disponible',
     foto: null,
     vistaPrevia: '',
-    estado_fisico: 'Operativo',
+    condicion_fisica: 'Operativo',
     ubicacion: '',
     observaciones: '',
   }
@@ -82,7 +82,7 @@ function camposDeEjemplar(ejemplar, modo, datos, indice) {
   }
   if (modo === 'detalle') {
     campos.codigo_ejemplar = (ejemplar.codigo_ejemplar || codigoEjemplarPorDefecto(datos.codigo_inventario, indice)).trim()
-    campos.estado_fisico = ejemplar.estado_fisico || 'Operativo'
+    campos.condicion_fisica = ejemplar.condicion_fisica || 'Operativo'
   }
   return campos
 }
@@ -95,7 +95,7 @@ export function construirCuerpoRegistroMaterial({ modo, datos, ejemplares = [] }
 
   if (modo !== 'unico') {
     delete compartidos.numero_serie
-    if (modo === 'detalle') delete compartidos.estado_fisico
+    if (modo === 'detalle') delete compartidos.condicion_fisica
   }
   delete compartidos.observaciones
 
@@ -108,7 +108,7 @@ export function construirCuerpoRegistroMaterial({ modo, datos, ejemplares = [] }
   if (modo === 'unico') {
     const fila = filas[0] || {}
     cuerpo.numero_serie = datos.numero_serie || ''
-    cuerpo.estado_fisico = datos.estado_fisico || fila.estado_fisico || 'Operativo'
+    cuerpo.condicion_fisica = datos.condicion_fisica || fila.condicion_fisica || 'Operativo'
     cuerpo.observaciones = datos.observaciones || ''
     cuerpo.ubicacion = datos.ubicacion || fila.ubicacion || ''
     cuerpo.estado_inicial_ejemplares = datos.estado_inicial_ejemplares || fila.estado || 'disponible'

@@ -208,7 +208,7 @@ function FichaTecnicaModal({ material, onCerrar, onEliminarInstancia, onAgregarI
                 mono={ficha.numeroSerie !== 'No registrado'}
               />
               <ItemEspecificacion etiqueta="Color" valor={ficha.color} />
-              <ItemEspecificacion etiqueta="Estado Físico" valor={ficha.estadoFisico} />
+              <ItemEspecificacion etiqueta="Estado" valor={ficha.estadoLegible} />
               <ItemEspecificacion etiqueta="Categoría" valor={ficha.tipoLegible} />
             </div>
           </div>
@@ -322,7 +322,7 @@ function FichaTecnicaModal({ material, onCerrar, onEliminarInstancia, onAgregarI
                             <BadgeEstado estado={inst.estado} texto={inst.estadoLegible} />
                           </td>
                           <td className="px-4 py-3 text-texto">
-                            {inst.estadoFisico || 'Operativo'}
+                            {inst.condicionFisica || 'Operativo'}
                           </td>
                           <td className="px-4 py-3 text-texto">
                             {inst.color || 'No especificado'}

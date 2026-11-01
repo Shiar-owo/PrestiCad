@@ -63,11 +63,23 @@ describe('construirCuerpoRegistroMaterial', () => {
   it('construye JSON único con los campos del ejemplar', () => {
     const cuerpo = construirCuerpoRegistroMaterial({
       modo: 'unico',
-      datos: { nombre: 'Proyector', codigo_inventario: 'EQ-1', numero_serie: 'SER-1', ubicacion: 'A1' },
+      datos: {
+        nombre: 'Proyector',
+        codigo_inventario: 'EQ-1',
+        numero_serie: 'SER-1',
+        ubicacion: 'A1',
+        condicion_fisica: 'Bueno',
+      },
       ejemplares: [],
     })
 
-    expect(cuerpo).toMatchObject({ modo: 'unico', stock: 1, numero_serie: 'SER-1', ubicacion: 'A1' })
+    expect(cuerpo).toMatchObject({
+      modo: 'unico',
+      stock: 1,
+      numero_serie: 'SER-1',
+      ubicacion: 'A1',
+      condicion_fisica: 'Bueno',
+    })
     expect(cuerpo).not.toHaveProperty('instancias')
   })
 
@@ -75,7 +87,13 @@ describe('construirCuerpoRegistroMaterial', () => {
     const foto = new File(['imagen'], 'ejemplar.png', { type: 'image/png' })
     const cuerpo = construirCuerpoRegistroMaterial({
       modo: 'lote',
-      datos: { nombre: 'Cámara', codigo_inventario: 'EQ-2', ubicacion: 'Estante A', numero_serie: 'no-compartir' },
+      datos: {
+        nombre: 'Cámara',
+        codigo_inventario: 'EQ-2',
+        ubicacion: 'Estante A',
+        numero_serie: 'no-compartir',
+        condicion_fisica: 'Operativo',
+      },
       ejemplares: [
         { id: 'a', numero_serie: 'SER-A', color: 'Negro', foto: null, observaciones: 'ok' },
         { id: 'b', numero_serie: 'SER-B', color: 'Blanco', foto, ubicacion: 'Estante B' },
@@ -85,6 +103,7 @@ describe('construirCuerpoRegistroMaterial', () => {
     expect(cuerpo).toBeInstanceOf(FormData)
     expect(cuerpo.get('stock')).toBe('2')
     expect(cuerpo.get('numero_serie')).toBeNull()
+    expect(cuerpo.get('condicion_fisica')).toBe('Operativo')
     expect(JSON.parse(cuerpo.get('instancias'))[1]).toMatchObject({ numero_serie: 'SER-B', color: 'Blanco', ubicacion: 'Estante B' })
     expect(cuerpo.get('instancia_foto_1').name).toBe('ejemplar.png')
   })
@@ -92,17 +111,17 @@ describe('construirCuerpoRegistroMaterial', () => {
   it('construye detalle JSON con códigos y condiciones por fila', () => {
     const cuerpo = construirCuerpoRegistroMaterial({
       modo: 'detalle',
-      datos: { nombre: 'Libro', codigo_inventario: 'LIB-1', estado_fisico: 'no-compartir' },
+      datos: { nombre: 'Libro', codigo_inventario: 'LIB-1', condicion_fisica: 'no-compartir' },
       ejemplares: [{
-        codigo_ejemplar: 'LIB-A', estado_fisico: 'Bueno', numero_serie: 'S1', color: 'Azul', ubicacion: 'A1', observaciones: 'Nota',
+        codigo_ejemplar: 'LIB-A', condicion_fisica: 'Bueno', numero_serie: 'S1', color: 'Azul', ubicacion: 'A1', observaciones: 'Nota',
       }, {
-        codigo_ejemplar: 'LIB-B', estado_fisico: 'Regular', color: 'Rojo',
+        codigo_ejemplar: 'LIB-B', condicion_fisica: 'Regular', color: 'Rojo',
       }],
     })
 
     expect(cuerpo).toMatchObject({ modo: 'detalle', stock: 2 })
-    expect(cuerpo.instancias[0]).toMatchObject({ codigo_ejemplar: 'LIB-A', estado_fisico: 'Bueno', color: 'Azul', observaciones: 'Nota' })
-    expect(cuerpo.estado_fisico).toBeUndefined()
+    expect(cuerpo.instancias[0]).toMatchObject({ codigo_ejemplar: 'LIB-A', condicion_fisica: 'Bueno', color: 'Azul', observaciones: 'Nota' })
+    expect(cuerpo.condicion_fisica).toBeUndefined()
   })
 })
 

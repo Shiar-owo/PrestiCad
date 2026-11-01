@@ -36,7 +36,6 @@ CAMPOS_EDITABLES = frozenset(
         "modelo",
         "numero_serie",
         "color",
-        "estado_fisico",
         "foto",
         "tier_minimo_requerido",
         "bonificacion_tiempo",
@@ -57,7 +56,6 @@ CAMPOS_TEXTO = (
     "modelo",
     "numero_serie",
     "color",
-    "estado_fisico",
 )
 
 CODIGO_DUPLICADO_MENSAJE = "El código de inventario ya está registrado."
@@ -192,7 +190,7 @@ def registrar_material(
     modelo="",
     numero_serie="",
     color="",
-    estado_fisico="",
+    condicion_fisica="",
     foto=None,
     tier_minimo_requerido=None,
     bonificacion_tiempo=None,
@@ -249,7 +247,7 @@ def registrar_material(
         filas = [{
             "codigo_ejemplar": f"{codigo}-01",
             "numero_serie": numero_serie,
-            "estado_fisico": estado_fisico or "Operativo",
+            "condicion_fisica": condicion_fisica or "Operativo",
             "ubicacion": ubicacion,
             "observaciones": observaciones,
             "estado": estado_inicial_ejemplares,
@@ -259,7 +257,7 @@ def registrar_material(
             {
                 "codigo_ejemplar": f"{codigo}-{i:02d}",
                 "numero_serie": f"{numero_serie}-{i:02d}" if numero_serie and stock > 1 else numero_serie,
-                "estado_fisico": estado_fisico or "Operativo",
+                "condicion_fisica": condicion_fisica or "Operativo",
                 "ubicacion": "",
                 "estado": estado_inicial_ejemplares,
             }
@@ -285,13 +283,13 @@ def registrar_material(
             raise InventarioError("instancias", "La fila debe ser un objeto válido.", indice=indice)
         if modo in ("lote", None):
             codigo_fila = fila["codigo_ejemplar"] if modo is None else f"{codigo}-{indice + 1:02d}"
-            estado_fisico_fila = estado_fisico or "Operativo"
+            condicion_fisica_fila = condicion_fisica or "Operativo"
             ubicacion_fila = fila.get("ubicacion") or ubicacion
         else:
             codigo_fila = str(fila.get("codigo_ejemplar", "")).strip()
             if not codigo_fila:
                 raise InventarioError("codigo_ejemplar", "El código del ejemplar es obligatorio.", indice=indice)
-            estado_fisico_fila = fila.get("estado_fisico", "Operativo")
+            condicion_fisica_fila = fila.get("condicion_fisica", "Operativo")
             ubicacion_fila = fila.get("ubicacion", "")
         estado_fila = fila.get("estado", estado_inicial_ejemplares)
         if modo == "detalle" and estado == "en_mantenimiento":
@@ -330,7 +328,7 @@ def registrar_material(
         filas_preparadas.append({
             "codigo_ejemplar": codigo_fila,
             "numero_serie": fila.get("numero_serie", ""),
-            "estado_fisico": estado_fisico_fila,
+            "condicion_fisica": condicion_fisica_fila,
             "estado": estado_fila,
             "ubicacion": ubicacion_fila,
             "observaciones": fila.get("observaciones", ""),
@@ -359,7 +357,6 @@ def registrar_material(
         "modelo": modelo.strip(),
         "numero_serie": numero_serie.strip() if modo in ("unico", None) else "",
         "color": color.strip(),
-        "estado_fisico": estado_fisico.strip() if modo in ("unico", "lote", None) else "",
         "foto": foto,
     }
 
@@ -391,7 +388,7 @@ def registrar_material(
                 codigo_ejemplar=fila["codigo_ejemplar"],
                 numero_serie=fila["numero_serie"],
                 estado=fila["estado"],
-                estado_fisico=fila["estado_fisico"] or "Operativo",
+                condicion_fisica=fila["condicion_fisica"] or "Operativo",
                 color=fila["color"],
                 observaciones=fila["observaciones"],
                 ubicacion=fila["ubicacion"],
@@ -486,7 +483,7 @@ def actualizar_material(material_id, **campos):
                         codigo_ejemplar=cod_ej,
                         numero_serie="",
                         estado="disponible",
-                        estado_fisico=material.estado_fisico or "Operativo",
+                        condicion_fisica="Operativo",
                         observaciones="",
                         ubicacion="",
                     )
@@ -706,7 +703,7 @@ def crear_instancia_material(
     codigo_ejemplar,
     numero_serie="",
     estado="disponible",
-    estado_fisico="Operativo",
+    condicion_fisica="Operativo",
     color="",
     foto=None,
     observaciones="",
@@ -720,7 +717,7 @@ def crear_instancia_material(
                 "codigo_ejemplar": codigo_ejemplar,
                 "numero_serie": numero_serie,
                 "estado": estado,
-                "estado_fisico": estado_fisico,
+                "condicion_fisica": condicion_fisica,
                 "color": color,
                 "foto": foto,
                 "observaciones": observaciones,
@@ -792,7 +789,7 @@ def crear_instancias_material(material_id, filas):
             "codigo_ejemplar": codigo,
             "numero_serie": fila.get("numero_serie", ""),
             "estado": estado,
-            "estado_fisico": fila.get("estado_fisico", "Operativo"),
+            "condicion_fisica": fila.get("condicion_fisica", "Operativo"),
             "color": color.strip(),
             "foto": foto,
             "observaciones": fila.get("observaciones", ""),
@@ -809,7 +806,7 @@ def crear_instancias_material(material_id, filas):
                 codigo_ejemplar=fila["codigo_ejemplar"],
                 numero_serie=fila["numero_serie"].strip() if fila["numero_serie"] else "",
                 estado=fila["estado"],
-                estado_fisico=fila["estado_fisico"].strip() if fila["estado_fisico"] else "Operativo",
+                condicion_fisica=fila["condicion_fisica"].strip() if fila["condicion_fisica"] else "Operativo",
                 color=fila["color"].strip() if fila["color"] else "",
                 foto=fila["foto"],
                 observaciones=fila["observaciones"].strip() if fila["observaciones"] else "",
@@ -881,7 +878,10 @@ def actualizar_instancia_material(instancia_id, **campos):
 
     foto_anterior = instancia.foto.name if "foto" in campos and instancia.foto else None
 
-    for campo in ("numero_serie", "estado_fisico", "color", "observaciones", "ubicacion"):
+    if "condicion_fisica" in campos and isinstance(campos["condicion_fisica"], str):
+        instancia.condicion_fisica = campos["condicion_fisica"].strip()
+
+    for campo in ("numero_serie", "color", "observaciones", "ubicacion"):
         if campo in campos and isinstance(campos[campo], str):
             setattr(instancia, campo, campos[campo].strip())
 

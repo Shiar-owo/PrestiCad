@@ -35,7 +35,6 @@ describe('obtenerDatosFichaTecnica', () => {
       modelo: 'DS1054Z',
       numero_serie: 'SN-987654321',
       color: 'Gris oscuro',
-      estado_fisico: 'Excelente',
       es_alto_valor: true,
       stock: 4,
       unidades_disponibles: 3,
@@ -69,7 +68,6 @@ describe('obtenerDatosFichaTecnica', () => {
       modelo: 'DS1054Z',
       numeroSerie: 'SN-987654321',
       color: 'Gris oscuro',
-      estadoFisico: 'Excelente',
       tierMinimo: 'avanzado',
       tierMinimoLegible: 'Avanzado',
       bonificacionTiempo: 8,
@@ -102,7 +100,7 @@ describe('obtenerDatosFichaTecnica', () => {
           codigo_ejemplar: 'LIB-CLRS-01',
           numero_serie: '',
           estado: 'disponible',
-          estado_fisico: 'Excelente',
+          condicion_fisica: 'Excelente',
           color: 'Negro',
           foto: 'https://ejemplo.com/ejemplar-1.jpg',
           observaciones: 'Estante A-1',
@@ -112,7 +110,7 @@ describe('obtenerDatosFichaTecnica', () => {
           codigo_ejemplar: 'LIB-CLRS-02',
           numero_serie: '',
           estado: 'en_mantenimiento',
-          estado_fisico: 'Hojas sueltas',
+          condicion_fisica: 'Hojas sueltas',
           observaciones: 'En empastado',
         },
       ],
@@ -130,9 +128,11 @@ describe('obtenerDatosFichaTecnica', () => {
     expect(ficha.instancias).toHaveLength(2)
     expect(ficha.instancias[0].codigoEjemplar).toBe('LIB-CLRS-01')
     expect(ficha.instancias[0].color).toBe('Negro')
+    expect(ficha.instancias[0].condicionFisica).toBe('Excelente')
     expect(ficha.instancias[0].foto).toBe('https://ejemplo.com/ejemplar-1.jpg')
     expect(ficha.instancias[0].esDisponible).toBe(true)
     expect(ficha.instancias[1].codigoEjemplar).toBe('LIB-CLRS-02')
+    expect(ficha.instancias[1].condicionFisica).toBe('Hojas sueltas')
     expect(ficha.instancias[1].color).toBe('Gris general')
     expect(ficha.instancias[1].foto).toBe('')
     expect(ficha.instancias[1].esDisponible).toBe(false)
@@ -155,7 +155,7 @@ describe('obtenerDatosFichaTecnica', () => {
     expect(ficha.modelo).toBe('No especificado')
     expect(ficha.numeroSerie).toBe('No registrado')
     expect(ficha.color).toBe('No especificado')
-    expect(ficha.estadoFisico).toBe('No especificado')
+    expect(ficha.estadoLegible).toBe('Disponible')
     expect(ficha.esAltoValor).toBe(false)
     expect(ficha.tierMinimoLegible).toBe('Estándar')
     expect(ficha.bonificacionTiempo).toBe(5)

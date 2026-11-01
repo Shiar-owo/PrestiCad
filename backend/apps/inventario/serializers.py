@@ -43,7 +43,6 @@ CAMPOS_FICHA_Y_REPUTACION = (
     "modelo",
     "numero_serie",
     "color",
-    "estado_fisico",
     "foto",
     "tier_minimo_requerido",
     "bonificacion_tiempo",
@@ -127,7 +126,7 @@ class InstanciaMaterialSerializer(serializers.ModelSerializer):
             "numero_serie",
             "estado",
             "estado_display",
-            "estado_fisico",
+            "condicion_fisica",
             "color",
             "foto",
             "observaciones",
@@ -146,7 +145,7 @@ class InstanciaMaterialModificacionSerializer(
     codigo_ejemplar = serializers.CharField(max_length=50, required=False)
     numero_serie = serializers.CharField(max_length=80, required=False, allow_blank=True)
     estado = serializers.ChoiceField(choices=ESTADOS_INSTANCIA, required=False)
-    estado_fisico = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    condicion_fisica = serializers.CharField(max_length=100, required=False, allow_blank=True)
     color = serializers.CharField(max_length=30, required=False, allow_blank=True)
     foto = serializers.ImageField(
         required=False,
@@ -163,7 +162,7 @@ class InstanciaMaterialModificacionSerializer(
             "codigo_ejemplar",
             "numero_serie",
             "estado",
-            "estado_fisico",
+            "condicion_fisica",
             "color",
             "foto",
             "observaciones",
@@ -297,6 +296,12 @@ class MaterialRegistroSerializer(RechazarCamposNoPermitidosMixin, serializers.Mo
     ubicacion = serializers.CharField(required=False, allow_blank=True, default="")
     observaciones = serializers.CharField(required=False, allow_blank=True, default="")
     instancias = InstanciasJSONField(required=False)
+    condicion_fisica = serializers.CharField(
+        max_length=100,
+        required=False,
+        allow_blank=True,
+        write_only=True,
+    )
     tier_minimo_requerido = serializers.ChoiceField(
         choices=TIERS,
         required=False,
@@ -326,6 +331,7 @@ class MaterialRegistroSerializer(RechazarCamposNoPermitidosMixin, serializers.Mo
             "ubicacion",
             "observaciones",
             "instancias",
+            "condicion_fisica",
             "es_alto_valor",
             *CAMPOS_FICHA_Y_REPUTACION,
         )
@@ -336,7 +342,6 @@ class MaterialRegistroSerializer(RechazarCamposNoPermitidosMixin, serializers.Mo
             "modelo": {"required": False, "allow_blank": True, "default": ""},
             "numero_serie": {"required": False, "allow_blank": True, "default": ""},
             "color": {"required": False, "allow_blank": True, "default": ""},
-            "estado_fisico": {"required": False, "allow_blank": True, "default": ""},
             "bonificacion_tiempo": {"required": False},
             "deduccion_tardanza": {"required": False},
             "deduccion_dano_parcial": {"required": False},
@@ -410,7 +415,6 @@ class MaterialActualizacionSerializer(RechazarCamposNoPermitidosMixin, serialize
             "modelo": {"required": False, "allow_blank": True},
             "numero_serie": {"required": False, "allow_blank": True},
             "color": {"required": False, "allow_blank": True},
-            "estado_fisico": {"required": False, "allow_blank": True},
             "es_alto_valor": {"required": False},
             "bonificacion_tiempo": {"required": False},
             "deduccion_tardanza": {"required": False},

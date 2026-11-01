@@ -610,6 +610,10 @@ class RegistrarPrestamoServiceTestCase(TestCase):
 class RegistrarPrestamoConcurrenciaTestCase(TransactionTestCase):
     """Comprueba que dos transacciones no entreguen una misma instancia."""
 
+    def setUp(self):
+        Rol.objects.get_or_create(nombre="gestor")
+        Rol.objects.get_or_create(nombre="prestatario")
+
     def test_dos_registros_concurrentes_no_comparten_instancia(self):
         gestor = crear_usuario("gestor-concurrencia@unsa.edu.pe", "10000020", rol="gestor")
         prestatarios = [
@@ -1005,14 +1009,14 @@ class HistorialPrestamosAPITestCase(APITestCase):
         instancia = prestamo.instancia
         instancia.numero_serie = "SERIE-DETALLE"
         instancia.color = "Azul"
-        instancia.estado_fisico = "Bueno"
+        instancia.condicion_fisica = "Bueno"
         instancia.ubicacion = "Estante A"
         instancia.observaciones = "Sin accesorios adicionales"
         instancia.save(
             update_fields=[
                 "numero_serie",
                 "color",
-                "estado_fisico",
+                "condicion_fisica",
                 "ubicacion",
                 "observaciones",
             ]
@@ -1031,8 +1035,12 @@ class HistorialPrestamosAPITestCase(APITestCase):
         self.assertEqual(datos["material"]["marca"], "Marca de prueba")
         self.assertEqual(datos["material"]["modelo"], "Modelo de prueba")
         self.assertEqual(datos["material"]["descripcion"], "Ficha técnica del préstamo")
+        self.assertEqual(datos["material"]["estado"], prestamo.material.estado)
+        self.assertNotIn("estado_fisico", datos["material"])
         self.assertEqual(datos["instancia"]["codigo_ejemplar"], instancia.codigo_ejemplar)
         self.assertEqual(datos["instancia"]["numero_serie"], "SERIE-DETALLE")
+        self.assertEqual(datos["instancia"]["condicion_fisica"], "Bueno")
+        self.assertNotIn("estado_fisico", datos["instancia"])
         self.assertEqual(datos["instancia"]["color"], "Azul")
         self.assertEqual(datos["instancia"]["ubicacion"], "Estante A")
         self.assertEqual(datos["instancia"]["observaciones"], "Sin accesorios adicionales")

@@ -20,7 +20,7 @@ function crearFila(id, codigo) {
     foto: null,
     vistaPrevia: '',
     estado: 'disponible',
-    estado_fisico: 'Operativo',
+    condicion_fisica: 'Operativo',
     ubicacion: '',
     observaciones: '',
   }
@@ -84,7 +84,7 @@ export function construirCuerpoAltaInstancias(ejemplares) {
     numero_serie: fila.numero_serie || '',
     color: fila.color || '',
     estado: fila.estado || 'disponible',
-    estado_fisico: fila.estado_fisico || 'Operativo',
+    condicion_fisica: fila.condicion_fisica || 'Operativo',
     ubicacion: fila.ubicacion || '',
     observaciones: fila.observaciones || '',
   }))

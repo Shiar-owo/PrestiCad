@@ -280,7 +280,7 @@ export default function DetallePrestamo({
                   </CampoDetalle>
                   <CampoDetalle etiqueta="Número de serie">{instancia.numero_serie || 'No registrado'}</CampoDetalle>
                   <CampoDetalle etiqueta="Color">{instancia.color || 'No registrado'}</CampoDetalle>
-                  <CampoDetalle etiqueta="Condición física">{instancia.condicion_fisica || 'No registrado'}</CampoDetalle>
+                  <CampoDetalle etiqueta="Observaciones">{instancia.observaciones || 'No registrado'}</CampoDetalle>
                   <CampoDetalle etiqueta="Ubicación">{instancia.ubicacion || 'No registrada'}</CampoDetalle>
                   <CampoDetalle etiqueta="Observaciones">{instancia.observaciones || 'Sin observaciones'}</CampoDetalle>
                 </dl>

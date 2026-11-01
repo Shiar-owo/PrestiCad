@@ -28,7 +28,6 @@ function crearDatosInstancia(instancia) {
     codigo_ejemplar: instancia?.codigo_ejemplar || '',
     numero_serie: instancia?.numero_serie || '',
     estado: instancia?.estado || 'disponible',
-    condicion_fisica: instancia?.condicion_fisica || '',
     color: instancia?.color || '',
     ubicacion: instancia?.ubicacion || '',
     observaciones: instancia?.observaciones || '',
@@ -284,10 +283,10 @@ function EditorInstanciasMaterial({ material, alcance, onCambiarAlcance, onGuard
               onCambio={(evento) => setDatos((actuales) => ({ ...actuales, numero_serie: evento.target.value }))}
             />
             <Campo
-              etiqueta="Condición física (opcional)"
-              valor={datos.condicion_fisica}
+              etiqueta="Observaciones (opcional)"
+              valor={datos.observaciones}
               maxLength={100}
-              onCambio={(evento) => setDatos((actuales) => ({ ...actuales, condicion_fisica: evento.target.value }))}
+              onCambio={(evento) => setDatos((actuales) => ({ ...actuales, observaciones: evento.target.value }))}
             />
             <Campo
               etiqueta="Color del ejemplar (opcional)"

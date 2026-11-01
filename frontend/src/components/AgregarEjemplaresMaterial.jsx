@@ -191,9 +191,9 @@ function AgregarEjemplaresMaterial({ material, onGuardado, onCancelar }) {
                   maxLength={30}
                 />
                 <Campo
-                  etiqueta="Condición física (opcional)"
-                  valor={fila.condicion_fisica}
-                  onCambio={(evento) => actualizarFila(indice, 'condicion_fisica', evento.target.value)}
+                  etiqueta="Observaciones (opcional)"
+                  valor={fila.observaciones}
+                  onCambio={(evento) => actualizarFila(indice, 'observaciones', evento.target.value)}
                   maxLength={100}
                 />
                 <Campo

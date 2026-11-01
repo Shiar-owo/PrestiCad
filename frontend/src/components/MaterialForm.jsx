@@ -72,7 +72,6 @@ const DATOS_INICIALES = {
   modelo: '',
   numero_serie: '',
   color: '',
-  condicion_fisica: 'Operativo',
   ubicacion: '',
   observaciones: '',
   foto: null,
@@ -230,7 +229,6 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
         ...fila,
         codigo_ejemplar: fila.codigo_ejemplar || codigoEjemplarPorDefecto(datos.codigo_material, indice),
         color: fila.color || datos.color,
-        condicion_fisica: fila.condicion_fisica || 'Operativo',
       }))
       : filasRedimensionadas
     const idsConservados = new Set(siguiente.map((fila) => fila.id))
@@ -360,7 +358,6 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
     if (!esEdicion) {
       cuerpo.stock = Number(datos.stock)
       cuerpo.numero_serie = datos.numero_serie.trim()
-      cuerpo.condicion_fisica = datos.condicion_fisica.trim()
       cuerpo.estado_inicial_ejemplares = datos.estado_inicial_ejemplares
       if (datos.modo === 'detalle') {
         cuerpo.estado = datos.estado
@@ -922,10 +919,10 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
             {(!esEdicion && ['unico', 'lote'].includes(datos.modo)) && (
               <Campo
                 etiqueta={datos.modo === 'unico'
-                  ? 'Condición física (opcional)'
-                  : 'Condición física de los ejemplares (opcional)'}
-                valor={datos.condicion_fisica}
-                onCambio={(evento) => actualizar('condicion_fisica', evento.target.value)}
+                  ? 'Observaciones (opcional)'
+                  : 'Observaciones de los ejemplares (opcional)'}
+                valor={datos.observaciones}
+                onCambio={(evento) => actualizar('observaciones', evento.target.value)}
                 maxLength={100}
               />
             )}
@@ -1034,9 +1031,9 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
                       />
                       {datos.modo === 'detalle' && (
                         <Campo
-                          etiqueta="Condición física (opcional)"
-                          valor={fila.condicion_fisica}
-                          onCambio={(evento) => actualizarFila(indice, 'condicion_fisica', evento.target.value)}
+                          etiqueta="Observaciones (opcional)"
+                          valor={fila.observaciones}
+                          onCambio={(evento) => actualizarFila(indice, 'observaciones', evento.target.value)}
                           maxLength={100}
                         />
                       )}

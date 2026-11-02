@@ -89,6 +89,7 @@ const DATOS_INICIALES = {
   stock: 1,
   modo: 'unico',
   es_alto_valor: false,
+  precio: '',
   marca: '',
   modelo: '',
   numero_serie: '',
@@ -152,6 +153,14 @@ function crearDatosIniciales(material) {
 
 function validar(datos) {
   const errores = {}
+
+  if (datos.precio === '' || datos.precio === null || datos.precio === undefined) {
+    errores.precio = 'El precio es obligatorio.'
+  } else if (!Number.isFinite(Number(datos.precio))) {
+    errores.precio = 'Ingresa un precio válido.'
+  } else if (Number(datos.precio) < 0) {
+    errores.precio = 'El precio no puede ser negativo.'
+  }
 
   const errorNombre = validarNombre(datos.nombre)
   if (errorNombre) {
@@ -377,6 +386,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
       codigo_material: datos.codigo_material.trim(),
       tipo: datos.tipo,
       es_alto_valor: datos.es_alto_valor,
+      precio: datos.precio === '' ? '' : Number(datos.precio),
       marca: datos.marca.trim(),
       modelo: datos.modelo.trim(),
       color: datos.color.trim(),
@@ -903,6 +913,17 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
             />
             ¿Es de alto valor? (opcional)
           </label>
+
+          <Campo
+            etiqueta="Precio"
+            tipo="number"
+            min="0"
+            step="0.01"
+            valor={datos.precio}
+            onCambio={(evento) => actualizar('precio', evento.target.value)}
+            error={errores.precio}
+            requerido
+          />
 
           <EncabezadoSeccion>Ficha técnica</EncabezadoSeccion>
           {!esEdicion && datos.modo === 'lote' && (

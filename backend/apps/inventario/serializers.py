@@ -44,6 +44,7 @@ CAMPOS_FICHA_Y_REPUTACION = (
     "numero_serie",
     "color",
     "foto",
+    "precio",
     "tier_minimo_requerido",
     "bonificacion_tiempo",
     "deduccion_tardanza",
@@ -271,6 +272,12 @@ class MaterialRegistroSerializer(RechazarCamposNoPermitidosMixin, serializers.Mo
         choices=TIPOS_MATERIAL,
         error_messages={"invalid_choice": "Tipo de material inválido."},
     )
+    precio = serializers.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        min_value=0,
+        error_messages={"required": "El precio es obligatorio.", "min_value": "El precio no puede ser negativo."},
+    )
     estado = serializers.ChoiceField(
         choices=ESTADOS_INICIALES_INSTANCIA,
         required=False,
@@ -380,6 +387,7 @@ class MaterialActualizacionSerializer(RechazarCamposNoPermitidosMixin, serialize
         choices=ESTADOS_MATERIAL, required=False, error_messages={"invalid_choice": "Estado de material inválido."}
     )
     stock = serializers.IntegerField(required=False, min_value=1, error_messages=MENSAJES_STOCK)
+    precio = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=0, required=False)
     foto = serializers.ImageField(
         required=False,
         allow_null=True,

@@ -22,8 +22,25 @@ ESTADOS_QUE_OCUPAN_UNIDAD = ("activo", "vencido")
 MINIMO_DIGITOS_BUSQUEDA_PRESTATARIO = 3
 MAXIMO_PRESTATARIOS_SUGERIDOS = 10
 
-# Límites del registro de entrega (HU09).
-MAXIMO_DIAS_PRESTAMO = 30
+# Límites del registro de entrega y tiempo de gracia (HU09 / HU11 / PRTCAD-183).
+MINIMO_MINUTOS_PRESTAMO = 15
+MAXIMO_MINUTOS_PRESTAMO = 15 * 24 * 60
+MINIMO_DIAS_PRESTAMO = 1
+MAXIMO_DIAS_PRESTAMO = 15
+TIEMPO_GRACIA_MINUTOS = 30
+
+
+def formatear_duracion_minutos(minutos):
+    """Formatea una duración en minutos en una expresión legible en español."""
+    minutos = int(minutos)
+    if minutos >= 1440 and minutos % 1440 == 0:
+        dias = minutos // 1440
+        return f"{dias} día" if dias == 1 else f"{dias} días"
+    if minutos >= 60 and minutos % 60 == 0:
+        horas = minutos // 60
+        return f"{horas} hora" if horas == 1 else f"{horas} horas"
+    return f"{minutos} minuto" if minutos == 1 else f"{minutos} minutos"
+
 TAMANO_MAXIMO_FOTO_CHECKLIST_BYTES = 4 * 1024 * 1024
 # Vercel limita el cuerpo completo del rewrite a ~4.5 MB, así que la suma de
 # todos los archivos de una misma petición no puede superar este valor.

@@ -307,6 +307,8 @@ def crear_material(**cambios):
         "tipo": "equipo",
         "stock": 1,
     }
+    if "tiempo_maximo_prestamo" not in cambios and "tier_minimo_requerido" not in cambios:
+        datos["tiempo_maximo_prestamo"] = 4320
     datos.update(cambios)
     material = registrar_material(**datos)
     if estado:
@@ -333,7 +335,7 @@ class RegistrarPrestamoServiceTestCase(TestCase):
         datos = {
             "dni_prestatario": self.prestatario.dni,
             "material_id": self.material.id,
-            "tiempo_prestamo_dias": 7,
+            "tiempo_prestamo_dias": 3,
             "checklist_inicial": CHECKLIST,
             "registrado_por": self.gestor,
         }
@@ -359,7 +361,7 @@ class RegistrarPrestamoServiceTestCase(TestCase):
         self.assertEqual(prestamo.usuario, self.prestatario)
         self.assertEqual(prestamo.registrado_por, self.gestor)
         self.assertEqual(prestamo.checklist_inicial, CHECKLIST)
-        self.assertEqual(prestamo.fecha_limite - prestamo.fecha_entrega, timedelta(days=7))
+        self.assertEqual(prestamo.fecha_limite - prestamo.fecha_entrega, timedelta(days=3))
         self.assertGreaterEqual(prestamo.fecha_entrega, antes)
         self.assertEqual(Material.objects.get(pk=self.material.pk).estado, "prestado")
         instancia = self.material.instancias.get()
@@ -379,19 +381,79 @@ class RegistrarPrestamoServiceTestCase(TestCase):
             [{"elemento": "Carcasa", "observacion": ""}],
         )
 
-    def test_rechaza_duracion_superior_a_treinta_dias(self):
+    def test_rechaza_duracion_superior_al_maximo_global(self):
         with self.assertRaises(PrestamoError) as contexto:
-            self._registrar(tiempo_prestamo_dias=31)
+            self._registrar(tiempo_prestamo_dias=16)
 
         self.assertEqual(contexto.exception.campo, "tiempo_prestamo_dias")
         self.assertEqual(Prestamo.objects.count(), 0)
+
+    def test_limita_duracion_minima_15_min_y_maxima_del_material(self):
+        gafas_vr = crear_material(
+            codigo_material="EQ-VR-01",
+            nombre="Gafas VR",
+            tipo="equipo",
+            tier_minimo_requerido="avanzado",
+            stock=2,
+        )
+        self.assertEqual(gafas_vr.tiempo_maximo_prestamo, 360)
+        avanzado = crear_usuario(
+            "avanzado@unsa.edu.pe",
+            "10000011",
+            reputacion_puntaje=300,
+            reputacion_tier="avanzado",
+        )
+
+        with self.assertRaises(PrestamoError) as error_minimo:
+            self._registrar(
+                dni_prestatario=avanzado.dni,
+                material_id=gafas_vr.id,
+                tiempo_prestamo_minutos=14,
+                tiempo_prestamo_dias=None,
+            )
+        self.assertEqual(error_minimo.exception.campo, "tiempo_prestamo_minutos")
+        self.assertIn("15 minutos", error_minimo.exception.mensaje)
+
+        prestamo_minimo = self._registrar(
+            dni_prestatario=avanzado.dni,
+            material_id=gafas_vr.id,
+            tiempo_prestamo_minutos=15,
+            tiempo_prestamo_dias=None,
+        )
+        self.assertEqual(prestamo_minimo.tiempo_prestamo_minutos, 15)
+        self.assertEqual(
+            prestamo_minimo.fecha_limite - prestamo_minimo.fecha_entrega,
+            timedelta(minutes=15),
+        )
+
+        with self.assertRaises(PrestamoError) as error_maximo_vr:
+            self._registrar(
+                dni_prestatario=avanzado.dni,
+                material_id=gafas_vr.id,
+                tiempo_prestamo_minutos=361,
+                tiempo_prestamo_dias=None,
+            )
+        self.assertEqual(error_maximo_vr.exception.campo, "tiempo_prestamo_minutos")
+        self.assertIn("6 horas", error_maximo_vr.exception.mensaje)
+
+        prestamo_vr_6h = self._registrar(
+            dni_prestatario=avanzado.dni,
+            material_id=gafas_vr.id,
+            tiempo_prestamo_minutos=360,
+            tiempo_prestamo_dias=None,
+        )
+        self.assertEqual(prestamo_vr_6h.tiempo_prestamo_minutos, 360)
+        self.assertEqual(
+            prestamo_vr_6h.fecha_limite - prestamo_vr_6h.fecha_entrega,
+            timedelta(hours=6),
+        )
 
     def test_rechaza_alta_sin_una_foto_por_elemento(self):
         with self.assertRaises(PrestamoError) as contexto:
             registrar_prestamo_real(
                 dni_prestatario=self.prestatario.dni,
                 material_id=self.material.id,
-                tiempo_prestamo_dias=7,
+                tiempo_prestamo_dias=3,
                 checklist_inicial=CHECKLIST,
                 fotos_checklist=[crear_foto_checklist()],
                 registrado_por=self.gestor,
@@ -632,7 +694,7 @@ class RegistrarPrestamoConcurrenciaTestCase(TransactionTestCase):
                     dni_prestatario=dni,
                     material_id=material.id,
                     instancia_id=instancia_id,
-                    tiempo_prestamo_dias=7,
+                    tiempo_prestamo_dias=3,
                     checklist_inicial=CHECKLIST,
                     registrado_por=gestor,
                 )
@@ -664,7 +726,7 @@ class ConsultarPrestamosServiceTestCase(TestCase):
         return registrar_prestamo(
             dni_prestatario=prestatario.dni,
             material_id=material.id,
-            tiempo_prestamo_dias=7,
+            tiempo_prestamo_dias=3,
             checklist_inicial=CHECKLIST,
             registrado_por=self.gestor,
         )
@@ -718,7 +780,7 @@ class HistorialPrestamosServiceTestCase(TestCase):
         return registrar_prestamo(
             dni_prestatario=prestatario.dni,
             material_id=material.id,
-            tiempo_prestamo_dias=7,
+            tiempo_prestamo_dias=3,
             checklist_inicial=CHECKLIST,
             registrado_por=self.gestor,
         )
@@ -778,6 +840,7 @@ class MisPrestamosAPITestCase(APITestCase):
         "codigo_ejemplar",
         "fecha_entrega",
         "fecha_limite",
+        "tiempo_prestamo_minutos",
         "tiempo_prestamo_dias",
         "estado",
     }
@@ -804,7 +867,7 @@ class MisPrestamosAPITestCase(APITestCase):
         return registrar_prestamo(
             dni_prestatario=usuario.dni,
             material_id=material.id,
-            tiempo_prestamo_dias=5,
+            tiempo_prestamo_dias=3,
             checklist_inicial=CHECKLIST,
             registrado_por=self.registrado_por,
         )
@@ -870,6 +933,7 @@ class HistorialPrestamosAPITestCase(APITestCase):
         "codigo_ejemplar",
         "fecha_entrega",
         "fecha_limite",
+        "tiempo_prestamo_minutos",
         "tiempo_prestamo_dias",
         "estado",
     }
@@ -893,7 +957,7 @@ class HistorialPrestamosAPITestCase(APITestCase):
         return registrar_prestamo(
             dni_prestatario=usuario.dni,
             material_id=material.id,
-            tiempo_prestamo_dias=5,
+            tiempo_prestamo_dias=3,
             checklist_inicial=CHECKLIST,
             registrado_por=self.gestor,
         )
@@ -1185,7 +1249,7 @@ class RegistrarPrestamoAPITestCase(APITestCase):
         datos = {
             "dni_prestatario": self.prestatario.dni,
             "material_id": str(self.material.id),
-            "tiempo_prestamo_dias": 5,
+            "tiempo_prestamo_dias": 3,
             "checklist_inicial": CHECKLIST,
         }
         datos.update(cambios)
@@ -1230,7 +1294,7 @@ class RegistrarPrestamoAPITestCase(APITestCase):
             self.assertEqual(datos["usuario_id"], self.prestatario.id)
             self.assertEqual(datos["usuario_nombre"], "Ana Torres")
             self.assertEqual(datos["estado"], "activo")
-            self.assertEqual(datos["tiempo_prestamo_dias"], 5)
+            self.assertEqual(datos["tiempo_prestamo_dias"], 3)
             self.assertEqual(datos["checklist_inicial"], CHECKLIST)
             self.assertEqual(datos["instancia_id"], str(instancia.id))
             self.assertEqual(datos["codigo_ejemplar"], instancia.codigo_ejemplar)
@@ -1275,17 +1339,25 @@ class RegistrarPrestamoAPITestCase(APITestCase):
         self.assertEqual(Prestamo.objects.count(), 0)
         self.assertEqual(FotoChecklist.objects.count(), 0)
 
-    def test_post_rechaza_duracion_mayor_a_treinta_dias(self):
+    def test_post_rechaza_duracion_menor_a_15_min_o_mayor_al_maximo_del_material(self):
         self._iniciar_sesion(self.gestor)
 
-        respuesta = self.client.post(
+        menor_minimo = self.client.post(
             self.URL,
-            self._payload_multipart(tiempo_prestamo_dias=31),
+            self._payload_multipart(tiempo_prestamo_minutos=10),
             format="multipart",
         )
+        self.assertEqual(menor_minimo.status_code, 400)
+        self.assertIn("tiempo_prestamo_minutos", menor_minimo.json())
 
-        self.assertEqual(respuesta.status_code, 400)
-        self.assertIn("tiempo_prestamo_dias", respuesta.json())
+        fuera_material = self.client.post(
+            self.URL,
+            self._payload_multipart(tiempo_prestamo_minutos=5000),
+            format="multipart",
+        )
+        self.assertEqual(fuera_material.status_code, 400)
+        self.assertIn("tiempo_prestamo_minutos", fuera_material.json())
+        self.assertIn("3 días", str(fuera_material.json()["tiempo_prestamo_minutos"]))
         self.assertEqual(Prestamo.objects.count(), 0)
 
     def test_post_multipart_registra_garantia_y_parsea_checklist_json(self):
@@ -1362,7 +1434,7 @@ class RegistrarPrestamoAPITestCase(APITestCase):
         registrar_prestamo(
             dni_prestatario=self.prestatario.dni,
             material_id=material.id,
-            tiempo_prestamo_dias=5,
+            tiempo_prestamo_dias=3,
             checklist_inicial=CHECKLIST,
             registrado_por=self.gestor,
         )
@@ -1481,7 +1553,7 @@ class DescargarGarantiaAPITestCase(APITestCase):
         return registrar_prestamo(
             dni_prestatario=self.prestatario.dni,
             material_id=self.material.id,
-            tiempo_prestamo_dias=5,
+            tiempo_prestamo_dias=3,
             checklist_inicial=CHECKLIST,
             registrado_por=self.gestor,
             documento_identidad=crear_pdf("dni-original.pdf"),
@@ -1666,7 +1738,7 @@ class DescargarGarantiaAPITestCase(APITestCase):
         prestamo = registrar_prestamo(
             dni_prestatario=self.prestatario.dni,
             material_id=material_sin_garantia.id,
-            tiempo_prestamo_dias=5,
+            tiempo_prestamo_dias=3,
             checklist_inicial=CHECKLIST,
             registrado_por=self.gestor,
         )
@@ -1704,7 +1776,7 @@ class DescargarFotoChecklistAPITestCase(APITestCase):
             return registrar_prestamo(
                 dni_prestatario=self.prestatario.dni,
                 material_id=self.material.id,
-                tiempo_prestamo_dias=5,
+                tiempo_prestamo_dias=3,
                 checklist_inicial=CHECKLIST,
                 registrado_por=self.gestor,
                 fotos_checklist=[crear_foto_checklist(), crear_foto_checklist()],
@@ -1771,7 +1843,7 @@ class DevolucionBaseTestCase(TestCase):
         self.prestamo = registrar_prestamo(
             dni_prestatario=self.prestatario.dni,
             material_id=self.material.id,
-            tiempo_prestamo_dias=7,
+            tiempo_prestamo_dias=3,
             checklist_inicial=CHECKLIST,
             registrado_por=self.gestor,
         )
@@ -1819,10 +1891,10 @@ class EstimarDevolucionServiceTestCase(DevolucionBaseTestCase):
         )
 
         self.assertTrue(resultado["a_tiempo"])
-        self.assertEqual(resultado["bonificacion"], 5)
+        self.assertEqual(resultado["bonificacion"], 15)
         self.assertEqual(resultado["dano"], "sin_cambios")
-        self.assertEqual(resultado["puntos_delta"], 5)
-        self.assertEqual(resultado["reputacion_despues"], 5)
+        self.assertEqual(resultado["puntos_delta"], 15)
+        self.assertEqual(resultado["reputacion_despues"], 15)
         self.assertEqual(Devolucion.objects.count(), 0)
         self.prestamo.refresh_from_db()
         self.assertEqual(self.prestamo.estado, "activo")
@@ -1960,17 +2032,17 @@ class RegistrarDevolucionServiceTestCase(DevolucionBaseTestCase):
 
         self.assertEqual(devolucion.prestamo, self.prestamo)
         self.assertEqual(devolucion.realizado_por, self.gestor)
-        self.assertEqual(devolucion.resultado["bonificacion"], 5)
-        self.assertEqual(devolucion.resultado["puntos_delta"], 5)
+        self.assertEqual(devolucion.resultado["bonificacion"], 15)
+        self.assertEqual(devolucion.resultado["puntos_delta"], 15)
         self.assertEqual(devolucion.resultado["reputacion_antes"], 0)
-        self.assertEqual(devolucion.resultado["reputacion_despues"], 5)
+        self.assertEqual(devolucion.resultado["reputacion_despues"], 15)
         self.assertFalse(devolucion.resultado["hay_dano"])
         self.assertGreaterEqual(devolucion.fecha_devolucion, antes)
 
         self.prestamo.refresh_from_db()
         self.assertEqual(self.prestamo.estado, "devuelto")
         self.prestatario.refresh_from_db()
-        self.assertEqual(self.prestatario.reputacion_puntaje, 5)
+        self.assertEqual(self.prestatario.reputacion_puntaje, 15)
         self.material.refresh_from_db()
         self.assertEqual(self.material.estado, "disponible")
 
@@ -1982,7 +2054,7 @@ class RegistrarDevolucionServiceTestCase(DevolucionBaseTestCase):
             dni_prestatario=self.prestatario.dni,
             material_id=material.id,
             instancia_id=instancias[0].id,
-            tiempo_prestamo_dias=7,
+            tiempo_prestamo_dias=3,
             checklist_inicial=CHECKLIST,
             registrado_por=self.gestor,
         )
@@ -1990,7 +2062,7 @@ class RegistrarDevolucionServiceTestCase(DevolucionBaseTestCase):
             dni_prestatario=segundo_prestatario.dni,
             material_id=material.id,
             instancia_id=instancias[1].id,
-            tiempo_prestamo_dias=7,
+            tiempo_prestamo_dias=3,
             checklist_inicial=CHECKLIST,
             registrado_por=self.gestor,
         )
@@ -2023,11 +2095,38 @@ class RegistrarDevolucionServiceTestCase(DevolucionBaseTestCase):
 
         resultado = devolucion.resultado
         self.assertFalse(resultado["a_tiempo"])
+        self.assertFalse(resultado["en_tiempo_gracia"])
         self.assertEqual(resultado["dias_tardanza"], 2)
         self.assertEqual(resultado["bonificacion"], 0)
         self.assertEqual(resultado["deduccion_tardanza"], 20)
         self.assertEqual(resultado["puntos_delta"], -20)
         self.assertEqual(resultado["reputacion_despues"], -20)
+
+    def test_tiempo_gracia_30_minutos_no_aplica_sancion_por_tardanza(self):
+        devolucion_en_gracia = self._devolver(
+            fecha_devolucion=self.prestamo.fecha_limite + timedelta(minutes=30),
+        )
+
+        resultado = devolucion_en_gracia.resultado
+        self.assertFalse(resultado["a_tiempo"])
+        self.assertTrue(resultado["en_tiempo_gracia"])
+        self.assertEqual(resultado["dias_tardanza"], 0)
+        self.assertEqual(resultado["bonificacion"], 0)
+        self.assertEqual(resultado["deduccion_tardanza"], 0)
+        self.assertEqual(resultado["puntos_delta"], 0)
+
+    def test_pasado_el_tiempo_de_gracia_aplica_sancion_por_tardanza(self):
+        devolucion_fuera_gracia = self._devolver(
+            fecha_devolucion=self.prestamo.fecha_limite + timedelta(minutes=31),
+        )
+
+        resultado = devolucion_fuera_gracia.resultado
+        self.assertFalse(resultado["a_tiempo"])
+        self.assertFalse(resultado["en_tiempo_gracia"])
+        self.assertEqual(resultado["dias_tardanza"], 1)
+        self.assertEqual(resultado["bonificacion"], 0)
+        self.assertEqual(resultado["deduccion_tardanza"], 10)
+        self.assertEqual(resultado["puntos_delta"], -10)
 
     def test_dano_parcial_guarda_el_contrato_actual_del_checklist(self):
         checklist = [
@@ -2044,7 +2143,7 @@ class RegistrarDevolucionServiceTestCase(DevolucionBaseTestCase):
         self.assertEqual(resultado["dano"], "dano_parcial")
         self.assertEqual(resultado["deduccion_dano"], 30)
         self.assertEqual(resultado["cobro_economico"], "40.00")
-        self.assertEqual(resultado["puntos_delta"], -25)
+        self.assertEqual(resultado["puntos_delta"], -15)
         self.assertEqual(
             set(devolucion.checklist_devolucion[0]),
             {"elemento", "estado", "observacion"},
@@ -2065,7 +2164,7 @@ class RegistrarDevolucionServiceTestCase(DevolucionBaseTestCase):
         self.assertEqual(resultado["dano"], "dano_total")
         self.assertEqual(resultado["deduccion_dano"], 60)
         self.assertEqual(resultado["cobro_economico"], "200.00")
-        self.assertEqual(resultado["puntos_delta"], -55)
+        self.assertEqual(resultado["puntos_delta"], -45)
 
     def test_cobro_nulo_cuando_el_material_no_tiene_costo_parametrizado(self):
         self.material.costo_reparacion = None
@@ -2361,7 +2460,7 @@ class DevolucionAPITestCase(DevolucionBaseTestCase):
         self.assertEqual(datos["checklist_inicial"][0]["foto_url"], "")
         self.assertNotIn("condicion", datos["checklist_inicial"][0])
         self.assertEqual(datos["prestatario_dni"], self.prestatario.dni)
-        self.assertEqual(datos["bonificacion_tiempo"], 5)
+        self.assertEqual(datos["bonificacion_tiempo"], 15)
         self.assertEqual(datos["deduccion_dano_total"], 60)
         self.assertEqual(datos["costo_reposicion"], "200.00")
 
@@ -2598,7 +2697,7 @@ class ReportesDevolucionAPITestCase(DevolucionBaseTestCase):
         prestamo = registrar_prestamo(
             dni_prestatario=self.prestatario.dni,
             material_id=otro_material.id,
-            tiempo_prestamo_dias=7,
+            tiempo_prestamo_dias=3,
             checklist_inicial=CHECKLIST,
             registrado_por=self.gestor,
         )

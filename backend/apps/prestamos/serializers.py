@@ -8,7 +8,10 @@ from apps.compartido.serializers import RechazarCamposNoPermitidosMixin
 from apps.prestamos.constants import (
     ESTADOS_CHECKLIST_DEVOLUCION,
     MAXIMO_DIAS_PRESTAMO,
+    MAXIMO_MINUTOS_PRESTAMO,
+    MINIMO_DIAS_PRESTAMO,
     MINIMO_DIGITOS_BUSQUEDA_PRESTATARIO,
+    MINIMO_MINUTOS_PRESTAMO,
     TAMANO_MAXIMO_SOLICITUD_BYTES,
 )
 from apps.prestamos.models import Devolucion, Garantia, Prestamo
@@ -101,8 +104,19 @@ class RegistrarPrestamoSerializer(
     dni_prestatario = serializers.CharField(max_length=8)
     material_id = serializers.UUIDField()
     instancia_id = serializers.UUIDField(required=False)
+    tiempo_prestamo_minutos = serializers.IntegerField(
+        required=False,
+        min_value=MINIMO_MINUTOS_PRESTAMO,
+        max_value=MAXIMO_MINUTOS_PRESTAMO,
+        error_messages={
+            "min_value": "El tiempo mínimo de préstamo es de 15 minutos.",
+            "max_value": "La duración máxima del préstamo es de 15 días (21600 minutos).",
+            "invalid": "Ingresa un tiempo de préstamo numérico válido.",
+        },
+    )
     tiempo_prestamo_dias = serializers.IntegerField(
-        min_value=1,
+        required=False,
+        min_value=MINIMO_DIAS_PRESTAMO,
         max_value=MAXIMO_DIAS_PRESTAMO,
         error_messages={
             "min_value": "El tiempo de préstamo debe ser al menos un día.",
@@ -188,6 +202,13 @@ class RegistrarPrestamoSerializer(
         finally:
             self.initial_data = datos_iniciales
 
+        if (
+            attrs.get("tiempo_prestamo_minutos") is None
+            and attrs.get("tiempo_prestamo_dias") is None
+        ):
+            raise serializers.ValidationError({
+                "tiempo_prestamo_minutos": "Indica la duración del préstamo.",
+            })
         if len(attrs.get("fotos_checklist", [])) != len(attrs["checklist_inicial"]):
             raise serializers.ValidationError({
                 "fotos_checklist": "Adjunta una foto por cada elemento del checklist inicial.",
@@ -235,6 +256,7 @@ class PrestamoRegistroSerializer(serializers.ModelSerializer):
             "codigo_ejemplar",
             "fecha_entrega",
             "fecha_limite",
+            "tiempo_prestamo_minutos",
             "tiempo_prestamo_dias",
             "estado",
             "checklist_inicial",
@@ -369,6 +391,7 @@ class DevolucionResultadoSerializer(serializers.Serializer):
 
     prestamo_id = serializers.IntegerField()
     a_tiempo = serializers.BooleanField()
+    en_tiempo_gracia = serializers.BooleanField(required=False, default=False)
     dias_tardanza = serializers.IntegerField()
     bonificacion = serializers.IntegerField()
     deduccion_tardanza = serializers.IntegerField()

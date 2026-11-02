@@ -3,18 +3,47 @@ import {
   TAMANO_MAXIMO_GARANTIA_MB,
 } from './constantes/garantia'
 import {
-  DURACION_MAXIMA_PRESTAMO_DIAS,
+  DURACION_MAXIMA_PRESTAMO_MINUTOS,
+  DURACION_MINIMA_PRESTAMO_MINUTOS,
   EXTENSIONES_FOTO_CHECKLIST,
   TAMANO_MAXIMO_FOTO_CHECKLIST_MB,
   TAMANO_MAXIMO_FOTO_CHECKLIST_BYTES,
+  TIEMPO_MAXIMO_DEFAULT_POR_TIER,
   TIPOS_FOTO_CHECKLIST,
+  convertirTiempoAMinutos,
+  formatearDuracionMinutos,
 } from './constantes/checklistPrestamo'
 import { esMaterialAltoValor } from './constantes/catalogo'
+
+export function obtenerMinutosMaximosMaterial(material) {
+  if (material?.tiempo_maximo_prestamo) {
+    return Number(material.tiempo_maximo_prestamo)
+  }
+  if (material?.tier_minimo_requerido) {
+    const porTier =
+      TIEMPO_MAXIMO_DEFAULT_POR_TIER[material.tier_minimo_requerido] ||
+      TIEMPO_MAXIMO_DEFAULT_POR_TIER.estandar
+    return porTier.minutos
+  }
+  return DURACION_MAXIMA_PRESTAMO_MINUTOS
+}
+
+export function mensajeRangoDuracion(material = null) {
+  const maximoMinutos = obtenerMinutosMaximosMaterial(material)
+  return `La duración debe ser de al menos ${DURACION_MINIMA_PRESTAMO_MINUTOS} minutos y máximo ${formatearDuracionMinutos(maximoMinutos)}.`
+}
+
+export function ayudaRangoDuracion(material = null) {
+  const maximoMinutos = obtenerMinutosMaximosMaterial(material)
+  return `Mínimo ${DURACION_MINIMA_PRESTAMO_MINUTOS} minutos · Máximo para este material: ${formatearDuracionMinutos(maximoMinutos)} · Incluye 30 min de tiempo de gracia en la devolución.`
+}
 
 export function validarFormularioPrestamo({
   dni,
   material,
   instanciaId,
+  duracionValor,
+  duracionUnidad,
   dias,
   checklist,
   documentoIdentidad,
@@ -23,6 +52,11 @@ export function validarFormularioPrestamo({
   const errores = {}
   const erroresFotos = {}
   const dniLimpio = String(dni ?? '').trim()
+  const valorTiempo = duracionValor !== undefined ? duracionValor : dias
+  const unidadTiempo = duracionUnidad || (duracionValor !== undefined ? 'horas' : 'dias')
+  const cantidad = Number(valorTiempo)
+  const minutos = convertirTiempoAMinutos(valorTiempo, unidadTiempo)
+  const maximoMinutos = obtenerMinutosMaximosMaterial(material)
 
   if (!/^\d{8}$/.test(dniLimpio)) {
     errores.dni = 'El DNI debe tener exactamente 8 dígitos.'
@@ -33,8 +67,19 @@ export function validarFormularioPrestamo({
   if (!instanciaId) {
     errores.instancia_id = 'Selecciona una instancia disponible.'
   }
-  if (!Number.isInteger(Number(dias)) || Number(dias) < 1 || Number(dias) > DURACION_MAXIMA_PRESTAMO_DIAS) {
-    errores.dias = `La duración debe ser de 1 a ${DURACION_MAXIMA_PRESTAMO_DIAS} días.`
+  if (
+    valorTiempo === ''
+    || valorTiempo === null
+    || valorTiempo === undefined
+    || !Number.isInteger(cantidad)
+    || cantidad <= 0
+    || !Number.isInteger(minutos)
+  ) {
+    errores.dias = mensajeRangoDuracion(material)
+  } else if (minutos < DURACION_MINIMA_PRESTAMO_MINUTOS) {
+    errores.dias = `El tiempo mínimo de préstamo es de ${DURACION_MINIMA_PRESTAMO_MINUTOS} minutos.`
+  } else if (minutos > maximoMinutos) {
+    errores.dias = `El tiempo solicitado supera el máximo permitido para este material (${formatearDuracionMinutos(maximoMinutos)}).`
   }
   if (!Array.isArray(checklist) || checklist.length === 0) {
     errores.checklist = 'Registra al menos un elemento del material.'
@@ -78,20 +123,27 @@ export function validarFoto(archivo) {
   return ''
 }
 
-export function evaluarCambioDuracion(duracion, duracionAnterior) {
+export function evaluarCambioDuracion(duracion, duracionAnterior, unidad = 'horas', material = null) {
+  if (duracion === '') return { valor: '', error: '' }
   const cantidad = Number(duracion)
-  if (
-    duracion !== ''
-    && (
-      !Number.isFinite(cantidad)
-      || !Number.isInteger(cantidad)
-      || cantidad < 1
-      || cantidad > DURACION_MAXIMA_PRESTAMO_DIAS
-    )
-  ) {
+  const minutos = convertirTiempoAMinutos(duracion, unidad)
+  const maximoMinutos = obtenerMinutosMaximosMaterial(material)
+  if (!Number.isFinite(cantidad) || !Number.isInteger(cantidad) || cantidad <= 0) {
     return {
       valor: String(duracionAnterior),
-      error: `La duración debe ser de 1 a ${DURACION_MAXIMA_PRESTAMO_DIAS} días.`,
+      error: mensajeRangoDuracion(material),
+    }
+  }
+  if (minutos < DURACION_MINIMA_PRESTAMO_MINUTOS) {
+    return {
+      valor: String(duracionAnterior),
+      error: `El tiempo mínimo de préstamo es de ${DURACION_MINIMA_PRESTAMO_MINUTOS} minutos.`,
+    }
+  }
+  if (minutos > maximoMinutos) {
+    return {
+      valor: String(duracionAnterior),
+      error: `El tiempo solicitado supera el máximo permitido para este material (${formatearDuracionMinutos(maximoMinutos)}).`,
     }
   }
   return { valor: duracion, error: '' }
@@ -128,14 +180,17 @@ function validarArchivoGarantia(archivo, mensajeRequerido) {
   return ''
 }
 
-export function calcularFechaLimiteEstimada(dias) {
-  const cantidad = Number(dias)
+export function calcularFechaLimiteEstimada(duracionValor, unidad = 'horas', material = null) {
+  const cantidad = Number(duracionValor)
+  const minutos = convertirTiempoAMinutos(duracionValor, unidad)
+  const maximoMinutos = obtenerMinutosMaximosMaterial(material)
   if (
-    !Number.isInteger(cantidad)
-    || cantidad < 1
-    || cantidad > DURACION_MAXIMA_PRESTAMO_DIAS
+    duracionValor === ''
+    || !Number.isInteger(cantidad)
+    || cantidad <= 0
+    || !Number.isInteger(minutos)
+    || minutos < DURACION_MINIMA_PRESTAMO_MINUTOS
+    || minutos > maximoMinutos
   ) return null
-  const fecha = new Date()
-  fecha.setDate(fecha.getDate() + cantidad)
-  return fecha
+  return new Date(Date.now() + minutos * 60 * 1000)
 }

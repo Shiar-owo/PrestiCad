@@ -14,6 +14,14 @@ import {
   UMBRAL_PRECIO_ALTO_VALOR,
 } from '../constantes/catalogo'
 import {
+  DURACION_MAXIMA_MATERIAL_MINUTOS,
+  DURACION_MINIMA_MATERIAL_MINUTOS,
+  TIEMPO_MAXIMO_DEFAULT_POR_TIER,
+  UNIDADES_TIEMPO_PRESTAMO,
+  convertirTiempoAMinutos,
+  descomponerMinutosEnUnidad,
+} from '../constantes/checklistPrestamo'
+import {
   MAXIMO_EJEMPLARES_REGISTRO,
   codigoEjemplarPorDefecto,
   construirCuerpoRegistroMaterial,
@@ -42,19 +50,19 @@ const CAMPOS_PUNTOS = [
 
 const DEFAULTS_REPUTACION_POR_TIER = {
   avanzado: {
-    bonificacion_tiempo: '10',
+    bonificacion_tiempo: '20',
     deduccion_tardanza: '5',
     deduccion_dano_parcial: '20',
     deduccion_dano_total: '40',
   },
   estandar: {
-    bonificacion_tiempo: '5',
+    bonificacion_tiempo: '15',
     deduccion_tardanza: '10',
     deduccion_dano_parcial: '30',
     deduccion_dano_total: '60',
   },
   restringido: {
-    bonificacion_tiempo: '0',
+    bonificacion_tiempo: '10',
     deduccion_tardanza: '15',
     deduccion_dano_parcial: '40',
     deduccion_dano_total: '80',
@@ -74,6 +82,7 @@ const ETIQUETAS_CAMPOS_ERROR = {
   stock: 'Cantidad de ejemplares',
   estado: 'Estado',
   estado_inicial_ejemplares: 'Estado',
+  tiempo_maximo_prestamo: 'Tiempo máximo de préstamo',
   foto: 'Foto',
   formulario: 'Registro',
 }
@@ -103,7 +112,10 @@ const DATOS_INICIALES = {
   foto: null,
   vistaPreviaFoto: '',
   tier_minimo_requerido: 'estandar',
-  bonificacion_tiempo: '5',
+  tiempo_maximo_valor: '24',
+  tiempo_maximo_unidad: 'horas',
+  tiempo_maximo_personalizado: false,
+  bonificacion_tiempo: '15',
   deduccion_tardanza: '10',
   deduccion_dano_parcial: '30',
   deduccion_dano_total: '60',
@@ -143,11 +155,21 @@ export function obtenerEstadoGeneralInicial(material) {
 }
 
 function crearDatosIniciales(material) {
+  const tierInicial = material?.tier_minimo_requerido || 'estandar'
+  const defaultTier =
+    TIEMPO_MAXIMO_DEFAULT_POR_TIER[tierInicial] || TIEMPO_MAXIMO_DEFAULT_POR_TIER.estandar
+  const tiempoDescompuesto = material?.tiempo_maximo_prestamo
+    ? descomponerMinutosEnUnidad(material.tiempo_maximo_prestamo)
+    : { valor: defaultTier.valor, unidad: defaultTier.unidad }
+
   return {
     ...DATOS_INICIALES,
     ...Object.fromEntries(
       Object.entries(DATOS_INICIALES).map(([campo, inicial]) => [campo, material?.[campo] ?? inicial]),
     ),
+    tiempo_maximo_valor: String(tiempoDescompuesto.valor),
+    tiempo_maximo_unidad: tiempoDescompuesto.unidad,
+    tiempo_maximo_personalizado: Boolean(material?.tiempo_maximo_prestamo),
     estado: obtenerEstadoGeneralInicial(material),
     modo: 'unico',
     foto: null,
@@ -174,6 +196,21 @@ function validar(datos) {
   const errorCodigo = validarCodigoMaterial(datos.codigo_material)
   if (errorCodigo) {
     errores.codigo_material = errorCodigo
+  }
+
+  if (datos.tiempo_maximo_valor !== '') {
+    const cantidad = Number(datos.tiempo_maximo_valor)
+    const minutos = convertirTiempoAMinutos(datos.tiempo_maximo_valor, datos.tiempo_maximo_unidad)
+    if (
+      !Number.isInteger(cantidad)
+      || cantidad <= 0
+      || !Number.isInteger(minutos)
+      || minutos < DURACION_MINIMA_MATERIAL_MINUTOS
+      || minutos > DURACION_MAXIMA_MATERIAL_MINUTOS
+    ) {
+      errores.tiempo_maximo_prestamo =
+        'El tiempo máximo de préstamo del material debe estar entre 30 minutos y 15 días (21600 minutos).'
+    }
   }
 
   for (const { campo } of CAMPOS_PUNTOS) {
@@ -315,23 +352,47 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
           ? (tierPrevioAAltoValor.current || 'estandar')
           : datos.tier_minimo_requerido
       if (antesEsAltoValor && !ahoraEsAltoValor) tierPrevioAAltoValor.current = null
-      setDatos((previos) => ({
-        ...previos,
-        precio: valor,
-        tier_minimo_requerido: tierAutomatico,
-        ...(reposicionVinculadaAlPrecio ? { costo_reposicion: valor } : {}),
-      }))
+      setDatos((previos) => {
+        const cambioTier = tierAutomatico !== previos.tier_minimo_requerido
+        const defaultTiempoTier =
+          TIEMPO_MAXIMO_DEFAULT_POR_TIER[tierAutomatico] || TIEMPO_MAXIMO_DEFAULT_POR_TIER.estandar
+        return {
+          ...previos,
+          precio: valor,
+          tier_minimo_requerido: tierAutomatico,
+          ...(cambioTier && DEFAULTS_REPUTACION_POR_TIER[tierAutomatico]
+            ? DEFAULTS_REPUTACION_POR_TIER[tierAutomatico]
+            : {}),
+          ...(cambioTier && !previos.tiempo_maximo_personalizado
+            ? {
+              tiempo_maximo_valor: String(defaultTiempoTier.valor),
+              tiempo_maximo_unidad: defaultTiempoTier.unidad,
+            }
+            : {}),
+          ...(reposicionVinculadaAlPrecio ? { costo_reposicion: valor } : {}),
+        }
+      })
       return
     }
     if (campo === 'costo_reposicion') {
       setReposicionVinculadaAlPrecio(false)
     }
     if (campo === 'tier_minimo_requerido' && DEFAULTS_REPUTACION_POR_TIER[valor]) {
-      setDatos((previos) => ({
-        ...previos,
-        tier_minimo_requerido: valor,
-        ...DEFAULTS_REPUTACION_POR_TIER[valor],
-      }))
+      setDatos((previos) => {
+        const defaultTiempoTier =
+          TIEMPO_MAXIMO_DEFAULT_POR_TIER[valor] || TIEMPO_MAXIMO_DEFAULT_POR_TIER.estandar
+        return {
+          ...previos,
+          tier_minimo_requerido: valor,
+          ...DEFAULTS_REPUTACION_POR_TIER[valor],
+          ...(!previos.tiempo_maximo_personalizado
+            ? {
+              tiempo_maximo_valor: String(defaultTiempoTier.valor),
+              tiempo_maximo_unidad: defaultTiempoTier.unidad,
+            }
+            : {}),
+        }
+      })
       return
     }
     if (!esEdicion && datos.modo === 'detalle' && campo === 'estado') {
@@ -351,7 +412,13 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
         return fila
       }))
     }
-    setDatos((previos) => ({ ...previos, [campo]: valor }))
+    setDatos((previos) => {
+      const siguientes = { ...previos, [campo]: valor }
+      if (campo === 'tiempo_maximo_valor' || campo === 'tiempo_maximo_unidad') {
+        siguientes.tiempo_maximo_personalizado = true
+      }
+      return siguientes
+    })
   }
 
   function actualizarFila(indice, campo, valor) {
@@ -435,6 +502,13 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
 
     if (datos.tier_minimo_requerido) {
       cuerpo.tier_minimo_requerido = datos.tier_minimo_requerido
+    }
+
+    if (datos.tiempo_maximo_valor !== '') {
+      cuerpo.tiempo_maximo_prestamo = convertirTiempoAMinutos(
+        datos.tiempo_maximo_valor,
+        datos.tiempo_maximo_unidad,
+      )
     }
 
     for (const { campo } of CAMPOS_PUNTOS) {
@@ -1155,6 +1229,28 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
                 ? 'Alto valor requiere Tier Avanzado.'
                 : ''}
             />
+            <div className="grid gap-2">
+              <div className="grid grid-cols-2 gap-2">
+                <Campo
+                  etiqueta="Tiempo máximo de préstamo"
+                  tipo="number"
+                  min="1"
+                  step="1"
+                  valor={datos.tiempo_maximo_valor}
+                  onCambio={(evento) => actualizar('tiempo_maximo_valor', evento.target.value)}
+                  error={errores.tiempo_maximo_prestamo}
+                />
+                <Campo
+                  etiqueta="Unidad de tiempo"
+                  opciones={UNIDADES_TIEMPO_PRESTAMO}
+                  valor={datos.tiempo_maximo_unidad}
+                  onCambio={(evento) => actualizar('tiempo_maximo_unidad', evento.target.value)}
+                />
+              </div>
+              <p className="text-xs text-texto-suave">
+                Mínimo 30 minutos y máximo 15 días (por defecto según Tier: Avanzado 6 h, Estándar 24 h, Restringido 3 días).
+              </p>
+            </div>
             {CAMPOS_PUNTOS.map(({ campo, etiqueta }) => (
               <Campo
                 key={campo}

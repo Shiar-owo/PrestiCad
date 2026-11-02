@@ -198,10 +198,61 @@ class RegistrarMaterialServiceTestCase(TestCase):
         )
 
         self.assertEqual(material.tier_minimo_requerido, "avanzado")
+        self.assertEqual(material.tiempo_maximo_prestamo, 360)
         self.assertEqual(material.bonificacion_tiempo, 20)
         self.assertEqual(material.deduccion_tardanza, 15)
         self.assertEqual(material.deduccion_dano_parcial, 40)
         self.assertEqual(material.deduccion_dano_total, 80)
+
+    def test_tiempo_maximo_prestamo_por_defecto_segun_tier_y_validador_de_limites(self):
+        material_restringido = registrar_material(
+            **self._datos_validos(
+                codigo_material="INV-TIER-R",
+                tier_minimo_requerido="restringido",
+            )
+        )
+        material_estandar = registrar_material(
+            **self._datos_validos(
+                codigo_material="INV-TIER-E",
+                tier_minimo_requerido="estandar",
+            )
+        )
+        material_avanzado = registrar_material(
+            **self._datos_validos(
+                codigo_material="INV-TIER-A",
+                tier_minimo_requerido="avanzado",
+            )
+        )
+        self.assertEqual(material_restringido.tiempo_maximo_prestamo, 4320)
+        self.assertEqual(material_estandar.tiempo_maximo_prestamo, 1440)
+        self.assertEqual(material_avanzado.tiempo_maximo_prestamo, 360)
+
+        material_personalizado = registrar_material(
+            **self._datos_validos(
+                codigo_material="INV-VR-3H",
+                tier_minimo_requerido="avanzado",
+                tiempo_maximo_prestamo=180,
+            )
+        )
+        self.assertEqual(material_personalizado.tiempo_maximo_prestamo, 180)
+
+        with self.assertRaises(InventarioError) as error_minimo:
+            registrar_material(
+                **self._datos_validos(
+                    codigo_material="INV-MIN-ERR",
+                    tiempo_maximo_prestamo=29,
+                )
+            )
+        self.assertEqual(error_minimo.exception.campo, "tiempo_maximo_prestamo")
+
+        with self.assertRaises(InventarioError) as error_maximo:
+            registrar_material(
+                **self._datos_validos(
+                    codigo_material="INV-MAX-ERR",
+                    tiempo_maximo_prestamo=21601,
+                )
+            )
+        self.assertEqual(error_maximo.exception.campo, "tiempo_maximo_prestamo")
 
     def test_guarda_la_ficha_tecnica(self):
         material = registrar_material(
@@ -347,8 +398,8 @@ class ParametrosReputacionPorDefectoTestCase(TestCase):
             nombre="Cable HDMI", codigo_material="OBJ-001", tipo="objeto"
         )
 
-        defaults = settings.MATERIALES_REPUTACION_DEFAULTS
-        self.assertEqual(material.tier_minimo_requerido, defaults["tier_minimo_requerido"])
+        defaults = settings.MATERIALES_REPUTACION_DEFAULTS["estandar"]
+        self.assertEqual(material.tier_minimo_requerido, "estandar")
         self.assertEqual(material.bonificacion_tiempo, defaults["bonificacion_tiempo"])
         self.assertEqual(material.deduccion_tardanza, defaults["deduccion_tardanza"])
         self.assertEqual(material.deduccion_dano_parcial, defaults["deduccion_dano_parcial"])
@@ -387,7 +438,8 @@ class ParametrosReputacionPorDefectoTestCase(TestCase):
         self.assertEqual(material.deduccion_dano_total, 90)
         # lo no parametrizado sigue con el default configurado
         self.assertEqual(
-            material.deduccion_tardanza, settings.MATERIALES_REPUTACION_DEFAULTS["deduccion_tardanza"]
+            material.deduccion_tardanza,
+            settings.MATERIALES_REPUTACION_DEFAULTS["estandar"]["deduccion_tardanza"],
         )
 
     def test_los_costos_no_tienen_default(self):
@@ -400,16 +452,16 @@ class ParametrosReputacionPorDefectoTestCase(TestCase):
 
     def test_parametros_por_defecto_devuelve_una_copia(self):
         defaults = parametros_reputacion_por_defecto()
-        defaults["bonificacion_tiempo"] = 999
+        defaults["estandar"]["bonificacion_tiempo"] = 999
 
         self.assertNotEqual(
-            settings.MATERIALES_REPUTACION_DEFAULTS["bonificacion_tiempo"],
+            settings.MATERIALES_REPUTACION_DEFAULTS["estandar"]["bonificacion_tiempo"],
             999,
         )
 
     def test_los_defaults_del_modelo_coinciden_con_la_configuracion(self):
         """Evita que la configuración y los `default` del modelo se desincronicen."""
-        defaults = settings.MATERIALES_REPUTACION_DEFAULTS
+        defaults = settings.MATERIALES_REPUTACION_DEFAULTS["estandar"]
 
         for campo, valor in defaults.items():
             default_del_modelo = Material._meta.get_field(campo).get_default()

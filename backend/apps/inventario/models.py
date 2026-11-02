@@ -7,8 +7,11 @@ from django.db import models
 from django.utils import timezone
 
 from apps.inventario.constants import (
+    DEFAULT_TIEMPO_MAXIMO_PRESTAMO_MINUTOS,
     ESTADOS_INSTANCIA,
     ESTADOS_MATERIAL,
+    MAXIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS,
+    MINIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS,
     TIPOS_MATERIAL,
     UMBRAL_PRECIO_ALTO_VALOR,
 )
@@ -23,7 +26,7 @@ from apps.usuarios.constants import TIERS
 # Los defaults del modelo corresponden al Tier Estándar. El servicio aplica
 # la tabla completa de defaults por Tier al registrar materiales.
 DEFAULT_TIER_MINIMO = "estandar"
-DEFAULT_BONIFICACION_TIEMPO = 5
+DEFAULT_BONIFICACION_TIEMPO = 15
 DEFAULT_DEDUCCION_TARDANZA = 10
 DEFAULT_DEDUCCION_DANO_PARCIAL = 30
 DEFAULT_DEDUCCION_DANO_TOTAL = 60
@@ -109,6 +112,15 @@ class Material(models.Model):
         default=DEFAULT_TIER_MINIMO,
         verbose_name="Tier mínimo requerido",
     )
+    tiempo_maximo_prestamo = models.PositiveIntegerField(
+        default=DEFAULT_TIEMPO_MAXIMO_PRESTAMO_MINUTOS,
+        validators=[
+            MinValueValidator(MINIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS),
+            MaxValueValidator(MAXIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS),
+        ],
+        verbose_name="Tiempo máximo de préstamo (minutos)",
+        help_text="Duración máxima permitida de préstamo para este material, en minutos (30 min a 15 días).",
+    )
     bonificacion_tiempo = models.PositiveIntegerField(
         default=DEFAULT_BONIFICACION_TIEMPO,
         validators=[MinValueValidator(PUNTOS_MINIMO), MaxValueValidator(PUNTOS_MAXIMO)],
@@ -171,12 +183,16 @@ class Material(models.Model):
 
     def requiere_garantia(self):
         """RN05: los materiales de alto valor exigen garantía al prestarlos."""
-        return self.precio > Decimal(UMBRAL_PRECIO_ALTO_VALOR)
+        if self.precio is not None and Decimal(str(self.precio)) > 0:
+            return Decimal(str(self.precio)) > Decimal(UMBRAL_PRECIO_ALTO_VALOR)
+        return bool(self.es_alto_valor)
 
     def save(self, *args, **kwargs):
         """Mantiene la clasificación sincronizada con el precio del material."""
+        if self.precio is None:
+            self.precio = Decimal("0")
         self.es_alto_valor = self.requiere_garantia()
-        if self.es_alto_valor:
+        if Decimal(str(self.precio)) > Decimal(UMBRAL_PRECIO_ALTO_VALOR):
             self.tier_minimo_requerido = "avanzado"
         super().save(*args, **kwargs)
 

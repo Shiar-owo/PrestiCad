@@ -15,8 +15,13 @@ from apps.prestamos.constants import (
     ESTADOS_DEVOLUBLES,
     ESTADOS_QUE_OCUPAN_UNIDAD,
     MAXIMO_DIAS_PRESTAMO,
+    MAXIMO_MINUTOS_PRESTAMO,
     MAXIMO_PRESTATARIOS_SUGERIDOS,
+    MINIMO_DIAS_PRESTAMO,
+    MINIMO_MINUTOS_PRESTAMO,
+    TIEMPO_GRACIA_MINUTOS,
     VALORES_ESTADOS_CHECKLIST_DEVOLUCION,
+    formatear_duracion_minutos,
 )
 from apps.prestamos.models import Devolucion, FotoChecklist, Garantia, Prestamo
 from apps.prestamos.reportes import generar_reporte_dano
@@ -227,12 +232,66 @@ def _validar_elegibilidad(usuario, material):
             "El usuario no está habilitado para recibir préstamos.",
         )
 
-    tier_minimo = "avanzado" if material.requiere_garantia() else material.tier_minimo_requerido
     tiers_permitidos = TIERS_ACCESIBLES.get(usuario.reputacion_tier)
-    if tiers_permitidos is None or tier_minimo not in tiers_permitidos:
+    if tiers_permitidos is None or material.tier_minimo_requerido not in tiers_permitidos:
         raise PrestamoError(
             "dni_prestatario",
             "El Tier de reputación del usuario no permite recibir este material.",
+        )
+
+
+def _resolver_duracion_prestamo(tiempo_prestamo_minutos, tiempo_prestamo_dias):
+    """Normaliza la duración del préstamo en minutos y días equivalentes.
+
+    Acepta `tiempo_prestamo_minutos` (mínimo 15 minutos, máximo 15 días) o
+    `tiempo_prestamo_dias` por compatibilidad, devolviendo `(minutos, dias, campo_error)`.
+    """
+    if tiempo_prestamo_minutos is not None:
+        if (
+            isinstance(tiempo_prestamo_minutos, bool)
+            or not isinstance(tiempo_prestamo_minutos, int)
+        ):
+            raise PrestamoError(
+                "tiempo_prestamo_minutos",
+                "El tiempo de préstamo debe ser un número entero de minutos.",
+            )
+        if tiempo_prestamo_minutos < MINIMO_MINUTOS_PRESTAMO:
+            raise PrestamoError(
+                "tiempo_prestamo_minutos",
+                f"El tiempo mínimo de préstamo es de {MINIMO_MINUTOS_PRESTAMO} minutos.",
+            )
+        if tiempo_prestamo_minutos > MAXIMO_MINUTOS_PRESTAMO:
+            raise PrestamoError(
+                "tiempo_prestamo_minutos",
+                f"La duración máxima del préstamo es de {MAXIMO_DIAS_PRESTAMO} días "
+                f"({MAXIMO_MINUTOS_PRESTAMO} minutos).",
+            )
+        dias = max(1, math.ceil(tiempo_prestamo_minutos / 1440))
+        return tiempo_prestamo_minutos, dias, "tiempo_prestamo_minutos"
+
+    if (
+        isinstance(tiempo_prestamo_dias, bool)
+        or not isinstance(tiempo_prestamo_dias, int)
+        or tiempo_prestamo_dias < MINIMO_DIAS_PRESTAMO
+        or tiempo_prestamo_dias > MAXIMO_DIAS_PRESTAMO
+    ):
+        raise PrestamoError(
+            "tiempo_prestamo_dias",
+            f"El tiempo de préstamo debe estar entre {MINIMO_DIAS_PRESTAMO} y {MAXIMO_DIAS_PRESTAMO} días.",
+        )
+    return tiempo_prestamo_dias * 1440, tiempo_prestamo_dias, "tiempo_prestamo_dias"
+
+
+def _validar_duracion_material(material, tiempo_prestamo_minutos, campo_duracion):
+    """Verifica que el préstamo no supere el tiempo máximo configurado en el material."""
+    maximo_material = (
+        getattr(material, "tiempo_maximo_prestamo", None) or MAXIMO_MINUTOS_PRESTAMO
+    )
+    if tiempo_prestamo_minutos > maximo_material:
+        limite_legible = formatear_duracion_minutos(maximo_material)
+        raise PrestamoError(
+            campo_duracion,
+            f"El tiempo solicitado supera el máximo permitido para este material ({limite_legible}).",
         )
 
 
@@ -512,7 +571,8 @@ def registrar_prestamo(
     dni_prestatario,
     material_id,
     instancia_id=None,
-    tiempo_prestamo_dias,
+    tiempo_prestamo_minutos=None,
+    tiempo_prestamo_dias=None,
     checklist_inicial,
     fotos_checklist,
     registrado_por,
@@ -521,15 +581,10 @@ def registrar_prestamo(
     fecha_entrega=None,
 ):
     """Registra la entrega con elegibilidad, garantía y control atómico de stock."""
-    if (
-        not isinstance(tiempo_prestamo_dias, int)
-        or tiempo_prestamo_dias < 1
-        or tiempo_prestamo_dias > MAXIMO_DIAS_PRESTAMO
-    ):
-        raise PrestamoError(
-            "tiempo_prestamo_dias",
-            f"El tiempo de préstamo debe estar entre 1 y {MAXIMO_DIAS_PRESTAMO} días.",
-        )
+    minutos_prestamo, dias_prestamo, campo_duracion = _resolver_duracion_prestamo(
+        tiempo_prestamo_minutos,
+        tiempo_prestamo_dias,
+    )
     _validar_checklist(checklist_inicial)
     _validar_fotos_checklist(checklist_inicial, fotos_checklist)
     checklist_inicial = [
@@ -551,6 +606,7 @@ def registrar_prestamo(
         ) from error
 
     _validar_elegibilidad(prestatario, material)
+    _validar_duracion_material(material, minutos_prestamo, campo_duracion)
 
     if material.estado in ("en_mantenimiento", "reservado"):
         raise PrestamoError(
@@ -595,8 +651,9 @@ def registrar_prestamo(
         material=material,
         registrado_por=registrado_por,
         fecha_entrega=fecha_entrega,
-        fecha_limite=fecha_entrega + timedelta(days=tiempo_prestamo_dias),
-        tiempo_prestamo_dias=tiempo_prestamo_dias,
+        fecha_limite=fecha_entrega + timedelta(minutes=minutos_prestamo),
+        tiempo_prestamo_minutos=minutos_prestamo,
+        tiempo_prestamo_dias=dias_prestamo,
         estado="activo",
         checklist_inicial=checklist_inicial,
         instancia_id=instancia_elegida["id"],
@@ -773,15 +830,16 @@ def _normalizar_checklist_devolucion(checklist_devolucion):
 
 
 def _dias_tardanza(fecha_devolucion, fecha_limite):
-    """Días completos excedidos, con mínimo de un día si ya pasó la fecha límite."""
-    diferencia = (fecha_devolucion - fecha_limite).total_seconds()
+    """Días excedidos tras superar el tiempo de gracia de 30 minutos."""
+    limite_con_gracia = fecha_limite + timedelta(minutes=TIEMPO_GRACIA_MINUTOS)
+    diferencia = (fecha_devolucion - limite_con_gracia).total_seconds()
     if diferencia <= 0:
         return 0
     return max(1, math.ceil(diferencia / SEGUNDOS_POR_DIA))
 
 
 def _calcular_resultado(prestamo, checklist, fecha_devolucion):
-    """Aplica RN06: bonificación a tiempo, tardanza proporcional y sanción por daño.
+    """Aplica RN06: bonificación a tiempo, tiempo de gracia de 30 min, tardanza proporcional y sanción por daño.
 
     El daño global es el peor estado del checklist (total prevalece sobre
     parcial) y el cobro solo existe cuando el material tiene costo
@@ -791,6 +849,8 @@ def _calcular_resultado(prestamo, checklist, fecha_devolucion):
     usuario = prestamo.usuario
 
     a_tiempo = fecha_devolucion <= prestamo.fecha_limite
+    limite_con_gracia = prestamo.fecha_limite + timedelta(minutes=TIEMPO_GRACIA_MINUTOS)
+    en_tiempo_gracia = (not a_tiempo) and (fecha_devolucion <= limite_con_gracia)
     dias_tardanza = _dias_tardanza(fecha_devolucion, prestamo.fecha_limite)
     bonificacion = material.bonificacion_tiempo if a_tiempo else 0
     deduccion_tardanza = dias_tardanza * material.deduccion_tardanza
@@ -815,6 +875,7 @@ def _calcular_resultado(prestamo, checklist, fecha_devolucion):
 
     return {
         "a_tiempo": a_tiempo,
+        "en_tiempo_gracia": en_tiempo_gracia,
         "dias_tardanza": dias_tardanza,
         "bonificacion": bonificacion,
         "deduccion_tardanza": deduccion_tardanza,

@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  ayudaRangoDuracion,
   calcularFechaLimiteEstimada,
   evaluarCambioDuracion,
   mapearErroresFotoChecklist,
+  obtenerMinutosMaximosMaterial,
   obtenerElementosSinFoto,
   validarFoto,
   validarFormularioPrestamo,
@@ -96,40 +98,76 @@ describe('validarFormularioPrestamo', () => {
     expect(errores).not.toHaveProperty('compromiso_responsabilidad')
   })
 
-  it('calcula la fecha estimada y rechaza duraciones inválidas', () => {
-    const ahora = new Date()
-    const fechaLimite = calcularFechaLimiteEstimada(3)
+  it('calcula la fecha estimada y rechaza duraciones fuera del mínimo de 15 min o máximo del material', () => {
+    const fechaLimite = calcularFechaLimiteEstimada(3, 'horas', { tiempo_maximo_prestamo: 360 })
 
-    expect(fechaLimite.getDate()).toBe(new Date(ahora.setDate(ahora.getDate() + 3)).getDate())
-    expect(calcularFechaLimiteEstimada(0)).toBeNull()
-    expect(calcularFechaLimiteEstimada(31)).toBeNull()
+    expect(fechaLimite).toBeInstanceOf(Date)
+    expect(calcularFechaLimiteEstimada(10, 'minutos')).toBeNull()
+    expect(calcularFechaLimiteEstimada(7, 'horas', { tiempo_maximo_prestamo: 360 })).toBeNull()
+    expect(calcularFechaLimiteEstimada(6, 'horas', { tier_minimo_requerido: 'avanzado' })).not.toBeNull()
   })
 
-  it('limita la duración a treinta días', () => {
-    expect(validarFormularioPrestamo({ ...formularioValido, dias: '31' }).dias)
-      .toMatch(/1 a 30 días/)
+  it('limita la duración mínima a 15 minutos y la máxima según el material (defaults por Tier)', () => {
+    expect(obtenerMinutosMaximosMaterial({ tier_minimo_requerido: 'avanzado' })).toBe(360)
+    expect(obtenerMinutosMaximosMaterial({ tier_minimo_requerido: 'estandar' })).toBe(1440)
+    expect(obtenerMinutosMaximosMaterial({ tier_minimo_requerido: 'restringido' })).toBe(4320)
+    expect(obtenerMinutosMaximosMaterial({ tiempo_maximo_prestamo: 180 })).toBe(180)
+
+    expect(
+      validarFormularioPrestamo({
+        ...formularioValido,
+        duracionValor: '10',
+        duracionUnidad: 'minutos',
+      }).dias,
+    ).toBe('El tiempo mínimo de préstamo es de 15 minutos.')
+
+    expect(
+      validarFormularioPrestamo({
+        ...formularioValido,
+        material: { id: 'vr-1', es_alto_valor: false, tier_minimo_requerido: 'avanzado' },
+        duracionValor: '7',
+        duracionUnidad: 'horas',
+      }).dias,
+    ).toBe('El tiempo solicitado supera el máximo permitido para este material (6 horas).')
+
+    expect(
+      validarFormularioPrestamo({
+        ...formularioValido,
+        material: { id: 'vr-1', es_alto_valor: false, tier_minimo_requerido: 'avanzado' },
+        duracionValor: '6',
+        duracionUnidad: 'horas',
+      }),
+    ).toEqual({})
+
+    expect(ayudaRangoDuracion({ tier_minimo_requerido: 'avanzado' })).toMatch(/6 horas/)
+    expect(ayudaRangoDuracion({ tier_minimo_requerido: 'avanzado' })).toMatch(/30 min de tiempo de gracia/)
   })
 
   it('conserva el último valor válido y avisa ante duraciones fuera del rango permitido', () => {
-    expect(evaluarCambioDuracion('31', '3')).toEqual({
-      valor: '3',
-      error: 'La duración debe ser de 1 a 30 días.',
+    const materialVr = { tier_minimo_requerido: 'avanzado' }
+    expect(evaluarCambioDuracion('10', '30', 'minutos', materialVr)).toEqual({
+      valor: '30',
+      error: 'El tiempo mínimo de préstamo es de 15 minutos.',
     })
-    expect(evaluarCambioDuracion('-1', '3')).toEqual({
-      valor: '3',
-      error: 'La duración debe ser de 1 a 30 días.',
+    expect(evaluarCambioDuracion('7', '6', 'horas', materialVr)).toEqual({
+      valor: '6',
+      error: 'El tiempo solicitado supera el máximo permitido para este material (6 horas).',
     })
-    expect(evaluarCambioDuracion('0', '3')).toEqual({
+    expect(evaluarCambioDuracion('-1', '3', 'horas', materialVr)).toEqual({
       valor: '3',
-      error: 'La duración debe ser de 1 a 30 días.',
+      error: 'La duración debe ser de al menos 15 minutos y máximo 6 horas.',
     })
-    expect(evaluarCambioDuracion('1.5', '3')).toEqual({
+    expect(evaluarCambioDuracion('0', '3', 'horas', materialVr)).toEqual({
       valor: '3',
-      error: 'La duración debe ser de 1 a 30 días.',
+      error: 'La duración debe ser de al menos 15 minutos y máximo 6 horas.',
     })
-    expect(evaluarCambioDuracion('30', '3')).toEqual({ valor: '30', error: '' })
-    expect(evaluarCambioDuracion('1', '3')).toEqual({ valor: '1', error: '' })
-    expect(evaluarCambioDuracion('', '3')).toEqual({ valor: '', error: '' })
+    expect(evaluarCambioDuracion('1.5', '3', 'horas', materialVr)).toEqual({
+      valor: '3',
+      error: 'La duración debe ser de al menos 15 minutos y máximo 6 horas.',
+    })
+    expect(evaluarCambioDuracion('6', '3', 'horas', materialVr)).toEqual({ valor: '6', error: '' })
+    expect(evaluarCambioDuracion('15', '30', 'minutos', materialVr)).toEqual({ valor: '15', error: '' })
+    expect(evaluarCambioDuracion('', '3', 'horas', materialVr)).toEqual({ valor: '', error: '' })
   })
 
   it('requiere fotos válidas por elemento y permite observación opcional', () => {

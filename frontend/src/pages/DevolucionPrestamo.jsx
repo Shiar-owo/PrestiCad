@@ -106,12 +106,16 @@ function ResumenSanciones({ estimacion }) {
       <CampoResumen etiqueta="Entrega">
         {estimacion.a_tiempo
           ? 'A tiempo (sin tardanza)'
-          : `Tardía por ${estimacion.dias_tardanza} día(s)`}
+          : estimacion.en_tiempo_gracia || estimacion.dias_tardanza === 0
+            ? 'En tiempo de gracia (30 min, sin sanción)'
+            : `Tardía por ${estimacion.dias_tardanza} día(s)`}
       </CampoResumen>
       <CampoResumen etiqueta="Sanción por tiempo">
         {estimacion.a_tiempo
           ? `Bonificación +${estimacion.bonificacion} puntos`
-          : `Deducción −${estimacion.deduccion_tardanza} puntos`}
+          : estimacion.en_tiempo_gracia || estimacion.dias_tardanza === 0
+            ? '0 puntos (tiempo de gracia de 30 min)'
+            : `Deducción −${estimacion.deduccion_tardanza} puntos`}
       </CampoResumen>
       <CampoResumen etiqueta="Daño detectado">
         {ETIQUETAS_DANO[estimacion.dano]}

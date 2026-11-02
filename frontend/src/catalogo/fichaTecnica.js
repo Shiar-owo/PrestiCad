@@ -4,6 +4,10 @@ import {
   ETIQUETAS_TIPO,
   esMaterialAltoValor,
 } from '../constantes/catalogo'
+import {
+  TIEMPO_MAXIMO_DEFAULT_POR_TIER,
+  formatearDuracionMinutos,
+} from '../constantes/checklistPrestamo'
 
 /**
  * Formatea un valor numérico como moneda en Soles (S/.).
@@ -51,6 +55,15 @@ export function obtenerDatosFichaTecnica(material) {
       ETIQUETAS_TIER[material.tier_minimo_requerido] ||
       material.tier_minimo_requerido ||
       'Estándar',
+    tiempoMaximoPrestamoMinutos:
+      material.tiempo_maximo_prestamo ??
+      (TIEMPO_MAXIMO_DEFAULT_POR_TIER[material.tier_minimo_requerido] ||
+        TIEMPO_MAXIMO_DEFAULT_POR_TIER.estandar).minutos,
+    tiempoMaximoPrestamoLegible: formatearDuracionMinutos(
+      material.tiempo_maximo_prestamo ??
+        (TIEMPO_MAXIMO_DEFAULT_POR_TIER[material.tier_minimo_requerido] ||
+          TIEMPO_MAXIMO_DEFAULT_POR_TIER.estandar).minutos,
+    ),
     bonificacionTiempo: material.bonificacion_tiempo ?? 5,
     deduccionTardanza: material.deduccion_tardanza ?? 10,
     deduccionDanoParcial: material.deduccion_dano_parcial ?? 30,

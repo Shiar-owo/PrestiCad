@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { api, ErrorApi } from '../api/client'
 import {
+  ayudaRangoDuracion,
   calcularFechaLimiteEstimada,
   evaluarCambioDuracion,
   mapearErroresFotoChecklist,
@@ -21,8 +22,9 @@ import AdvertenciaModal from '../components/ui/AdvertenciaModal'
 import { TAMANO_MAXIMO_GARANTIA_MB } from '../constantes/garantia'
 import { esMaterialAltoValor } from '../constantes/catalogo'
 import {
-  DURACION_MAXIMA_PRESTAMO_DIAS,
   TAMANO_MAXIMO_FOTO_CHECKLIST_MB,
+  UNIDADES_TIEMPO_PRESTAMO,
+  convertirTiempoAMinutos,
 } from '../constantes/checklistPrestamo'
 import { construirSolicitudPrestamo } from '../prestamos/solicitudPrestamo'
 import { validarTamanoSolicitud } from '../prestamos/tamanoSolicitud'
@@ -35,7 +37,8 @@ const FORMULARIO_INICIAL = {
   dni: '',
   materialId: '',
   instanciaId: '',
-  dias: '7',
+  dias: '1',
+  unidadTiempo: 'horas',
   checklist: [{ elemento: '', observacion: '', foto: null, fotoPrevia: '' }],
   documentoIdentidad: null,
   compromisoResponsabilidad: null,
@@ -182,13 +185,13 @@ function RegistrarPrestamo() {
     instancias,
     formulario.instanciaId,
   )
-  const fechaLimiteEstimada = useMemo(
-    () => calcularFechaLimiteEstimada(formulario.dias),
-    [formulario.dias],
-  )
   const perfilVerificadoActual = dniPerfilVerificado === formulario.dni.trim()
     ? perfilPrestatario
     : null
+  const fechaLimiteEstimada = useMemo(
+    () => calcularFechaLimiteEstimada(formulario.dias, formulario.unidadTiempo, materialSeleccionado),
+    [formulario.dias, formulario.unidadTiempo, materialSeleccionado],
+  )
   const tierCumple = Boolean(
     perfilVerificadoActual && materialSeleccionado
     && NIVEL_TIER[perfilVerificadoActual.reputacion_tier] >= NIVEL_TIER[materialSeleccionado.tier_minimo_requerido],
@@ -242,12 +245,22 @@ function RegistrarPrestamo() {
   }
 
   function cambiarDuracion(duracion) {
-    const cambio = evaluarCambioDuracion(duracion, formulario.dias)
+    const cambio = evaluarCambioDuracion(
+      duracion,
+      formulario.dias,
+      formulario.unidadTiempo,
+      materialSeleccionado,
+    )
     if (cambio.error) {
       setErrores((actual) => ({ ...actual, dias: cambio.error }))
       return
     }
     actualizar('dias', cambio.valor)
+  }
+
+  function cambiarUnidadTiempo(nuevaUnidad) {
+    setFormulario((actual) => ({ ...actual, unidadTiempo: nuevaUnidad }))
+    setErrores((actual) => ({ ...actual, dias: undefined }))
   }
 
   function actualizarChecklist(indice, campo, valor) {
@@ -322,7 +335,8 @@ function RegistrarPrestamo() {
       dni: formulario.dni,
       material: materialSeleccionado,
       instanciaId: formulario.instanciaId,
-      dias: formulario.dias,
+      duracionValor: formulario.dias,
+      duracionUnidad: formulario.unidadTiempo,
       checklist: formulario.checklist,
       documentoIdentidad: formulario.documentoIdentidad,
       compromisoResponsabilidad: formulario.compromisoResponsabilidad,
@@ -340,11 +354,12 @@ function RegistrarPrestamo() {
 
     setGuardando(true)
     try {
+      const minutosPrestamo = convertirTiempoAMinutos(formulario.dias, formulario.unidadTiempo)
       const solicitud = construirSolicitudPrestamo({
         dni: formulario.dni,
         material: materialSeleccionado,
         instanciaId: formulario.instanciaId,
-        dias: formulario.dias,
+        minutos: minutosPrestamo,
         checklist: formulario.checklist,
         documentoIdentidad: formulario.documentoIdentidad,
         compromisoResponsabilidad: formulario.compromisoResponsabilidad,
@@ -369,6 +384,7 @@ function RegistrarPrestamo() {
       const camposApi = {
         dni_prestatario: 'dni',
         instancia_id: 'instancia_id',
+        tiempo_prestamo_minutos: 'dias',
         tiempo_prestamo_dias: 'dias',
         documento_identidad: 'documento_identidad',
         compromiso_responsabilidad: 'compromiso_responsabilidad',
@@ -573,18 +589,25 @@ function RegistrarPrestamo() {
                 mensaje="Este material no tiene ejemplares disponibles para prestar."
               />
             )}
-            <Campo
-              etiqueta="Duración del préstamo (días)"
-              tipo="number"
-              min="1"
-              max={DURACION_MAXIMA_PRESTAMO_DIAS}
-              step="1"
-              valor={formulario.dias}
-              onCambio={(evento) => cambiarDuracion(evento.target.value)}
-              error={errores.dias}
-              ayuda={`Duración permitida: de 1 a ${DURACION_MAXIMA_PRESTAMO_DIAS} días.`}
-              requerido
-            />
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Campo
+                etiqueta="Duración del préstamo"
+                tipo="number"
+                min="1"
+                step="1"
+                valor={formulario.dias}
+                onCambio={(evento) => cambiarDuracion(evento.target.value)}
+                error={errores.dias}
+                ayuda={ayudaRangoDuracion(materialSeleccionado)}
+                requerido
+              />
+              <Campo
+                etiqueta="Unidad de tiempo"
+                opciones={UNIDADES_TIEMPO_PRESTAMO}
+                valor={formulario.unidadTiempo}
+                onCambio={(evento) => cambiarUnidadTiempo(evento.target.value)}
+              />
+            </div>
             {fechaLimiteEstimada && (
               <p className="text-sm text-texto-suave">
                 Fecha límite estimada:{' '}

@@ -1,3 +1,4 @@
+import math
 import uuid
 from pathlib import Path
 
@@ -11,6 +12,9 @@ from apps.prestamos.constants import (
     ESTADOS_PRESTAMO,
     FASES_FOTO_CHECKLIST,
     MAXIMO_DIAS_PRESTAMO,
+    MAXIMO_MINUTOS_PRESTAMO,
+    MINIMO_DIAS_PRESTAMO,
+    MINIMO_MINUTOS_PRESTAMO,
     TIPOS_GARANTIA,
 )
 from apps.prestamos.storage import obtener_almacenamiento_garantias
@@ -67,8 +71,19 @@ class Prestamo(models.Model):
     )
     fecha_entrega = models.DateTimeField(default=timezone.now)
     fecha_limite = models.DateTimeField()
+    tiempo_prestamo_minutos = models.PositiveIntegerField(
+        default=1440,
+        validators=[
+            MinValueValidator(MINIMO_MINUTOS_PRESTAMO),
+            MaxValueValidator(MAXIMO_MINUTOS_PRESTAMO),
+        ],
+    )
     tiempo_prestamo_dias = models.PositiveIntegerField(
-        validators=[MinValueValidator(1), MaxValueValidator(MAXIMO_DIAS_PRESTAMO)],
+        default=1,
+        validators=[
+            MinValueValidator(MINIMO_DIAS_PRESTAMO),
+            MaxValueValidator(MAXIMO_DIAS_PRESTAMO),
+        ],
     )
     estado = models.CharField(
         max_length=20,
@@ -90,6 +105,20 @@ class Prestamo(models.Model):
 
     def __str__(self):
         return f"Préstamo {self.pk}: {self.material} para {self.usuario}"
+
+    def save(self, *args, **kwargs):
+        if self._state.adding:
+            if (
+                self.tiempo_prestamo_minutos == 1440
+                and self.tiempo_prestamo_dias
+                and self.tiempo_prestamo_dias != 1
+            ):
+                self.tiempo_prestamo_minutos = self.tiempo_prestamo_dias * 1440
+            elif self.tiempo_prestamo_minutos:
+                self.tiempo_prestamo_dias = max(
+                    1, math.ceil(self.tiempo_prestamo_minutos / 1440)
+                )
+        super().save(*args, **kwargs)
 
     @property
     def requiere_garantia(self):

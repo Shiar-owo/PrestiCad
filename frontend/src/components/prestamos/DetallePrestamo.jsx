@@ -3,6 +3,7 @@ import { ArrowLeft, ChevronLeft, ChevronRight, RotateCcw, Trash2, Upload } from 
 
 import { api, ErrorApi } from '../../api/client'
 import { ETIQUETAS_ESTADO, esMaterialAltoValor } from '../../constantes/catalogo'
+import { formatearDuracionMinutos } from '../../constantes/checklistPrestamo'
 import BadgeEstado from '../ui/BadgeEstado'
 import Boton from '../ui/Boton'
 import ErrorAlerta from '../ui/ErrorAlerta'
@@ -208,7 +209,11 @@ export default function DetallePrestamo({
             )}
             <CampoDetalle etiqueta="Fecha de entrega">{mostrarFecha(detalle.fecha_entrega)}</CampoDetalle>
             <CampoDetalle etiqueta="Fecha límite">{mostrarFecha(detalle.fecha_limite)}</CampoDetalle>
-            <CampoDetalle etiqueta="Duración">{detalle.tiempo_prestamo_dias} días</CampoDetalle>
+            <CampoDetalle etiqueta="Duración">
+              {detalle.tiempo_prestamo_minutos
+                ? formatearDuracionMinutos(detalle.tiempo_prestamo_minutos)
+                : `${detalle.tiempo_prestamo_dias} días`}
+            </CampoDetalle>
             <CampoDetalle etiqueta="Estado"><BadgeEstado estado={estado} /></CampoDetalle>
           </dl>
 
@@ -242,6 +247,11 @@ export default function DetallePrestamo({
                 {esMaterialAltoValor(material) ? 'Sí' : 'No'}
               </CampoDetalle>
               <CampoDetalle etiqueta="Tier mínimo">{material?.tier_minimo_requerido}</CampoDetalle>
+              {material?.tiempo_maximo_prestamo && (
+                <CampoDetalle etiqueta="Tiempo máximo del material">
+                  {formatearDuracionMinutos(material.tiempo_maximo_prestamo)}
+                </CampoDetalle>
+              )}
               <CampoDetalle etiqueta="Bonificación por entrega a tiempo">
                 {material?.bonificacion_tiempo} puntos
               </CampoDetalle>

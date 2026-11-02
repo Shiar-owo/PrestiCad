@@ -4,6 +4,7 @@ import { api, ErrorApi } from '../api/client'
 import { validarNombre, validarTelefono } from '../validaciones'
 import useTituloPagina from '../hooks/useTituloPagina'
 import Campo from '../components/ui/Campo'
+import CampoTelefono from '../components/ui/CampoTelefono'
 import Boton from '../components/ui/Boton'
 import Tarjeta from '../components/ui/Tarjeta'
 import Skeleton from '../components/ui/Skeleton'
@@ -112,13 +113,12 @@ function FormularioPerfil({ perfil, onGuardar, guardando = false, mensajeExito }
               valor={ETIQUETAS_TIPO[perfil.tipo] || perfil.tipo}
               readOnly
             />
-            <Campo
-              etiqueta="Teléfono (opcional)"
-              tipo="tel"
+            <CampoTelefono
+              etiqueta="Teléfono / Celular"
               valor={telefono}
               onCambio={(evento) => setTelefono(evento.target.value)}
               error={errores.telefono}
-              maxLength={20}
+              requerido
             />
           </div>
 

@@ -110,3 +110,50 @@
     line-height: 1.5rem;
   }
 }
+
+/* =====================================================================
+   intl-tel-input — Integración con el sistema de temas de PrestiCad
+   ===================================================================== */
+.campo-telefono .iti {
+  width: 100%;
+}
+
+.campo-telefono .iti__selected-country-primary {
+  color: var(--color-texto);
+}
+
+.campo-telefono .iti__selected-dial-code {
+  color: var(--color-texto);
+  font-size: 0.875rem;
+}
+
+.campo-telefono .iti__dropdown-content {
+  background-color: var(--color-superficie);
+  border: 1px solid var(--color-borde);
+  border-radius: 0.5rem;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+  color: var(--color-texto);
+  z-index: 50;
+}
+
+.campo-telefono .iti__search-input {
+  background-color: var(--color-superficie);
+  color: var(--color-texto);
+  border: 1px solid var(--color-borde);
+  border-radius: 0.375rem;
+  padding: 0.375rem 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.campo-telefono .iti__country {
+  color: var(--color-texto);
+}
+
+.campo-telefono .iti__country:hover,
+.campo-telefono .iti__country.iti__highlight {
+  background-color: var(--color-superficie-alta);
+}
+
+.campo-telefono .iti__dial-code {
+  color: var(--color-texto-suave);
+}

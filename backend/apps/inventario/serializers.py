@@ -13,6 +13,8 @@ from apps.inventario.constants import (
     ESTADOS_INICIALES_INSTANCIA,
     ESTADOS_INSTANCIA,
     ESTADOS_MATERIAL,
+    MAXIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS,
+    MINIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS,
     MODOS_REGISTRO_MATERIAL,
     TIPOS_MATERIAL,
 )
@@ -36,6 +38,20 @@ MENSAJES_STOCK = {
     "invalid": "Ingresa un stock numérico.",
 }
 
+MENSAJES_TIEMPO_MAXIMO_PRESTAMO = {
+    "min_value": (
+        f"El tiempo máximo de préstamo del material debe estar entre "
+        f"{MINIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS} minutos y 15 días "
+        f"({MAXIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS} minutos)."
+    ),
+    "max_value": (
+        f"El tiempo máximo de préstamo del material debe estar entre "
+        f"{MINIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS} minutos y 15 días "
+        f"({MAXIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS} minutos)."
+    ),
+    "invalid": "El tiempo máximo de préstamo debe ser un número entero de minutos.",
+}
+
 # Campos de la ficha técnica y de los parámetros de reputación: se repiten en
 # los contratos de alta y de edición.
 CAMPOS_FICHA_Y_REPUTACION = (
@@ -46,6 +62,7 @@ CAMPOS_FICHA_Y_REPUTACION = (
     "foto",
     "precio",
     "tier_minimo_requerido",
+    "tiempo_maximo_prestamo",
     "bonificacion_tiempo",
     "deduccion_tardanza",
     "deduccion_dano_parcial",
@@ -276,6 +293,7 @@ class MaterialRegistroSerializer(RechazarCamposNoPermitidosMixin, serializers.Mo
         max_digits=10,
         decimal_places=2,
         min_value=0,
+        required=False,
         error_messages={"required": "El precio es obligatorio.", "min_value": "El precio no puede ser negativo."},
     )
     estado = serializers.ChoiceField(
@@ -304,6 +322,12 @@ class MaterialRegistroSerializer(RechazarCamposNoPermitidosMixin, serializers.Mo
         choices=TIERS,
         required=False,
         error_messages={"invalid_choice": "Tier mínimo inválido."},
+    )
+    tiempo_maximo_prestamo = serializers.IntegerField(
+        required=False,
+        min_value=MINIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS,
+        max_value=MAXIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS,
+        error_messages=MENSAJES_TIEMPO_MAXIMO_PRESTAMO,
     )
     # `validators` es necesario porque DRF no ejecuta los validadores del
     # modelo durante `is_valid()`. `allow_empty_file=False` evita que un
@@ -386,6 +410,12 @@ class MaterialActualizacionSerializer(RechazarCamposNoPermitidosMixin, serialize
     )
     stock = serializers.IntegerField(required=False, min_value=1, error_messages=MENSAJES_STOCK)
     precio = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=0, required=False)
+    tiempo_maximo_prestamo = serializers.IntegerField(
+        required=False,
+        min_value=MINIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS,
+        max_value=MAXIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS,
+        error_messages=MENSAJES_TIEMPO_MAXIMO_PRESTAMO,
+    )
     foto = serializers.ImageField(
         required=False,
         allow_null=True,

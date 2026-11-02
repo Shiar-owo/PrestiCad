@@ -378,6 +378,12 @@ function FichaTecnicaModal({ material, onCerrar, onEliminarInstancia, onAgregarI
                 tipo="neutral"
               />
               <ItemRegla
+                etiqueta="Tiempo Máximo de Préstamo"
+                valor={ficha.tiempoMaximoPrestamoLegible}
+                descripcion="Mínimo 15 min · 30 min de tiempo de gracia"
+                tipo="neutral"
+              />
+              <ItemRegla
                 etiqueta="Entrega Puntual"
                 valor={`+${ficha.bonificacionTiempo} pts`}
                 descripcion="Bonificación por devolver a tiempo"

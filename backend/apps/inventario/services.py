@@ -11,10 +11,14 @@ from django.db import IntegrityError, transaction
 from django.db.models.deletion import ProtectedError
 
 from apps.inventario.constants import (
+    DEFAULT_TIEMPO_MAXIMO_PRESTAMO_MINUTOS,
     ESTADOS_INICIALES_INSTANCIA,
     ESTADOS_INSTANCIA,
     ESTADOS_MATERIAL,
     MAXIMO_EJEMPLARES_REGISTRO,
+    MAXIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS,
+    MINIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS,
+    TIEMPO_MAXIMO_DEFAULT_POR_TIER,
     UMBRAL_PRECIO_ALTO_VALOR,
 )
 from apps.inventario.models import InstanciaMaterial, Material
@@ -33,12 +37,14 @@ CAMPOS_EDITABLES = frozenset(
         "tipo",
         "estado",
         "es_alto_valor",
+        "precio",
         "marca",
         "modelo",
         "numero_serie",
         "color",
         "foto",
         "tier_minimo_requerido",
+        "tiempo_maximo_prestamo",
         "bonificacion_tiempo",
         "deduccion_tardanza",
         "deduccion_dano_parcial",
@@ -88,7 +94,42 @@ def normalizar_codigo(codigo):
 
 def parametros_reputacion_por_defecto():
     """Devuelve una copia de los defaults de reputación indexados por Tier."""
-    return {tier: dict(valores) for tier, valores in settings.MATERIALES_REPUTACION_DEFAULTS.items()}
+    config = settings.MATERIALES_REPUTACION_DEFAULTS
+    if all(isinstance(valores, dict) for valores in config.values()):
+        return {tier: dict(valores) for tier, valores in config.items()}
+    return dict(config)
+
+
+def obtener_tiempo_maximo_por_defecto_tier(tier):
+    """Devuelve el tiempo máximo de préstamo por defecto (en minutos) según el Tier del material."""
+    return TIEMPO_MAXIMO_DEFAULT_POR_TIER.get(tier, DEFAULT_TIEMPO_MAXIMO_PRESTAMO_MINUTOS)
+
+
+def _validar_tiempo_maximo_prestamo(valor):
+    """Valida que el tiempo máximo de préstamo del material esté entre 30 minutos y 15 días."""
+    if isinstance(valor, bool):
+        raise InventarioError(
+            "tiempo_maximo_prestamo",
+            "El tiempo máximo de préstamo debe ser un número entero de minutos.",
+        )
+    try:
+        minutos = int(valor)
+    except (TypeError, ValueError) as exc:
+        raise InventarioError(
+            "tiempo_maximo_prestamo",
+            "El tiempo máximo de préstamo debe ser un número entero de minutos.",
+        ) from exc
+    if (
+        minutos < MINIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS
+        or minutos > MAXIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS
+    ):
+        raise InventarioError(
+            "tiempo_maximo_prestamo",
+            f"El tiempo máximo de préstamo del material debe estar entre "
+            f"{MINIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS} minutos y 15 días "
+            f"({MAXIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS} minutos).",
+        )
+    return minutos
 
 
 def obtener_material(material_id):
@@ -182,13 +223,14 @@ def registrar_material(
     descripcion="",
     stock=1,
     es_alto_valor=None,
-    precio=0,
+    precio=None,
     marca="",
     modelo="",
     numero_serie="",
     color="",
     foto=None,
     tier_minimo_requerido=None,
+    tiempo_maximo_prestamo=None,
     bonificacion_tiempo=None,
     deduccion_tardanza=None,
     deduccion_dano_parcial=None,
@@ -361,16 +403,34 @@ def registrar_material(
         "costo_reparacion": costo_reparacion,
         "costo_reposicion": costo_reposicion,
     }
-    if reputacion["costo_reposicion"] is None:
+    if precio is not None and reputacion["costo_reposicion"] is None:
         reputacion["costo_reposicion"] = precio
     # Los parámetros no informados quedan con el valor por defecto configurable
     # (criterio 3): lo que sí llega, gana.
-    es_alto_valor = precio > UMBRAL_PRECIO_ALTO_VALOR
-    tier = "avanzado" if es_alto_valor else (reputacion["tier_minimo_requerido"] or "estandar")
+    precio_efectivo = 0 if precio is None else precio
+    es_alto_valor = (
+        precio_efectivo > UMBRAL_PRECIO_ALTO_VALOR
+        if precio is not None
+        else bool(es_alto_valor)
+    )
+    campos["precio"] = precio_efectivo
     campos["es_alto_valor"] = es_alto_valor
-    defaults = parametros_reputacion_por_defecto()[tier]
-    defaults["tier_minimo_requerido"] = tier
+    todos_defaults = parametros_reputacion_por_defecto()
+    forzar_avanzado = precio is not None and es_alto_valor
+    if all(isinstance(v, dict) for v in todos_defaults.values()):
+        tier = "avanzado" if forzar_avanzado else (reputacion["tier_minimo_requerido"] or "estandar")
+        defaults = dict(todos_defaults[tier])
+        defaults["tier_minimo_requerido"] = tier
+    else:
+        defaults = dict(todos_defaults)
+        if forzar_avanzado:
+            defaults["tier_minimo_requerido"] = "avanzado"
     defaults.update({campo: valor for campo, valor in reputacion.items() if valor is not None})
+    tier_efectivo = defaults["tier_minimo_requerido"]
+    if tiempo_maximo_prestamo is None or tiempo_maximo_prestamo == "":
+        defaults["tiempo_maximo_prestamo"] = obtener_tiempo_maximo_por_defecto_tier(tier_efectivo)
+    else:
+        defaults["tiempo_maximo_prestamo"] = _validar_tiempo_maximo_prestamo(tiempo_maximo_prestamo)
     campos.update(defaults)
 
     archivos_guardados = []
@@ -453,6 +513,13 @@ def actualizar_material(material_id, **campos):
         defaults = parametros_reputacion_por_defecto()[tier_nuevo]
         for campo, valor in defaults.items():
             campos.setdefault(campo, valor)
+        if material.tiempo_maximo_prestamo == obtener_tiempo_maximo_por_defecto_tier(
+            material.tier_minimo_requerido
+        ):
+            campos.setdefault(
+                "tiempo_maximo_prestamo",
+                obtener_tiempo_maximo_por_defecto_tier(tier_nuevo),
+            )
 
     no_permitidos = set(campos) - CAMPOS_EDITABLES
     if no_permitidos:
@@ -493,6 +560,11 @@ def actualizar_material(material_id, **campos):
 
     if "stock" in campos and campos["stock"] < 1:
         raise InventarioError("stock", "El stock debe ser al menos 1 unidad.")
+
+    if "tiempo_maximo_prestamo" in campos:
+        campos["tiempo_maximo_prestamo"] = _validar_tiempo_maximo_prestamo(
+            campos["tiempo_maximo_prestamo"]
+        )
 
     if "stock" in campos and campos["stock"] > material.stock:
         conteo_actual = material.instancias.count()

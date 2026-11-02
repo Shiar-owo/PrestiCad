@@ -53,7 +53,7 @@ MATERIALES = (
         "tipo": "equipo", "marca": "Equipo institucional",
         "modelo": "Laptop con Windows 11",
         "numero_serie": "DEMO-LAP-014", "color": "Plata",
-        "estado_fisico": "Bueno", "es_alto_valor": False,
+        "precio": 180, "estado_fisico": "Bueno", "es_alto_valor": False,
         "tier_minimo_requerido": "estandar", "foto": "laptop.jpg",
         "ejemplares": (
             ("DEMO-LAP-001-01", "prestado", "Operativo", "Almacén A-01"),
@@ -65,7 +65,7 @@ MATERIALES = (
         "descripcion": "Visor Meta Quest 2 con dos controles para experiencias de realidad virtual.",
         "tipo": "equipo", "marca": "Meta", "modelo": "Quest 2",
         "numero_serie": "DEMO-META-002", "color": "Blanco",
-        "estado": "prestado", "estado_fisico": "Excelente", "es_alto_valor": True,
+        "precio": 1200, "estado": "prestado", "estado_fisico": "Excelente", "es_alto_valor": True,
         "tier_minimo_requerido": "avanzado", "foto": "gafas_vr.jpg",
         "ejemplares": (
             ("DEMO-VR-001-01", "prestado", "Excelente", "Almacén A-02"),
@@ -76,7 +76,7 @@ MATERIALES = (
         "descripcion": "Calculadora científica para cursos de matemática, física e ingeniería.",
         "tipo": "equipo", "marca": "Casio", "modelo": "fx-991ES PLUS",
         "numero_serie": "DEMO-CAS-991", "color": "Negro",
-        "estado_fisico": "Bueno", "es_alto_valor": False,
+        "precio": 80, "estado_fisico": "Bueno", "es_alto_valor": False,
         "tier_minimo_requerido": "restringido", "foto": "calculadora_cientifica.jpg",
         "ejemplares": (
             ("DEMO-CALC-001-01", "disponible", "Operativo", "Almacén B-03"),
@@ -88,7 +88,7 @@ MATERIALES = (
         "descripcion": "Libro de consulta sobre C++, sus estructuras, funciones y programación orientada a objetos.",
         "tipo": "libro", "marca": "", "modelo": "Edición ilustrativa",
         "numero_serie": "", "color": "Blanco", "estado_fisico": "Bueno",
-        "es_alto_valor": False, "tier_minimo_requerido": "restringido",
+        "precio": 60, "es_alto_valor": False, "tier_minimo_requerido": "restringido",
         "foto": "libro_crls.jpeg",
         "ejemplares": (
             ("DEMO-LIB-001-01", "disponible", "Bueno", "Biblioteca C-02"),
@@ -247,24 +247,38 @@ class Command(BaseCommand):
                 material.delete()
 
     def _cargar_inventario(self):
+        from apps.inventario.services import (
+            obtener_tiempo_maximo_por_defecto_tier,
+            parametros_reputacion_por_defecto,
+        )
+
+        defaults_reputacion = parametros_reputacion_por_defecto()
         materiales = {}
         for datos in MATERIALES:
             datos = datos.copy()
             codigo = datos.pop("codigo_material")
             foto = datos.pop("foto")
+            datos.pop("estado_fisico", None)
             ejemplares = datos.pop("ejemplares")
+            tier_material = datos.get("tier_minimo_requerido", "estandar")
+            for campo_rep, valor_rep in defaults_reputacion.get(tier_material, {}).items():
+                datos.setdefault(campo_rep, valor_rep)
+            datos.setdefault(
+                "tiempo_maximo_prestamo",
+                obtener_tiempo_maximo_por_defecto_tier(tier_material),
+            )
             material, _ = Material.objects.update_or_create(
                 codigo_material=codigo,
                 defaults={**datos, "foto": f"inventario/{foto}", "stock": len(ejemplares)},
             )
             materiales[codigo] = material
-            for codigo_ejemplar, estado, estado_fisico, ubicacion in ejemplares:
+            for codigo_ejemplar, estado, observaciones, ubicacion in ejemplares:
                 InstanciaMaterial.objects.update_or_create(
                     codigo_ejemplar=codigo_ejemplar,
                     defaults={
                         "material": material,
                         "estado": estado,
-                        "estado_fisico": estado_fisico,
+                        "observaciones": observaciones,
                         "ubicacion": ubicacion,
                         "foto": f"inventario/{foto}",
                     },
@@ -290,9 +304,10 @@ class Command(BaseCommand):
                 "material": gafas_vr,
                 "instancia": InstanciaMaterial.objects.get(codigo_ejemplar="DEMO-VR-001-01"),
                 "registrado_por": gestor,
-                "fecha_entrega": ahora - timedelta(days=1),
-                "fecha_limite": ahora + timedelta(days=6),
-                "tiempo_prestamo_dias": 7,
+                "fecha_entrega": ahora - timedelta(hours=2),
+                "fecha_limite": ahora + timedelta(hours=4),
+                "tiempo_prestamo_minutos": 360,
+                "tiempo_prestamo_dias": 1,
                 "estado": "activo",
                 "checklist_inicial": [
                     {"elemento": "Visor de realidad virtual", "estado": "sin_cambios"},
@@ -312,9 +327,10 @@ class Command(BaseCommand):
                 "material": laptop,
                 "instancia": InstanciaMaterial.objects.get(codigo_ejemplar="DEMO-LAP-001-01"),
                 "registrado_por": gestor,
-                "fecha_entrega": ahora - timedelta(days=2),
-                "fecha_limite": ahora + timedelta(days=5),
-                "tiempo_prestamo_dias": 7,
+                "fecha_entrega": ahora - timedelta(hours=6),
+                "fecha_limite": ahora + timedelta(hours=18),
+                "tiempo_prestamo_minutos": 1440,
+                "tiempo_prestamo_dias": 1,
                 "estado": "activo",
                 "checklist_inicial": [{"elemento": "Laptop", "estado": "sin_cambios"}],
             },
@@ -329,8 +345,9 @@ class Command(BaseCommand):
                 "instancia": InstanciaMaterial.objects.get(codigo_ejemplar="DEMO-CALC-001-01"),
                 "registrado_por": gestor,
                 "fecha_entrega": fecha_entrega,
-                "fecha_limite": fecha_entrega + timedelta(days=7),
-                "tiempo_prestamo_dias": 7,
+                "fecha_limite": fecha_entrega + timedelta(days=3),
+                "tiempo_prestamo_minutos": 4320,
+                "tiempo_prestamo_dias": 3,
                 "estado": "devuelto",
                 "checklist_inicial": [{"elemento": "Calculadora científica", "estado": "sin_cambios"}],
             },
@@ -339,7 +356,7 @@ class Command(BaseCommand):
             prestamo=prestamo_devuelto,
             defaults={
                 "realizado_por": gestor,
-                "fecha_devolucion": fecha_entrega + timedelta(days=9),
+                "fecha_devolucion": fecha_entrega + timedelta(days=5),
                 "checklist_devolucion": [{
                     "elemento": "Tapa del compartimento de pilas", "estado": "dano_parcial",
                     "observacion": "La tapa presenta una fisura; la calculadora enciende y funciona.",

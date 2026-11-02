@@ -4,6 +4,7 @@ export function construirSolicitudPrestamo({
   dni,
   material,
   instanciaId,
+  minutos,
   dias,
   checklist,
   fotosChecklist = checklist.map((item) => item.foto),
@@ -14,7 +15,11 @@ export function construirSolicitudPrestamo({
   solicitud.append('dni_prestatario', dni.trim())
   solicitud.append('material_id', material.id)
   solicitud.append('instancia_id', instanciaId)
-  solicitud.append('tiempo_prestamo_dias', String(Number(dias)))
+  if (minutos !== undefined && minutos !== null && minutos !== '') {
+    solicitud.append('tiempo_prestamo_minutos', String(Number(minutos)))
+  } else {
+    solicitud.append('tiempo_prestamo_dias', String(Number(dias)))
+  }
   solicitud.append('checklist_inicial', JSON.stringify(checklist.map((item) => ({
     elemento: item.elemento.trim(),
     observacion: item.observacion.trim(),

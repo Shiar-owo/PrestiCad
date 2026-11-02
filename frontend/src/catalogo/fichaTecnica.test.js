@@ -70,6 +70,8 @@ describe('obtenerDatosFichaTecnica', () => {
       color: 'Gris oscuro',
       tierMinimo: 'avanzado',
       tierMinimoLegible: 'Avanzado',
+      tiempoMaximoPrestamoMinutos: 360,
+      tiempoMaximoPrestamoLegible: '6 horas',
       bonificacionTiempo: 8,
       deduccionTardanza: 15,
       deduccionDanoParcial: 40,

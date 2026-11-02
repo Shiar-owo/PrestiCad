@@ -98,19 +98,19 @@ MEDIA_URL_PUBLICA = os.getenv("MEDIA_URL_PUBLICA", "")
 
 MATERIALES_REPUTACION_DEFAULTS = {
     "avanzado": {
-        "bonificacion_tiempo": 10,
+        "bonificacion_tiempo": 20,
         "deduccion_tardanza": 5,
         "deduccion_dano_parcial": 20,
         "deduccion_dano_total": 40,
     },
     "estandar": {
-        "bonificacion_tiempo": 5,
+        "bonificacion_tiempo": 15,
         "deduccion_tardanza": 10,
         "deduccion_dano_parcial": 30,
         "deduccion_dano_total": 60,
     },
     "restringido": {
-        "bonificacion_tiempo": 0,
+        "bonificacion_tiempo": 10,
         "deduccion_tardanza": 15,
         "deduccion_dano_parcial": 40,
         "deduccion_dano_total": 80,

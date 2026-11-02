@@ -32,6 +32,19 @@ describe('construirSolicitudPrestamo', () => {
     expect(solicitud.get('compromiso_responsabilidad').name).toBe('compromiso.pdf')
   })
 
+  it('envía tiempo_prestamo_minutos cuando se informa minutos', () => {
+    const solicitud = construirSolicitudPrestamo({
+      dni: '12345678',
+      material: { id: 'material-vr', es_alto_valor: false },
+      instanciaId: 'instancia-vr',
+      minutos: 180,
+      checklist: [{ elemento: 'Visor VR', observacion: '', foto: new File(['foto'], 'vr.png', { type: 'image/png' }) }],
+    })
+
+    expect(solicitud.get('tiempo_prestamo_minutos')).toBe('180')
+    expect(solicitud.has('tiempo_prestamo_dias')).toBe(false)
+  })
+
   it('omite los campos PDF cuando el material no requiere garantía', () => {
     const solicitud = construirSolicitudPrestamo({
       dni: '12345678',

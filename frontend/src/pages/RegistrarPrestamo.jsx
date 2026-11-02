@@ -19,6 +19,7 @@ import SubidaDocumentoPDF from '../components/prestamos/SubidaDocumentoPDF'
 import SelectorPrestatario from '../components/prestamos/SelectorPrestatario'
 import AdvertenciaModal from '../components/ui/AdvertenciaModal'
 import { TAMANO_MAXIMO_GARANTIA_MB } from '../constantes/garantia'
+import { esMaterialAltoValor } from '../constantes/catalogo'
 import {
   DURACION_MAXIMA_PRESTAMO_DIAS,
   TAMANO_MAXIMO_FOTO_CHECKLIST_MB,
@@ -674,7 +675,7 @@ function RegistrarPrestamo() {
               </Boton>
             </fieldset>
 
-            {materialSeleccionado?.es_alto_valor && (
+            {esMaterialAltoValor(materialSeleccionado) && (
               <fieldset
                 key={formulario.materialId}
                 className="grid gap-3 rounded-xl border border-acento-300 bg-acento-50/50 p-4 dark:border-acento-700/60 dark:bg-acento-500/10"
@@ -708,7 +709,7 @@ function RegistrarPrestamo() {
                 tipo="submit"
                 cargando={guardando}
                 deshabilitado={bloqueadoPorElegibilidad || Boolean(
-                  materialSeleccionado?.es_alto_valor
+                  esMaterialAltoValor(materialSeleccionado)
                   && (!formulario.documentoIdentidad || !formulario.compromisoResponsabilidad)
                 )}
               >

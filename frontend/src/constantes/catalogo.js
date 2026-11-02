@@ -14,6 +14,15 @@ export const ETIQUETAS_ESTADO = {
   prestado: 'Prestado',
 }
 
+export const UMBRAL_PRECIO_ALTO_VALOR = 200
+
+export function esMaterialAltoValor(material) {
+  if (material?.precio !== null && material?.precio !== undefined && material?.precio !== '') {
+    return Number(material.precio) > UMBRAL_PRECIO_ALTO_VALOR
+  }
+  return Boolean(material?.es_alto_valor)
+}
+
 // Debe reflejar apps/usuarios/constants.py (TIERS)
 export const ETIQUETAS_TIER = {
   avanzado: 'Avanzado',

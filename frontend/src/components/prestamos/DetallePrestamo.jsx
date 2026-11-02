@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { ArrowLeft, ChevronLeft, ChevronRight, RotateCcw, Trash2, Upload } from 'lucide-react'
 
 import { api, ErrorApi } from '../../api/client'
-import { ETIQUETAS_ESTADO } from '../../constantes/catalogo'
+import { ETIQUETAS_ESTADO, esMaterialAltoValor } from '../../constantes/catalogo'
 import BadgeEstado from '../ui/BadgeEstado'
 import Boton from '../ui/Boton'
 import ErrorAlerta from '../ui/ErrorAlerta'
@@ -239,7 +239,7 @@ export default function DetallePrestamo({
                 {ETIQUETAS_ESTADO[material?.estado] || material?.estado || 'No registrado'}
               </CampoDetalle>
               <CampoDetalle etiqueta="Alto valor">
-                {material?.es_alto_valor ? 'Sí' : 'No'}
+                {esMaterialAltoValor(material) ? 'Sí' : 'No'}
               </CampoDetalle>
               <CampoDetalle etiqueta="Tier mínimo">{material?.tier_minimo_requerido}</CampoDetalle>
               <CampoDetalle etiqueta="Bonificación por entrega a tiempo">
@@ -320,7 +320,7 @@ export default function DetallePrestamo({
 
           <section className="mt-6 rounded-xl border border-borde p-4" aria-labelledby="titulo-documentos-garantia">
             <h4 id="titulo-documentos-garantia" className="font-bold text-texto">Documentos de garantía</h4>
-            {!material?.es_alto_valor ? (
+            {!esMaterialAltoValor(material) ? (
               <p className="mt-2 text-sm text-texto-suave">Este material no requiere documentos de garantía.</p>
             ) : (
               <ul className="mt-3 grid gap-4">

@@ -9,6 +9,7 @@ import {
   TAMANO_MAXIMO_FOTO_CHECKLIST_BYTES,
   TIPOS_FOTO_CHECKLIST,
 } from './constantes/checklistPrestamo'
+import { esMaterialAltoValor } from './constantes/catalogo'
 
 export function validarFormularioPrestamo({
   dni,
@@ -47,7 +48,7 @@ export function validarFormularioPrestamo({
     })
     if (Object.keys(erroresFotos).length > 0) errores.fotosChecklist = erroresFotos
   }
-  if (material?.es_alto_valor) {
+  if (esMaterialAltoValor(material)) {
     const errorDocumentoIdentidad = validarArchivoGarantia(
       documentoIdentidad,
       'Adjunta el documento de identidad en PDF.',

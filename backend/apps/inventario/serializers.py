@@ -329,12 +329,10 @@ class MaterialRegistroSerializer(RechazarCamposNoPermitidosMixin, serializers.Mo
             "ubicacion",
             "observaciones",
             "instancias",
-            "es_alto_valor",
             *CAMPOS_FICHA_Y_REPUTACION,
         )
         extra_kwargs = {
             "descripcion": {"required": False, "allow_blank": True, "default": ""},
-            "es_alto_valor": {"required": False, "default": False},
             "marca": {"required": False, "allow_blank": True, "default": ""},
             "modelo": {"required": False, "allow_blank": True, "default": ""},
             "numero_serie": {"required": False, "allow_blank": True, "default": ""},
@@ -403,7 +401,6 @@ class MaterialActualizacionSerializer(RechazarCamposNoPermitidosMixin, serialize
             "codigo_material",
             "tipo",
             "estado",
-            "es_alto_valor",
             *CAMPOS_FICHA_Y_REPUTACION,
             "stock",
         )
@@ -413,7 +410,6 @@ class MaterialActualizacionSerializer(RechazarCamposNoPermitidosMixin, serialize
             "modelo": {"required": False, "allow_blank": True},
             "numero_serie": {"required": False, "allow_blank": True},
             "color": {"required": False, "allow_blank": True},
-            "es_alto_valor": {"required": False},
             "bonificacion_tiempo": {"required": False},
             "deduccion_tardanza": {"required": False},
             "deduccion_dano_parcial": {"required": False},

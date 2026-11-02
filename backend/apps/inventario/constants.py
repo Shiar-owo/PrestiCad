@@ -6,6 +6,8 @@ TIPOS_MATERIAL = [
     ("objeto", "Objeto"),
 ]
 
+UMBRAL_PRECIO_ALTO_VALOR = 200
+
 ESTADOS_MATERIAL = [
     ("disponible", "Disponible"),
     ("en_mantenimiento", "En Mantenimiento"),

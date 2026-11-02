@@ -227,8 +227,9 @@ def _validar_elegibilidad(usuario, material):
             "El usuario no está habilitado para recibir préstamos.",
         )
 
+    tier_minimo = "avanzado" if material.requiere_garantia() else material.tier_minimo_requerido
     tiers_permitidos = TIERS_ACCESIBLES.get(usuario.reputacion_tier)
-    if tiers_permitidos is None or material.tier_minimo_requerido not in tiers_permitidos:
+    if tiers_permitidos is None or tier_minimo not in tiers_permitidos:
         raise PrestamoError(
             "dni_prestatario",
             "El Tier de reputación del usuario no permite recibir este material.",

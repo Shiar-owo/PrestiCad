@@ -124,6 +124,61 @@ class RegistroUsuarioAPITestCase(APITestCase):
         self.assertIn("reputacion_puntaje", respuesta.json())
         self.assertEqual(Usuario.objects.count(), 0)
 
+    def test_telefono_obligatorio_sin_campo_devuelve_400(self):
+        datos = dict(
+            nombre="Juan",
+            apellido="Pérez",
+            email="juan.perez@unsa.edu.pe",
+            dni="76543210",
+            tipo="alumno",
+            facultad="Ingeniería de Producción y Servicios",
+            password="ClaveSegura123",
+        )
+        respuesta = self.client.post(self.URL, datos, format="json")
+        self.assertEqual(respuesta.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("telefono", respuesta.json())
+
+    def test_telefono_vacio_devuelve_400(self):
+        respuesta = self._post(telefono="")
+        self.assertEqual(respuesta.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("telefono", respuesta.json())
+
+    def test_telefono_invalido_formato_devuelve_400(self):
+        respuesta = self._post(telefono="no-es-un-numero")
+        self.assertEqual(respuesta.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("telefono", respuesta.json())
+
+    def test_telefono_invalido_prefijo_incoherente_devuelve_400(self):
+        # 123456789 no es un prefijo de celular válido en Perú
+        respuesta = self._post(telefono="123456789")
+        self.assertEqual(respuesta.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("telefono", respuesta.json())
+
+    def test_telefono_invalido_longitud_devuelve_400(self):
+        # 8 dígitos en celular peruano es incompleto
+        respuesta = self._post(telefono="98765432")
+        self.assertEqual(respuesta.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("telefono", respuesta.json())
+
+    def test_telefono_valido_peruano_se_guarda_en_e164(self):
+        respuesta = self._post(telefono="987654321")
+        self.assertEqual(respuesta.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(respuesta.json()["telefono"], "+51987654321")
+        usuario = Usuario.objects.get(email="juan.perez@unsa.edu.pe")
+        self.assertEqual(usuario.telefono, "+51987654321")
+
+    def test_telefono_valido_internacional_se_guarda_en_e164(self):
+        # Número móvil válido de Chile (+56 9 9123 4567)
+        respuesta = self._post(
+            email="chileno@unsa.edu.pe",
+            dni="71234567",
+            telefono="+56991234567",
+        )
+        self.assertEqual(respuesta.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(respuesta.json()["telefono"], "+56991234567")
+        usuario = Usuario.objects.get(email="chileno@unsa.edu.pe")
+        self.assertEqual(usuario.telefono, "+56991234567")
+
 
 class ReputacionInicialTestCase(TestCase):
     """Tests del Tier inicial Neutral (T01.04).
@@ -449,7 +504,7 @@ class PerfilUsuarioServiceTestCase(TestCase):
         self.usuario.refresh_from_db()
 
         self.assertEqual(self.usuario.nombre, "Ana María")
-        self.assertEqual(self.usuario.telefono, "912345678")
+        self.assertEqual(self.usuario.telefono, "+51912345678")
         self.assertEqual(self.usuario.apellido, "García")
         self.assertEqual(self.usuario.email, "ana.garcia@unsa.edu.pe")
         self.assertEqual(self.usuario.dni, "12345678")
@@ -481,7 +536,7 @@ class PerfilUsuarioServiceTestCase(TestCase):
         self.assertTrue(serializer.is_valid(), serializer.errors)
         self.assertEqual(
             serializer.validated_data,
-            {"nombre": "Ana María", "telefono": "912345678"},
+            {"nombre": "Ana María", "telefono": "+51912345678"},
         )
 
     def test_serializer_de_actualizacion_requiere_nombre(self):
@@ -570,7 +625,7 @@ class PerfilUsuarioAPITestCase(APITestCase):
 
         self.assertEqual(respuesta.status_code, status.HTTP_200_OK)
         self.assertEqual(respuesta.json()["nombre"], "Ana María")
-        self.assertEqual(respuesta.json()["telefono"], "912345678")
+        self.assertEqual(respuesta.json()["telefono"], "+51912345678")
         self.assertEqual(self.usuario.apellido, "García")
         self.assertEqual(self.usuario.email, "ana.garcia@unsa.edu.pe")
         self.assertEqual(self.usuario.dni, "12345678")

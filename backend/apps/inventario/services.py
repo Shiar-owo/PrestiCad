@@ -86,13 +86,8 @@ def normalizar_codigo(codigo):
 
 
 def parametros_reputacion_por_defecto():
-    """Devuelve los valores por defecto de los parámetros de reputación (HU04 criterio 3).
-
-    Son los configurados en `settings.MATERIALES_REPUTACION_DEFAULTS`; se
-    devuelve una copia para que quien la reciba pueda modificarla sin alterar
-    la configuración global.
-    """
-    return dict(settings.MATERIALES_REPUTACION_DEFAULTS)
+    """Devuelve una copia de los defaults de reputación indexados por Tier."""
+    return {tier: dict(valores) for tier, valores in settings.MATERIALES_REPUTACION_DEFAULTS.items()}
 
 
 def obtener_material(material_id):
@@ -365,7 +360,9 @@ def registrar_material(
     }
     # Los parámetros no informados quedan con el valor por defecto configurable
     # (criterio 3): lo que sí llega, gana.
-    defaults = parametros_reputacion_por_defecto()
+    tier = reputacion["tier_minimo_requerido"] or "estandar"
+    defaults = parametros_reputacion_por_defecto()[tier]
+    defaults["tier_minimo_requerido"] = tier
     defaults.update({campo: valor for campo, valor in reputacion.items() if valor is not None})
     campos.update(defaults)
 
@@ -430,6 +427,14 @@ def actualizar_material(material_id, **campos):
     cumple las restricciones.
     """
     material = obtener_material(material_id)
+
+    # Si cambia el Tier, los parámetros omitidos adoptan sus nuevos defaults.
+    # Los valores enviados explícitamente (incluidos los personalizados) ganan.
+    tier_nuevo = campos.get("tier_minimo_requerido")
+    if tier_nuevo and tier_nuevo != material.tier_minimo_requerido:
+        defaults = parametros_reputacion_por_defecto()[tier_nuevo]
+        for campo, valor in defaults.items():
+            campos.setdefault(campo, valor)
 
     no_permitidos = set(campos) - CAMPOS_EDITABLES
     if no_permitidos:

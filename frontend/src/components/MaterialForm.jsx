@@ -35,6 +35,27 @@ const CAMPOS_PUNTOS = [
   { campo: 'deduccion_dano_total', etiqueta: 'Deducción por daño total' },
 ]
 
+const DEFAULTS_REPUTACION_POR_TIER = {
+  avanzado: {
+    bonificacion_tiempo: '10',
+    deduccion_tardanza: '5',
+    deduccion_dano_parcial: '20',
+    deduccion_dano_total: '40',
+  },
+  estandar: {
+    bonificacion_tiempo: '5',
+    deduccion_tardanza: '10',
+    deduccion_dano_parcial: '30',
+    deduccion_dano_total: '60',
+  },
+  restringido: {
+    bonificacion_tiempo: '0',
+    deduccion_tardanza: '15',
+    deduccion_dano_parcial: '40',
+    deduccion_dano_total: '80',
+  },
+}
+
 const OPCIONES_ESTADO_INICIAL_EJEMPLAR = [
   { valor: 'disponible', etiqueta: 'Disponible' },
   { valor: 'en_mantenimiento', etiqueta: 'En mantenimiento' },
@@ -265,6 +286,14 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
   }
 
   function actualizar(campo, valor) {
+    if (campo === 'tier_minimo_requerido' && DEFAULTS_REPUTACION_POR_TIER[valor]) {
+      setDatos((previos) => ({
+        ...previos,
+        tier_minimo_requerido: valor,
+        ...DEFAULTS_REPUTACION_POR_TIER[valor],
+      }))
+      return
+    }
     if (!esEdicion && datos.modo === 'detalle' && campo === 'estado') {
       setEjemplares(ejemplares.map((fila) => ({ ...fila, estado: valor })))
     }

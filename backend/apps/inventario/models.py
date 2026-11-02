@@ -18,9 +18,8 @@ from apps.inventario.validators import validar_foto
 # ninguna tabla de usuarios.
 from apps.usuarios.constants import TIERS
 
-# Los `default` de los parámetros de reputación reproducen los valores de
-# `settings.MATERIALES_REPUTACION_DEFAULTS`, que es la fuente configurable
-# que aplica el servicio al registrar un material (T04.04).
+# Los defaults del modelo corresponden al Tier Estándar. El servicio aplica
+# la tabla completa de defaults por Tier al registrar materiales.
 DEFAULT_TIER_MINIMO = "estandar"
 DEFAULT_BONIFICACION_TIEMPO = 5
 DEFAULT_DEDUCCION_TARDANZA = 10

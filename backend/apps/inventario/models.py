@@ -80,6 +80,11 @@ class Material(models.Model):
         verbose_name="Es de alto valor",
         help_text="Los equipos de alto valor exigen garantía al prestarlos (RN05).",
     )
+    precio = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        verbose_name="Precio",
+    )
 
     # Ficha técnica (value object `FichaTecnica` del modelo de dominio).
     marca = models.CharField(max_length=80, blank=True, default="")

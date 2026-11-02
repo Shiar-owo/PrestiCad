@@ -6,6 +6,7 @@ import { validarNombre, validarTelefono } from '../validaciones'
 import useTituloPagina from '../hooks/useTituloPagina'
 import Tarjeta from '../components/ui/Tarjeta'
 import Campo from '../components/ui/Campo'
+import CampoTelefono from '../components/ui/CampoTelefono'
 import Boton from '../components/ui/Boton'
 import ErrorAlerta from '../components/ui/ErrorAlerta'
 
@@ -14,6 +15,7 @@ export const CAMPOS_OBLIGATORIOS_REGISTRO = [
   'apellido',
   'email',
   'dni',
+  'telefono',
   'tipo',
   'facultad',
   'password',
@@ -249,12 +251,12 @@ function RegistroUsuario() {
               ayuda="8 dígitos numéricos."
               requerido
             />
-            <Campo
-              etiqueta="Teléfono (opcional)"
-              tipo="tel"
+            <CampoTelefono
+              etiqueta="Teléfono / Celular"
               valor={datos.telefono}
               onCambio={(evento) => actualizar('telefono', evento.target.value)}
               error={errores.telefono}
+              requerido
             />
             <Campo
               etiqueta="Tipo de usuario"

@@ -6,6 +6,7 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from apps.usuarios.models import Credencial, Rol, Usuario
+from apps.usuarios.validators import validar_y_normalizar_telefono
 
 INTENTOS_FALLIDOS_MAXIMOS = 5
 MINUTOS_BLOQUEO_CUENTA = 15
@@ -124,6 +125,13 @@ def registrar_usuario(*, nombre, apellido, email, dni, telefono="", tipo, facult
     if Usuario.objects.filter(dni=dni).exists():
         raise UsuariosError("dni", "El DNI ya está registrado.")
 
+    if telefono:
+        try:
+            telefono = validar_y_normalizar_telefono(telefono, default_region="PE", obligatorio=False)
+        except Exception as exc:
+            mensaje = exc.detail[0] if hasattr(exc, "detail") and isinstance(exc.detail, list) else str(exc)
+            raise UsuariosError("telefono", str(mensaje))
+
     try:
         with transaction.atomic():
             usuario = Usuario.objects.create(
@@ -174,7 +182,14 @@ def actualizar_perfil(usuario, *, nombre, telefono=None):
     usuario.nombre = nombre.strip()
     campos_actualizados = ["nombre", "updated_at"]
     if telefono is not None:
-        usuario.telefono = telefono.strip()
+        telefono_limpio = telefono.strip()
+        if telefono_limpio:
+            try:
+                telefono_limpio = validar_y_normalizar_telefono(telefono_limpio, default_region="PE", obligatorio=False)
+            except Exception as exc:
+                mensaje = exc.detail[0] if hasattr(exc, "detail") and isinstance(exc.detail, list) else str(exc)
+                raise UsuariosError("telefono", str(mensaje))
+        usuario.telefono = telefono_limpio
         campos_actualizados.append("telefono")
     usuario.save(update_fields=campos_actualizados)
     return usuario

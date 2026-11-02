@@ -1,3 +1,9 @@
+import {
+  parsePhoneNumberFromString,
+  isPossiblePhoneNumber,
+  isValidPhoneNumber,
+} from 'libphonenumber-js'
+
 export function validarNombre(nombre) {
   if (!nombre.trim()) {
     return 'El nombre es obligatorio.'
@@ -6,12 +12,42 @@ export function validarNombre(nombre) {
   return ''
 }
 
-export function validarTelefono(telefono) {
-  if (telefono.trim() && !/^[\d+\s-]+$/.test(telefono.trim())) {
+export function validarTelefono(telefono, opciones = {}) {
+  const { obligatorio = true, paisDefault = 'PE' } =
+    typeof opciones === 'string' ? { obligatorio: true, paisDefault: opciones } : opciones
+
+  const texto = (telefono ?? '').trim()
+  if (!texto) {
+    return obligatorio ? 'El teléfono o celular es obligatorio.' : ''
+  }
+
+  if (!/^[\d+\s().-]+$/.test(texto)) {
     return 'El teléfono solo puede contener dígitos.'
   }
 
+  if (!isPossiblePhoneNumber(texto, paisDefault)) {
+    return 'La longitud del número de teléfono o celular no es válida.'
+  }
+
+  if (!isValidPhoneNumber(texto, paisDefault)) {
+    return 'Ingresa un número de teléfono o celular válido.'
+  }
+
   return ''
+}
+
+export function normalizarTelefonoE164(telefono, paisDefault = 'PE') {
+  const texto = (telefono ?? '').trim()
+  if (!texto) return ''
+  try {
+    const parseado = parsePhoneNumberFromString(texto, paisDefault)
+    if (parseado && parseado.isValid()) {
+      return parseado.format('E.164')
+    }
+  } catch {
+    // fallback al texto limpio
+  }
+  return texto
 }
 
 export function validarEmail(email) {

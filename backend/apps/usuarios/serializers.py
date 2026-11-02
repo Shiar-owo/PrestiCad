@@ -4,6 +4,7 @@ from rest_framework import serializers
 from apps.compartido.serializers import RechazarCamposNoPermitidosMixin
 from apps.usuarios.constants import ESTADOS_USUARIO, ROLES, TIERS, TIPOS_USUARIO
 from apps.usuarios.models import Credencial, Rol, Usuario
+from apps.usuarios.validators import validar_y_normalizar_telefono
 
 DNI_VALIDATOR = RegexValidator(
     r"^\d{8}$",
@@ -103,6 +104,9 @@ class UsuarioRegistroSerializer(RechazarCamposNoPermitidosMixin, serializers.Mod
         },
     )
 
+    def validate_telefono(self, value):
+        return validar_y_normalizar_telefono(value, default_region="PE", obligatorio=True)
+
     class Meta:
         model = Usuario
         fields = (
@@ -119,7 +123,14 @@ class UsuarioRegistroSerializer(RechazarCamposNoPermitidosMixin, serializers.Mod
         extra_kwargs = {
             "nombre": {"error_messages": MENSAJES_CAMPO_NOMBRE},
             "apellido": {"error_messages": {"required": "El apellido es obligatorio.", "blank": "El apellido es obligatorio."}},
-            "telefono": {"required": False, "allow_blank": True, "default": ""},
+            "telefono": {
+                "required": True,
+                "allow_blank": False,
+                "error_messages": {
+                    "required": "El teléfono o celular es obligatorio.",
+                    "blank": "El teléfono o celular es obligatorio.",
+                },
+            },
             "facultad": {"error_messages": {"required": "La facultad es obligatoria.", "blank": "La facultad es obligatoria."}},
             "departamento_carrera": {"required": False, "allow_blank": True, "default": ""},
         }
@@ -155,7 +166,12 @@ class ActualizarPerfilSerializer(RechazarCamposNoPermitidosMixin, serializers.Se
         max_length=100,
         error_messages=MENSAJES_CAMPO_NOMBRE,
     )
-    telefono = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    telefono = serializers.CharField(max_length=30, required=False, allow_blank=True)
+
+    def validate_telefono(self, value):
+        if not value or not str(value).strip():
+            return ""
+        return validar_y_normalizar_telefono(value, default_region="PE", obligatorio=False)
 
 class CredencialSerializer(serializers.ModelSerializer):
     """Contrato de entrada/salida JSON para las credenciales de acceso."""

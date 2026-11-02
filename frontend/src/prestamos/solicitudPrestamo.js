@@ -1,3 +1,5 @@
+import { esMaterialAltoValor } from '../constantes/catalogo'
+
 export function construirSolicitudPrestamo({
   dni,
   material,
@@ -21,10 +23,11 @@ export function construirSolicitudPrestamo({
     if (foto) solicitud.append(`foto_checklist_${indice}`, foto)
   })
 
-  if (material.es_alto_valor && documentoIdentidad) {
+  const materialAltoValor = esMaterialAltoValor(material)
+  if (materialAltoValor && documentoIdentidad) {
     solicitud.append('documento_identidad', documentoIdentidad)
   }
-  if (material.es_alto_valor && compromisoResponsabilidad) {
+  if (materialAltoValor && compromisoResponsabilidad) {
     solicitud.append('compromiso_responsabilidad', compromisoResponsabilidad)
   }
 

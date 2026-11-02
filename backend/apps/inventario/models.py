@@ -1,3 +1,4 @@
+from decimal import Decimal
 import uuid
 from pathlib import Path
 
@@ -9,6 +10,7 @@ from apps.inventario.constants import (
     ESTADOS_INSTANCIA,
     ESTADOS_MATERIAL,
     TIPOS_MATERIAL,
+    UMBRAL_PRECIO_ALTO_VALOR,
 )
 from apps.inventario.validators import validar_foto
 
@@ -79,6 +81,11 @@ class Material(models.Model):
         default=False,
         verbose_name="Es de alto valor",
         help_text="Los equipos de alto valor exigen garantía al prestarlos (RN05).",
+    )
+    precio = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        verbose_name="Precio",
     )
 
     # Ficha técnica (value object `FichaTecnica` del modelo de dominio).
@@ -164,7 +171,14 @@ class Material(models.Model):
 
     def requiere_garantia(self):
         """RN05: los materiales de alto valor exigen garantía al prestarlos."""
-        return self.es_alto_valor
+        return self.precio > Decimal(UMBRAL_PRECIO_ALTO_VALOR)
+
+    def save(self, *args, **kwargs):
+        """Mantiene la clasificación sincronizada con el precio del material."""
+        self.es_alto_valor = self.requiere_garantia()
+        if self.es_alto_valor:
+            self.tier_minimo_requerido = "avanzado"
+        super().save(*args, **kwargs)
 
     @property
     def total_instancias(self):

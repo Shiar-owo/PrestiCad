@@ -2,6 +2,7 @@ import {
   ETIQUETAS_ESTADO,
   ETIQUETAS_TIER,
   ETIQUETAS_TIPO,
+  esMaterialAltoValor,
 } from '../constantes/catalogo'
 
 /**
@@ -34,7 +35,7 @@ export function obtenerDatosFichaTecnica(material) {
     estado: material.estado || 'disponible',
     estadoLegible: ETIQUETAS_ESTADO[material.estado] || material.estado || 'Disponible',
     foto: material.foto || '',
-    esAltoValor: Boolean(material.es_alto_valor),
+    esAltoValor: esMaterialAltoValor(material),
     stockTotal: material.stock ?? 1,
     unidadesDisponibles: unidades,
     hayDisponibilidad,

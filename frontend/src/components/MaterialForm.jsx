@@ -7,7 +7,12 @@ import {
   validarNombre,
   validarPuntosReputacion,
 } from '../validaciones'
-import { ETIQUETAS_ESTADO, OPCIONES_TIER, OPCIONES_TIPO } from '../constantes/catalogo'
+import {
+  ETIQUETAS_ESTADO,
+  OPCIONES_TIER,
+  OPCIONES_TIPO,
+  UMBRAL_PRECIO_ALTO_VALOR,
+} from '../constantes/catalogo'
 import {
   MAXIMO_EJEMPLARES_REGISTRO,
   codigoEjemplarPorDefecto,
@@ -88,7 +93,7 @@ const DATOS_INICIALES = {
   tipo: 'equipo',
   stock: 1,
   modo: 'unico',
-  es_alto_valor: false,
+  precio: '',
   marca: '',
   modelo: '',
   numero_serie: '',
@@ -153,6 +158,14 @@ function crearDatosIniciales(material) {
 function validar(datos) {
   const errores = {}
 
+  if (datos.precio === '' || datos.precio === null || datos.precio === undefined) {
+    errores.precio = 'El precio es obligatorio.'
+  } else if (!Number.isFinite(Number(datos.precio))) {
+    errores.precio = 'Ingresa un precio válido.'
+  } else if (Number(datos.precio) < 0) {
+    errores.precio = 'El precio no puede ser negativo.'
+  }
+
   const errorNombre = validarNombre(datos.nombre)
   if (errorNombre) {
     errores.nombre = errorNombre
@@ -203,8 +216,12 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
   const [alcanceEdicion, setAlcanceEdicion] = useState(null)
   const contadorIds = useRef(0)
   const urlsTemporales = useRef(new Set())
+  const tierPrevioAAltoValor = useRef(null)
   const enviandoRef = useRef(false)
   const [datos, setDatos] = useState(() => crearDatosIniciales(material))
+  const [reposicionVinculadaAlPrecio, setReposicionVinculadaAlPrecio] = useState(() =>
+    !material || material.costo_reposicion == null || Number(material.costo_reposicion) === Number(material.precio),
+  )
   const [ejemplares, setEjemplares] = useState(() =>
     material ? [] : crearEjemplares(1, () => `ejemplar-${++contadorIds.current}`),
   )
@@ -286,6 +303,29 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
   }
 
   function actualizar(campo, valor) {
+    if (campo === 'precio') {
+      const antesEsAltoValor = Number(datos.precio) > UMBRAL_PRECIO_ALTO_VALOR
+      const ahoraEsAltoValor = Number(valor) > UMBRAL_PRECIO_ALTO_VALOR
+      if (!antesEsAltoValor && ahoraEsAltoValor) {
+        tierPrevioAAltoValor.current = datos.tier_minimo_requerido
+      }
+      const tierAutomatico = ahoraEsAltoValor
+        ? 'avanzado'
+        : antesEsAltoValor
+          ? (tierPrevioAAltoValor.current || 'estandar')
+          : datos.tier_minimo_requerido
+      if (antesEsAltoValor && !ahoraEsAltoValor) tierPrevioAAltoValor.current = null
+      setDatos((previos) => ({
+        ...previos,
+        precio: valor,
+        tier_minimo_requerido: tierAutomatico,
+        ...(reposicionVinculadaAlPrecio ? { costo_reposicion: valor } : {}),
+      }))
+      return
+    }
+    if (campo === 'costo_reposicion') {
+      setReposicionVinculadaAlPrecio(false)
+    }
     if (campo === 'tier_minimo_requerido' && DEFAULTS_REPUTACION_POR_TIER[valor]) {
       setDatos((previos) => ({
         ...previos,
@@ -376,7 +416,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
       descripcion: datos.descripcion.trim(),
       codigo_material: datos.codigo_material.trim(),
       tipo: datos.tipo,
-      es_alto_valor: datos.es_alto_valor,
+      precio: datos.precio === '' ? '' : Number(datos.precio),
       marca: datos.marca.trim(),
       modelo: datos.modelo.trim(),
       color: datos.color.trim(),
@@ -542,6 +582,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
         liberarVistaPrevia(datos.vistaPreviaFoto)
         liberarVistasDeFilas(ejemplares)
         setDatos(crearDatosIniciales(null))
+        setReposicionVinculadaAlPrecio(true)
         setEjemplares(crearEjemplares(1, () => `ejemplar-${++contadorIds.current}`))
       }
       if (onGuardado) {
@@ -894,15 +935,17 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
             )}
           </div>
 
-          <label className="flex items-center gap-2 text-sm font-semibold text-texto">
-            <input
-              type="checkbox"
-              checked={datos.es_alto_valor}
-              onChange={(evento) => actualizar('es_alto_valor', evento.target.checked)}
-              className="size-4 rounded border-borde accent-marca-600"
-            />
-            ¿Es de alto valor? (opcional)
-          </label>
+          <Campo
+            etiqueta="Precio"
+            tipo="number"
+            min="0"
+            step="0.01"
+            valor={datos.precio}
+            onCambio={(evento) => actualizar('precio', evento.target.value)}
+            error={errores.precio}
+            requerido
+            ayuda={`Los materiales con precio mayor a S/ ${UMBRAL_PRECIO_ALTO_VALOR} se clasifican automáticamente como Alto valor.`}
+          />
 
           <EncabezadoSeccion>Ficha técnica</EncabezadoSeccion>
           {!esEdicion && datos.modo === 'lote' && (
@@ -1107,6 +1150,10 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
               ]}
               valor={datos.tier_minimo_requerido}
               onCambio={(evento) => actualizar('tier_minimo_requerido', evento.target.value)}
+              deshabilitado={Number(datos.precio) > UMBRAL_PRECIO_ALTO_VALOR}
+              ayuda={Number(datos.precio) > UMBRAL_PRECIO_ALTO_VALOR
+                ? 'Alto valor requiere Tier Avanzado.'
+                : ''}
             />
             {CAMPOS_PUNTOS.map(({ campo, etiqueta }) => (
               <Campo
@@ -1136,6 +1183,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
               min="0"
               step="0.01"
               valor={datos.costo_reposicion}
+              ayuda="Por defecto, se completa con el Precio. Puedes cambiarlo manualmente."
               onCambio={(evento) => actualizar('costo_reposicion', evento.target.value)}
               error={errores.costo_reposicion}
             />

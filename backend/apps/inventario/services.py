@@ -15,6 +15,7 @@ from apps.inventario.constants import (
     ESTADOS_INSTANCIA,
     ESTADOS_MATERIAL,
     MAXIMO_EJEMPLARES_REGISTRO,
+    UMBRAL_PRECIO_ALTO_VALOR,
 )
 from apps.inventario.models import InstanciaMaterial, Material
 from apps.inventario.validators import validar_foto
@@ -180,7 +181,8 @@ def registrar_material(
     estado="disponible",
     descripcion="",
     stock=1,
-    es_alto_valor=False,
+    es_alto_valor=None,
+    precio=0,
     marca="",
     modelo="",
     numero_serie="",
@@ -342,6 +344,7 @@ def registrar_material(
         "stock": stock,
         "estado": estado_material,
         "es_alto_valor": es_alto_valor,
+        "precio": precio,
         "marca": marca.strip(),
         "modelo": modelo.strip(),
         "numero_serie": numero_serie.strip() if modo in ("unico", None) else "",
@@ -358,9 +361,13 @@ def registrar_material(
         "costo_reparacion": costo_reparacion,
         "costo_reposicion": costo_reposicion,
     }
+    if reputacion["costo_reposicion"] is None:
+        reputacion["costo_reposicion"] = precio
     # Los parámetros no informados quedan con el valor por defecto configurable
     # (criterio 3): lo que sí llega, gana.
-    tier = reputacion["tier_minimo_requerido"] or "estandar"
+    es_alto_valor = precio > UMBRAL_PRECIO_ALTO_VALOR
+    tier = "avanzado" if es_alto_valor else (reputacion["tier_minimo_requerido"] or "estandar")
+    campos["es_alto_valor"] = es_alto_valor
     defaults = parametros_reputacion_por_defecto()[tier]
     defaults["tier_minimo_requerido"] = tier
     defaults.update({campo: valor for campo, valor in reputacion.items() if valor is not None})
@@ -427,6 +434,17 @@ def actualizar_material(material_id, **campos):
     cumple las restricciones.
     """
     material = obtener_material(material_id)
+
+    if "precio" in campos:
+        es_alto_valor = campos["precio"] > UMBRAL_PRECIO_ALTO_VALOR
+        campos["es_alto_valor"] = es_alto_valor
+        if es_alto_valor:
+            campos["tier_minimo_requerido"] = "avanzado"
+        elif material.es_alto_valor and "tier_minimo_requerido" not in campos:
+            campos["tier_minimo_requerido"] = "estandar"
+    elif material.requiere_garantia():
+        campos["es_alto_valor"] = True
+        campos["tier_minimo_requerido"] = "avanzado"
 
     # Si cambia el Tier, los parámetros omitidos adoptan sus nuevos defaults.
     # Los valores enviados explícitamente (incluidos los personalizados) ganan.

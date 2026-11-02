@@ -5,10 +5,12 @@ from apps.inventario.models import InstanciaMaterial, Material
 
 @admin.register(Material)
 class MaterialAdmin(admin.ModelAdmin):
+    readonly_fields = ("es_alto_valor",)
     list_display = (
         "nombre",
         "codigo_material",
         "tipo",
+        "precio",
         "estado",
         "stock",
         "tier_minimo_requerido",

@@ -360,6 +360,8 @@ def registrar_material(
         "costo_reparacion": costo_reparacion,
         "costo_reposicion": costo_reposicion,
     }
+    if reputacion["costo_reposicion"] is None:
+        reputacion["costo_reposicion"] = precio
     # Los parámetros no informados quedan con el valor por defecto configurable
     # (criterio 3): lo que sí llega, gana.
     tier = reputacion["tier_minimo_requerido"] or "estandar"

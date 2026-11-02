@@ -214,6 +214,9 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
   const urlsTemporales = useRef(new Set())
   const enviandoRef = useRef(false)
   const [datos, setDatos] = useState(() => crearDatosIniciales(material))
+  const [reposicionVinculadaAlPrecio, setReposicionVinculadaAlPrecio] = useState(() =>
+    !material || material.costo_reposicion == null || Number(material.costo_reposicion) === Number(material.precio),
+  )
   const [ejemplares, setEjemplares] = useState(() =>
     material ? [] : crearEjemplares(1, () => `ejemplar-${++contadorIds.current}`),
   )
@@ -295,6 +298,17 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
   }
 
   function actualizar(campo, valor) {
+    if (campo === 'precio') {
+      setDatos((previos) => ({
+        ...previos,
+        precio: valor,
+        ...(reposicionVinculadaAlPrecio ? { costo_reposicion: valor } : {}),
+      }))
+      return
+    }
+    if (campo === 'costo_reposicion') {
+      setReposicionVinculadaAlPrecio(false)
+    }
     if (campo === 'tier_minimo_requerido' && DEFAULTS_REPUTACION_POR_TIER[valor]) {
       setDatos((previos) => ({
         ...previos,
@@ -552,6 +566,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
         liberarVistaPrevia(datos.vistaPreviaFoto)
         liberarVistasDeFilas(ejemplares)
         setDatos(crearDatosIniciales(null))
+        setReposicionVinculadaAlPrecio(true)
         setEjemplares(crearEjemplares(1, () => `ejemplar-${++contadorIds.current}`))
       }
       if (onGuardado) {
@@ -1157,6 +1172,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
               min="0"
               step="0.01"
               valor={datos.costo_reposicion}
+              ayuda="Por defecto, se completa con el Precio. Puedes cambiarlo manualmente."
               onCambio={(evento) => actualizar('costo_reposicion', evento.target.value)}
               error={errores.costo_reposicion}
             />

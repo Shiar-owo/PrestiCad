@@ -112,63 +112,65 @@
 
 ---
 
-### HU06 — Reservar material
+### HU06 — Reservar material o solicitar espera
 
-**Como** Prestatario, **quiero** reservar un material disponible indicando prioridad y justificación, **para que** tenga garantizada su disponibilidad para un préstamo futuro.
+**Como** Prestatario, **quiero** reservar un material indicando prioridad y justificación, o quedar en lista de espera si no hay disponibilidad, **para que** pueda acceder a él cuando se libere una instancia.
 
-**Requisitos asociados:** RF04, RN01, RN03, RN04
+**Requisitos asociados:** RF04, RN01, RN03, RN04, RN08, RN11, RNF06
 
 | # | Criterio de aceptación |
 |---|------------------------|
-| 1 | El usuario selecciona un material que cuente con disponibilidad (al menos una instancia física disponible) |
-| 2 | El formulario solicita: nivel de prioridad (Alta/Media/Baja), descripción/justificación del uso |
-| 3 | El sistema verifica que el Tier del usuario cumple con el Tier mínimo requerido del material |
-| 4 | Si el Tier no es suficiente, el sistema rechaza la reserva mostrando la restricción |
-| 5 | Al confirmar, la reserva queda en estado "Reservada" con timestamp |
-| 6 | Se reserva la disponibilidad del material (o se reserva la instancia física asignada) |
-| 7 | La reserva tiene vigencia de 24 horas desde la hora pactada de recojo |
-| 8 | La reserva se asocia al usuario (se puede ver en "Mis reservas") |
-| 9 | Un usuario puede tener un máximo configurable de reservas activas simultáneas |
+| 1 | El usuario selecciona un material y el sistema muestra su disponibilidad y Tier mínimo requerido |
+| 2 | El formulario solicita nivel de prioridad (Alta/Media/Baja) y descripción/justificación del uso |
+| 3 | Si el Tier es suficiente y existe una instancia física disponible, el sistema asigna la instancia y confirma la reserva en estado "Reservada" con vigencia de 24 horas |
+| 4 | Si no existe una instancia disponible, la solicitud queda en estado "En Espera" con vigencia de 72 horas, sin consumir inventario |
+| 5 | Antes de confirmar una nueva solicitud normal, el sistema intenta autopromover la cola existente; si la cola sigue pendiente, la nueva solicitud entra en espera |
+| 6 | Si el Tier no es suficiente y el usuario no pertenece al Tier Restringido, el sistema rechaza la solicitud mostrando la restricción |
+| 7 | Si el usuario es del Tier Restringido y el material es de Tier superior, puede solicitar una excepción académica adjuntando documento de identidad y compromiso firmado; la solicitud queda en espera para aprobación del Gestor y no se autopromueve |
+| 8 | La autopromoción respeta el orden: prioridad (Alta/Media/Baja), luego fecha de solicitud más antigua, luego Tier (Avanzado/Estándar/Restringido) |
+| 9 | La reserva o solicitud se asocia al usuario y se puede ver en "Mis reservas"; el máximo configurable de solicitudes activas incluye reservas confirmadas y en espera |
 
-**Reglas de negocio:** RN01, RN03, RN04
+**Reglas de negocio:** RN01, RN03, RN04, RN08, RN11
 
 ---
 
-### HU07 — Cancelación automática de reservas vencidas
+### HU07 — Expiración de reservas y solicitudes en espera
 
-**Como** Sistema, **quiero** cancelar automáticamente las reservas no recogidas en 24 horas, **para que** los materiales vuelvan a estar disponibles para otros usuarios.
+**Como** Sistema, **quiero** cancelar las reservas confirmadas no recogidas en 24 horas y expirar las solicitudes en espera a las 72 horas, **para que** las instancias se liberen y la cola no acumule solicitudes obsoletas.
 
-**Requisitos asociados:** RN04
+**Requisitos asociados:** RN04, RN11
 
 | # | Criterio de aceptación |
 |---|------------------------|
-| 1 | Un proceso periódico (cron job) verifica reservas en estado "Reservada" |
-| 2 | Si la reserva superó las 24 horas sin retiro, cambia a estado "Cancelada por Vencimiento" |
-| 3 | La instancia física o cupo reservado vuelve a estado "Disponible" |
-| 4 | Se aplica una penalización al puntaje de reputación del usuario (configurable) |
-| 5 | El usuario recibe una notificación de cancelación |
-| 6 | El Gestor de Almacén puede ejecutar la cancelación manualmente antes del vencimiento |
+| 1 | Un proceso periódico (cron job) verifica reservas en estado "Reservada" y solicitudes en estado "En Espera" |
+| 2 | Si una reserva confirmada superó las 24 horas sin retiro, cambia a "Cancelada por Vencimiento", libera la instancia y aplica la penalización configurable por inasistencia |
+| 3 | Si una solicitud en espera superó las 72 horas, cambia a "Expirada" sin aplicar penalización |
+| 4 | Al liberarse una instancia, el sistema dispara la autopromoción de la cola de espera respetando prioridad, antigüedad y Tier |
+| 5 | El Gestor de Almacén puede cancelar manualmente una reserva confirmada antes del vencimiento, liberando la instancia y disparando la autopromoción |
+| 6 | El estado actualizado de cada reserva o solicitud se refleja en "Mis reservas"; las notificaciones in-app quedan fuera del alcance de esta iteración |
 
-**Reglas de negocio:** RN04
+**Reglas de negocio:** RN04, RN11
 
 ---
 
-### HU08 — Evaluar y priorizar reservas simultáneas
+### HU08 — Gestionar cola de reservas y excepciones
 
-**Como** Gestor de Almacén, **quiero** ver las reservas pendientes para un mismo material y priorizar según justificación y Tier, **para que** la asignación sea justa y eficiente.
+**Como** Gestor de Almacén, **quiero** supervisar la cola de reservas, aprobar o rechazar excepciones y cancelar reservas, **para que** la asignación sea justa y las solicitudes normales se autopromuevan sin intervención manual.
 
-**Requisitos asociados:** RN08
+**Requisitos asociados:** RN03, RN05, RN08, RN11
 
 | # | Criterio de aceptación |
 |---|------------------------|
-| 1 | Se muestra una cola de reservas pendientes por material |
-| 2 | Cada reserva muestra: usuario, prioridad (Alta/Media/Baja), justificación, Tier de reputación, fecha de solicitud |
-| 3 | El gestor puede ordenar por prioridad, Tier o fecha |
-| 4 | El gestor puede aprobar o rechazar cada reserva individualmente |
-| 5 | Al aprobar, se notifica al usuario y se inicia el proceso de préstamo |
-| 6 | Las transacciones de reserva son atómicas (no se produce race condition) |
+| 1 | Se muestra una cola por material con solicitudes en espera, reservas confirmadas e instancias disponibles |
+| 2 | Cada solicitud muestra usuario, prioridad (Alta/Media/Baja), justificación, Tier, fecha de solicitud y si es por excepción académica |
+| 3 | El sistema ordena las solicitudes normales por prioridad, fecha de solicitud y Tier, y autopromueve la primera cuando hay una instancia disponible |
+| 4 | El Gestor de Almacén puede rechazar solicitudes en espera y cancelar reservas confirmadas indicando el motivo; ambas acciones actualizan la cola |
+| 5 | Las solicitudes por excepción académica solo pueden ser aprobadas o rechazadas por el Gestor; no se autopromueven |
+| 6 | Para aprobar una excepción se requiere la garantía completa y una instancia real disponible |
+| 7 | La auto-confirmación y la autopromoción son atómicas, sin asignar una misma instancia dos veces ni saltarse el orden de la cola |
+| 8 | Los cambios de estado se reflejan en "Mis reservas"; las notificaciones in-app quedan fuera del alcance de esta iteración |
 
-**Reglas de negocio:** RN08
+**Reglas de negocio:** RN03, RN05, RN08, RN11
 
 ---
 
@@ -176,25 +178,26 @@
 
 ---
 
-### HU09 — Registrar préstamo (entrega de material)
+### HU09 — Registrar préstamo y convertir reserva
 
-**Como** Gestor de Almacén, **quiero** registrar la entrega de un material a un usuario con checklist digital de estado inicial y garantía (si aplica), **para que** quede un registro formal y trazable del préstamo.
+**Como** Gestor de Almacén, **quiero** registrar la entrega de un material a un usuario con checklist digital de estado inicial y garantía (si aplica) y convertir la reserva de origen, **para que** quede un registro formal y trazable del préstamo.
 
-**Requisitos asociados:** RF05, RF09, RN05, RN09
+**Requisitos asociados:** RF05, RF09, RN01, RN05, RN09, RN11
 
 | # | Criterio de aceptación |
 |---|------------------------|
-| 1 | El gestor busca el préstamo/reserva activa del usuario |
+| 1 | El gestor busca la reserva confirmada, la excepción aprobada o el préstamo activo del usuario |
 | 2 | El sistema verifica la identidad y elegibilidad del usuario (Tier, sin impedimentos) |
-| 3 | El gestor selecciona la instancia física/ejemplar específico a entregar y completa un checklist del estado inicial con cada elemento, una foto obligatoria y una observación opcional |
-| 4 | Para equipos de alto valor o préstamos por excepción académica, se cargan en PDF el documento de identidad y el compromiso de responsabilidad firmado |
-| 5 | Si la garantía es requerida y falta cualquiera de los dos PDF, el sistema no permite que el préstamo pase a "Activo" |
-| 6 | El gestor indica la duración del préstamo entre 1 y 30 días |
-| 7 | El sistema calcula y muestra la fecha límite de devolución |
-| 8 | El estado del préstamo cambia a "Activo" |
-| 9 | El estado de la instancia física seleccionada cambia a "Prestado", reduciendo en 1 el stock disponible del material |
+| 3 | Si el préstamo proviene de una reserva confirmada, el sistema utiliza la instancia asignada y vincula la reserva al préstamo |
+| 4 | Si no proviene de una reserva, el gestor selecciona la instancia física/ejemplar específico a entregar y completa un checklist del estado inicial con cada elemento, una foto obligatoria y una observación opcional |
+| 5 | Para equipos de alto valor o préstamos por excepción académica, se valida la garantía registrada mediante documento de identidad y compromiso de responsabilidad firmado |
+| 6 | Si la garantía es requerida y falta cualquiera de los dos PDF, el sistema no permite que el préstamo pase a "Activo" |
+| 7 | El gestor indica la duración del préstamo entre 1 y 30 días |
+| 8 | El sistema calcula y muestra la fecha límite de devolución |
+| 9 | El estado del préstamo cambia a "Activo" |
+| 10 | El estado de la instancia física seleccionada cambia a "Prestado", reduciendo en 1 el stock disponible del material, y la reserva de origen cambia a "Convertida en Préstamo" si corresponde |
 
-**Reglas de negocio:** RN05, RN09
+**Reglas de negocio:** RN01, RN05, RN09, RN11
 
 ---
 
@@ -259,7 +262,7 @@
 |---|------------------------|
 | 1 | Cada usuario tiene un puntaje de reputación visible en su perfil |
 | 2 | El rango es de -500 a 500 (no se puede salir de este rango) |
-| 3 | Tier Avanzado: 201 a 500 pts → acceso total, prioridad en reservas, prórrogas automáticas |
+| 3 | Tier Avanzado: 201 a 500 pts → acceso total, desempate en la cola de reservas y prórrogas automáticas |
 | 4 | Tier Estándar: -50 a 200 pts → acceso a libros y equipos estándar, margen de tolerancia |
 | 5 | Tier Restringido: -500 a -51 pts → solo materiales básicos, sin prórrogas |
 | 6 | El Tier se recalcula automáticamente al modificar el puntaje |
@@ -269,23 +272,26 @@
 
 ---
 
-### HU13 — Préstamo excepcional por necesidad académica
+### HU13 — Reserva y préstamo excepcional por necesidad académica
 
-**Como** Prestatario en Tier Restringido, **quiero** acceder excepcionalmente a materiales de mayor Tier presentando garantía firmada, **para que** pueda cubrir una necesidad académica urgente a pesar de mi nivel de reputación.
+**Como** Prestatario en Tier Restringido, **quiero** solicitar excepcionalmente una reserva o préstamo de materiales de mayor Tier presentando garantía firmada, **para que** pueda cubrir una necesidad académica urgente a pesar de mi nivel de reputación.
 
-**Requisitos asociados:** RN03, RN05
+**Requisitos asociados:** RN03, RN05, RN11, RNF06
 
 | # | Criterio de aceptación |
 |---|------------------------|
-| 1 | El usuario selecciona un material de Tier superior al suyo |
-| 2 | El sistema detecta que está en Tier Restringido y muestra la opción de "Excepción Académica" |
-| 3 | El usuario debe subir documento de identidad y compromiso de responsabilidad firmado |
-| 4 | El sistema registra la garantía y asocia al préstamo |
-| 5 | El préstamo se activa con estado "Activo - Excepción" |
-| 6 | Se muestra un indicador especial en el préstamo para que el gestor lo revise |
-| 7 | Si la devolución es con daño, la penalización es el doble de la parametrizada |
+| 1 | El usuario selecciona un material de Tier superior y el sistema detecta que pertenece al Tier Restringido |
+| 2 | El sistema muestra la opción de "Excepción Académica" tanto para reserva como para préstamo |
+| 3 | El usuario debe subir documento de identidad y compromiso de responsabilidad firmado; el total de adjuntos no debe superar 4 MB |
+| 4 | El sistema registra la garantía al solicitar la reserva excepcional y la asocia a la solicitud |
+| 5 | La reserva excepcional queda en estado "En Espera" para revisión del Gestor de Almacén y no participa en la autopromoción |
+| 6 | El Gestor de Almacén aprueba o rechaza la solicitud después de validar la garantía; la aprobación requiere una instancia real disponible |
+| 7 | Al aprobar una reserva excepcional, esta queda "Reservada" con vigencia de 24 horas; el préstamo excepcional directo también requiere aprobación del Gestor |
+| 8 | El préstamo se activa con el indicador `es_excepcion` y se muestra como "Activo - Excepción", sin crear un estado de préstamo distinto |
+| 9 | Si la devolución es con daño, se duplican únicamente los puntos de daño; el cobro económico de reparación/reposición no se duplica |
+| 10 | Se muestra un indicador especial en el préstamo para que el gestor lo identifique y revise |
 
-**Reglas de negocio:** RN03 (Excepción Académica), RN05
+**Reglas de negocio:** RN03 (Excepción Académica), RN05, RN11
 
 ---
 
@@ -321,7 +327,7 @@
 | # | Criterio de aceptación |
 |---|------------------------|
 | 1 | El usuario puede solicitar prórroga desde "Mis préstamos" para préstamos en estado "Activo" |
-| 2 | El sistema verifica que el material no tenga reservas pendientes |
+| 2 | El sistema verifica que el material no tenga reservas confirmadas ni solicitudes en espera |
 | 3 | El sistema verifica el Tier del usuario |
 | 4 | Tier Avanzado: se otorga prórroga automáticamente |
 | 5 | Tier Estándar: requiere aprobación del Gestor |
@@ -405,9 +411,9 @@
 |-------|-----------|--------------|
 | 1. Gestión de Usuarios | HU01, HU02, HU03 | RF01, RF02, RNF03 |
 | 2. Inventario | HU04, HU05 | RF03, RNF01, RNF04 |
-| 3. Reservas | HU06, HU07, HU08 | RF04, RN01, RN04, RN08 |
-| 4. Préstamos | HU09, HU10 | RF05, RF07, RF09, RN05, RN09 |
-| 5. Devoluciones/Sanciones | HU11, HU12, HU13, HU14 | RF06, RF08, RN03, RN05, RN06 |
+| 3. Reservas | HU06, HU07, HU08 | RF04, RN01, RN03, RN04, RN05, RN08, RN11, RNF06 |
+| 4. Préstamos | HU09, HU10 | RF05, RF07, RF09, RN01, RN05, RN09, RN11 |
+| 5. Devoluciones/Sanciones | HU11, HU12, HU13, HU14 | RF06, RF08, RN03, RN05, RN06, RN11, RNF06 |
 | 6. Prórrogas | HU15 | RF12, RN07 |
 | 7. Perfil/Historial | HU16, HU17 | RF10, RF11 |
 | 8. Reportes | HU18 | Stakeholder sección 4 |

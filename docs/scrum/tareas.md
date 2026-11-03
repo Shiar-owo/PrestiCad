@@ -88,45 +88,48 @@
 
 ---
 
-### HU06 — Reservar material
+### HU06 — Reservar material o solicitar espera
 
 | # | Tarea | Tipo |
 |---|-------|------|
-| T06.01 | Definir modelo de entidad `Reserva` (usuario, material, prioridad, justificación, estado, timestamp, fecha límite recojo) | Backend |
+| T06.01 | Definir modelo de entidad `Reserva` (usuario, material, prioridad, justificación, estado, timestamp, fecha límite de recojo y de espera, es_excepcion, motivo de rechazo, instancia asignada) | Backend |
 | T06.02 | Crear migración/DDL de la tabla `reservas` | Backend |
-| T06.03 | Implementar servicio de reserva con validación de Tier y disponibilidad | Backend |
-| T06.04 | Implementar cambio de estado del material a "Reservado" al crear reserva | Backend |
-| T06.05 | Crear endpoint `POST /api/reservas` | Backend |
-| T06.06 | Crear formulario de reserva (prioridad, justificación) | Frontend |
-| T06.07 | Crear vista "Mis reservas" | Frontend |
-| T06.08 | Integrar formulario con endpoint | Integración |
+| T06.03 | Implementar servicio de reserva con validación de Tier, disponibilidad real y auto-confirmación atómica | Backend |
+| T06.04 | Implementar registro en lista de espera cuando no hay instancia disponible, sin consumir stock | Backend |
+| T06.05 | Implementar solicitud de reserva excepcional con garantía y estado pendiente de aprobación del Gestor | Backend |
+| T06.06 | Crear endpoints `POST /api/reservas` y `GET /api/reservas/mis-reservas` | Backend |
+| T06.07 | Crear formulario de reserva (prioridad, justificación) | Frontend |
+| T06.08 | Crear flujo UI de excepción académica y carga de documentos | Frontend |
+| T06.09 | Crear vista "Mis reservas" con estados Reservada, En Espera, Expirada, Rechazada y Cancelada | Frontend |
+| T06.10 | Integrar formulario y flujos con endpoints | Integración |
 
 ---
 
-### HU07 — Cancelación automática de reservas vencidas
+### HU07 — Expiración de reservas y solicitudes en espera
 
 | # | Tarea | Tipo |
 |---|-------|------|
-| T07.01 | Implementar proceso periódico (cron/scheduler) de verificación de reservas | Backend |
-| T07.02 | Implementar lógica de cancelación por vencimiento (24h) | Backend |
-| T07.03 | Implementar penalización de reputación por inasistencia | Backend |
+| T07.01 | Implementar proceso periódico (cron/scheduler) de verificación de reservas confirmadas y solicitudes en espera | Backend |
+| T07.02 | Implementar expiración de reservas confirmadas a las 24h con penalización y liberación de instancia | Backend |
+| T07.03 | Implementar expiración de solicitudes en espera a las 72h sin penalización | Backend |
 | T07.04 | Implementar cancelación manual por Gestor | Backend |
 | T07.05 | Crear endpoint `POST /api/reservas/{id}/cancelar` | Backend |
-| T07.06 | Agregar notificación de cancelación al usuario | Integración |
+| T07.06 | Implementar disparo de autopromoción al liberar una instancia por vencimiento o cancelación | Backend |
 
 ---
 
-### HU08 — Evaluar y priorizar reservas simultáneas
+### HU08 — Gestionar cola de reservas y excepciones
 
 | # | Tarea | Tipo |
 |---|-------|------|
 | T08.01 | Implementar servicio de cola de reservas por material | Backend |
-| T08.02 | Implementar ordenamiento por prioridad, Tier y fecha | Backend |
-| T08.03 | Implementar transacciones atómicas para evitar race conditions (RN08) | Backend |
-| T08.04 | Crear endpoint `GET /api/reservas/cola/{materialId}` y `POST /api/reservas/{id}/aprobar` | Backend |
-| T08.05 | Crear vista de cola de reservas para Gestor | Frontend |
-| T08.06 | Implementar botones de aprobar/rechazar individual | Frontend |
-| T08.07 | Integrar vista con endpoints | Integración |
+| T08.02 | Implementar ordenamiento por prioridad, fecha de solicitud y Tier | Backend |
+| T08.03 | Implementar autopromoción atómica y selección de una instancia real disponible (RN08, RN11) | Backend |
+| T08.04 | Implementar disparadores de autopromoción y revisión periódica de respaldo | Backend |
+| T08.05 | Crear endpoints `GET /api/reservas/cola/{materialId}`, `POST /api/reservas/{id}/aprobar-excepcion` y `POST /api/reservas/{id}/rechazar` | Backend |
+| T08.06 | Crear vista de cola de reservas para Gestor | Frontend |
+| T08.07 | Implementar acciones de aprobar/rechazar excepción, rechazar espera y cancelar reserva | Frontend |
+| T08.08 | Integrar vista con endpoints | Integración |
 
 ---
 
@@ -134,13 +137,13 @@
 
 ---
 
-### HU09 — Registrar préstamo (entrega de material)
+### HU09 — Registrar préstamo y convertir reserva
 
 | # | Tarea | Tipo |
 |---|-------|------|
 | T09.01 | Definir modelo de entidad `Prestamo` (usuario, material, fechaEntrega, fechaLimite, tiempoPrestamo, estado, garantía, checklistInicial) | Backend |
 | T09.02 | Crear migración/DDL de la tabla `prestamos` | Backend |
-| T09.03 | Implementar servicio de préstamo con verificación de elegibilidad (Tier, impedimentos) | Backend |
+| T09.03 | Implementar servicio de préstamo con verificación de elegibilidad, uso de instancia reservada y conversión de reserva (RN01, RN11) | Backend |
 | T09.04 | Implementar checklist digital de estado inicial (RN09) | Backend |
 | T09.05 | Implementar registro de garantía para equipos de alto valor (RN05) | Backend |
 | T09.06 | Implementar cálculo automático de fecha límite de devolución | Backend |
@@ -202,17 +205,19 @@
 
 ---
 
-### HU13 — Préstamo excepcional por necesidad académica
+### HU13 — Reserva y préstamo excepcional por necesidad académica
 
 | # | Tarea | Tipo |
 |---|-------|------|
-| T13.01 | Implementar flujo de excepción académica en servicio de préstamo | Backend |
-| T13.02 | Implementar registro de garantía especial (doc. identidad + compromiso firmado) | Backend |
-| T13.03 | Implementar penalización doble en devolución para préstamos por excepción | Backend |
-| T13.04 | Crear endpoint `POST /api/prestamos/excepcion` | Backend |
-| T13.05 | Crear flujo UI de "Solicitar Excepción Académica" cuando Tier es Restringido | Frontend |
-| T13.06 | Implementar upload de documentos de garantía | Frontend |
-| T13.07 | Integrar flujo de excepción con endpoints | Integración |
+| T13.01 | Implementar flujo de excepción académica en servicios de reserva y préstamo | Backend |
+| T13.02 | Implementar registro de garantía especial (doc. identidad + compromiso firmado) con validación de 4 MB | Backend |
+| T13.03 | Implementar aprobación/rechazo de excepciones por Gestor y bloqueo de autopromoción | Backend |
+| T13.04 | Implementar conversión de reserva excepcional a préstamo reutilizando la garantía | Backend |
+| T13.05 | Implementar penalización doble solo en puntos de daño para préstamos por excepción | Backend |
+| T13.06 | Crear endpoints `POST /api/reservas/excepcion`, `POST /api/prestamos/excepcion` y `PUT /api/reservas/{id}/aprobar-excepcion` | Backend |
+| T13.07 | Crear flujo UI de solicitud excepcional y carga de documentos | Frontend |
+| T13.08 | Crear vista y acciones de revisión de excepciones para Gestor | Frontend |
+| T13.09 | Integrar flujos de excepción con endpoints | Integración |
 
 ---
 
@@ -304,12 +309,12 @@
 
 | Épica | Tareas | Backend | Frontend | Integración |
 |-------|--------|---------|----------|-------------|
-| 1. Usuarios | 23 | 12 | 7 | 3 |
-| 2. Inventario | 14 | 7 | 4 | 2 |
-| 3. Reservas | 21 | 11 | 5 | 3 |
-| 4. Préstamos | 16 | 9 | 4 | 2 |
-| 5. Devoluciones | 36 | 20 | 8 | 3 |
+| 1. Usuarios | 23 | 14 | 6 | 3 |
+| 2. Inventario | 14 | 8 | 4 | 2 |
+| 3. Reservas | 24 | 17 | 5 | 2 |
+| 4. Préstamos | 16 | 9 | 5 | 2 |
+| 5. Devoluciones | 36 | 25 | 9 | 2 |
 | 6. Prórrogas | 8 | 5 | 2 | 1 |
-| 7. Perfil/Historial | 13 | 5 | 5 | 2 |
+| 7. Perfil/Historial | 13 | 5 | 6 | 2 |
 | 8. Reportes | 9 | 6 | 2 | 1 |
-| **Total** | **140** | **75** | **37** | **17** |
+| **Total** | **143** | **89** | **39** | **15** |

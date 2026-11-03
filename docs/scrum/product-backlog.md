@@ -22,14 +22,14 @@
 | 4 | HU02 | Gestionar roles y permisos | Usuarios | Alta | 3 | HU01 | RF01, RNF03 |
 | 5 | HU05 | Buscar y consultar materiales | Inventario | Media | 3 | HU04 | RF03, RNF01 |
 | 6 | HU12 | Gestionar reputación y Tiers | Devoluciones | Alta | 8 | HU01 | RF08, RN03 |
-| 7 | HU06 | Reservar material | Reservas | Alta | 5 | HU04, HU05, HU12 | RF04, RN01, RN03, RN04 |
-| 8 | HU07 | Cancelación automática reservas | Reservas | Alta | 5 | HU06 | RN04 |
-| 9 | HU08 | Evaluar reservas simultáneas | Reservas | Media | 5 | HU06 | RN08 |
-| 10 | HU09 | Registrar préstamo (entrega) | Préstamos | Alta | 8 | HU06, HU09 | RF05, RF09, RN05, RN09 |
+| 7 | HU06 | Reservar material o solicitar espera | Reservas | Alta | 5 | HU04, HU05, HU12 | RF04, RN01, RN03, RN04, RN08, RN11, RNF06 |
+| 8 | HU07 | Expiración de reservas y solicitudes | Reservas | Alta | 5 | HU06 | RN04, RN11 |
+| 9 | HU08 | Gestionar cola de reservas y excepciones | Reservas | Media | 5 | HU06 | RN03, RN05, RN08, RN11 |
+| 10 | HU09 | Registrar préstamo y convertir reserva | Préstamos | Alta | 8 | HU04, HU05, HU06 | RF05, RF09, RN01, RN05, RN09, RN11 |
 | 11 | HU10 | Consultar estado de préstamos | Préstamos | Media | 3 | HU09 | RF07 |
 | 12 | HU11 | Registrar devolución con sanciones | Devoluciones | Alta | 8 | HU09, HU12 | RF06, RF08, RN06, RN09 |
 | 13 | HU14 | Gestionar suspensiones | Devoluciones | Media | 5 | HU12 | RF08 |
-| 14 | HU13 | Préstamo excepcional académico | Devoluciones | Media | 5 | HU09, HU12 | RN03, RN05 |
+| 14 | HU13 | Reserva y préstamo excepcional académico | Devoluciones | Media | 5 | HU06, HU09, HU12 | RN03, RN05, RN11, RNF06 |
 | 15 | HU15 | Solicitar prórroga | Prórrogas | Media | 5 | HU09, HU12 | RF12, RN07 |
 | 16 | HU16 | Consultar y actualizar perfil | Perfil | Media | 3 | HU01, HU12 | RF10, RF11 |
 | 17 | HU17 | Historial por material | Perfil | Media | 3 | HU09 | RF10 |

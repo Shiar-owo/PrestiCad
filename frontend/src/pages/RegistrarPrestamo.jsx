@@ -42,6 +42,7 @@ const FORMULARIO_INICIAL = {
   checklist: [{ elemento: '', observacion: '', foto: null, fotoPrevia: '' }],
   documentoIdentidad: null,
   compromisoResponsabilidad: null,
+  esExcepcion: false,
 }
 
 const NIVEL_TIER = { restringido: 0, estandar: 1, avanzado: 2 }
@@ -197,11 +198,22 @@ function RegistrarPrestamo() {
     && NIVEL_TIER[perfilVerificadoActual.reputacion_tier] >= NIVEL_TIER[materialSeleccionado.tier_minimo_requerido],
   )
   const perfilHabilitado = perfilVerificadoActual?.rol === 'prestatario' && perfilVerificadoActual?.estado === 'activo'
+  const puedeSolicitarExcepcion = Boolean(
+    perfilHabilitado && materialSeleccionado && !tierCumple
+    && perfilVerificadoActual?.reputacion_tier === 'restringido',
+  )
+  const excepcionActiva = Boolean(puedeSolicitarExcepcion && formulario.esExcepcion)
+  const requiereGarantia = Boolean(
+    excepcionActiva || esMaterialAltoValor(materialSeleccionado),
+  )
   const verificacionPendiente = /^\d{8}$/.test(formulario.dni.trim())
     && (consultandoPerfil || !perfilVerificadoActual && !errorPerfil)
   const bloqueadoPorElegibilidad = Boolean(
     materialSeleccionado && /^\d{8}$/.test(formulario.dni.trim())
-    && (verificacionPendiente || errorPerfil || !perfilVerificadoActual || !perfilHabilitado || !tierCumple),
+    && (
+      verificacionPendiente || errorPerfil || !perfilVerificadoActual || !perfilHabilitado
+      || (!tierCumple && !excepcionActiva)
+    ),
   )
 
   function actualizar(campo, valor) {
@@ -221,6 +233,7 @@ function RegistrarPrestamo() {
             instanciaId: '',
             documentoIdentidad: null,
             compromisoResponsabilidad: null,
+            esExcepcion: false,
           }
         : {}),
     }))
@@ -340,6 +353,7 @@ function RegistrarPrestamo() {
       checklist: formulario.checklist,
       documentoIdentidad: formulario.documentoIdentidad,
       compromisoResponsabilidad: formulario.compromisoResponsabilidad,
+      esExcepcion: excepcionActiva,
     }
     const validacion = validarFormularioPrestamo(datosValidacion)
     setErrores(validacion)
@@ -363,13 +377,17 @@ function RegistrarPrestamo() {
         checklist: formulario.checklist,
         documentoIdentidad: formulario.documentoIdentidad,
         compromisoResponsabilidad: formulario.compromisoResponsabilidad,
+        esExcepcion: excepcionActiva,
       })
       const errorTamano = validarTamanoSolicitud(solicitud)
       if (errorTamano) {
         setError(errorTamano)
         return
       }
-      const respuesta = await api.post('/prestamos/', solicitud)
+      const respuesta = await api.post(
+        excepcionActiva ? '/prestamos/excepcion/' : '/prestamos/',
+        solicitud,
+      )
       setPrestamoCreado(respuesta)
       formulario.checklist.forEach((item) => {
         if (item.fotoPrevia) {
@@ -433,7 +451,7 @@ function RegistrarPrestamo() {
           role="status"
         >
           <p className="font-semibold">
-            Préstamo registrado como activo para {prestamoCreado.usuario_nombre}.
+            Préstamo registrado como activo{prestamoCreado.es_excepcion ? ' con excepción académica' : ''} para {prestamoCreado.usuario_nombre}.
           </p>
           <p className="mt-1">
             Fecha límite de devolución:{' '}
@@ -499,11 +517,39 @@ function RegistrarPrestamo() {
                 {materialSeleccionado && (
                   <p className="mt-1">
                     Tier requerido: {ETIQUETA_TIER[materialSeleccionado.tier_minimo_requerido] || materialSeleccionado.tier_minimo_requerido}.
-                    {' '}{!tierCumple && <strong>No cumple el requisito; el registro está bloqueado.</strong>}
                     {tierCumple && perfilHabilitado && <strong> Cumple el requisito.</strong>}
+                    {!tierCumple && puedeSolicitarExcepcion && (
+                      <strong> No cumple el requisito; puedes registrar una excepción académica.</strong>
+                    )}
+                    {!tierCumple && !puedeSolicitarExcepcion && (
+                      <strong> No cumple el requisito; el registro está bloqueado.</strong>
+                    )}
                   </p>
                 )}
               </div>
+            )}
+            {puedeSolicitarExcepcion && (
+              <label
+                className={`flex cursor-pointer gap-3 rounded-xl border p-4 text-sm ${
+                  excepcionActiva
+                    ? 'border-acento-400 bg-acento-50 text-acento-900 dark:border-acento-600 dark:bg-acento-500/15 dark:text-acento-200'
+                    : 'border-borde bg-superficie text-texto'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={formulario.esExcepcion}
+                  onChange={(evento) => actualizar('esExcepcion', evento.target.checked)}
+                  className="mt-1 h-4 w-4 shrink-0"
+                />
+                <span>
+                  <span className="block font-semibold">Registrar como préstamo excepcional</span>
+                  <span className="mt-1 block text-texto-suave">
+                    Autoriza este material pese al Tier Restringido del prestatario. Exige ambos
+                    documentos de garantía y duplica la deducción por daño; el cobro económico no se duplica.
+                  </span>
+                </span>
+              </label>
             )}
             <Campo
               etiqueta="Instancia disponible"
@@ -698,13 +744,15 @@ function RegistrarPrestamo() {
               </Boton>
             </fieldset>
 
-            {esMaterialAltoValor(materialSeleccionado) && (
+            {requiereGarantia && (
               <fieldset
                 key={formulario.materialId}
                 className="grid gap-3 rounded-xl border border-acento-300 bg-acento-50/50 p-4 dark:border-acento-700/60 dark:bg-acento-500/10"
               >
                 <legend className="px-2 text-sm font-bold text-acento-800 dark:text-acento-300">
-                  Garantía obligatoria para material de alto valor
+                  {excepcionActiva
+                    ? 'Garantía obligatoria para préstamo excepcional'
+                    : 'Garantía obligatoria para material de alto valor'}
                 </legend>
                 <p className="text-xs text-texto-suave">
                   Adjunta ambos documentos en PDF. Se almacenarán de forma privada y solo gestión
@@ -732,7 +780,7 @@ function RegistrarPrestamo() {
                 tipo="submit"
                 cargando={guardando}
                 deshabilitado={bloqueadoPorElegibilidad || Boolean(
-                  esMaterialAltoValor(materialSeleccionado)
+                  requiereGarantia
                   && (!formulario.documentoIdentidad || !formulario.compromisoResponsabilidad)
                 )}
               >

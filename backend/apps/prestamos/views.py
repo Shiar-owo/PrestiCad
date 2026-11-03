@@ -52,6 +52,28 @@ from apps.prestamos.services import (
 )
 
 
+def _registrar_prestamo(request, *, es_excepcion=False):
+    serializer = RegistrarPrestamoSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+
+    try:
+        prestamo = registrar_prestamo(
+            **serializer.validated_data,
+            registrado_por=request.usuario_autenticado,
+            es_excepcion=es_excepcion,
+        )
+    except PrestamoError as error:
+        return Response(
+            {error.campo: [error.mensaje]},
+            status=error.status_code,
+        )
+
+    return Response(
+        PrestamoRegistroSerializer(prestamo).data,
+        status=status.HTTP_201_CREATED,
+    )
+
+
 class RegistrarPrestamoView(APIView):
     """Registra la entrega de un material: POST /api/prestamos/."""
 
@@ -59,24 +81,17 @@ class RegistrarPrestamoView(APIView):
     parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def post(self, request):
-        serializer = RegistrarPrestamoSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        return _registrar_prestamo(request)
 
-        try:
-            prestamo = registrar_prestamo(
-                **serializer.validated_data,
-                registrado_por=request.usuario_autenticado,
-            )
-        except PrestamoError as error:
-            return Response(
-                {error.campo: [error.mensaje]},
-                status=error.status_code,
-            )
 
-        return Response(
-            PrestamoRegistroSerializer(prestamo).data,
-            status=status.HTTP_201_CREATED,
-        )
+class RegistrarPrestamoExcepcionalView(APIView):
+    """Registra una excepción académica directa: POST /api/prestamos/excepcion/."""
+
+    permission_classes = [EsGestorDeAlmacen]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+
+    def post(self, request):
+        return _registrar_prestamo(request, es_excepcion=True)
 
 
 class BuscarPrestatariosView(APIView):

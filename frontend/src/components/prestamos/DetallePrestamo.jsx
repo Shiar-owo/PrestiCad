@@ -4,6 +4,7 @@ import { ArrowLeft, ChevronLeft, ChevronRight, RotateCcw, Trash2, Upload } from 
 import { api, ErrorApi } from '../../api/client'
 import { ETIQUETAS_ESTADO, esMaterialAltoValor } from '../../constantes/catalogo'
 import { formatearDuracionMinutos } from '../../constantes/checklistPrestamo'
+import { textoEstadoPrestamo } from '../../prestamos/estadoPrestamo'
 import BadgeEstado from '../ui/BadgeEstado'
 import Boton from '../ui/Boton'
 import ErrorAlerta from '../ui/ErrorAlerta'
@@ -132,6 +133,7 @@ export default function DetallePrestamo({
   }
 
   const estado = detalle?.estado ?? prestamo.estado_visible ?? prestamo.estado
+  const esExcepcion = detalle?.es_excepcion ?? prestamo.es_excepcion
   const material = detalle?.material
   const instancia = detalle?.instancia
   const documentos = detalle?.documentos_garantia
@@ -214,7 +216,14 @@ export default function DetallePrestamo({
                 ? formatearDuracionMinutos(detalle.tiempo_prestamo_minutos)
                 : `${detalle.tiempo_prestamo_dias} días`}
             </CampoDetalle>
-            <CampoDetalle etiqueta="Estado"><BadgeEstado estado={estado} /></CampoDetalle>
+            <CampoDetalle etiqueta="Estado">
+              <BadgeEstado estado={estado} texto={textoEstadoPrestamo({ es_excepcion: esExcepcion }, estado)} />
+            </CampoDetalle>
+            {esExcepcion && (
+              <CampoDetalle etiqueta="Tipo de préstamo">
+                Excepción académica
+              </CampoDetalle>
+            )}
           </dl>
 
           <section className="mt-6 rounded-xl border border-borde p-4" aria-labelledby="titulo-ficha-prestamo">
@@ -330,7 +339,7 @@ export default function DetallePrestamo({
 
           <section className="mt-6 rounded-xl border border-borde p-4" aria-labelledby="titulo-documentos-garantia">
             <h4 id="titulo-documentos-garantia" className="font-bold text-texto">Documentos de garantía</h4>
-            {!esMaterialAltoValor(material) ? (
+            {!esExcepcion && !esMaterialAltoValor(material) ? (
               <p className="mt-2 text-sm text-texto-suave">Este material no requiere documentos de garantía.</p>
             ) : (
               <ul className="mt-3 grid gap-4">

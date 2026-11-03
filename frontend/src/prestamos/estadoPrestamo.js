@@ -26,6 +26,11 @@ export function presentarEstadoPrestamo(estado) {
   }
 }
 
+export function textoEstadoPrestamo(prestamo, estado = prestamo.estado) {
+  if (prestamo.es_excepcion && estado === 'activo') return 'Activo - Excepción'
+  return presentarEstadoPrestamo(estado).texto
+}
+
 export function ordenarPrestamos(prestamos, ahora = new Date()) {
   return prestamos
     .map((prestamo) => ({

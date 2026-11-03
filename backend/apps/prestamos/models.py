@@ -90,6 +90,10 @@ class Prestamo(models.Model):
         choices=ESTADOS_PRESTAMO,
         default="activo",
     )
+    es_excepcion = models.BooleanField(
+        default=False,
+        help_text="Préstamo autorizado pese a que el Tier del usuario no permite el material.",
+    )
     checklist_inicial = models.JSONField(default=list)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -122,7 +126,7 @@ class Prestamo(models.Model):
 
     @property
     def requiere_garantia(self):
-        return self.material.requiere_garantia()
+        return self.es_excepcion or self.material.requiere_garantia()
 
     @property
     def garantia_completa(self):

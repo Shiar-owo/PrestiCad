@@ -4,6 +4,7 @@ import {
   obtenerEstadoVisible,
   ordenarPrestamos,
   presentarEstadoPrestamo,
+  textoEstadoPrestamo,
 } from './estadoPrestamo'
 
 describe('presentarEstadoPrestamo', () => {
@@ -14,6 +15,16 @@ describe('presentarEstadoPrestamo', () => {
     ['devuelto', 'Devuelto', 'prestamo-estado--devuelto'],
   ])('presenta %s con texto y clase visibles', (estado, texto, clase) => {
     expect(presentarEstadoPrestamo(estado)).toEqual({ texto, clase })
+  })
+})
+
+describe('textoEstadoPrestamo', () => {
+  it('identifica un préstamo activo registrado como excepción', () => {
+    expect(textoEstadoPrestamo({ es_excepcion: true }, 'activo')).toBe('Activo - Excepción')
+  })
+
+  it('conserva la etiqueta regular cuando no es excepción', () => {
+    expect(textoEstadoPrestamo({ es_excepcion: false }, 'activo')).toBe('Activo')
   })
 })
 

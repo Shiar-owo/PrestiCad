@@ -854,7 +854,7 @@ class MaterialesAPITestCase(EscenariosDeMaterialApi):
         cuerpo = respuesta.json()
         self.assertEqual(cuerpo["estado"], "disponible")
         self.assertEqual(cuerpo["unidades_disponibles"], 1)
-        self.assertEqual(cuerpo["bonificacion_tiempo"], 5)
+        self.assertEqual(cuerpo["bonificacion_tiempo"], 15)
         self.assertEqual(Material.objects.count(), 1)
 
     def test_registrar_como_administrador_responde_201(self):

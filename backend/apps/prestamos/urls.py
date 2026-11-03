@@ -11,12 +11,18 @@ from apps.prestamos.views import (
     ListarReportesDevolucionView,
     MisPrestamosView,
     RegistrarDevolucionView,
+    RegistrarPrestamoExcepcionalView,
     RegistrarPrestamoView,
     ReporteDevolucionView,
 )
 
 urlpatterns = [
     path("prestamos/", RegistrarPrestamoView.as_view(), name="registrar-prestamo"),
+    path(
+        "prestamos/excepcion/",
+        RegistrarPrestamoExcepcionalView.as_view(),
+        name="registrar-prestamo-excepcional",
+    ),
     path(
         "prestamos/prestatarios/",
         BuscarPrestatariosView.as_view(),

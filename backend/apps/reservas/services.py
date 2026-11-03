@@ -2,6 +2,7 @@
 from datetime import timedelta
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Case, IntegerField, Value, When
 from django.utils import timezone
@@ -9,6 +10,13 @@ from django.utils import timezone
 from apps.inventario import services as servicios_inventario
 from apps.inventario.constants import TIERS_ACCESIBLES
 from apps.inventario.models import InstanciaMaterial, Material
+from apps.prestamos.constants import TAMANO_MAXIMO_SOLICITUD_BYTES
+from apps.prestamos.services import (
+    PrestamoError,
+    crear_garantia_registrada,
+    obtener_documento_garantia_reserva as _obtener_documento_garantia_reserva_prestamo,
+)
+from apps.prestamos.validators import validar_pdf_garantia
 from apps.reservas.constants import (
     ESTADOS_ACTIVOS,
     HORAS_ESPERA,
@@ -276,6 +284,177 @@ def crear_reserva(
         )
 
     return reserva
+
+
+def _validar_documentos_garantia_reserva(documento_identidad, compromiso_responsabilidad):
+    documentos = (
+        ("documento_identidad", documento_identidad, "El documento de identidad en PDF"),
+        (
+            "compromiso_responsabilidad",
+            compromiso_responsabilidad,
+            "El compromiso de responsabilidad en PDF",
+        ),
+    )
+    for campo, archivo, descripcion in documentos:
+        if archivo is None:
+            raise ReservaError(
+                campo,
+                f"{descripcion} es obligatorio para reservas excepcionales.",
+            )
+        try:
+            validar_pdf_garantia(archivo)
+        except ValidationError as error:
+            raise ReservaError(campo, error.messages[0]) from error
+
+    total_bytes = sum(getattr(archivo, "size", 0) for _, archivo, _ in documentos if archivo)
+    if total_bytes > TAMANO_MAXIMO_SOLICITUD_BYTES:
+        raise ReservaError(
+            "archivos",
+            "El total de archivos de la solicitud no debe superar 4 MB.",
+        )
+
+
+@transaction.atomic
+def crear_reserva_excepcional(
+    *,
+    usuario,
+    material_id,
+    prioridad,
+    justificacion,
+    documento_identidad,
+    compromiso_responsabilidad,
+    ahora=None,
+):
+    """Crea una solicitud de reserva por excepción académica para un prestatario Restringido (HU06, HU13)."""
+    ahora = ahora or timezone.now()
+    _validar_usuario_prestatario(usuario)
+    prioridad_limpia, justificacion_limpia = _validar_campos_solicitud(prioridad, justificacion)
+    _validar_documentos_garantia_reserva(documento_identidad, compromiso_responsabilidad)
+
+    usuario_bloqueado = (
+        Usuario.objects.select_for_update().select_related("rol").get(pk=usuario.pk)
+    )
+    _validar_usuario_prestatario(usuario_bloqueado)
+    material = _obtener_material_bloqueado(material_id)
+
+    tiers_permitidos = TIERS_ACCESIBLES.get(usuario_bloqueado.reputacion_tier, ())
+    if (
+        usuario_bloqueado.reputacion_tier != "restringido"
+        or material.tier_minimo_requerido in tiers_permitidos
+    ):
+        raise ReservaError(
+            "es_excepcion",
+            MENSAJES_ERROR_RESERVA["excepcion_solo_restringido"],
+            status_code=400,
+        )
+
+    _validar_maximo_reservas_activas(usuario_bloqueado.id)
+
+    reserva = Reserva.objects.create(
+        usuario=usuario_bloqueado,
+        material=material,
+        instancia=None,
+        prioridad=prioridad_limpia,
+        justificacion=justificacion_limpia,
+        estado="en_espera",
+        es_excepcion=True,
+        fecha_solicitud=ahora,
+        fecha_limite_espera=ahora + timedelta(hours=HORAS_ESPERA),
+    )
+
+    crear_garantia_registrada(
+        documento_identidad=documento_identidad,
+        compromiso_responsabilidad=compromiso_responsabilidad,
+        reserva=reserva,
+    )
+    return reserva
+
+
+@transaction.atomic
+def aprobar_excepcion(*, reserva_id, realizado_por=None, ahora=None):
+    """Aprueba una reserva excepcional asignándole un ejemplar disponible tras promover la cola normal (HU08, HU13)."""
+    ahora = ahora or timezone.now()
+    try:
+        reserva = (
+            Reserva.objects.select_for_update(of=("self",))
+            .select_related("usuario", "material", "instancia")
+            .get(pk=reserva_id)
+        )
+    except (Reserva.DoesNotExist, ValueError, TypeError) as error:
+        raise ReservaError(
+            "reserva_id",
+            MENSAJES_ERROR_RESERVA["reserva_no_encontrada"],
+            status_code=404,
+        ) from error
+
+    if not reserva.es_excepcion:
+        raise ReservaError(
+            "es_excepcion",
+            "Solo las solicitudes por excepción académica pueden aprobarse mediante este flujo.",
+            status_code=400,
+        )
+    if reserva.estado != "en_espera":
+        raise ReservaError(
+            "estado",
+            "Solo se pueden aprobar solicitudes excepcionales que se encuentran en espera.",
+            status_code=409,
+        )
+    if reserva.expiro(ahora):
+        reserva.estado = "expirada"
+        reserva.save(update_fields=["estado", "updated_at"])
+        raise ReservaError(
+            "estado",
+            "La solicitud excepcional ha expirado y ya no puede aprobarse.",
+            status_code=409,
+        )
+    if not reserva.garantia_completa:
+        raise ReservaError(
+            "garantia",
+            "La solicitud excepcional requiere la garantía completa registrada (DNI y compromiso firmado).",
+            status_code=409,
+        )
+
+    # Primero autopromover la cola normal para no saltar a quienes esperan con Tier suficiente
+    autopromover_material(reserva.material_id, ahora=ahora)
+
+    try:
+        instancia_reservada = servicios_inventario.marcar_instancia_reservada(
+            reserva.material_id,
+        )
+    except servicios_inventario.InventarioError as error:
+        raise ReservaError(
+            "instancia",
+            MENSAJES_ERROR_RESERVA["sin_instancia_disponible"],
+            status_code=409,
+        ) from error
+
+    reserva.instancia_id = instancia_reservada["id"]
+    reserva.estado = "reservada"
+    reserva.fecha_confirmacion = ahora
+    reserva.fecha_limite_recojo = ahora + timedelta(hours=HORAS_RECOJO)
+    reserva.save(
+        update_fields=[
+            "instancia",
+            "estado",
+            "fecha_confirmacion",
+            "fecha_limite_recojo",
+            "updated_at",
+        ]
+    )
+    reserva.refresh_from_db()
+    return reserva
+
+
+def obtener_documento_garantia_reserva(reserva_id, tipo):
+    """Obtiene el documento PDF de garantía asociado a una reserva excepcional."""
+    try:
+        return _obtener_documento_garantia_reserva_prestamo(reserva_id, tipo)
+    except PrestamoError as error:
+        raise ReservaError(
+            error.campo,
+            error.mensaje,
+            status_code=error.status_code,
+        ) from error
 
 
 @transaction.atomic

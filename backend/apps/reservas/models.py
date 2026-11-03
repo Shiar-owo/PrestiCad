@@ -90,6 +90,19 @@ class Reserva(models.Model):
     def consume_inventario(self):
         return self.estado == "reservada" and self.instancia_id is not None
 
+    @property
+    def garantia_completa(self):
+        if not self.es_excepcion:
+            return True
+        garantia = getattr(self, "garantia", None)
+        if garantia is None:
+            return False
+        return bool(
+            garantia.estado == "registrada"
+            and garantia.documento_identidad
+            and garantia.compromiso_responsabilidad
+        )
+
     def puede_autopromoverse(self):
         return self.estado == "en_espera" and not self.es_excepcion
 

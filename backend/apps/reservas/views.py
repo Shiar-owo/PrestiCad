@@ -1,3 +1,4 @@
+from django.http import FileResponse, HttpResponseRedirect
 from rest_framework import status
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
@@ -6,21 +7,26 @@ from rest_framework.views import APIView
 from apps.reservas.permissions import (
     EsGestorDeAlmacen,
     EsGestorOAdministrador,
+    EsGestorOPrestatarioTitularReserva,
     EsPrestatarioAutenticado,
 )
 from apps.reservas.serializers import (
     ColaMaterialSerializer,
+    CrearReservaExcepcionalSerializer,
     CrearReservaSerializer,
     MotivoAccionReservaSerializer,
     ReservaDetalleSerializer,
 )
 from apps.reservas.services import (
     ReservaError,
+    aprobar_excepcion,
     cancelar_reserva,
     consultar_cola_material,
     consultar_mis_reservas,
     consultar_reservas_confirmadas,
     crear_reserva,
+    crear_reserva_excepcional,
+    obtener_documento_garantia_reserva,
     rechazar_reserva,
 )
 
@@ -50,6 +56,94 @@ class CrearReservaView(APIView):
             ReservaDetalleSerializer(reserva).data,
             status=status.HTTP_201_CREATED,
         )
+
+
+class CrearReservaExcepcionalView(APIView):
+    """Registra una solicitud de reserva excepcional con garantía: POST /api/reservas/excepcion/."""
+
+    permission_classes = [EsPrestatarioAutenticado]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+
+    def post(self, request):
+        serializer = CrearReservaExcepcionalSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            reserva = crear_reserva_excepcional(
+                usuario=request.usuario_autenticado,
+                **serializer.validated_data,
+            )
+        except ReservaError as error:
+            return Response(
+                {error.campo: [error.mensaje]},
+                status=error.status_code,
+            )
+
+        return Response(
+            ReservaDetalleSerializer(reserva).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class AprobarExcepcionReservaView(APIView):
+    """Aprueba una solicitud excepcional en espera: POST/PUT /api/reservas/<uuid:id>/aprobar-excepcion/."""
+
+    permission_classes = [EsGestorDeAlmacen]
+    parser_classes = [JSONParser, FormParser, MultiPartParser]
+
+    def _aprobar(self, request, id):
+        try:
+            reserva = aprobar_excepcion(
+                reserva_id=id,
+                realizado_por=request.usuario_autenticado,
+            )
+        except ReservaError as error:
+            return Response(
+                {error.campo: [error.mensaje]},
+                status=error.status_code,
+            )
+
+        return Response(ReservaDetalleSerializer(reserva).data)
+
+    def post(self, request, id):
+        return self._aprobar(request, id)
+
+    def put(self, request, id):
+        return self._aprobar(request, id)
+
+
+class DescargarDocumentoGarantiaReservaView(APIView):
+    """Descarga protegida del PDF de garantía de una reserva excepcional: GET /api/reservas/<uuid:id>/garantia/<str:tipo>/."""
+
+    permission_classes = [EsGestorOPrestatarioTitularReserva]
+
+    def get(self, request, id, tipo):
+        try:
+            documento, nombre = obtener_documento_garantia_reserva(id, tipo)
+        except ReservaError as error:
+            return Response(
+                {error.campo: [error.mensaje]},
+                status=error.status_code,
+            )
+
+        try:
+            url = documento.url
+        except ValueError:
+            url = None
+
+        if url and url.startswith(("http://", "https://")):
+            return HttpResponseRedirect(url)
+
+        try:
+            archivo = documento.open("rb")
+        except (FileNotFoundError, OSError):
+            return Response(
+                {"detail": "El archivo del documento de garantía no existe."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        respuesta = FileResponse(archivo, content_type="application/pdf")
+        respuesta["Content-Disposition"] = f'inline; filename="{nombre}"'
+        return respuesta
 
 
 class MisReservasView(APIView):

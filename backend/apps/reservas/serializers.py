@@ -1,6 +1,8 @@
 from rest_framework import serializers
 
 from apps.inventario.models import InstanciaMaterial, Material
+from apps.prestamos.constants import TAMANO_MAXIMO_SOLICITUD_BYTES
+from apps.prestamos.validators import validar_pdf_garantia
 from apps.reservas.constants import MENSAJES_ERROR_RESERVA, VALORES_PRIORIDAD_RESERVA
 from apps.reservas.models import Reserva
 from apps.reservas.services import calcular_posicion_en_cola
@@ -33,6 +35,48 @@ class CrearReservaSerializer(serializers.Serializer):
             "blank": MENSAJES_ERROR_RESERVA["justificacion_obligatoria"],
         },
     )
+
+
+class CrearReservaExcepcionalSerializer(CrearReservaSerializer):
+    """Valida los campos y documentos PDF obligatorios para una reserva excepcional (HU06, HU13)."""
+
+    documento_identidad = serializers.FileField(
+        required=True,
+        allow_empty_file=False,
+        validators=[validar_pdf_garantia],
+        error_messages={
+            "required": "El documento de identidad en PDF es obligatorio para reservas excepcionales.",
+            "null": "El documento de identidad en PDF es obligatorio para reservas excepcionales.",
+            "empty": "El documento de identidad en PDF no puede estar vacío.",
+        },
+    )
+    compromiso_responsabilidad = serializers.FileField(
+        required=True,
+        allow_empty_file=False,
+        validators=[validar_pdf_garantia],
+        error_messages={
+            "required": "El compromiso de responsabilidad en PDF es obligatorio para reservas excepcionales.",
+            "null": "El compromiso de responsabilidad en PDF es obligatorio para reservas excepcionales.",
+            "empty": "El compromiso de responsabilidad en PDF no puede estar vacío.",
+        },
+    )
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        archivos = [
+            attrs.get("documento_identidad"),
+            attrs.get("compromiso_responsabilidad"),
+        ]
+        total = sum(getattr(archivo, "size", 0) for archivo in archivos if archivo)
+        if total > TAMANO_MAXIMO_SOLICITUD_BYTES:
+            raise serializers.ValidationError(
+                {
+                    "archivos": [
+                        "El total de archivos de la solicitud no debe superar 4 MB."
+                    ]
+                }
+            )
+        return attrs
 
 
 class MotivoAccionReservaSerializer(serializers.Serializer):

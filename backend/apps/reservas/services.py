@@ -172,6 +172,7 @@ def autopromover_material(material_id, *, ahora=None):
             material.id,
             instancia_id=instancia.id,
         )
+        instancia.estado = "reservado"
         reserva.instancia = instancia
         reserva.estado = "reservada"
         reserva.fecha_confirmacion = ahora
@@ -257,6 +258,7 @@ def crear_reserva(
             material.id,
             instancia_id=instancia_libre.id,
         )
+        instancia_libre.estado = "reservado"
         reserva = Reserva.objects.create(
             usuario=usuario_bloqueado,
             material=material,

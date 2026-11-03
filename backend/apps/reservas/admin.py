@@ -20,9 +20,9 @@ class ReservaAdmin(admin.ModelAdmin):
     list_filter = ("estado", "prioridad", "es_excepcion")
     search_fields = (
         "usuario__dni",
-        "usuario__correo",
-        "usuario__nombres",
-        "usuario__apellidos",
+        "usuario__email",
+        "usuario__nombre",
+        "usuario__apellido",
         "material__nombre",
         "material__codigo_material",
         "instancia__codigo_ejemplar",

@@ -96,15 +96,15 @@ class MotivoAccionReservaSerializer(serializers.Serializer):
 class UsuarioResumenReservaSerializer(serializers.Serializer):
     id = serializers.IntegerField(read_only=True)
     dni = serializers.CharField(read_only=True)
-    nombres = serializers.CharField(read_only=True)
-    apellidos = serializers.CharField(read_only=True)
+    nombre = serializers.CharField(read_only=True)
+    apellido = serializers.CharField(read_only=True)
     nombre_completo = serializers.SerializerMethodField()
-    correo = serializers.EmailField(read_only=True)
+    email = serializers.EmailField(read_only=True)
     reputacion_puntaje = serializers.IntegerField(read_only=True)
     reputacion_tier = serializers.CharField(read_only=True)
 
     def get_nombre_completo(self, obj):
-        return f"{obj.nombres} {obj.apellidos}".strip()
+        return f"{obj.nombre} {obj.apellido}".strip()
 
 
 class MaterialResumenReservaSerializer(serializers.ModelSerializer):

@@ -11,6 +11,7 @@ import PanelInicio from '../pages/PanelInicio'
 import MisPrestamos from '../prestamos/MisPrestamos'
 import MisReservas from '../pages/MisReservas'
 import ReservarMaterial from '../pages/ReservarMaterial'
+import ColaReservas from '../pages/ColaReservas'
 import HistorialPrestamos from '../prestamos/HistorialPrestamos'
 import Materiales from '../pages/Materiales'
 import RegistrarPrestamo from '../pages/RegistrarPrestamo'
@@ -140,6 +141,7 @@ function Rutas() {
               </RequerirRol>
             }
           />
+          <Route path="cola-reservas" element={<ColaReservas />} />
           <Route path="historial" element={<HistorialPrestamos />} />
           <Route path="reportes" element={<ReportesDanos />} />
         </Route>

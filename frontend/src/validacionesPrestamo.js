@@ -49,6 +49,7 @@ export function validarFormularioPrestamo({
   documentoIdentidad,
   compromisoResponsabilidad,
   esExcepcion = false,
+  garantiaReutilizada = false,
 }) {
   const errores = {}
   const erroresFotos = {}
@@ -94,7 +95,7 @@ export function validarFormularioPrestamo({
     })
     if (Object.keys(erroresFotos).length > 0) errores.fotosChecklist = erroresFotos
   }
-  if (esExcepcion || esMaterialAltoValor(material)) {
+  if ((esExcepcion || esMaterialAltoValor(material)) && !garantiaReutilizada) {
     const errorDocumentoIdentidad = validarArchivoGarantia(
       documentoIdentidad,
       'Adjunta el documento de identidad en PDF.',

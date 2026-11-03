@@ -10,6 +10,7 @@ export function construirSolicitudPrestamo({
   fotosChecklist = checklist.map((item) => item.foto),
   documentoIdentidad,
   compromisoResponsabilidad,
+  esExcepcion = false,
 }) {
   const solicitud = new FormData()
   solicitud.append('dni_prestatario', dni.trim())
@@ -28,11 +29,11 @@ export function construirSolicitudPrestamo({
     if (foto) solicitud.append(`foto_checklist_${indice}`, foto)
   })
 
-  const materialAltoValor = esMaterialAltoValor(material)
-  if (materialAltoValor && documentoIdentidad) {
+  const requiereGarantia = esExcepcion || esMaterialAltoValor(material)
+  if (requiereGarantia && documentoIdentidad) {
     solicitud.append('documento_identidad', documentoIdentidad)
   }
-  if (materialAltoValor && compromisoResponsabilidad) {
+  if (requiereGarantia && compromisoResponsabilidad) {
     solicitud.append('compromiso_responsabilidad', compromisoResponsabilidad)
   }
 

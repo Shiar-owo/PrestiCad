@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-import { ordenarPrestamos } from '../../prestamos/estadoPrestamo'
+import { ordenarPrestamos, textoEstadoPrestamo } from '../../prestamos/estadoPrestamo'
 import { filtrarPrestamos } from '../../prestamos/filtroPrestamos'
 import BadgeEstado from '../ui/BadgeEstado'
 import EstadoVacio from '../ui/EstadoVacio'
@@ -54,7 +54,10 @@ export default function ListaPrestamos({ prestamos, onSeleccionar }) {
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="font-bold text-texto">{prestamo.material_nombre}</span>
-                  <BadgeEstado estado={prestamo.estado_visible} />
+                  <BadgeEstado
+                    estado={prestamo.estado_visible}
+                    texto={textoEstadoPrestamo(prestamo, prestamo.estado_visible)}
+                  />
                 </div>
                 <p className="mt-1 text-sm text-texto-suave">
                   Código de Material: {prestamo.material_codigo}

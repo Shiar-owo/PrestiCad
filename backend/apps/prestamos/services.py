@@ -220,7 +220,7 @@ def _obtener_prestatario_bloqueado(dni):
         ) from error
 
 
-def _validar_elegibilidad(usuario, material):
+def _validar_elegibilidad(usuario, material, *, es_excepcion=False):
     if usuario.rol.nombre != "prestatario":
         raise PrestamoError(
             "dni_prestatario",
@@ -233,6 +233,19 @@ def _validar_elegibilidad(usuario, material):
         )
 
     tiers_permitidos = TIERS_ACCESIBLES.get(usuario.reputacion_tier)
+    if es_excepcion:
+        if (
+            usuario.reputacion_tier != "restringido"
+            or tiers_permitidos is None
+            or material.tier_minimo_requerido in tiers_permitidos
+        ):
+            raise PrestamoError(
+                "es_excepcion",
+                "El préstamo excepcional solo aplica a usuarios Restringidos "
+                "con material de un Tier superior.",
+            )
+        return
+
     if tiers_permitidos is None or material.tier_minimo_requerido not in tiers_permitidos:
         raise PrestamoError(
             "dni_prestatario",
@@ -336,7 +349,13 @@ def _validar_fotos_checklist(checklist_inicial, fotos_checklist):
             ) from error
 
 
-def _validar_documentos_garantia(material, documento_identidad, compromiso_responsabilidad):
+def _validar_documentos_garantia(
+    material,
+    documento_identidad,
+    compromiso_responsabilidad,
+    *,
+    es_excepcion=False,
+):
     documentos = (
         ("documento_identidad", documento_identidad, "El documento de identidad en PDF"),
         (
@@ -345,7 +364,7 @@ def _validar_documentos_garantia(material, documento_identidad, compromiso_respo
             "El compromiso de responsabilidad en PDF",
         ),
     )
-    requiere_garantia = material.requiere_garantia()
+    requiere_garantia = es_excepcion or material.requiere_garantia()
     if not requiere_garantia:
         for campo, archivo, _ in documentos:
             if archivo is not None:
@@ -358,7 +377,8 @@ def _validar_documentos_garantia(material, documento_identidad, compromiso_respo
             if archivo is None:
                 raise PrestamoError(
                     campo,
-                    f"{descripcion} es obligatorio para materiales de alto valor.",
+                    f"{descripcion} es obligatorio para préstamos excepcionales "
+                    "y materiales de alto valor.",
                 )
 
     for campo, archivo, _ in documentos:
@@ -579,6 +599,7 @@ def registrar_prestamo(
     documento_identidad=None,
     compromiso_responsabilidad=None,
     fecha_entrega=None,
+    es_excepcion=False,
 ):
     """Registra la entrega con elegibilidad, garantía y control atómico de stock."""
     minutos_prestamo, dias_prestamo, campo_duracion = _resolver_duracion_prestamo(
@@ -605,7 +626,7 @@ def registrar_prestamo(
             status_code=404,
         ) from error
 
-    _validar_elegibilidad(prestatario, material)
+    _validar_elegibilidad(prestatario, material, es_excepcion=es_excepcion)
     _validar_duracion_material(material, minutos_prestamo, campo_duracion)
 
     if material.estado in ("en_mantenimiento", "reservado"):
@@ -615,11 +636,12 @@ def registrar_prestamo(
             status_code=409,
         )
 
-    requiere_garantia = material.requiere_garantia()
+    requiere_garantia = es_excepcion or material.requiere_garantia()
     _validar_documentos_garantia(
         material,
         documento_identidad,
         compromiso_responsabilidad,
+        es_excepcion=es_excepcion,
     )
 
     try:
@@ -655,6 +677,7 @@ def registrar_prestamo(
         tiempo_prestamo_minutos=minutos_prestamo,
         tiempo_prestamo_dias=dias_prestamo,
         estado="activo",
+        es_excepcion=es_excepcion,
         checklist_inicial=checklist_inicial,
         instancia_id=instancia_elegida["id"],
     )
@@ -869,6 +892,10 @@ def _calcular_resultado(prestamo, checklist, fecha_devolucion):
         deduccion_dano = 0
         cobro = None
 
+    deduccion_dano_base = deduccion_dano
+    if prestamo.es_excepcion:
+        deduccion_dano *= 2
+
     puntos_delta = bonificacion - deduccion_tardanza - deduccion_dano
     reputacion_antes = usuario.reputacion_puntaje
     reputacion_despues = puntaje_reputacion_ajustado(reputacion_antes + puntos_delta)
@@ -881,6 +908,7 @@ def _calcular_resultado(prestamo, checklist, fecha_devolucion):
         "deduccion_tardanza": deduccion_tardanza,
         "dano": dano,
         "hay_dano": dano != "sin_cambios",
+        "deduccion_dano_base": deduccion_dano_base,
         "deduccion_dano": deduccion_dano,
         "cobro_economico": str(cobro) if cobro is not None else None,
         "puntos_delta": puntos_delta,

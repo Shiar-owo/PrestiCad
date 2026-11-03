@@ -571,6 +571,82 @@ class RegistrarPrestamoServiceTestCase(TestCase):
         material.refresh_from_db()
         self.assertEqual(material.estado, "disponible")
 
+    def test_excepcion_directa_permite_material_superior_con_garantia(self):
+        restringido = crear_usuario(
+            "restringido-excepcion@unsa.edu.pe",
+            "10000031",
+            reputacion_puntaje=-100,
+            reputacion_tier="restringido",
+        )
+        material = crear_material(
+            codigo_material="EQ-EXC-01",
+            tier_minimo_requerido="avanzado",
+        )
+
+        with self.assertRaises(PrestamoError) as contexto:
+            self._registrar(
+                dni_prestatario=restringido.dni,
+                material_id=material.id,
+                tiempo_prestamo_minutos=60,
+                tiempo_prestamo_dias=None,
+                es_excepcion=True,
+            )
+        self.assertEqual(contexto.exception.campo, "documento_identidad")
+
+        with storage_garantias_temporal():
+            prestamo = self._registrar(
+                dni_prestatario=restringido.dni,
+                material_id=material.id,
+                tiempo_prestamo_minutos=60,
+                tiempo_prestamo_dias=None,
+                es_excepcion=True,
+                documento_identidad=crear_pdf("dni-excepcion.pdf"),
+                compromiso_responsabilidad=crear_pdf("compromiso-excepcion.pdf"),
+            )
+
+            self.assertTrue(prestamo.es_excepcion)
+            self.assertTrue(prestamo.requiere_garantia)
+            self.assertTrue(prestamo.garantia_completa)
+
+    def test_excepcion_directa_rechaza_usuario_no_restringido(self):
+        material = crear_material(
+            codigo_material="EQ-EXC-02",
+            tier_minimo_requerido="avanzado",
+        )
+
+        with self.assertRaises(PrestamoError) as contexto:
+            self._registrar(
+                material_id=material.id,
+                tiempo_prestamo_minutos=60,
+                tiempo_prestamo_dias=None,
+                es_excepcion=True,
+            )
+
+        self.assertEqual(contexto.exception.campo, "es_excepcion")
+        self.assertEqual(Prestamo.objects.count(), 0)
+
+    def test_excepcion_directa_rechaza_material_accesible_para_restringido(self):
+        restringido = crear_usuario(
+            "restringido-accesible@unsa.edu.pe",
+            "10000032",
+            reputacion_puntaje=-100,
+            reputacion_tier="restringido",
+        )
+        material = crear_material(
+            codigo_material="EQ-EXC-03",
+            tier_minimo_requerido="restringido",
+        )
+
+        with self.assertRaises(PrestamoError) as contexto:
+            self._registrar(
+                dni_prestatario=restringido.dni,
+                material_id=material.id,
+                es_excepcion=True,
+            )
+
+        self.assertEqual(contexto.exception.campo, "es_excepcion")
+        self.assertEqual(Prestamo.objects.count(), 0)
+
     def test_rechaza_usuario_suspendido(self):
         self.prestatario.estado = "suspendido"
         self.prestatario.save(update_fields=["estado"])
@@ -843,6 +919,7 @@ class MisPrestamosAPITestCase(APITestCase):
         "tiempo_prestamo_minutos",
         "tiempo_prestamo_dias",
         "estado",
+        "es_excepcion",
     }
 
     def setUp(self):
@@ -936,6 +1013,7 @@ class HistorialPrestamosAPITestCase(APITestCase):
         "tiempo_prestamo_minutos",
         "tiempo_prestamo_dias",
         "estado",
+        "es_excepcion",
     }
 
     def setUp(self):
@@ -1522,6 +1600,52 @@ class RegistrarPrestamoAPITestCase(APITestCase):
         sesion.save()
 
         respuesta = cliente.post(self.URL, self._payload(), format="json")
+
+        self.assertEqual(respuesta.status_code, 403)
+        self.assertEqual(Prestamo.objects.count(), 0)
+
+    def test_post_excepcion_registra_flag_y_garantia_obligatoria(self):
+        restringido = crear_usuario(
+            "restringido-api@unsa.edu.pe",
+            "20000031",
+            reputacion_puntaje=-100,
+            reputacion_tier="restringido",
+        )
+        material = crear_material(
+            codigo_material="API-EXC-01",
+            tier_minimo_requerido="avanzado",
+        )
+        self._iniciar_sesion(self.gestor)
+        datos = self._payload_multipart(
+            dni_prestatario=restringido.dni,
+            material_id=str(material.id),
+            instancia_id=str(material.instancias.get().id),
+            tiempo_prestamo_minutos=60,
+            documento_identidad=crear_pdf("dni-excepcion.pdf"),
+            compromiso_responsabilidad=crear_pdf("compromiso-excepcion.pdf"),
+        )
+
+        with storage_garantias_temporal():
+            respuesta = self.client.post(
+                "/api/prestamos/excepcion/",
+                datos,
+                format="multipart",
+            )
+
+        self.assertEqual(respuesta.status_code, 201, respuesta.content)
+        self.assertTrue(respuesta.json()["es_excepcion"])
+        self.assertTrue(respuesta.json()["requiere_garantia"])
+        self.assertTrue(respuesta.json()["garantia_completa"])
+        self.assertTrue(Prestamo.objects.get().es_excepcion)
+
+    def test_post_excepcion_como_prestatario_responde_403(self):
+        self._iniciar_sesion(self.prestatario)
+
+        respuesta = self.client.post(
+            "/api/prestamos/excepcion/",
+            self._payload(),
+            format="json",
+        )
 
         self.assertEqual(respuesta.status_code, 403)
         self.assertEqual(Prestamo.objects.count(), 0)
@@ -2148,6 +2272,25 @@ class RegistrarDevolucionServiceTestCase(DevolucionBaseTestCase):
             set(devolucion.checklist_devolucion[0]),
             {"elemento", "estado", "observacion"},
         )
+
+    def test_excepcion_duplica_solo_la_deduccion_por_dano(self):
+        self.prestamo.es_excepcion = True
+        self.prestamo.save(update_fields=["es_excepcion"])
+        checklist = [
+            {"elemento": "Carcasa", "estado": "dano_parcial", "observacion": "Rasguño"},
+            {"elemento": "Cable", "estado": "sin_cambios", "observacion": ""},
+        ]
+
+        devolucion = self._devolver(
+            fecha_devolucion=self.prestamo.fecha_limite,
+            checklist=checklist,
+        )
+
+        resultado = devolucion.resultado
+        self.assertEqual(resultado["deduccion_dano_base"], 30)
+        self.assertEqual(resultado["deduccion_dano"], 60)
+        self.assertEqual(resultado["cobro_economico"], "40.00")
+        self.assertEqual(resultado["puntos_delta"], -45)
 
     def test_dano_total_aplica_deduccion_y_cobro_de_reposicion(self):
         checklist = [

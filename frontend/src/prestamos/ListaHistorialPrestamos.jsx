@@ -1,6 +1,7 @@
 import BadgeEstado from '../components/ui/BadgeEstado'
 import DetallePrestamo from '../components/prestamos/DetallePrestamo'
 import { esDevoluble } from '../constantes/devolucion'
+import { textoEstadoPrestamo } from './estadoPrestamo'
 import { obtenerPrestamoAdyacente } from './historialPrestamos'
 
 export default function ListaHistorialPrestamos({
@@ -48,7 +49,10 @@ export default function ListaHistorialPrestamos({
           >
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="font-bold text-texto">{prestamo.material_nombre}</span>
-              <BadgeEstado estado={prestamo.estado} />
+              <BadgeEstado
+                estado={prestamo.estado}
+                texto={textoEstadoPrestamo(prestamo)}
+              />
             </div>
             <p className="mt-1 text-sm text-texto-suave">
               Prestatario: {prestamo.prestatario_nombre} · Código de Material: {prestamo.material_codigo}

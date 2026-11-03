@@ -62,6 +62,16 @@ describe('validarFormularioPrestamo', () => {
     expect(errores).toHaveProperty('compromiso_responsabilidad')
   })
 
+  it('exige ambos PDF cuando se registra una excepción académica', () => {
+    const errores = validarFormularioPrestamo({
+      ...formularioValido,
+      esExcepcion: true,
+    })
+
+    expect(errores).toHaveProperty('documento_identidad')
+    expect(errores).toHaveProperty('compromiso_responsabilidad')
+  })
+
   it('rechaza extensión, tipo MIME y tamaño incorrectos en los PDF', () => {
     const errores = validarFormularioPrestamo({
       ...formularioValido,

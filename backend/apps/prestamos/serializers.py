@@ -259,6 +259,7 @@ class PrestamoRegistroSerializer(serializers.ModelSerializer):
             "tiempo_prestamo_minutos",
             "tiempo_prestamo_dias",
             "estado",
+            "es_excepcion",
             "checklist_inicial",
             "requiere_garantia",
             "garantia_documento_identidad_cargado",
@@ -397,6 +398,7 @@ class DevolucionResultadoSerializer(serializers.Serializer):
     deduccion_tardanza = serializers.IntegerField()
     dano = serializers.ChoiceField(choices=ESTADOS_CHECKLIST_DEVOLUCION)
     hay_dano = serializers.BooleanField()
+    deduccion_dano_base = serializers.IntegerField(required=False)
     deduccion_dano = serializers.IntegerField()
     cobro_economico = serializers.DecimalField(
         max_digits=10,

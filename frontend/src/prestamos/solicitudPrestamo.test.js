@@ -45,6 +45,26 @@ describe('construirSolicitudPrestamo', () => {
     expect(solicitud.has('tiempo_prestamo_dias')).toBe(false)
   })
 
+  it('incluye ambos PDF en una excepción aunque el material no sea de alto valor', () => {
+    const documentoIdentidad = new File(['%PDF-'], 'dni.pdf', { type: 'application/pdf' })
+    const compromisoResponsabilidad = new File(['%PDF-'], 'compromiso.pdf', {
+      type: 'application/pdf',
+    })
+    const solicitud = construirSolicitudPrestamo({
+      dni: '12345678',
+      material: { id: 'material-1', es_alto_valor: false },
+      instanciaId: 'instancia-1',
+      dias: '5',
+      checklist: [{ elemento: 'Equipo', observacion: '', foto: new File(['foto'], 'equipo.png', { type: 'image/png' }) }],
+      documentoIdentidad,
+      compromisoResponsabilidad,
+      esExcepcion: true,
+    })
+
+    expect(solicitud.get('documento_identidad')).toBe(documentoIdentidad)
+    expect(solicitud.get('compromiso_responsabilidad')).toBe(compromisoResponsabilidad)
+  })
+
   it('omite los campos PDF cuando el material no requiere garantía', () => {
     const solicitud = construirSolicitudPrestamo({
       dni: '12345678',

@@ -70,6 +70,7 @@ class PrestamoConsultaSerializer(serializers.ModelSerializer):
             "tiempo_prestamo_minutos",
             "tiempo_prestamo_dias",
             "estado",
+            "es_excepcion",
         )
         read_only_fields = fields
 
@@ -102,6 +103,7 @@ class PrestamoHistorialSerializer(serializers.ModelSerializer):
             "tiempo_prestamo_minutos",
             "tiempo_prestamo_dias",
             "estado",
+            "es_excepcion",
         )
         read_only_fields = fields
 
@@ -189,6 +191,7 @@ class PrestamoHistorialDetalleSerializer(serializers.ModelSerializer):
             "tiempo_prestamo_minutos",
             "tiempo_prestamo_dias",
             "estado",
+            "es_excepcion",
             "checklist_inicial",
             "documentos_garantia",
         )
@@ -260,6 +263,7 @@ class PrestamoDevolucionDetalleSerializer(serializers.ModelSerializer):
             "tiempo_prestamo_minutos",
             "tiempo_prestamo_dias",
             "estado",
+            "es_excepcion",
             "prestatario_nombre",
             "prestatario_dni",
             "checklist_inicial",

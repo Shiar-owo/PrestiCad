@@ -390,9 +390,16 @@ def _validar_documentos_garantia(
             raise PrestamoError(campo, error.messages[0]) from error
 
 
-def _crear_garantia_registrada(prestamo, documento_identidad, compromiso_responsabilidad):
+def crear_garantia_registrada(
+    *,
+    documento_identidad,
+    compromiso_responsabilidad,
+    prestamo=None,
+    reserva=None,
+):
     garantia = Garantia(
         prestamo=prestamo,
+        reserva=reserva,
         tipo="documento_y_compromiso",
         estado="registrada",
         fecha_registro=timezone.now(),
@@ -412,6 +419,65 @@ def _crear_garantia_registrada(prestamo, documento_identidad, compromiso_respons
             almacenamiento.delete(nombre)
         raise
     return garantia
+
+
+def _crear_garantia_registrada(
+    prestamo,
+    documento_identidad,
+    compromiso_responsabilidad,
+    *,
+    reserva=None,
+):
+    return crear_garantia_registrada(
+        documento_identidad=documento_identidad,
+        compromiso_responsabilidad=compromiso_responsabilidad,
+        prestamo=prestamo,
+        reserva=reserva,
+    )
+
+
+def obtener_documento_garantia_reserva(reserva_id, tipo):
+    """Obtiene el FieldFile del documento de garantía asociado a una reserva excepcional."""
+    from apps.reservas.models import Reserva
+
+    campos = {
+        "documento-identidad": ("documento_identidad", "documento-identidad"),
+        "compromiso": ("compromiso_responsabilidad", "compromiso-responsabilidad"),
+    }
+    if tipo not in campos:
+        raise PrestamoError(
+            "tipo",
+            "El tipo de documento de garantía no es válido.",
+        )
+
+    try:
+        reserva = Reserva.objects.get(pk=reserva_id)
+    except (Reserva.DoesNotExist, ValueError, TypeError) as error:
+        raise PrestamoError(
+            "reserva_id",
+            "No existe la reserva indicada.",
+            status_code=404,
+        ) from error
+
+    try:
+        garantia = reserva.garantia
+    except Garantia.DoesNotExist as error:
+        raise PrestamoError(
+            "garantia",
+            "La reserva no tiene una garantía registrada.",
+            status_code=404,
+        ) from error
+
+    nombre_campo, nombre_descarga = campos[tipo]
+    documento = getattr(garantia, nombre_campo)
+    if not documento:
+        raise PrestamoError(
+            nombre_campo,
+            "El documento de garantía solicitado no está disponible.",
+            status_code=404,
+        )
+
+    return documento, f"{nombre_descarga}-reserva-{reserva.pk}.pdf"
 
 
 def obtener_documento_garantia(prestamo_id, tipo):
@@ -591,6 +657,7 @@ def registrar_prestamo(
     dni_prestatario,
     material_id,
     instancia_id=None,
+    reserva_id=None,
     tiempo_prestamo_minutos=None,
     tiempo_prestamo_dias=None,
     checklist_inicial,
@@ -601,7 +668,7 @@ def registrar_prestamo(
     fecha_entrega=None,
     es_excepcion=False,
 ):
-    """Registra la entrega con elegibilidad, garantía y control atómico de stock."""
+    """Registra la entrega con elegibilidad, garantía, conversión opcional de reserva y control atómico de stock."""
     minutos_prestamo, dias_prestamo, campo_duracion = _resolver_duracion_prestamo(
         tiempo_prestamo_minutos,
         tiempo_prestamo_dias,
@@ -626,10 +693,77 @@ def registrar_prestamo(
             status_code=404,
         ) from error
 
+    fecha_entrega = fecha_entrega or timezone.now()
+    reserva = None
+    garantia_reserva_reutilizable = None
+    if reserva_id is not None:
+        from apps.reservas.models import Reserva
+
+        try:
+            reserva = (
+                Reserva.objects.select_for_update(of=("self",))
+                .select_related("usuario", "material", "instancia")
+                .get(pk=reserva_id)
+            )
+        except (Reserva.DoesNotExist, ValueError, TypeError) as error:
+            raise PrestamoError(
+                "reserva_id",
+                "No existe la reserva indicada.",
+                status_code=404,
+            ) from error
+
+        if reserva.usuario_id != prestatario.id:
+            raise PrestamoError(
+                "reserva_id",
+                "La reserva indicada no pertenece al prestatario.",
+            )
+        if reserva.material_id != material.id:
+            raise PrestamoError(
+                "reserva_id",
+                "La reserva indicada no corresponde al material seleccionado.",
+            )
+        if reserva.estado != "reservada" or reserva.expiro(fecha_entrega):
+            raise PrestamoError(
+                "reserva_id",
+                "La reserva no se encuentra confirmada y vigente para su conversión.",
+                status_code=409,
+            )
+        if reserva.instancia_id is None:
+            raise PrestamoError(
+                "reserva_id",
+                "La reserva no tiene un ejemplar asignado.",
+                status_code=409,
+            )
+        if instancia_id is not None and str(instancia_id) != str(reserva.instancia_id):
+            raise PrestamoError(
+                "instancia_id",
+                "Debe entregarse el ejemplar asignado a la reserva confirmada.",
+            )
+        instancia_id = reserva.instancia_id
+        if reserva.es_excepcion:
+            es_excepcion = True
+        try:
+            garantia_existente = Garantia.objects.select_for_update().get(reserva=reserva)
+            if (
+                garantia_existente.estado == "registrada"
+                and garantia_existente.documento_identidad
+                and garantia_existente.compromiso_responsabilidad
+            ):
+                garantia_reserva_reutilizable = garantia_existente
+        except Garantia.DoesNotExist:
+            garantia_reserva_reutilizable = None
+
     _validar_elegibilidad(prestatario, material, es_excepcion=es_excepcion)
     _validar_duracion_material(material, minutos_prestamo, campo_duracion)
 
-    if material.estado in ("en_mantenimiento", "reservado"):
+    if reserva is None:
+        if material.estado in ("en_mantenimiento", "reservado"):
+            raise PrestamoError(
+                "material_id",
+                "El material no está disponible para entrega.",
+                status_code=409,
+            )
+    elif material.estado == "en_mantenimiento":
         raise PrestamoError(
             "material_id",
             "El material no está disponible para entrega.",
@@ -637,17 +771,21 @@ def registrar_prestamo(
         )
 
     requiere_garantia = es_excepcion or material.requiere_garantia()
-    _validar_documentos_garantia(
-        material,
-        documento_identidad,
-        compromiso_responsabilidad,
-        es_excepcion=es_excepcion,
-    )
+    if garantia_reserva_reutilizable is not None and documento_identidad is None and compromiso_responsabilidad is None:
+        pass
+    else:
+        _validar_documentos_garantia(
+            material,
+            documento_identidad,
+            compromiso_responsabilidad,
+            es_excepcion=es_excepcion,
+        )
 
     try:
         instancia_elegida = servicios_inventario.marcar_instancia_prestada(
             material.id,
             instancia_id=instancia_id,
+            permitir_reservada=reserva is not None,
         )
     except servicios_inventario.InventarioError as error:
         raise PrestamoError(
@@ -667,7 +805,6 @@ def registrar_prestamo(
             status_code=409,
         )
 
-    fecha_entrega = fecha_entrega or timezone.now()
     prestamo = Prestamo.objects.create(
         usuario=prestatario,
         material=material,
@@ -682,6 +819,12 @@ def registrar_prestamo(
         instancia_id=instancia_elegida["id"],
     )
 
+    if reserva is not None:
+        reserva.estado = "convertida_en_prestamo"
+        reserva.fecha_recojo = fecha_entrega
+        reserva.prestamo = prestamo
+        reserva.save(update_fields=["estado", "fecha_recojo", "prestamo", "updated_at"])
+
     # Material.estado describe disponibilidad del conjunto: solo pasa a
     # prestado cuando ya no queda ninguna unidad libre. `stock` se mantiene
     # como total registrado; la disponibilidad se deriva de préstamos activos.
@@ -689,17 +832,34 @@ def registrar_prestamo(
     if unidades_restantes == 0:
         material.estado = "prestado"
         material.save(update_fields=("estado", "updated_at"))
-    elif material.estado == "prestado":
-        # Puede ocurrir si inventario se reabasteció sin actualizar el estado.
+    elif material.estado in ("prestado", "reservado") and material.instancias.filter(estado="disponible").exists():
         material.estado = "disponible"
         material.save(update_fields=("estado", "updated_at"))
 
     if requiere_garantia:
-        _crear_garantia_registrada(
-            prestamo,
-            documento_identidad,
-            compromiso_responsabilidad,
-        )
+        if garantia_reserva_reutilizable is not None and documento_identidad is None and compromiso_responsabilidad is None:
+            garantia_reserva_reutilizable.prestamo = prestamo
+            garantia_reserva_reutilizable.save(update_fields=["prestamo"])
+        elif garantia_reserva_reutilizable is not None:
+            # Si se adjuntaron nuevos PDFs al convertir, actualizamos y vinculamos la garantía existente.
+            for nombre_campo, archivo in (
+                ("documento_identidad", documento_identidad),
+                ("compromiso_responsabilidad", compromiso_responsabilidad),
+            ):
+                if archivo is not None:
+                    campo_archivo = getattr(garantia_reserva_reutilizable, nombre_campo)
+                    campo_archivo.save(archivo.name, archivo, save=False)
+            garantia_reserva_reutilizable.prestamo = prestamo
+            garantia_reserva_reutilizable.estado = "registrada"
+            garantia_reserva_reutilizable.fecha_registro = timezone.now()
+            garantia_reserva_reutilizable.save()
+        else:
+            _crear_garantia_registrada(
+                prestamo,
+                documento_identidad,
+                compromiso_responsabilidad,
+                reserva=reserva,
+            )
 
     fotos_guardadas = []
     try:

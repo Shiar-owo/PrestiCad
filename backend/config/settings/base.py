@@ -29,6 +29,7 @@ INSTALLED_APPS = [
     "apps.usuarios",
     "apps.inventario",
     "apps.prestamos",
+    "apps.reservas",
 ]
 
 MIDDLEWARE = [
@@ -95,6 +96,8 @@ CSRF_TRUSTED_ORIGINS = [
 ]
 SESSION_IDLE_TIMEOUT_MINUTES = int(os.getenv("SESSION_IDLE_TIMEOUT_MINUTES", "30"))
 MEDIA_URL_PUBLICA = os.getenv("MEDIA_URL_PUBLICA", "")
+MAXIMO_RESERVAS_ACTIVAS = int(os.getenv("MAXIMO_RESERVAS_ACTIVAS", "3"))
+RESERVA_PENALIZACION_PUNTOS = int(os.getenv("RESERVA_PENALIZACION_PUNTOS", "20"))
 
 MATERIALES_REPUTACION_DEFAULTS = {
     "avanzado": {

@@ -2,6 +2,7 @@ import { useContext } from 'react'
 import { Link } from 'react-router'
 import {
   ArrowUpRight,
+  CalendarClock,
   ClipboardList,
   Gauge,
   History,
@@ -25,6 +26,12 @@ const ACCESOS = {
       icono: History,
     },
     {
+      etiqueta: 'Mis reservas',
+      a: '/panel/reservas',
+      descripcion: 'Gestiona tus reservas confirmadas y solicitudes en lista de espera',
+      icono: CalendarClock,
+    },
+    {
       etiqueta: 'Mi perfil',
       a: '/panel/perfil',
       descripcion: 'Datos personales y nivel de reputación',
@@ -45,6 +52,12 @@ const ACCESOS = {
       icono: ClipboardList,
     },
     {
+      etiqueta: 'Cola de reservas',
+      a: '/panel/cola-reservas',
+      descripcion: 'Solicitudes en lista de espera, excepciones académicas y reservas confirmadas',
+      icono: CalendarClock,
+    },
+    {
       etiqueta: 'Gestión de inventario',
       a: '/panel/inventario',
       descripcion: 'Alta, edición y estado de los materiales',
@@ -63,6 +76,12 @@ const ACCESOS = {
       a: '/panel/gestion-prestamos',
       descripcion: 'Historial de préstamos, reportes y opciones de préstamos',
       icono: ClipboardList,
+    },
+    {
+      etiqueta: 'Cola de reservas',
+      a: '/panel/cola-reservas',
+      descripcion: 'Consulta de lista de espera y reservas confirmadas por material',
+      icono: CalendarClock,
     },
     {
       etiqueta: 'Gestión de inventario',

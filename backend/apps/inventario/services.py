@@ -589,6 +589,7 @@ def actualizar_material(material_id, **campos):
                     )
                 )
             InstanciaMaterial.objects.bulk_create(nuevas)
+            _programar_autopromocion(material.id)
 
     if campos.get("foto") is not None:
         validar_foto(campos["foto"])
@@ -611,6 +612,8 @@ def actualizar_material(material_id, **campos):
     if actualizar_estado_general:
         _sincronizar_estado_material_desde_instancias(material)
         campos_actualizados.append("estado")
+        if estado_general_solicitado == "disponible":
+            _programar_autopromocion(material.id)
     material.save(update_fields=campos_actualizados)
 
     if foto_anterior and foto_anterior != material.foto.name:
@@ -660,6 +663,25 @@ def _sincronizar_estado_material_desde_instancias(material):
         material.estado = "reservado"
 
 
+def _programar_autopromocion(material_id):
+    """Dispara la autopromoción de la cola de espera del material tras confirmar la transacción."""
+
+    def _ejecutar():
+        try:
+            from apps.reservas import services as servicios_reservas
+
+            if hasattr(servicios_reservas, "autopromover_material"):
+                servicios_reservas.autopromover_material(material_id)
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "Error al ejecutar autopromoción diferida para el material %s.",
+                material_id,
+                exc_info=True,
+            )
+
+    transaction.on_commit(_ejecutar)
+
+
 def _eliminar_foto(storage, nombre):
     """Borra el archivo de la foto reemplazada.
 
@@ -699,14 +721,130 @@ def listar_instancias_material(material_id, *, estado=None):
 
 
 @transaction.atomic
-def marcar_instancia_prestada(material_id, instancia_id=None):
+def marcar_instancia_reservada(material_id, instancia_id=None):
+    """Bloquea y marca como reservada una instancia disponible del material (disponible -> reservado)."""
+    try:
+        material = Material.objects.select_for_update().get(pk=material_id)
+    except (Material.DoesNotExist, ValueError, TypeError) as error:
+        raise InventarioError(
+            "material_id",
+            "No existe el material indicado.",
+            status_code=404,
+        ) from error
+
+    consulta = InstanciaMaterial.objects.select_for_update()
+    if instancia_id is None:
+        instancia = (
+            consulta.filter(material_id=material.id, estado="disponible")
+            .order_by("codigo_ejemplar")
+            .first()
+        )
+        if instancia is None:
+            raise InventarioError(
+                "material_id",
+                "No quedan unidades disponibles de este material.",
+                status_code=409,
+            )
+    else:
+        try:
+            instancia = consulta.get(pk=instancia_id)
+        except (InstanciaMaterial.DoesNotExist, ValueError, TypeError) as error:
+            raise InventarioError(
+                "instancia_id",
+                "No existe la instancia indicada.",
+                status_code=404,
+            ) from error
+
+        if instancia.material_id != material.id:
+            raise InventarioError(
+                "instancia_id",
+                "La instancia no pertenece al material indicado.",
+            )
+        if instancia.estado != "disponible":
+            raise InventarioError(
+                "instancia_id",
+                "La instancia no está disponible para reservar.",
+                status_code=409,
+            )
+
+    instancia.estado = "reservado"
+    instancia.save(update_fields=("estado", "updated_at"))
+    _sincronizar_estado_material_desde_instancias(material)
+    material.save(update_fields=("estado", "updated_at"))
+    return {
+        "id": instancia.id,
+        "codigo_ejemplar": instancia.codigo_ejemplar,
+        "estado": instancia.estado,
+    }
+
+
+@transaction.atomic
+def liberar_instancia_reservada(instancia_id, *, estado_final="disponible", disparar_autopromocion=True):
+    """Libera una instancia reservada hacia disponible o en_mantenimiento y sincroniza el material."""
+    if estado_final not in ("disponible", "en_mantenimiento"):
+        raise InventarioError(
+            "estado",
+            "Una instancia reservada solo puede liberarse a 'disponible' o 'en_mantenimiento'.",
+        )
+
+    try:
+        instancia = (
+            InstanciaMaterial.objects.select_for_update()
+            .select_related("material")
+            .get(pk=instancia_id)
+        )
+    except (InstanciaMaterial.DoesNotExist, ValueError, TypeError) as error:
+        raise InventarioError(
+            "instancia_id",
+            "No existe la instancia indicada.",
+            status_code=404,
+        ) from error
+
+    material = Material.objects.select_for_update().get(pk=instancia.material_id)
+    if instancia.estado != "reservado":
+        raise InventarioError(
+            "instancia_id",
+            "La instancia no figura como reservada.",
+            status_code=409,
+        )
+
+    instancia.estado = estado_final
+    instancia.save(update_fields=("estado", "updated_at"))
+    _sincronizar_estado_material_desde_instancias(material)
+    material.save(update_fields=("estado", "updated_at"))
+    if estado_final == "disponible" and disparar_autopromocion:
+        _programar_autopromocion(material.id)
+    return {
+        "id": instancia.id,
+        "codigo_ejemplar": instancia.codigo_ejemplar,
+        "estado": instancia.estado,
+    }
+
+
+@transaction.atomic
+def marcar_instancia_prestada(material_id, instancia_id=None, *, permitir_reservada=False):
     """Bloquea y marca prestada una instancia del material.
 
     Si se indica `instancia_id`, valida esa unidad exacta; si no, conserva la
     selección automática por código para los clientes existentes.
+    Solo la conversión válida de una reserva confirmada puede pasar `permitir_reservada=True`.
     """
+    try:
+        material = Material.objects.select_for_update().get(pk=material_id)
+    except (Material.DoesNotExist, ValueError, TypeError) as error:
+        raise InventarioError(
+            "material_id",
+            "No existe el material indicado.",
+            status_code=404,
+        ) from error
+
     consulta = InstanciaMaterial.objects.select_for_update()
     if instancia_id is None:
+        if permitir_reservada:
+            raise InventarioError(
+                "instancia_id",
+                "Debe especificarse la instancia reservada para convertirla en préstamo.",
+            )
         instancia = (
             consulta.filter(material_id=material_id, estado="disponible")
             .order_by("codigo_ejemplar")
@@ -733,7 +871,8 @@ def marcar_instancia_prestada(material_id, instancia_id=None):
                 "instancia_id",
                 "La instancia no pertenece al material indicado.",
             )
-        if instancia.estado != "disponible":
+        estados_permitidos = ("disponible", "reservado") if permitir_reservada else ("disponible",)
+        if instancia.estado not in estados_permitidos:
             raise InventarioError(
                 "instancia_id",
                 "La instancia no está disponible para préstamo.",
@@ -742,6 +881,9 @@ def marcar_instancia_prestada(material_id, instancia_id=None):
 
     instancia.estado = "prestado"
     instancia.save(update_fields=("estado", "updated_at"))
+    if permitir_reservada:
+        _sincronizar_estado_material_desde_instancias(material)
+        material.save(update_fields=("estado", "updated_at"))
     return {
         "id": instancia.id,
         "codigo_ejemplar": instancia.codigo_ejemplar,
@@ -797,6 +939,8 @@ def registrar_devolucion_instancia(
         instancia.observaciones = observaciones
         campos_actualizados.append("observaciones")
     instancia.save(update_fields=campos_actualizados)
+    if estado_final == "disponible":
+        _programar_autopromocion(material_id)
     return {"id": instancia.id, "estado": instancia.estado}
 
 
@@ -918,6 +1062,8 @@ def crear_instancias_material(material_id, filas):
         material.stock = max(material.stock, material.instancias.count())
         _sincronizar_estado_material_desde_instancias(material)
         material.save(update_fields=["stock", "estado", "updated_at"])
+        if any(inst.estado == "disponible" for inst in instancias_creadas):
+            _programar_autopromocion(material.id)
         return instancias_creadas
     except Exception as error:
         archivos_guardados = [
@@ -954,6 +1100,7 @@ def actualizar_instancia_material(instancia_id, **campos):
             raise InventarioError("codigo_ejemplar", "El código de ejemplar ya pertenece a otra unidad.")
         instancia.codigo_ejemplar = codigo
 
+    estado_anterior = instancia.estado
     if "estado" in campos:
         estado = campos["estado"]
         estados_validos = {clave for clave, _ in ESTADOS_INSTANCIA}
@@ -989,6 +1136,8 @@ def actualizar_instancia_material(instancia_id, **campos):
     if "estado" in campos:
         _sincronizar_estado_material_desde_instancias(instancia.material)
         instancia.material.save(update_fields=["estado", "updated_at"])
+        if estado_anterior != "disponible" and instancia.estado == "disponible":
+            _programar_autopromocion(instancia.material_id)
 
     foto_nueva = instancia.foto.name if instancia.foto else None
     if foto_anterior and foto_anterior != foto_nueva:

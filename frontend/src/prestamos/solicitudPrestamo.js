@@ -4,6 +4,7 @@ export function construirSolicitudPrestamo({
   dni,
   material,
   instanciaId,
+  reservaId = '',
   minutos,
   dias,
   checklist,
@@ -16,6 +17,9 @@ export function construirSolicitudPrestamo({
   solicitud.append('dni_prestatario', dni.trim())
   solicitud.append('material_id', material.id)
   solicitud.append('instancia_id', instanciaId)
+  if (reservaId) {
+    solicitud.append('reserva_id', String(reservaId).trim())
+  }
   if (minutos !== undefined && minutos !== null && minutos !== '') {
     solicitud.append('tiempo_prestamo_minutos', String(Number(minutos)))
   } else {

@@ -7,6 +7,13 @@ const VARIANTES_POR_ESTADO = {
   activo: 'exito',
   vencido: 'error',
   devuelto: 'neutro',
+  en_espera: 'aviso',
+  reservada: 'exito',
+  expirada: 'neutro',
+  rechazada: 'error',
+  cancelada: 'neutro',
+  cancelada_por_vencimiento: 'error',
+  convertida_en_prestamo: 'info',
   desconocido: 'neutro',
 }
 
@@ -19,6 +26,13 @@ const ETIQUETAS = {
   activo: 'Activo',
   vencido: 'Vencido',
   devuelto: 'Devuelto',
+  en_espera: 'En espera',
+  reservada: 'Reservada',
+  expirada: 'Expirada',
+  rechazada: 'Rechazada',
+  cancelada: 'Cancelada',
+  cancelada_por_vencimiento: 'Cancelada por vencimiento',
+  convertida_en_prestamo: 'Convertida en préstamo',
   desconocido: 'Estado desconocido',
 }
 

@@ -53,7 +53,13 @@ function ItemRegla({ etiqueta, valor, descripcion = '', tipo = 'neutral' }) {
   )
 }
 
-function FichaTecnicaModal({ material, onCerrar, onEliminarInstancia, onAgregarInstancias }) {
+function FichaTecnicaModal({
+  material,
+  onCerrar,
+  onEliminarInstancia,
+  onAgregarInstancias,
+  onReservar = null,
+}) {
   const [mostrarAltaInstancias, setMostrarAltaInstancias] = useState(false)
   const ficha = obtenerDatosFichaTecnica(material)
 
@@ -427,8 +433,16 @@ function FichaTecnicaModal({ material, onCerrar, onEliminarInstancia, onAgregarI
           </div>
         </div>
 
-        {/* Pie de modal con botón de cierre */}
-        <footer className="flex items-center justify-end border-t border-borde bg-superficie-alta/60 px-6 py-4">
+        {/* Pie de modal con botón de cierre y acción de reserva */}
+        <footer className="flex flex-wrap items-center justify-end gap-2.5 border-t border-borde bg-superficie-alta/60 px-6 py-4">
+          {onReservar && (
+            <Boton
+              tipo="button"
+              onClick={() => onReservar(material)}
+            >
+              Reservar material
+            </Boton>
+          )}
           <Boton variante="secundario" tipo="button" onClick={onCerrar}>
             Cerrar ficha técnica
           </Boton>

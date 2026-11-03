@@ -2,6 +2,7 @@ import { useContext } from 'react'
 import { Link, NavLink, Outlet } from 'react-router'
 import {
   ArrowUpRight,
+  CalendarClock,
   FileText,
   History,
   PackagePlus,
@@ -18,6 +19,7 @@ import {
 const ICONOS_OPCION = {
   'registrar-prestamo': PackagePlus,
   'registrar-devolucion': RotateCcw,
+  'cola-reservas': CalendarClock,
   'historial-prestamos': History,
   reportes: FileText,
 }

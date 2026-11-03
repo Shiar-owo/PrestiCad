@@ -72,6 +72,18 @@ describe('validarFormularioPrestamo', () => {
     expect(errores).toHaveProperty('compromiso_responsabilidad')
   })
 
+  it('no exige adjuntar PDFs de nuevo cuando la garantía de la reserva se reutiliza', () => {
+    const errores = validarFormularioPrestamo({
+      ...formularioValido,
+      material: { id: 'mat-2', es_alto_valor: true },
+      esExcepcion: true,
+      garantiaReutilizada: true,
+    })
+
+    expect(errores).not.toHaveProperty('documento_identidad')
+    expect(errores).not.toHaveProperty('compromiso_responsabilidad')
+  })
+
   it('rechaza extensión, tipo MIME y tamaño incorrectos en los PDF', () => {
     const errores = validarFormularioPrestamo({
       ...formularioValido,

@@ -9,6 +9,9 @@ import Login from '../pages/Login'
 import RegistroUsuario from '../pages/RegistroUsuario'
 import PanelInicio from '../pages/PanelInicio'
 import MisPrestamos from '../prestamos/MisPrestamos'
+import MisReservas from '../pages/MisReservas'
+import ReservarMaterial from '../pages/ReservarMaterial'
+import ColaReservas from '../pages/ColaReservas'
 import HistorialPrestamos from '../prestamos/HistorialPrestamos'
 import Materiales from '../pages/Materiales'
 import RegistrarPrestamo from '../pages/RegistrarPrestamo'
@@ -73,6 +76,22 @@ function Rutas() {
             </RequerirRol>
           }
         />
+        <Route
+          path="reservas"
+          element={
+            <RequerirRol roles={['prestatario']}>
+              <MisReservas />
+            </RequerirRol>
+          }
+        />
+        <Route
+          path="reservas/nueva"
+          element={
+            <RequerirRol roles={['prestatario']}>
+              <ReservarMaterial />
+            </RequerirRol>
+          }
+        />
         <Route path="perfil" element={<RutaPerfil />} />
         <Route
           path="inventario"
@@ -122,6 +141,7 @@ function Rutas() {
               </RequerirRol>
             }
           />
+          <Route path="cola-reservas" element={<ColaReservas />} />
           <Route path="historial" element={<HistorialPrestamos />} />
           <Route path="reportes" element={<ReportesDanos />} />
         </Route>

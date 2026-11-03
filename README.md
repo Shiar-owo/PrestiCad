@@ -24,7 +24,8 @@ Cada módulo es autocontenido:
 |--------|-----------------|-----------------|
 | `usuarios` | Identidad y Acceso | Registro, roles, autenticación, perfil |
 | `inventario` | Bienes y Conservación | Catálogo de materiales y su estado |
-| `prestamos` | Ciclo de Préstamo | Reservas, préstamos y garantías |
+| `prestamos` | Ciclo de Préstamo | Préstamos, devoluciones y garantías |
+| `reservas` | Reservas y Espera | Reservas confirmadas, lista de espera y excepciones |
 | `reputacion` | Reputación y Confianza | Puntaje, Tiers y sanciones |
 
 > Los módulos se incorporan como "Django apps" dentro de `backend/apps/` cuando su primera historia entra al sprint. Hoy solo existe `usuarios`.
@@ -107,6 +108,25 @@ docker compose exec backend python manage.py cargar_datos_demo --reiniciar
 ```
 
 El comando `crear_usuarios_prueba` solo crea las cuentas iniciales; no borra datos ya existentes. Para probar el modo de solo cuentas desde cero, usa una base de datos vacía.
+
+### Procesamiento de Reservas y Vencimientos (Cron)
+
+El módulo de reservas cuenta con un comando administrativo para procesar expiraciones y autopromociones atómicas:
+
+```bash
+docker compose exec backend python manage.py procesar_reservas
+```
+
+**Comportamiento operativo:**
+1. **Reservas confirmadas vencidas (24 h de vigencia):** Libera el ejemplar reservado a `disponible` y aplica la deducción configurable (`RESERVA_PENALIZACION_PUNTOS`, por defecto 20 puntos de reputación).
+2. **Solicitudes en espera expiradas (72 h de vigencia):** Pasa la solicitud a estado `expirada` sin consumir inventario ni penalizar al prestatario.
+3. **Autopromoción automática:** Al liberar ejemplares de reservas vencidas, promueve atómicamente a la solicitud en espera con mayor prioridad, antigüedad y Tier.
+
+**Ejecución periódica recomendada:**
+En entornos de producción o servidores locales, configurar una tarea cron periódica (por ejemplo, cada 5 minutos):
+```bash
+*/5 * * * * docker compose exec -T backend python manage.py procesar_reservas >> /var/log/presticad_reservas.log 2>&1
+```
 
 Tests:
 

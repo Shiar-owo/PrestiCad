@@ -14,6 +14,13 @@ export const OPCIONES_GESTION_PRESTAMOS = [
     roles: ['gestor'],
   },
   {
+    id: 'cola-reservas',
+    etiqueta: 'Cola de Reservas',
+    a: '/panel/cola-reservas',
+    descripcion: 'Gestión de lista de espera, excepciones académicas y reservas confirmadas.',
+    roles: ['gestor', 'administrador'],
+  },
+  {
     id: 'historial-prestamos',
     etiqueta: 'Historial de Préstamos',
     a: '/panel/historial',
@@ -39,6 +46,7 @@ export function esRutaGestionPrestamos(pathname = '') {
     '/panel/gestion-prestamos',
     '/panel/prestamo',
     '/panel/devolucion',
+    '/panel/cola-reservas',
     '/panel/historial',
     '/panel/reportes',
   ].some((prefijo) => pathname === prefijo || pathname.startsWith(`${prefijo}/`))

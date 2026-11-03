@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router'
 
 import { api, ErrorApi } from '../api/client'
 import {
@@ -35,6 +36,7 @@ import {
 
 const FORMULARIO_INICIAL = {
   dni: '',
+  reservaId: '',
   materialId: '',
   instanciaId: '',
   dias: '1',
@@ -76,9 +78,18 @@ const OPCIONES_MATERIAL = (materiales) => [
 
 function RegistrarPrestamo() {
   useTituloPagina('Registrar entrega')
+  const [searchParams] = useSearchParams()
+  const dniInicial = searchParams.get('dni') || ''
+  const reservaIdInicial = searchParams.get('reservaId') || ''
+
   const [materiales, setMateriales] = useState([])
   const [instancias, setInstancias] = useState([])
-  const [formulario, setFormulario] = useState(FORMULARIO_INICIAL)
+  const [reservasConfirmadas, setReservasConfirmadas] = useState([])
+  const [formulario, setFormulario] = useState(() => ({
+    ...FORMULARIO_INICIAL,
+    dni: dniInicial,
+    reservaId: reservaIdInicial,
+  }))
   const [cargando, setCargando] = useState(true)
   const [cargandoInstancias, setCargandoInstancias] = useState(false)
   const [guardando, setGuardando] = useState(false)
@@ -109,6 +120,7 @@ function RegistrarPrestamo() {
     setPerfilPrestatario(null)
     setDniPerfilVerificado('')
     setErrorPerfil('')
+    setReservasConfirmadas([])
     if (!/^\d{8}$/.test(dni)) {
       setConsultandoPerfil(false)
       return undefined
@@ -116,11 +128,30 @@ function RegistrarPrestamo() {
 
     let vigente = true
     setConsultandoPerfil(true)
-    api.get(`/usuarios/elegibilidad-prestamo/?dni=${dni}`)
-      .then((perfil) => {
-        if (vigente) {
-          setPerfilPrestatario(perfil)
-          setDniPerfilVerificado(dni)
+    Promise.all([
+      api.get(`/usuarios/elegibilidad-prestamo/?dni=${dni}`),
+      api.get(`/reservas/confirmadas/?dni=${dni}`).catch(() => []),
+    ])
+      .then(([perfil, confirmadas]) => {
+        if (!vigente) return
+        setPerfilPrestatario(perfil)
+        setDniPerfilVerificado(dni)
+        const listaConfirmadas = Array.isArray(confirmadas) ? confirmadas : []
+        setReservasConfirmadas(listaConfirmadas)
+
+        if (reservaIdInicial) {
+          const coincide = listaConfirmadas.find(
+            (r) => String(r.id) === String(reservaIdInicial),
+          )
+          if (coincide) {
+            setFormulario((actual) => ({
+              ...actual,
+              reservaId: String(coincide.id),
+              materialId: String(coincide.material?.id || ''),
+              instanciaId: String(coincide.instancia?.id || ''),
+              esExcepcion: Boolean(coincide.es_excepcion),
+            }))
+          }
         }
       })
       .catch((errorApi) => {
@@ -133,12 +164,28 @@ function RegistrarPrestamo() {
       })
 
     return () => { vigente = false }
-  }, [formulario.dni])
+  }, [formulario.dni, reservaIdInicial])
+
+  const reservaSeleccionada = useMemo(
+    () =>
+      reservasConfirmadas.find(
+        (r) => String(r.id) === String(formulario.reservaId),
+      ) || null,
+    [reservasConfirmadas, formulario.reservaId],
+  )
 
   useEffect(() => {
     let cancelado = false
     setInstancias([])
     setErrorInstancias('')
+
+    if (reservaSeleccionada) {
+      setInstancias(reservaSeleccionada.instancia ? [reservaSeleccionada.instancia] : [])
+      setCargandoInstancias(false)
+      return () => {
+        cancelado = true
+      }
+    }
 
     if (!formulario.materialId) {
       setCargandoInstancias(false)
@@ -162,7 +209,7 @@ function RegistrarPrestamo() {
     return () => {
       cancelado = true
     }
-  }, [formulario.materialId])
+  }, [formulario.materialId, reservaSeleccionada])
 
   async function cargarMateriales() {
     setCargando(true)
@@ -179,13 +226,12 @@ function RegistrarPrestamo() {
     }
   }
 
-  const materialSeleccionado = materiales.find(
-    (material) => String(material.id) === String(formulario.materialId),
-  )
-  const instanciaSeleccionada = obtenerInstanciaSeleccionada(
-    instancias,
-    formulario.instanciaId,
-  )
+  const materialSeleccionado =
+    reservaSeleccionada?.material ||
+    materiales.find((material) => String(material.id) === String(formulario.materialId))
+  const instanciaSeleccionada =
+    reservaSeleccionada?.instancia ||
+    obtenerInstanciaSeleccionada(instancias, formulario.instanciaId)
   const perfilVerificadoActual = dniPerfilVerificado === formulario.dni.trim()
     ? perfilPrestatario
     : null
@@ -202,7 +248,10 @@ function RegistrarPrestamo() {
     perfilHabilitado && materialSeleccionado && !tierCumple
     && perfilVerificadoActual?.reputacion_tier === 'restringido',
   )
-  const excepcionActiva = Boolean(puedeSolicitarExcepcion && formulario.esExcepcion)
+  const excepcionActiva = Boolean(
+    reservaSeleccionada?.es_excepcion || (puedeSolicitarExcepcion && formulario.esExcepcion),
+  )
+  const garantiaReutilizada = Boolean(reservaSeleccionada?.garantia?.garantia_completa)
   const requiereGarantia = Boolean(
     excepcionActiva || esMaterialAltoValor(materialSeleccionado),
   )
@@ -216,6 +265,38 @@ function RegistrarPrestamo() {
     ),
   )
 
+  function seleccionarReserva(nuevoReservaId) {
+    const reserva = reservasConfirmadas.find(
+      (r) => String(r.id) === String(nuevoReservaId),
+    )
+    if (reserva) {
+      setFormulario((actual) => ({
+        ...actual,
+        reservaId: String(reserva.id),
+        materialId: String(reserva.material?.id || ''),
+        instanciaId: String(reserva.instancia?.id || ''),
+        esExcepcion: Boolean(reserva.es_excepcion),
+      }))
+    } else {
+      setFormulario((actual) => ({
+        ...actual,
+        reservaId: '',
+        materialId: '',
+        instanciaId: '',
+        esExcepcion: false,
+      }))
+    }
+    setErrores((actual) => ({
+      ...actual,
+      material: undefined,
+      instancia_id: undefined,
+      documento_identidad: undefined,
+      compromiso_responsabilidad: undefined,
+    }))
+    setError('')
+    setPrestamoCreado(null)
+  }
+
   function actualizar(campo, valor) {
     const camposError = {
       dni: 'dni',
@@ -228,8 +309,14 @@ function RegistrarPrestamo() {
     setFormulario((actual) => ({
       ...actual,
       [campo]: valor,
+      ...(campo === 'dni'
+        ? {
+            reservaId: '',
+          }
+        : {}),
       ...(campo === 'materialId'
         ? {
+            reservaId: '',
             instanciaId: '',
             documentoIdentidad: null,
             compromisoResponsabilidad: null,
@@ -354,6 +441,7 @@ function RegistrarPrestamo() {
       documentoIdentidad: formulario.documentoIdentidad,
       compromisoResponsabilidad: formulario.compromisoResponsabilidad,
       esExcepcion: excepcionActiva,
+      garantiaReutilizada,
     }
     const validacion = validarFormularioPrestamo(datosValidacion)
     setErrores(validacion)
@@ -373,6 +461,7 @@ function RegistrarPrestamo() {
         dni: formulario.dni,
         material: materialSeleccionado,
         instanciaId: formulario.instanciaId,
+        reservaId: formulario.reservaId,
         minutos: minutosPrestamo,
         checklist: formulario.checklist,
         documentoIdentidad: formulario.documentoIdentidad,
@@ -468,14 +557,13 @@ function RegistrarPrestamo() {
         </div>
       )}
 
-      {!cargando && materiales.length === 0 && (
-        <EstadoVacio
-          titulo="No hay unidades disponibles"
-          mensaje="No hay materiales disponibles para prestar en este momento."
-        />
+      {!cargando && materiales.length === 0 && !reservaSeleccionada && (
+        <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+          No hay materiales con unidades libres para préstamo directo en este momento. Si el prestatario cuenta con una <strong>reserva confirmada</strong> vigente, ingresa su DNI para convertirla en préstamo.
+        </div>
       )}
 
-      {!cargando && materiales.length > 0 && (
+      {!cargando && (
         <Tarjeta className="p-6">
           <form ref={referenciaFormulario} onSubmit={registrar} noValidate className="grid gap-5">
             <SelectorPrestatario
@@ -483,15 +571,53 @@ function RegistrarPrestamo() {
               valor={formulario.dni}
               onCambio={(valor) => actualizar('dni', valor)}
               error={errores.dni}
-              ayuda="Al completar o seleccionar el DNI se consultará la reputación del prestatario."
+              ayuda="Al completar o seleccionar el DNI se consultará la reputación y las reservas confirmadas del prestatario."
               requerido
             />
+            {reservasConfirmadas.length > 0 && (
+              <div className="rounded-xl border border-marca-300 bg-marca-50/50 p-4 space-y-2 dark:border-marca-700 dark:bg-marca-950/30">
+                <label
+                  htmlFor="select-reserva-confirmada"
+                  className="block text-sm font-bold text-marca-900 dark:text-marca-200"
+                >
+                  Convertir reserva confirmada vigente ({reservasConfirmadas.length})
+                </label>
+                <select
+                  id="select-reserva-confirmada"
+                  value={formulario.reservaId}
+                  onChange={(e) => seleccionarReserva(e.target.value)}
+                  className="w-full rounded-lg border border-borde bg-white px-3 py-2 text-sm text-texto dark:bg-superficie"
+                >
+                  <option value="">Préstamo directo (sin usar reserva confirmada)</option>
+                  {reservasConfirmadas.map((res) => (
+                    <option key={res.id} value={res.id}>
+                      {res.material?.nombre} ({res.material?.codigo_material}) — Ejemplar{' '}
+                      {res.instancia?.codigo_ejemplar}
+                      {res.es_excepcion ? ' [Excepción académica]' : ''} · Recojo hasta:{' '}
+                      {fechaLegible(res.fecha_limite_recojo)}
+                    </option>
+                  ))}
+                </select>
+                {reservaSeleccionada && (
+                  <p className="text-xs text-texto-suave">
+                    Se ha precargado automáticamente el material y el ejemplar{' '}
+                    <strong>{reservaSeleccionada.instancia?.codigo_ejemplar}</strong> asignado a la reserva.
+                  </p>
+                )}
+              </div>
+            )}
             <Campo
               etiqueta="Material disponible"
-              opciones={OPCIONES_MATERIAL(materiales)}
+              opciones={
+                reservaSeleccionada?.material &&
+                !materiales.some((m) => String(m.id) === String(reservaSeleccionada.material.id))
+                  ? OPCIONES_MATERIAL([reservaSeleccionada.material, ...materiales])
+                  : OPCIONES_MATERIAL(materiales)
+              }
               valor={formulario.materialId}
               onCambio={(evento) => actualizar('materialId', evento.target.value)}
               error={errores.material}
+              deshabilitado={Boolean(reservaSeleccionada)}
               requerido
             />
             {consultandoPerfil && (
@@ -552,21 +678,23 @@ function RegistrarPrestamo() {
               </label>
             )}
             <Campo
-              etiqueta="Instancia disponible"
+              etiqueta={reservaSeleccionada ? 'Instancia reservada asignada' : 'Instancia disponible'}
               opciones={crearOpcionesInstancia(instancias, cargandoInstancias)}
               valor={formulario.instanciaId}
               onCambio={(evento) => actualizar('instanciaId', evento.target.value)}
               error={errores.instancia_id}
               ayuda={!materialSeleccionado
                 ? 'Selecciona primero el material.'
-                : cargandoInstancias
-                  ? 'Consultando sus instancias disponibles.'
-                  : errorInstancias
-                    ? 'No se pudo consultar el inventario de instancias.'
-                    : instancias.length > 0
-                      ? 'El código identifica el ejemplar físico que se entregará.'
-                      : 'No hay instancias disponibles para este material.'}
-              deshabilitado={!materialSeleccionado || cargandoInstancias || instancias.length === 0}
+                : reservaSeleccionada
+                  ? 'Ejemplar reservado exclusivamente para esta solicitud.'
+                  : cargandoInstancias
+                    ? 'Consultando sus instancias disponibles.'
+                    : errorInstancias
+                      ? 'No se pudo consultar el inventario de instancias.'
+                      : instancias.length > 0
+                        ? 'El código identifica el ejemplar físico que se entregará.'
+                        : 'No hay instancias disponibles para este material.'}
+              deshabilitado={Boolean(reservaSeleccionada) || !materialSeleccionado || cargandoInstancias || instancias.length === 0}
               requerido
             />
             {instanciaSeleccionada && (
@@ -754,19 +882,38 @@ function RegistrarPrestamo() {
                     ? 'Garantía obligatoria para préstamo excepcional'
                     : 'Garantía obligatoria para material de alto valor'}
                 </legend>
-                <p className="text-xs text-texto-suave">
-                  Adjunta ambos documentos en PDF. Se almacenarán de forma privada y solo gestión
-                  autorizada podrá descargarlos. Tamaño máximo: {TAMANO_MAXIMO_GARANTIA_MB} MB.
-                </p>
+                {garantiaReutilizada ? (
+                  <div className="rounded-lg border border-marca-300 bg-marca-50 p-3 text-xs text-marca-900 dark:border-marca-700 dark:bg-marca-950/40 dark:text-marca-200 space-y-1.5">
+                    <p className="font-bold">
+                      Garantía verificada en la reserva (se reutilizará automáticamente)
+                    </p>
+                    <p>
+                      No es necesario volver a adjuntar los PDFs: el préstamo quedará vinculado a los documentos registrados en la reserva. Puedes adjuntar nuevos archivos abajo solo si deseas reemplazarlos.
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-xs text-texto-suave">
+                    Adjunta ambos documentos en PDF. Se almacenarán de forma privada y solo gestión
+                    autorizada podrá descargarlos. Tamaño máximo: {TAMANO_MAXIMO_GARANTIA_MB} MB.
+                  </p>
+                )}
                 <SubidaDocumentoPDF
-                  etiqueta="Documento de identidad (PDF)"
+                  etiqueta={
+                    garantiaReutilizada
+                      ? 'Documento de identidad (PDF, opcional para reemplazar)'
+                      : 'Documento de identidad (PDF)'
+                  }
                   archivo={formulario.documentoIdentidad}
                   onCambio={(archivo) => actualizar('documentoIdentidad', archivo)}
                   error={errores.documento_identidad}
                   ayuda={`Solo se acepta application/pdf, hasta ${TAMANO_MAXIMO_GARANTIA_MB} MB.`}
                 />
                 <SubidaDocumentoPDF
-                  etiqueta="Carta de responsabilidad (PDF)"
+                  etiqueta={
+                    garantiaReutilizada
+                      ? 'Carta de responsabilidad (PDF, opcional para reemplazar)'
+                      : 'Carta de responsabilidad (PDF)'
+                  }
                   archivo={formulario.compromisoResponsabilidad}
                   onCambio={(archivo) => actualizar('compromisoResponsabilidad', archivo)}
                   error={errores.compromiso_responsabilidad}
@@ -781,10 +928,11 @@ function RegistrarPrestamo() {
                 cargando={guardando}
                 deshabilitado={bloqueadoPorElegibilidad || Boolean(
                   requiereGarantia
+                  && !garantiaReutilizada
                   && (!formulario.documentoIdentidad || !formulario.compromisoResponsabilidad)
                 )}
               >
-                Confirmar entrega
+                {reservaSeleccionada ? 'Convertir reserva y confirmar entrega' : 'Confirmar entrega'}
               </Boton>
               <Boton
                 variante="secundario"

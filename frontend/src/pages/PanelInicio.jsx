@@ -2,6 +2,7 @@ import { useContext } from 'react'
 import { Link } from 'react-router'
 import {
   ArrowUpRight,
+  CalendarClock,
   ClipboardList,
   Gauge,
   History,
@@ -23,6 +24,12 @@ const ACCESOS = {
       a: '/panel/prestamos',
       descripcion: 'Consulta el estado y las fechas de tus préstamos',
       icono: History,
+    },
+    {
+      etiqueta: 'Mis reservas',
+      a: '/panel/reservas',
+      descripcion: 'Gestiona tus reservas confirmadas y solicitudes en lista de espera',
+      icono: CalendarClock,
     },
     {
       etiqueta: 'Mi perfil',

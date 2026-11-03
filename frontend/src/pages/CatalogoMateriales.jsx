@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useContext, useEffect, useState } from 'react'
+import { useNavigate } from 'react-router'
 
 import { api } from '../api/client'
+import SesionContext from '../contextos/SesionContext'
 import useTituloPagina from '../hooks/useTituloPagina'
 import BarraBusqueda from '../components/BarraBusqueda'
 import ResultadosMateriales from '../components/ResultadosMateriales'
@@ -8,6 +10,8 @@ import FichaTecnicaModal from '../components/FichaTecnicaModal'
 
 function CatalogoMateriales({ onSeleccionarMaterial }) {
   useTituloPagina('Catálogo')
+  const { usuario } = useContext(SesionContext)
+  const navigate = useNavigate()
   const [materiales, setMateriales] = useState([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
@@ -68,6 +72,11 @@ function CatalogoMateriales({ onSeleccionarMaterial }) {
         <FichaTecnicaModal
           material={materialFicha}
           onCerrar={() => setMaterialFicha(null)}
+          onReservar={
+            usuario?.rol === 'prestatario'
+              ? (mat) => navigate(`/panel/reservas/nueva?materialId=${mat.id}`)
+              : null
+          }
         />
       )}
     </div>

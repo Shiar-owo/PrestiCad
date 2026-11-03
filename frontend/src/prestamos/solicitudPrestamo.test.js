@@ -81,4 +81,23 @@ describe('construirSolicitudPrestamo', () => {
     expect(solicitud.has('documento_identidad')).toBe(false)
     expect(solicitud.has('compromiso_responsabilidad')).toBe(false)
   })
+
+  it('incluye reserva_id cuando se convierte una reserva confirmada', () => {
+    const solicitud = construirSolicitudPrestamo({
+      dni: '12345678',
+      material: { id: 'material-1', es_alto_valor: false },
+      instanciaId: 'instancia-1',
+      reservaId: 'reserva-uuid-123',
+      minutos: 120,
+      checklist: [
+        {
+          elemento: 'Equipo',
+          observacion: '',
+          foto: new File(['foto'], 'equipo.png', { type: 'image/png' }),
+        },
+      ],
+    })
+
+    expect(solicitud.get('reserva_id')).toBe('reserva-uuid-123')
+  })
 })

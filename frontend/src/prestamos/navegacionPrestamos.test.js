@@ -6,21 +6,23 @@ import {
 } from './navegacionPrestamos'
 
 describe('obtenerOpcionesGestionPrestamos', () => {
-  it('incluye las cuatro opciones para el gestor de almacén', () => {
+  it('incluye las cinco opciones para el gestor de almacén', () => {
     const opciones = obtenerOpcionesGestionPrestamos('gestor')
 
     expect(opciones.map((opcion) => opcion.etiqueta)).toEqual([
       'Registrar Préstamo',
       'Registrar Devolución',
+      'Cola de Reservas',
       'Historial de Préstamos',
       'Reportes',
     ])
   })
 
-  it('conserva solo historial y reportes para el administrador', () => {
+  it('conserva cola de reservas, historial y reportes para el administrador', () => {
     const opciones = obtenerOpcionesGestionPrestamos('administrador')
 
     expect(opciones.map((opcion) => opcion.etiqueta)).toEqual([
+      'Cola de Reservas',
       'Historial de Préstamos',
       'Reportes',
     ])
@@ -38,6 +40,7 @@ describe('esRutaGestionPrestamos', () => {
     expect(esRutaGestionPrestamos('/panel/prestamo')).toBe(true)
     expect(esRutaGestionPrestamos('/panel/devolucion')).toBe(true)
     expect(esRutaGestionPrestamos('/panel/devolucion/42')).toBe(true)
+    expect(esRutaGestionPrestamos('/panel/cola-reservas')).toBe(true)
     expect(esRutaGestionPrestamos('/panel/historial')).toBe(true)
     expect(esRutaGestionPrestamos('/panel/reportes')).toBe(true)
   })

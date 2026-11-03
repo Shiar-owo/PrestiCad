@@ -144,12 +144,21 @@ class Prestamo(models.Model):
 
 
 class Garantia(models.Model):
-    """Documentos que respaldan un préstamo de material de alto valor."""
+    """Documentos que respaldan un préstamo de alto valor o una reserva/préstamo excepcional."""
 
     prestamo = models.OneToOneField(
         Prestamo,
         on_delete=models.PROTECT,
         related_name="garantia",
+        null=True,
+        blank=True,
+    )
+    reserva = models.OneToOneField(
+        "reservas.Reserva",
+        on_delete=models.PROTECT,
+        related_name="garantia",
+        null=True,
+        blank=True,
     )
     tipo = models.CharField(
         max_length=40,
@@ -181,9 +190,19 @@ class Garantia(models.Model):
     class Meta:
         verbose_name = "Garantía"
         verbose_name_plural = "Garantías"
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(prestamo__isnull=False) | models.Q(reserva__isnull=False),
+                name="garantia_prestamo_o_reserva_chk",
+            ),
+        ]
 
     def __str__(self):
-        return f"Garantía del préstamo {self.prestamo_id}"
+        if self.prestamo_id and self.reserva_id:
+            return f"Garantía del préstamo {self.prestamo_id} (reserva {self.reserva_id})"
+        if self.prestamo_id:
+            return f"Garantía del préstamo {self.prestamo_id}"
+        return f"Garantía de la reserva {self.reserva_id}"
 
 
 class FotoChecklist(models.Model):

@@ -48,6 +48,16 @@ class Reserva(models.Model):
         default="media",
     )
     justificacion = models.TextField()
+    fecha_inicio = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Fecha y hora de inicio de la reserva (dentro del horario de atención).",
+    )
+    fecha_fin = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Fecha y hora de fin de la reserva (dentro del horario de atención).",
+    )
     estado = models.CharField(
         max_length=30,
         choices=ESTADOS_RESERVA,

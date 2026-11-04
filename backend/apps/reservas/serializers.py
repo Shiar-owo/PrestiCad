@@ -3,7 +3,15 @@ from rest_framework import serializers
 from apps.inventario.models import InstanciaMaterial, Material
 from apps.prestamos.constants import TAMANO_MAXIMO_SOLICITUD_BYTES
 from apps.prestamos.validators import validar_pdf_garantia
-from apps.reservas.constants import MENSAJES_ERROR_RESERVA, VALORES_PRIORIDAD_RESERVA
+from apps.reservas.constants import (
+    DIAS_LABORABLES,
+    HORA_RESERVA_MAXIMO_FIN,
+    HORA_RESERVA_MINIMO_INICIO,
+    HORARIO_ATENCION_FIN,
+    HORARIO_ATENCION_INICIO,
+    MENSAJES_ERROR_RESERVA,
+    VALORES_PRIORIDAD_RESERVA,
+)
 from apps.reservas.models import Reserva
 from apps.reservas.services import calcular_posicion_en_cola
 
@@ -16,6 +24,24 @@ class CrearReservaSerializer(serializers.Serializer):
             "required": "Selecciona un material para reservar.",
             "null": "Selecciona un material para reservar.",
             "invalid": "El identificador del material no es válido.",
+        }
+    )
+    instancia_id = serializers.UUIDField(
+        required=False,
+        error_messages={
+            "invalid": "El identificador de la instancia no es válido.",
+        }
+    )
+    fecha_inicio = serializers.DateTimeField(
+        required=False,
+        error_messages={
+            "invalid": "La fecha y hora de inicio de la reserva no es válida.",
+        }
+    )
+    fecha_fin = serializers.DateTimeField(
+        required=False,
+        error_messages={
+            "invalid": "La fecha y hora de fin de la reserva no es válida.",
         }
     )
     prioridad = serializers.ChoiceField(
@@ -35,6 +61,35 @@ class CrearReservaSerializer(serializers.Serializer):
             "blank": MENSAJES_ERROR_RESERVA["justificacion_obligatoria"],
         },
     )
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        fecha_inicio = attrs.get("fecha_inicio")
+        fecha_fin = attrs.get("fecha_fin")
+        if fecha_inicio is not None or fecha_fin is not None:
+            if fecha_inicio is None or fecha_fin is None:
+                raise serializers.ValidationError({
+                    "fecha_inicio": "Debe indicar tanto la fecha de inicio como la de fin de la reserva.",
+                    "fecha_fin": "Debe indicar tanto la fecha de inicio como la de fin de la reserva.",
+                })
+            if fecha_fin <= fecha_inicio:
+                raise serializers.ValidationError({
+                    "fecha_fin": "La fecha y hora de fin debe ser posterior a la de inicio.",
+                })
+            for etiqueta, valor in (("fecha_inicio", fecha_inicio), ("fecha_fin", fecha_fin)):
+                if valor.weekday() not in DIAS_LABORABLES:
+                    raise serializers.ValidationError({
+                        etiqueta: "La reserva solo puede realizarse de lunes a viernes (días laborables).",
+                    })
+                minutos_dia = valor.hour * 60 + valor.minute
+                if not (HORA_RESERVA_MINIMO_INICIO * 60 <= minutos_dia <= HORA_RESERVA_MAXIMO_FIN * 60):
+                    raise serializers.ValidationError({
+                        etiqueta: (
+                            f"La reserva debe estar dentro del horario de atención "
+                            f"({HORA_RESERVA_MINIMO_INICIO}:00 a {HORA_RESERVA_MAXIMO_FIN}:00)."
+                        ),
+                    })
+        return attrs
 
 
 class CrearReservaExcepcionalSerializer(CrearReservaSerializer):
@@ -133,6 +188,8 @@ class MaterialResumenReservaSerializer(serializers.ModelSerializer):
 
 
 class InstanciaResumenReservaSerializer(serializers.ModelSerializer):
+    foto = serializers.SerializerMethodField(read_only=True)
+
     class Meta:
         model = InstanciaMaterial
         fields = [
@@ -143,7 +200,16 @@ class InstanciaResumenReservaSerializer(serializers.ModelSerializer):
             "color",
             "ubicacion",
             "observaciones",
+            "foto",
         ]
+
+    def get_foto(self, obj):
+        if obj.foto:
+            try:
+                return obj.foto.url
+            except ValueError:
+                return obj.foto.name
+        return None
 
 
 class ReservaDetalleSerializer(serializers.ModelSerializer):

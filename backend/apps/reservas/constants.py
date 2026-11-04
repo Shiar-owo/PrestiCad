@@ -34,6 +34,16 @@ ORDEN_TIER = {
 HORAS_ESPERA = 72
 HORAS_RECOJO = 24
 
+# Horario de atención del almacén: Lunes a Viernes, de 08:00 a 18:00.
+HORARIO_ATENCION_INICIO = 8   # 08:00
+HORARIO_ATENCION_FIN = 18     # 18:00
+# La reserva debe iniciar al menos 1 hora después de la apertura y terminar
+# al menos 1 hora antes del cierre.
+HORA_RESERVA_MINIMO_INICIO = 9   # 09:00
+HORA_RESERVA_MAXIMO_FIN = 17     # 17:00
+DIAS_LABORABLES = (0, 1, 2, 3, 4)  # Lunes a Viernes
+TOLERANCIA_RECOJO_MINUTOS = 30
+
 ESTADOS_ACTIVOS = ("en_espera", "reservada")
 
 MENSAJES_ERROR_RESERVA = {
@@ -57,5 +67,5 @@ MENSAJES_ERROR_RESERVA = {
         "para materiales de un Tier superior."
     ),
     "sin_instancia_disponible": "No hay ejemplares disponibles para confirmar la reserva en este momento.",
-    "motivo_vencimiento_recojo": "Cancelada automáticamente por no recoger el ejemplar dentro del plazo de 24 horas.",
+    "motivo_vencimiento_recojo": "Cancelada automáticamente por no recoger el ejemplar dentro del plazo (incluida tolerancia de 30 minutos).",
 }

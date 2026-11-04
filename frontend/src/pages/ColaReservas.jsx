@@ -153,16 +153,22 @@ export default function ColaReservas() {
     setProcesandoId(reserva.id)
 
     try {
-      await api.post(`/reservas/${reserva.id}/aprobar-excepcion/`, {})
-      setMensajeExito(
-        `Excepción académica aprobada para ${reserva.usuario?.nombre_completo || reserva.usuario?.dni}. Se asignó un ejemplar por 24 horas.`,
-      )
+      const respuesta = await api.post(`/reservas/${reserva.id}/aprobar-excepcion/`, {})
+      if (respuesta?.estado === 'reservada') {
+        setMensajeExito(
+          `Excepción académica aprobada para ${reserva.usuario?.nombre_completo || reserva.usuario?.dni}. Se asignó un ejemplar con recojo por 24 horas.`,
+        )
+      } else {
+        setMensajeExito(
+          `Excepción académica aprobada para ${reserva.usuario?.nombre_completo || reserva.usuario?.dni}. Ha ingresado a la lista de espera con turno por orden de llegada.`,
+        )
+      }
       setRecarga((v) => v + 1)
     } catch (err) {
       setErrorAccion(
         extraerMensajeError(
           err,
-          'No se pudo aprobar la excepción académica. Verifica que existan ejemplares libres.',
+          'No se pudo aprobar la excepción académica.',
         ),
       )
     } finally {
@@ -527,17 +533,16 @@ export default function ColaReservas() {
                               cargando={procesandoId === reserva.id}
                               deshabilitado={
                                 Boolean(procesandoId) ||
-                                instanciasDisponibles.length === 0 ||
                                 !reserva.garantia?.garantia_completa
                               }
                               title={
-                                instanciasDisponibles.length === 0
-                                  ? 'Se requiere al menos un ejemplar disponible para aprobar la excepción.'
+                                !reserva.garantia?.garantia_completa
+                                  ? 'La solicitud requiere que ambos documentos de garantía estén completos para poder ser aprobada.'
                                   : undefined
                               }
                               onClick={() => manejarAprobarExcepcion(reserva)}
                             >
-                              Aprobar excepción (24 h)
+                              Aprobar excepción
                             </Boton>
                             <Boton
                               variante="peligro"
@@ -573,11 +578,11 @@ export default function ColaReservas() {
               className="flex items-center gap-2 text-base font-bold text-texto"
             >
               <Clock aria-hidden="true" className="size-5 text-acento-600" />
-              Cola de espera normal ordenada ({enEsperaNormales.length})
+              Cola de espera ordenada ({enEsperaNormales.length})
             </h3>
             {enEsperaNormales.length === 0 ? (
               <p className="rounded-xl border border-borde bg-superficie p-4 text-sm text-texto-suave">
-                No hay solicitudes normales en lista de espera para este material.
+                No hay solicitudes en lista de espera para este material.
               </p>
             ) : (
               <ul className="grid gap-3">
@@ -590,15 +595,22 @@ export default function ColaReservas() {
                             #{reserva.posicion_cola || indice + 1}
                           </span>
                           <div>
-                            <p className="font-bold text-texto">
-                              {reserva.usuario?.nombre_completo}{' '}
-                              <span className="font-normal text-xs text-texto-suave">
-                                · DNI {reserva.usuario?.dni} · Tier{' '}
-                                {ETIQUETAS_TIER[reserva.usuario?.reputacion_tier] ||
-                                  reserva.usuario?.reputacion_tier}{' '}
-                                ({reserva.usuario?.reputacion_puntaje} pts)
-                              </span>
-                            </p>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="font-bold text-texto">
+                                {reserva.usuario?.nombre_completo}{' '}
+                                <span className="font-normal text-xs text-texto-suave">
+                                  · DNI {reserva.usuario?.dni} · Tier{' '}
+                                  {ETIQUETAS_TIER[reserva.usuario?.reputacion_tier] ||
+                                    reserva.usuario?.reputacion_tier}{' '}
+                                  ({reserva.usuario?.reputacion_puntaje} pts)
+                                </span>
+                              </p>
+                              {reserva.es_excepcion && (
+                                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900 dark:bg-amber-950/60 dark:text-amber-200">
+                                  Excepción aprobada
+                                </span>
+                              )}
+                            </div>
                             <p className="text-xs text-texto-suave">
                               Creada: {formatearFechaReserva(reserva.fecha_solicitud || reserva.fecha_creacion || reserva.created_at)} · Expira:{' '}
                               {formatearFechaReserva(reserva.fecha_limite_espera)}

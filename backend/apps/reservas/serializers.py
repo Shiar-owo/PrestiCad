@@ -158,6 +158,7 @@ class ReservaDetalleSerializer(serializers.ModelSerializer):
             "justificacion",
             "estado",
             "es_excepcion",
+            "excepcion_aprobada",
             "motivo_rechazo",
             "motivo_cancelacion",
             "fecha_solicitud",

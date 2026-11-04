@@ -51,6 +51,10 @@ class Reserva(models.Model):
         default=False,
         help_text="Reserva solicitada por excepción académica para un prestatario en Tier Restringido.",
     )
+    excepcion_aprobada = models.BooleanField(
+        default=False,
+        help_text="Indica si la excepción académica fue aprobada por el gestor para ingresar a la cola.",
+    )
     motivo_rechazo = models.TextField(blank=True, default="")
     motivo_cancelacion = models.TextField(blank=True, default="")
     fecha_solicitud = models.DateTimeField(default=timezone.now)

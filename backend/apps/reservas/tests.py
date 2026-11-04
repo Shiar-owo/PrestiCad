@@ -520,6 +520,53 @@ class ReservasServiceTestCase(TestCase):
                 material.deduccion_dano_parcial * 2,
             )
 
+    def test_aprobar_excepcion_sin_instancias_disponibles_entra_a_cola_y_se_autopromueve(self):
+        material = crear_material(
+            codigo_material="EQ-EXC-SIN-INSTANCIA",
+            stock=1,
+            estado_inicial_ejemplares="en_mantenimiento",
+            estado="en_mantenimiento",
+            tier_minimo_requerido="estandar",
+        )
+        with storage_garantias_temporal():
+            reserva_exc = crear_reserva_excepcional(
+                usuario=self.prestatario_restringido,
+                material_id=material.id,
+                justificacion="Tesis sin copias libres",
+                documento_identidad=crear_pdf("dni.pdf"),
+                compromiso_responsabilidad=crear_pdf("compromiso.pdf"),
+            )
+            self.assertEqual(reserva_exc.estado, "en_espera")
+            self.assertFalse(reserva_exc.excepcion_aprobada)
+
+            # El gestor aprueba la excepción aunque NO haya ejemplares disponibles
+            aprobada = aprobar_excepcion(
+                reserva_id=reserva_exc.id,
+                realizado_por=self.gestor,
+            )
+            self.assertEqual(aprobada.estado, "en_espera")
+            self.assertTrue(aprobada.excepcion_aprobada)
+            self.assertIsNone(aprobada.instancia_id)
+
+            # Aparece en la cola activa con posición 1
+            cola = consultar_cola_material(material.id)
+            self.assertEqual(len(cola["en_espera_normales"]), 1)
+            self.assertEqual(cola["en_espera_normales"][0].id, aprobada.id)
+            self.assertEqual(cola["en_espera_normales"][0].posicion_cola, 1)
+            self.assertEqual(len(cola["en_espera_excepciones"]), 0)
+
+            # Cuando se libera un ejemplar (pasa de mantenimiento a disponible), se autopromueve
+            instancia = material.instancias.first()
+            instancia.estado = "disponible"
+            instancia.save(update_fields=["estado", "updated_at"])
+
+            promovidas = autopromover_material(material.id)
+            self.assertEqual(len(promovidas), 1)
+            self.assertEqual(promovidas[0].id, aprobada.id)
+            aprobada.refresh_from_db()
+            self.assertEqual(aprobada.estado, "reservada")
+            self.assertIsNotNone(aprobada.instancia_id)
+
 
 class ReservasAPITestCase(APITestCase):
     def setUp(self):

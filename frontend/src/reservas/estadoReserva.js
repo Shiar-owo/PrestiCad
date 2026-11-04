@@ -51,7 +51,9 @@ export function textoEstadoReserva(reserva, estado = reserva?.estado) {
     return 'Reservada - Excepción'
   }
   if (reserva?.es_excepcion && estado === 'en_espera') {
-    return 'En espera - Excepción'
+    return reserva.excepcion_aprobada
+      ? 'En espera (Excepción aprobada)'
+      : 'En espera - Excepción'
   }
   return presentarEstadoReserva(estado).texto
 }

@@ -71,7 +71,6 @@ const DEFAULTS_REPUTACION_POR_TIER = {
 
 const OPCIONES_ESTADO_INICIAL_EJEMPLAR = [
   { valor: 'disponible', etiqueta: 'Disponible' },
-  { valor: 'en_mantenimiento', etiqueta: 'En mantenimiento' },
 ]
 
 const ETIQUETAS_CAMPOS_ERROR = {
@@ -1217,11 +1216,8 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Campo
-              etiqueta={esEdicion ? 'Tier mínimo requerido (opcional)' : 'Tier mínimo (opcional)'}
-              opciones={[
-                { valor: '', etiqueta: 'Sin especificar' },
-                ...OPCIONES_TIER,
-              ]}
+              etiqueta={esEdicion ? 'Tier mínimo requerido' : 'Tier mínimo'}
+              opciones={OPCIONES_TIER}
               valor={datos.tier_minimo_requerido}
               onCambio={(evento) => actualizar('tier_minimo_requerido', evento.target.value)}
               deshabilitado={Number(datos.precio) > UMBRAL_PRECIO_ALTO_VALOR}

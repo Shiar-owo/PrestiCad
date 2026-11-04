@@ -220,7 +220,7 @@ def crear_reserva(
 
     tiers_permitidos = TIERS_ACCESIBLES.get(usuario_bloqueado.reputacion_tier, ())
     if material.tier_minimo_requerido not in tiers_permitidos:
-        if usuario_bloqueado.reputacion_tier == "restringido":
+        if usuario_bloqueado.reputacion_tier in ("restringido", "estandar"):
             raise ReservaError(
                 "material_id",
                 MENSAJES_ERROR_RESERVA["tier_insuficiente_excepcion_disponible"],

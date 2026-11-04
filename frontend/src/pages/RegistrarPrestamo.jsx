@@ -178,6 +178,15 @@ function RegistrarPrestamo() {
               esExcepcion: Boolean(coincide.es_excepcion),
             }))
           }
+        } else if (listaConfirmadas.length > 0) {
+          const primera = listaConfirmadas[0]
+          setFormulario((actual) => ({
+            ...actual,
+            reservaId: String(primera.id),
+            materialId: String(primera.material?.id || ''),
+            instanciaId: String(primera.instancia?.id || ''),
+            esExcepcion: Boolean(primera.es_excepcion),
+          }))
         }
       })
       .catch((errorApi) => {
@@ -604,12 +613,20 @@ function RegistrarPrestamo() {
             />
             {reservasConfirmadas.length > 0 && (
               <div className="rounded-xl border border-marca-300 bg-marca-50/50 p-4 space-y-2 dark:border-marca-700 dark:bg-marca-950/30">
-                <label
-                  htmlFor="select-reserva-confirmada"
-                  className="block text-sm font-bold text-marca-900 dark:text-marca-200"
-                >
-                  {esConversionFija ? 'Reserva confirmada a convertir' : `Convertir reserva confirmada vigente (${reservasConfirmadas.length})`}
-                </label>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+                      <label
+                        htmlFor="select-reserva-confirmada"
+                        className="block text-sm font-bold text-marca-900 dark:text-marca-200"
+                      >
+                        {esConversionFija ? 'Reserva confirmada a convertir' : `Convertir reserva confirmada vigente (${reservasConfirmadas.length})`}
+                      </label>
+                      {reservaIdInicial && (
+                        <span className="rounded-full bg-marca-100 px-2.5 py-0.5 text-xs font-semibold text-marca-800 dark:bg-marca-950/80 dark:text-marca-300">
+                          Modo conversión de reserva
+                        </span>
+                      )}
+                    </div>
+
                 <select
                   id="select-reserva-confirmada"
                   value={formulario.reservaId}

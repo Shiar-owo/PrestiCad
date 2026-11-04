@@ -49,6 +49,7 @@ class SesionActualView(APIView):
             "rol": usuario.rol.nombre,
             "estado": usuario.estado,
             "reputacion_tier": usuario.reputacion_tier,
+            "reputacion_puntaje": usuario.reputacion_puntaje,
         }).data)
 
 
@@ -82,6 +83,7 @@ class AuthLoginView(APIView):
                 "rol": usuario.rol.nombre,
                 "estado": usuario.estado,
                 "reputacion_tier": usuario.reputacion_tier,
+                "reputacion_puntaje": usuario.reputacion_puntaje,
             }).data,
         }, status=status.HTTP_200_OK)
 

@@ -180,7 +180,7 @@ class ColaMaterialView(APIView):
 class ReservasConfirmadasView(APIView):
     """Lista las reservas confirmadas vigentes para convertirlas en préstamo: GET /api/reservas/confirmadas/?dni=..."""
 
-    permission_classes = [EsGestorDeAlmacen]
+    permission_classes = [EsGestorOAdministrador]
 
     def get(self, request):
         dni = request.query_params.get("dni", "")

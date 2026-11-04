@@ -10,21 +10,6 @@ ESTADOS_RESERVA = [
     ("convertida_en_prestamo", "Convertida en préstamo"),
 ]
 
-PRIORIDADES_RESERVA = [
-    ("alta", "Alta"),
-    ("media", "Media"),
-    ("baja", "Baja"),
-]
-
-VALORES_PRIORIDAD_RESERVA = ("alta", "media", "baja")
-
-# Orden numérico ascendente (0 es mayor jerarquía) para autopromoción y cola (RN11)
-ORDEN_PRIORIDAD = {
-    "alta": 0,
-    "media": 1,
-    "baja": 2,
-}
-
 ORDEN_TIER = {
     "avanzado": 0,
     "estandar": 1,
@@ -57,7 +42,6 @@ MENSAJES_ERROR_RESERVA = {
         "Puedes solicitar una reserva excepcional por necesidad académica adjuntando los documentos de garantía."
     ),
     "maximo_reservas_activas": "Has alcanzado el límite máximo de solicitudes de reserva activas.",
-    "prioridad_invalida": "La prioridad debe ser alta, media o baja.",
     "justificacion_obligatoria": "La justificación de la reserva es obligatoria.",
     "motivo_obligatorio": "El motivo es obligatorio para completar esta acción.",
     "estado_invalido_cancelar": "Solo se pueden cancelar reservas en estado reservada.",

@@ -110,7 +110,7 @@ class RegistrarPrestamoSerializer(
         min_value=60,
         max_value=MAXIMO_MINUTOS_PRESTAMO,
         error_messages={
-            "min_value": "El tiempo mínimo de préstamo es de 15 minutos.",
+            "min_value": "El tiempo mínimo de préstamo es de 1 h (60 min).",
             "max_value": "La duración máxima del préstamo es de 15 días (21600 minutos).",
             "invalid": "Ingresa un tiempo de préstamo numérico válido.",
         },
@@ -186,24 +186,19 @@ class RegistrarPrestamoSerializer(
             data = datos
         return super().to_internal_value(data)
 
-    
+
     def validate(self, attrs):
-        attrs = super().validate(attrs)
-        material_id = attrs.get('material_id')
-        minutos = attrs.get('tiempo_prestamo_minutos')
-        if material_id and minutos:
-            from apps.inventario.models import Material
-            try:
-                material = Material.objects.get(pk=material_id)
-            except Material.DoesNotExist:
-                raise serializers.ValidationError({
-                    'material_id': 'Material no encontrado.'
-                })
-            if material.tier_minimo_requerido == 'avanzado' and minutos > 480:
-                raise serializers.ValidationError({
-                    'tiempo_prestamo_minutos': 'El tiempo máximo de préstamo para materiales de tier avanzado es 8 h (480 min).'
-                })
-        return attrs
+        datos_iniciales = self.initial_data
+        archivos_permitidos = {
+            f"foto_checklist_{indice}"
+            for indice in range(len(attrs["checklist_inicial"]))
+        }
+        if hasattr(datos_iniciales, "keys"):
+            self.initial_data = {
+                campo: datos_iniciales.get(campo)
+                for campo in datos_iniciales.keys()
+                if campo not in archivos_permitidos
+            }
         try:
             super().validate(attrs)
         finally:
@@ -216,6 +211,23 @@ class RegistrarPrestamoSerializer(
             raise serializers.ValidationError({
                 "tiempo_prestamo_minutos": "Indica la duración del préstamo.",
             })
+
+        # Validar límite de 8 h para materiales de tier avanzado
+        minutos = attrs.get("tiempo_prestamo_minutos")
+        material_id = attrs.get("material_id")
+        if minutos and material_id:
+            from apps.inventario.models import Material as MaterialModel
+            try:
+                material = MaterialModel.objects.get(pk=material_id)
+                if material.tier_minimo_requerido == "avanzado" and minutos > 480:
+                    raise serializers.ValidationError({
+                        "tiempo_prestamo_minutos": (
+                            "El tiempo máximo de préstamo para materiales de tier avanzado es 8 h (480 min)."
+                        ),
+                    })
+            except MaterialModel.DoesNotExist:
+                pass  # La vista ya valida existencia
+
         if len(attrs.get("fotos_checklist", [])) != len(attrs["checklist_inicial"]):
             raise serializers.ValidationError({
                 "fotos_checklist": "Adjunta una foto por cada elemento del checklist inicial.",

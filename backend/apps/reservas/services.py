@@ -28,7 +28,6 @@ from apps.reservas.constants import (
     HORAS_RECOJO,
     MENSAJES_ERROR_RESERVA,
     TOLERANCIA_RECOJO_MINUTOS,
-    VALORES_PRIORIDAD_RESERVA,
 )
 from apps.reservas.models import Reserva
 from apps.usuarios.models import Usuario
@@ -337,7 +336,6 @@ def crear_reserva(
             usuario=usuario_bloqueado,
             material=material,
             instancia=instancia_elegida,
-            prioridad=prioridad_limpia,
             justificacion=justificacion_limpia,
             estado="reservada",
             es_excepcion=False,

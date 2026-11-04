@@ -181,7 +181,6 @@ export default function ReservarMaterial() {
       horaFin: esAvanzado ? horaFin : undefined,
       fechaInicio: esAvanzado ? undefined : fechaInicio,
       fechaFin: esAvanzado ? undefined : fechaFin,
-      prioridad,
       justificacion,
       esExcepcion: aplicaExcepcion,
       esAvanzado,
@@ -219,7 +218,6 @@ export default function ReservarMaterial() {
           instancia_id: instanciaId || undefined,
           fecha_inicio: fechaI,
           fecha_fin: fechaF,
-          prioridad,
           justificacion: justificacion.trim(),
         })
       }
@@ -665,32 +663,6 @@ export default function ReservarMaterial() {
               </p>
             </div>
           )}
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <label
-                htmlFor="select-prioridad-reserva"
-                className="block text-sm font-semibold text-texto"
-              >
-                Nivel de prioridad *
-              </label>
-              <select
-                id="select-prioridad-reserva"
-                value={prioridad}
-                onChange={(e) => setPrioridad(e.target.value)}
-                className="mt-1.5 w-full rounded-lg border border-borde bg-white px-3 py-2 text-sm text-texto dark:bg-superficie"
-              >
-                {OPCIONES_PRIORIDAD.map((op) => (
-                  <option key={op.valor} value={op.valor}>
-                    {op.etiqueta}
-                  </option>
-                ))}
-              </select>
-              {errores.prioridad && (
-                <p className="mt-1 text-xs font-medium text-error">{errores.prioridad}</p>
-              )}
-            </div>
-          </div>
 
           <div>
             <label

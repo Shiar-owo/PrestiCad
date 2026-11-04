@@ -135,7 +135,6 @@ export function validarFormularioReserva({
   horaFin,
   fechaInicio,
   fechaFin,
-  prioridad,
   justificacion,
   esExcepcion = false,
   esAvanzado = false,
@@ -158,10 +157,6 @@ export function validarFormularioReserva({
   )
   if (Object.keys(erroresHorario).length > 0) {
     Object.assign(errores, erroresHorario)
-  }
-
-  if (!['alta', 'media', 'baja'].includes(prioridad)) {
-    errores.prioridad = 'Selecciona una prioridad válida (alta, media o baja).'
   }
 
   if (!String(justificacion || '').trim()) {

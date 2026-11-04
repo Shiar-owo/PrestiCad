@@ -13,7 +13,6 @@ from apps.reservas.constants import (
     HORARIO_ATENCION_FIN,
     HORARIO_ATENCION_INICIO,
     MENSAJES_ERROR_RESERVA,
-    VALORES_PRIORIDAD_RESERVA,
 )
 from apps.reservas.models import Reserva
 from apps.reservas.services import calcular_posicion_en_cola
@@ -46,14 +45,6 @@ class CrearReservaSerializer(serializers.Serializer):
         error_messages={
             "invalid": "La fecha y hora de fin de la reserva no es válida.",
         }
-    )
-    prioridad = serializers.ChoiceField(
-        choices=VALORES_PRIORIDAD_RESERVA,
-        error_messages={
-            "required": MENSAJES_ERROR_RESERVA["prioridad_invalida"],
-            "null": MENSAJES_ERROR_RESERVA["prioridad_invalida"],
-            "invalid_choice": MENSAJES_ERROR_RESERVA["prioridad_invalida"],
-        },
     )
     justificacion = serializers.CharField(
         allow_blank=False,

@@ -4,7 +4,8 @@ from rest_framework import serializers
 
 from apps.inventario.models import Material
 from apps.inventario.serializers import FotoMaterial, InstanciaMaterialSerializer
-from apps.prestamos.models import Garantia, Prestamo
+from apps.prestamos.models import Devolucion, Garantia, Prestamo
+from apps.prestamos.serializers import url_reporte_publica
 
 
 def serializar_checklist_inicial(prestamo):
@@ -27,6 +28,42 @@ def serializar_checklist_inicial(prestamo):
                     kwargs={
                         "prestamo_id": prestamo.pk,
                         "fase": "inicial",
+                        "indice": indice,
+                    },
+                )
+                if foto and foto.imagen
+                else ""
+            ),
+        })
+    return checklist
+
+
+def serializar_checklist_devolucion(prestamo):
+    """Devuelve el checklist final de la devolución con URL privada de la foto."""
+    try:
+        devolucion = prestamo.devolucion
+    except Devolucion.DoesNotExist:
+        return []
+
+    fotos = {
+        foto.indice: foto
+        for foto in prestamo.fotos_checklist.filter(fase="final")
+    }
+    checklist = []
+    for indice, item in enumerate(devolucion.checklist_devolucion or []):
+        if not isinstance(item, dict):
+            continue
+        foto = fotos.get(indice)
+        checklist.append({
+            "elemento": str(item.get("elemento", "")),
+            "estado": str(item.get("estado", "")),
+            "observacion": str(item.get("observacion", "")),
+            "foto_url": (
+                reverse(
+                    "foto-checklist",
+                    kwargs={
+                        "prestamo_id": prestamo.pk,
+                        "fase": "final",
                         "indice": indice,
                     },
                 )
@@ -177,6 +214,9 @@ class PrestamoHistorialDetalleSerializer(serializers.ModelSerializer):
     )
     estado = serializers.CharField(source="estado_consulta", read_only=True)
     checklist_inicial = serializers.SerializerMethodField()
+    checklist_final = serializers.SerializerMethodField()
+    hay_dano = serializers.SerializerMethodField()
+    reporte_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Prestamo
@@ -193,6 +233,9 @@ class PrestamoHistorialDetalleSerializer(serializers.ModelSerializer):
             "estado",
             "es_excepcion",
             "checklist_inicial",
+            "checklist_final",
+            "hay_dano",
+            "reporte_url",
             "documentos_garantia",
         )
         read_only_fields = fields
@@ -202,6 +245,24 @@ class PrestamoHistorialDetalleSerializer(serializers.ModelSerializer):
 
     def get_checklist_inicial(self, obj):
         return serializar_checklist_inicial(obj)
+
+    def get_checklist_final(self, obj):
+        return serializar_checklist_devolucion(obj)
+
+    def get_hay_dano(self, obj):
+        try:
+            devolucion = obj.devolucion
+            resultado = devolucion.resultado or {}
+            return bool(resultado.get("hay_dano", False))
+        except Devolucion.DoesNotExist:
+            return None
+
+    def get_reporte_url(self, obj):
+        try:
+            devolucion = obj.devolucion
+            return url_reporte_publica(devolucion) or None
+        except Devolucion.DoesNotExist:
+            return None
 
 
 class PrestamoDevolucionDetalleSerializer(serializers.ModelSerializer):

@@ -478,7 +478,7 @@ export default function ColaReservas() {
                             <strong className="text-texto">
                               {ETIQUETAS_PRIORIDAD[reserva.prioridad] || reserva.prioridad}
                             </strong>{' '}
-                            · Solicitada: {formatearFechaReserva(reserva.fecha_creacion)} · Expira
+                            · Solicitada: {formatearFechaReserva(reserva.fecha_solicitud || reserva.fecha_creacion || reserva.created_at)} · Expira
                             en espera: {formatearFechaReserva(reserva.fecha_limite_espera)}
                           </p>
                         </div>
@@ -496,7 +496,7 @@ export default function ColaReservas() {
                       <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
                         <div className="flex flex-wrap items-center gap-3 text-xs">
                           <span className="font-semibold text-texto">Garantía adjunta:</span>
-                          {reserva.garantia?.documento_identidad_disponible ? (
+                          {(reserva.garantia?.documento_identidad_disponible ?? reserva.garantia?.tiene_documento_identidad) ? (
                             <a
                               href={`/api/reservas/${reserva.id}/garantia/documento-identidad/`}
                               target="_blank"
@@ -509,7 +509,7 @@ export default function ColaReservas() {
                           ) : (
                             <span className="text-error">Sin DNI</span>
                           )}
-                          {reserva.garantia?.compromiso_responsabilidad_disponible ? (
+                          {(reserva.garantia?.compromiso_responsabilidad_disponible ?? reserva.garantia?.tiene_compromiso_responsabilidad) ? (
                             <a
                               href={`/api/reservas/${reserva.id}/garantia/compromiso/`}
                               target="_blank"
@@ -609,7 +609,7 @@ export default function ColaReservas() {
                               <strong className="text-texto">
                                 {ETIQUETAS_PRIORIDAD[reserva.prioridad] || reserva.prioridad}
                               </strong>{' '}
-                              · Creada: {formatearFechaReserva(reserva.fecha_creacion)} · Expira:{' '}
+                              · Creada: {formatearFechaReserva(reserva.fecha_solicitud || reserva.fecha_creacion || reserva.created_at)} · Expira:{' '}
                               {formatearFechaReserva(reserva.fecha_limite_espera)}
                             </p>
                           </div>

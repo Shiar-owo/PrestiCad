@@ -104,8 +104,8 @@ export function ordenarColaReservas(reservas = []) {
     const prioB = ORDEN_PRIORIDAD[b.prioridad] || 0
     if (prioA !== prioB) return prioB - prioA
 
-    const fechaA = new Date(a.fecha_creacion).getTime()
-    const fechaB = new Date(b.fecha_creacion).getTime()
+    const fechaA = new Date(a.fecha_solicitud || a.fecha_creacion || a.created_at).getTime()
+    const fechaB = new Date(b.fecha_solicitud || b.fecha_creacion || b.created_at).getTime()
     if (!Number.isNaN(fechaA) && !Number.isNaN(fechaB) && fechaA !== fechaB) {
       return fechaA - fechaB
     }

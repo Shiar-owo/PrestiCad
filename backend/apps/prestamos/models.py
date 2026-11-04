@@ -95,6 +95,16 @@ class Prestamo(models.Model):
         help_text="Préstamo autorizado pese a que el Tier del usuario no permite el material.",
     )
     checklist_inicial = models.JSONField(default=list)
+    material_snapshot = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Copia inmutable de los datos del Material al momento del préstamo.",
+    )
+    instancia_snapshot = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Copia inmutable de los datos de la InstanciaMaterial al momento del préstamo.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

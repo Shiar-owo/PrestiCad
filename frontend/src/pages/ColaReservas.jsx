@@ -607,20 +607,6 @@ export default function ColaReservas() {
                             #{reserva.posicion_cola || indice + 1}
                           </span>
                           <div>
-                            <p className="font-bold text-texto">
-                              {reserva.usuario?.nombre_completo}{' '}
-                              <span className="font-normal text-xs text-texto-suave">
-                                · DNI {reserva.usuario?.dni} · Tier{' '}
-                                {ETIQUETAS_TIER[reserva.usuario?.reputacion_tier] ||
-                                  reserva.usuario?.reputacion_tier}{' '}
-                                ({reserva.usuario?.reputacion_puntaje} pts)
-                              </span>
-                            </p>
-                            {reserva.material && (
-                              <p className="mt-0.5 text-xs font-semibold text-acento-700 dark:text-acento-300">
-                                Material: {reserva.material.nombre} ({reserva.material.codigo_material})
-                              </p>
-                            )}
                             <div className="flex flex-wrap items-center gap-2">
                               <p className="font-bold text-texto">
                                 {reserva.usuario?.nombre_completo}{' '}
@@ -637,6 +623,11 @@ export default function ColaReservas() {
                                 </span>
                               )}
                             </div>
+                            {reserva.material && (
+                              <p className="mt-0.5 text-xs font-semibold text-acento-700 dark:text-acento-300">
+                                Material: {reserva.material.nombre} ({reserva.material.codigo_material})
+                              </p>
+                            )}
                             <p className="text-xs text-texto-suave">
                               Creada: {formatearFechaReserva(reserva.fecha_solicitud || reserva.fecha_creacion || reserva.created_at)} · Expira:{' '}
                               {formatearFechaReserva(reserva.fecha_limite_espera)}

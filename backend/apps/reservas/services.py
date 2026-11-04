@@ -338,7 +338,6 @@ def crear_reserva(
             material=material,
             instancia=instancia_elegida,
             prioridad=prioridad_limpia,
-            instancia=instancia_libre,
             justificacion=justificacion_limpia,
             estado="reservada",
             es_excepcion=False,

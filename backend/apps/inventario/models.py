@@ -119,7 +119,7 @@ class Material(models.Model):
             MaxValueValidator(MAXIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS),
         ],
         verbose_name="Tiempo máximo de préstamo (minutos)",
-        help_text="Duración máxima permitida de préstamo para este material, en minutos (30 min a 15 días).",
+        help_text="Duración máxima permitida de préstamo para este material, en minutos (1 hora a 15 días).",
     )
     bonificacion_tiempo = models.PositiveIntegerField(
         default=DEFAULT_BONIFICACION_TIEMPO,

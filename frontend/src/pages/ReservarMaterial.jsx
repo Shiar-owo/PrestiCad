@@ -305,7 +305,7 @@ export default function ReservarMaterial() {
                   />
                 )}
               </div>
-              <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3 dark:border-amber-800 dark:bg-amber-950/30">
+              <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3 dark:border-amber-800 dark:bg-marca-950/30">
                 <dt className="text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-300">
                   Límite de recojo (24 h)
                 </dt>
@@ -386,7 +386,7 @@ export default function ReservarMaterial() {
       {errorEnvio && <ErrorAlerta mensaje={errorEnvio} />}
 
       <Tarjeta className="p-6">
-        <form onSubmit={manejarSubmit} className="space-y-5" noValidate>
+        <form onSubmit={manejarSubmit} noValidate className="space-y-5">
           <p className="text-xs text-texto-suave">* Campos obligatorios.</p>
 
           <div>
@@ -484,7 +484,7 @@ export default function ReservarMaterial() {
                 </div>
               )}
             </div>
-          })
+          )}
 
           {materialSeleccionado && instancias.length > 0 && (
             <div className="grid gap-4 sm:grid-cols-2">

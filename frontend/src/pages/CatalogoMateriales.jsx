@@ -15,7 +15,7 @@ function CatalogoMateriales({ onSeleccionarMaterial }) {
   const [materiales, setMateriales] = useState([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
-  const [filtros, setFiltros] = useState({ q: '', categoria: '', estado: '' })
+  const [filtros, setFiltros] = useState({ q: '', categoria: '' })
   const [materialFicha, setMaterialFicha] = useState(null)
 
   useEffect(() => {
@@ -31,7 +31,6 @@ function CatalogoMateriales({ onSeleccionarMaterial }) {
       const params = new URLSearchParams()
       if (nuevosFiltros.q) params.set('q', nuevosFiltros.q)
       if (nuevosFiltros.categoria) params.set('categoria', nuevosFiltros.categoria)
-      if (nuevosFiltros.estado) params.set('estado', nuevosFiltros.estado)
 
       const queryString = params.toString() ? `?${params.toString()}` : ''
       const datos = await api.get(`/materiales/buscar/${queryString}`)

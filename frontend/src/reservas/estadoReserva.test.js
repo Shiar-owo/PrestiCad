@@ -59,7 +59,9 @@ describe('helpers de estado y elegibilidad de reserva', () => {
     expect(requiereExcepcionAcademica('restringido', 'estandar')).toBe(true)
     expect(requiereExcepcionAcademica('restringido', 'avanzado')).toBe(true)
     expect(requiereExcepcionAcademica('restringido', 'restringido')).toBe(false)
-    expect(requiereExcepcionAcademica('estandar', 'avanzado')).toBe(false)
+    expect(requiereExcepcionAcademica('estandar', 'avanzado')).toBe(true)
+    expect(requiereExcepcionAcademica('estandar', 'estandar')).toBe(false)
+    expect(requiereExcepcionAcademica('avanzado', 'avanzado')).toBe(false)
   })
 })
 

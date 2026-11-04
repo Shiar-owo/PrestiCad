@@ -415,7 +415,8 @@ export default function ReservarMaterial() {
                     Solicitud de Excepción por Necesidad Académica (HU13)
                   </p>
                   <p>
-                    Tu cuenta se encuentra en Tier <strong>Restringido</strong> y este material exige Tier{' '}
+                    Tu cuenta se encuentra en Tier{' '}
+                    <strong>{ETIQUETAS_TIER[tierUsuario] || tierUsuario}</strong> y este material exige Tier{' '}
                     <strong>{ETIQUETAS_TIER[tierMaterial] || tierMaterial}</strong>. Puedes registrar una solicitud excepcional adjuntando obligatoriamente tu documento de identidad y el compromiso de responsabilidad firmado en PDF (máximo 4 MB en total).
                   </p>
                   <p>

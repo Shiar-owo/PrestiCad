@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, ChevronLeft, ChevronRight, RotateCcw, Trash2, Upload } from 'lucide-react'
+import { ArrowLeft, ChevronLeft, ChevronRight, ExternalLink, RotateCcw, Trash2, Upload } from 'lucide-react'
 
 import { api, ErrorApi } from '../../api/client'
 import { ETIQUETAS_ESTADO, esMaterialAltoValor } from '../../constantes/catalogo'
@@ -210,6 +210,11 @@ export default function DetallePrestamo({
               </CampoDetalle>
             )}
             <CampoDetalle etiqueta="Fecha de entrega">{mostrarFecha(detalle.fecha_entrega)}</CampoDetalle>
+            <CampoDetalle etiqueta="Fecha de devolución">
+              {detalle.fecha_devolucion
+                ? mostrarFecha(detalle.fecha_devolucion)
+                : 'Pendiente de devolución'}
+            </CampoDetalle>
             <CampoDetalle etiqueta="Fecha límite">{mostrarFecha(detalle.fecha_limite)}</CampoDetalle>
             <CampoDetalle etiqueta="Duración">
               {detalle.tiempo_prestamo_minutos
@@ -336,6 +341,75 @@ export default function DetallePrestamo({
               <p className="mt-2 text-sm text-texto-suave">No se registró checklist inicial.</p>
             )}
           </section>
+
+          {/* Checklist final de devolución (solo si está devuelto) */}
+          {detalle.estado === 'devuelto' && (
+            <section className="mt-6 rounded-xl border border-borde p-4" aria-labelledby="titulo-checklist-final">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h4 id="titulo-checklist-final" className="font-bold text-texto">Checklist al devolver</h4>
+                {detalle.hay_dano !== null && (
+                  <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                    detalle.hay_dano
+                      ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+                      : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+                  }`}>
+                    {detalle.hay_dano ? 'Con daño detectado' : 'Sin daño'}
+                  </span>
+                )}
+              </div>
+              {detalle.checklist_final?.length ? (
+                <ul className="mt-3 grid min-w-0 gap-3 sm:grid-cols-2">
+                  {detalle.checklist_final.map((elemento, indice) => (
+                    <li key={`final-${elemento.elemento}-${indice}`} className="min-w-0 rounded-lg bg-superficie p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="font-semibold text-texto">{elemento.elemento}</p>
+                        {elemento.estado && (
+                          <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                            elemento.estado === 'sin_cambios'
+                              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+                              : elemento.estado === 'dano_parcial'
+                              ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300'
+                              : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+                          }`}>
+                            {elemento.estado === 'sin_cambios' ? 'Sin cambios'
+                              : elemento.estado === 'dano_parcial' ? 'Daño parcial'
+                              : 'Daño total'}
+                          </span>
+                        )}
+                      </div>
+                      {elemento.foto_url && (
+                        <figure className="mt-2 aspect-[4/3] w-full max-w-sm overflow-hidden rounded-lg border border-borde bg-superficie">
+                          <img
+                            src={elemento.foto_url}
+                            alt={`Foto devolución de ${elemento.elemento}`}
+                            className="h-full w-full object-contain"
+                          />
+                        </figure>
+                      )}
+                      {elemento.observacion && (
+                        <p className="mt-1 text-sm text-texto-suave">Observación: {elemento.observacion}</p>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-2 text-sm text-texto-suave">No se registró checklist de devolución.</p>
+              )}
+              {detalle.hay_dano && detalle.reporte_url && (
+                <div className="mt-4">
+                  <a
+                    href={detalle.reporte_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 rounded-lg bg-marca-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-marca-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-acento-600"
+                  >
+                    <ExternalLink aria-hidden="true" className="size-4" />
+                    Descargar reporte de daño (PDF)
+                  </a>
+                </div>
+              )}
+            </section>
+          )}
 
           <section className="mt-6 rounded-xl border border-borde p-4" aria-labelledby="titulo-documentos-garantia">
             <h4 id="titulo-documentos-garantia" className="font-bold text-texto">Documentos de garantía</h4>

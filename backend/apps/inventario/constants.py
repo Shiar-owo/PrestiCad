@@ -52,11 +52,11 @@ MINIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS = 30
 MAXIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS = 15 * 24 * 60
 
 # Tiempo máximo de préstamo por defecto (en minutos) según el Tier mínimo del material:
-# - Avanzado: 6 horas (360 min) — equipos especializados/restringidos dentro del campus
+# - Avanzado: 8 horas (480 min) — equipos especializados/restringidos dentro del campus
 # - Estándar: 24 horas / 1 día (1440 min)
 # - Restringido: 3 días (4320 min)
 TIEMPO_MAXIMO_DEFAULT_POR_TIER = {
-    "avanzado": 360,
+    "avanzado": 480,
     "estandar": 1440,
     "restringido": 4320,
 }

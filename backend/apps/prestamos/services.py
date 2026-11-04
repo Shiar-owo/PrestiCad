@@ -235,13 +235,13 @@ def _validar_elegibilidad(usuario, material, *, es_excepcion=False):
     tiers_permitidos = TIERS_ACCESIBLES.get(usuario.reputacion_tier)
     if es_excepcion:
         if (
-            usuario.reputacion_tier != "restringido"
+            usuario.reputacion_tier not in ("restringido", "estandar")
             or tiers_permitidos is None
             or material.tier_minimo_requerido in tiers_permitidos
         ):
             raise PrestamoError(
                 "es_excepcion",
-                "El préstamo excepcional solo aplica a usuarios Restringidos "
+                "El préstamo excepcional solo aplica a usuarios en Tier Restringido o Estándar "
                 "con material de un Tier superior.",
             )
         return
@@ -256,7 +256,7 @@ def _validar_elegibilidad(usuario, material, *, es_excepcion=False):
 def _resolver_duracion_prestamo(tiempo_prestamo_minutos, tiempo_prestamo_dias):
     """Normaliza la duración del préstamo en minutos y días equivalentes.
 
-    Acepta `tiempo_prestamo_minutos` (mínimo 15 minutos, máximo 15 días) o
+    Acepta `tiempo_prestamo_minutos` (mínimo 1 hora, máximo 15 días) o
     `tiempo_prestamo_dias` por compatibilidad, devolviendo `(minutos, dias, campo_error)`.
     """
     if tiempo_prestamo_minutos is not None:
@@ -271,7 +271,7 @@ def _resolver_duracion_prestamo(tiempo_prestamo_minutos, tiempo_prestamo_dias):
         if tiempo_prestamo_minutos < MINIMO_MINUTOS_PRESTAMO:
             raise PrestamoError(
                 "tiempo_prestamo_minutos",
-                f"El tiempo mínimo de préstamo es de {MINIMO_MINUTOS_PRESTAMO} minutos.",
+                "El tiempo mínimo de préstamo es de 1 h (60 min).",
             )
         if tiempo_prestamo_minutos > MAXIMO_MINUTOS_PRESTAMO:
             raise PrestamoError(

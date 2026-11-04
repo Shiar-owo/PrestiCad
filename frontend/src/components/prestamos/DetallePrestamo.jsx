@@ -203,111 +203,205 @@ export default function DetallePrestamo({
 
       {!cargando && detalle && (
         <>
-          <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {detalle.prestatario_nombre && (
-              <CampoDetalle etiqueta="Prestatario">
-                {detalle.prestatario_nombre} · DNI {detalle.prestatario_dni}
-              </CampoDetalle>
-            )}
-            <CampoDetalle etiqueta="Fecha de entrega">{mostrarFecha(detalle.fecha_entrega)}</CampoDetalle>
-            <CampoDetalle etiqueta="Fecha límite">{mostrarFecha(detalle.fecha_limite)}</CampoDetalle>
-            <CampoDetalle etiqueta="Duración">
-              {detalle.tiempo_prestamo_minutos
-                ? formatearDuracionMinutos(detalle.tiempo_prestamo_minutos)
-                : `${detalle.tiempo_prestamo_dias} días`}
-            </CampoDetalle>
-            <CampoDetalle etiqueta="Estado">
-              <BadgeEstado estado={estado} texto={textoEstadoPrestamo({ es_excepcion: esExcepcion }, estado)} />
-            </CampoDetalle>
-            {esExcepcion && (
-              <CampoDetalle etiqueta="Tipo de préstamo">
-                Excepción académica
-              </CampoDetalle>
-            )}
-          </dl>
-
-          <section className="mt-6 rounded-xl border border-borde p-4" aria-labelledby="titulo-ficha-prestamo">
-            <h4 id="titulo-ficha-prestamo" className="font-bold text-texto">Ficha del material</h4>
-            {material?.foto && (
-              <img
-                src={material.foto}
-                alt={`Foto de ${material.nombre}`}
-                className="mt-3 h-44 w-44 rounded-lg border border-borde object-cover"
-              />
-            )}
-            <dl className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <CampoDetalle etiqueta="Material">{material?.nombre || prestamo.material_nombre}</CampoDetalle>
-              <CampoDetalle etiqueta="Código de Material">
-                {material?.codigo_material || material?.codigo_inventario || prestamo.material_codigo}
-              </CampoDetalle>
-              <CampoDetalle etiqueta="Descripción">{material?.descripcion || 'Sin descripción'}</CampoDetalle>
-              <CampoDetalle etiqueta="Tipo">{material?.tipo || 'No especificado'}</CampoDetalle>
-              <CampoDetalle etiqueta="Marca y modelo">
-                {[material?.marca, material?.modelo].filter(Boolean).join(' · ') || 'No especificados'}
-              </CampoDetalle>
-              <CampoDetalle etiqueta="Número de serie general">
-                {material?.numero_serie || 'No registrado'}
-              </CampoDetalle>
-              <CampoDetalle etiqueta="Color general">{material?.color || 'No registrado'}</CampoDetalle>
-              <CampoDetalle etiqueta="Estado">
-                {ETIQUETAS_ESTADO[material?.estado] || material?.estado || 'No registrado'}
-              </CampoDetalle>
-              <CampoDetalle etiqueta="Alto valor">
-                {esMaterialAltoValor(material) ? 'Sí' : 'No'}
-              </CampoDetalle>
-              <CampoDetalle etiqueta="Tier mínimo">{material?.tier_minimo_requerido}</CampoDetalle>
-              {material?.tiempo_maximo_prestamo && (
-                <CampoDetalle etiqueta="Tiempo máximo del material">
-                  {formatearDuracionMinutos(material.tiempo_maximo_prestamo)}
-                </CampoDetalle>
-              )}
-              <CampoDetalle etiqueta="Bonificación por entrega a tiempo">
-                {material?.bonificacion_tiempo} puntos
-              </CampoDetalle>
-              <CampoDetalle etiqueta="Deducción por tardanza">
-                {material?.deduccion_tardanza} puntos por día
-              </CampoDetalle>
-              <CampoDetalle etiqueta="Deducción por daño parcial">
-                {material?.deduccion_dano_parcial} puntos
-              </CampoDetalle>
-              <CampoDetalle etiqueta="Deducción por daño total">
-                {material?.deduccion_dano_total} puntos
-              </CampoDetalle>
-              <CampoDetalle etiqueta="Costos de reparación y reposición">
-                {material?.costo_reparacion ?? 'No definido'} / {material?.costo_reposicion ?? 'No definido'}
-              </CampoDetalle>
-            </dl>
+          <section className="mt-4 overflow-x-auto">
+            <table className="min-w-full divide-y divide-borde bg-white dark:bg-superficie">
+              <thead className="bg-superficie/50">
+                <tr>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-texto-suave uppercase tracking-wider">
+                    Campo
+                  </th>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-texto-suave uppercase tracking-wider">
+                    Valor
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-borde">
+                {detalle.prestatario_nombre && (
+                  <tr className="hover:bg-superficie-alta/50 transition-colors">
+                    <td className="px-4 py-3 text-sm font-medium text-texto-suave">Prestatario</td>
+                    <td className="px-4 py-3 text-sm text-texto">
+                      {detalle.prestatario_nombre} · DNI {detalle.prestatario_dni}
+                    </td>
+                  </tr>
+                )}
+                <tr className="hover:bg-superficie-alta/50 transition-colors">
+                  <td className="px-4 py-3 text-sm font-medium text-texto-suave">Fecha de entrega</td>
+                  <td className="px-4 py-3 text-sm text-texto">{mostrarFecha(detalle.fecha_entrega)}</td>
+                </tr>
+                <tr className="hover:bg-superficie-alta/50 transition-colors">
+                  <td className="px-4 py-3 text-sm font-medium text-texto-suave">Fecha límite</td>
+                  <td className="px-4 py-3 text-sm text-texto">{mostrarFecha(detalle.fecha_limite)}</td>
+                </tr>
+                <tr className="hover:bg-superficie-alta/50 transition-colors">
+                  <td className="px-4 py-3 text-sm font-medium text-texto-suave">Duración</td>
+                  <td className="px-4 py-3 text-sm text-texto">
+                    {detalle.tiempo_prestamo_minutos
+                      ? formatearDuracionMinutos(detalle.tiempo_prestamo_minutos)
+                      : `${detalle.tiempo_prestamo_dias} días`}
+                  </td>
+                </tr>
+                <tr className="hover:bg-superficie-alta/50 transition-colors">
+                  <td className="px-4 py-3 text-sm font-medium text-texto-suave">Estado</td>
+                  <td className="px-4 py-3 text-sm">
+                    <BadgeEstado estado={estado} texto={textoEstadoPrestamo({ es_excepcion: esExcepcion }, estado)} />
+                  </td>
+                </tr>
+                {esExcepcion && (
+                  <tr className="hover:bg-superficie-alta/50 transition-colors">
+                    <td className="px-4 py-3 text-sm font-medium text-texto-suave">Tipo de préstamo</td>
+                    <td className="px-4 py-3 text-sm text-texto">Excepción académica</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </section>
 
-          <section className="mt-6 rounded-xl border border-borde p-4" aria-labelledby="titulo-instancia-prestamo">
-            <h4 id="titulo-instancia-prestamo" className="font-bold text-texto">
-              Ejemplar entregado
-            </h4>
-            {instancia ? (
-              <>
-                {instancia.foto && (
-                  <img
-                    src={instancia.foto}
-                    alt={`Foto de ${instancia.codigo_ejemplar}`}
-                    className="mt-3 h-40 w-40 rounded-lg border border-borde object-cover"
-                  />
+          <section className="mt-6 overflow-x-auto">
+            <table className="min-w-full divide-y divide-borde bg-white dark:bg-superficie">
+              <thead className="bg-superficie/50">
+                <tr>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-texto-suave uppercase tracking-wider">
+                    Campo
+                  </th>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-texto-suave uppercase tracking-wider">
+                    Valor
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-borde">
+                <tr className="hover:bg-superficie-alta/50 transition-colors">
+                  <td className="px-4 py-3 text-sm font-medium text-texto-suave">Material</td>
+                  <td className="px-4 py-3 text-sm text-texto">
+                    {material?.nombre || prestamo.material_nombre}
+                  </td>
+                </tr>
+                <tr className="hover:bg-superficie-alta/50 transition-colors">
+                  <td className="px-4 py-3 text-sm font-medium text-texto-suave">Código de Material</td>
+                  <td className="px-4 py-3 text-sm text-texto-suave font-mono">
+                    {material?.codigo_material || material?.codigo_inventario || prestamo.material_codigo}
+                  </td>
+                </tr>
+                <tr className="hover:bg-superficie-alta/50 transition-colors">
+                  <td className="px-4 py-3 text-sm font-medium text-texto-suave">Descripción</td>
+                  <td className="px-4 py-3 text-sm text-texto">{material?.descripcion || 'Sin descripción'}</td>
+                </tr>
+                <tr className="hover:bg-superficie-alta/50 transition-colors">
+                  <td className="px-4 py-3 text-sm font-medium text-texto-suave">Tipo</td>
+                  <td className="px-4 py-3 text-sm text-texto">{material?.tipo || 'No especificado'}</td>
+                </tr>
+                <tr className="hover:bg-superficie-alta/50 transition-colors">
+                  <td className="px-4 py-3 text-sm font-medium text-texto-suave">Marca y modelo</td>
+                  <td className="px-4 py-3 text-sm text-texto">
+                    {[material?.marca, material?.modelo].filter(Boolean).join(' · ') || 'No especificados'}
+                  </td>
+                </tr>
+                <tr className="hover:bg-superficie-alta/50 transition-colors">
+                  <td className="px-4 py-3 text-sm font-medium text-texto-suave">Número de serie general</td>
+                  <td className="px-4 py-3 text-sm text-texto">{material?.numero_serie || 'No registrado'}</td>
+                </tr>
+                <tr className="hover:bg-superficie-alta/50 transition-colors">
+                  <td className="px-4 py-3 text-sm font-medium text-texto-suave">Color general</td>
+                  <td className="px-4 py-3 text-sm text-texto">{material?.color || 'No registrado'}</td>
+                </tr>
+                <tr className="hover:bg-superficie-alta/50 transition-colors">
+                  <td className="px-4 py-3 text-sm font-medium text-texto-suave">Estado</td>
+                  <td className="px-4 py-3 text-sm text-texto">
+                    {ETIQUETAS_ESTADO[material?.estado] || material?.estado || 'No registrado'}
+                  </td>
+                </tr>
+                <tr className="hover:bg-superficie-alta/50 transition-colors">
+                  <td className="px-4 py-3 text-sm font-medium text-texto-suave">Alto valor</td>
+                  <td className="px-4 py-3 text-sm text-texto">
+                    {esMaterialAltoValor(material) ? 'Sí' : 'No'}
+                  </td>
+                </tr>
+                <tr className="hover:bg-superficie-alta/50 transition-colors">
+                  <td className="px-4 py-3 text-sm font-medium text-texto-suave">Tier mínimo</td>
+                  <td className="px-4 py-3 text-sm text-texto">{material?.tier_minimo_requerido}</td>
+                </tr>
+                {material?.tiempo_maximo_prestamo && (
+                  <tr className="hover:bg-superficie-alta/50 transition-colors">
+                    <td className="px-4 py-3 text-sm font-medium text-texto-suave">Tiempo máximo del material</td>
+                    <td className="px-4 py-3 text-sm text-texto">
+                      {formatearDuracionMinutos(material.tiempo_maximo_prestamo)}
+                    </td>
+                  </tr>
                 )}
-                <dl className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  <CampoDetalle etiqueta="Código de Ejemplar">{instancia.codigo_ejemplar}</CampoDetalle>
-                  <CampoDetalle etiqueta="Estado del ejemplar">
-                    {instancia.estado_display || instancia.estado}
-                  </CampoDetalle>
-                  <CampoDetalle etiqueta="Número de serie">{instancia.numero_serie || 'No registrado'}</CampoDetalle>
-                  <CampoDetalle etiqueta="Color">{instancia.color || 'No registrado'}</CampoDetalle>
-                  <CampoDetalle etiqueta="Observaciones del ejemplar">{instancia.observaciones || 'Sin observaciones'}</CampoDetalle>
-                  <CampoDetalle etiqueta="Ubicación">{instancia.ubicacion || 'No registrada'}</CampoDetalle>
-                </dl>
-              </>
-            ) : (
-              <p className="mt-2 text-sm text-texto-suave">
-                Este préstamo no tiene una instancia individual asociada.
-              </p>
-            )}
+                <tr className="hover:bg-superficie-alta/50 transition-colors">
+                  <td className="px-4 py-3 text-sm font-medium text-texto-suave">Bonificación por entrega a tiempo</td>
+                  <td className="px-4 py-3 text-sm text-texto">{material?.bonificacion_tiempo} puntos</td>
+                </tr>
+                <tr className="hover:bg-superficie-alta/50 transition-colors">
+                  <td className="px-4 py-3 text-sm font-medium text-texto-suave">Deducción por tardanza</td>
+                  <td className="px-4 py-3 text-sm text-texto">{material?.deduccion_tardanza} puntos por día</td>
+                </tr>
+                <tr className="hover:bg-superficie-alta/50 transition-colors">
+                  <td className="px-4 py-3 text-sm font-medium text-texto-suave">Deducción por daño parcial</td>
+                  <td className="px-4 py-3 text-sm text-texto">{material?.deduccion_dano_parcial} puntos</td>
+                </tr>
+                <tr className="hover:bg-superficie-alta/50 transition-colors">
+                  <td className="px-4 py-3 text-sm font-medium text-texto-suave">Deducción por daño total</td>
+                  <td className="px-4 py-3 text-sm text-texto">{material?.deduccion_dano_total} puntos</td>
+                </tr>
+                <tr className="hover:bg-superficie-alta/50 transition-colors">
+                  <td className="px-4 py-3 text-sm font-medium text-texto-suave">Costos reparación / reposición</td>
+                  <td className="px-4 py-3 text-sm text-texto">
+                    {material?.costo_reparacion ?? 'No definido'} / {material?.costo_reposicion ?? 'No definido'}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </section>
+
+          <section className="mt-6 overflow-x-auto">
+            <table className="min-w-full divide-y divide-borde bg-white dark:bg-superficie">
+              <thead className="bg-superficie/50">
+                <tr>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-texto-suave uppercase tracking-wider">
+                    Campo
+                  </th>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-texto-suave uppercase tracking-wider">
+                    Valor
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-borde">
+                {instancia ? (
+                  <>
+                    <tr className="hover:bg-superficie-alta/50 transition-colors">
+                      <td className="px-4 py-3 text-sm font-medium text-texto-suave">Código de Ejemplar</td>
+                      <td className="px-4 py-3 text-sm text-texto font-mono">{instancia.codigo_ejemplar}</td>
+                    </tr>
+                    <tr className="hover:bg-superficie-alta/50 transition-colors">
+                      <td className="px-4 py-3 text-sm font-medium text-texto-suave">Estado del ejemplar</td>
+                      <td className="px-4 py-3 text-sm text-texto">{instancia.estado_display || instancia.estado}</td>
+                    </tr>
+                    <tr className="hover:bg-superficie-alta/50 transition-colors">
+                      <td className="px-4 py-3 text-sm font-medium text-texto-suave">Número de serie</td>
+                      <td className="px-4 py-3 text-sm text-texto">{instancia.numero_serie || 'No registrado'}</td>
+                    </tr>
+                    <tr className="hover:bg-superficie-alta/50 transition-colors">
+                      <td className="px-4 py-3 text-sm font-medium text-texto-suave">Color</td>
+                      <td className="px-4 py-3 text-sm text-texto">{instancia.color || 'No registrado'}</td>
+                    </tr>
+                    <tr className="hover:bg-superficie-alta/50 transition-colors">
+                      <td className="px-4 py-3 text-sm font-medium text-texto-suave">Observaciones del ejemplar</td>
+                      <td className="px-4 py-3 text-sm text-texto">{instancia.observaciones || 'Sin observaciones'}</td>
+                    </tr>
+                    <tr className="hover:bg-superficie-alta/50 transition-colors">
+                      <td className="px-4 py-3 text-sm font-medium text-texto-suave">Ubicación</td>
+                      <td className="px-4 py-3 text-sm text-texto">{instancia.ubicacion || 'No registrada'}</td>
+                    </tr>
+                  </>
+                ) : (
+                  <tr className="hover:bg-superficie-alta/50 transition-colors">
+                    <td className="px-4 py-3 text-sm text-texto-suave" colSpan={2}>
+                      Este préstamo no tiene una instancia individual asociada.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </section>
 
           <section className="mt-6 rounded-xl border border-borde p-4" aria-labelledby="titulo-checklist-inicial">

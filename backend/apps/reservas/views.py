@@ -21,6 +21,7 @@ from apps.reservas.services import (
     ReservaError,
     aprobar_excepcion,
     cancelar_reserva,
+    consultar_cola_general,
     consultar_cola_material,
     consultar_mis_reservas,
     consultar_reservas_confirmadas,
@@ -157,13 +158,16 @@ class MisReservasView(APIView):
 
 
 class ColaMaterialView(APIView):
-    """Devuelve la cola de espera, reservas confirmadas y ejemplares libres del material: GET /api/reservas/cola/<uuid:material_id>/."""
+    """Devuelve la cola de espera, reservas confirmadas y ejemplares libres (del material o general): GET /api/reservas/cola/ o /api/reservas/cola/<uuid:material_id>/."""
 
     permission_classes = [EsGestorOAdministrador]
 
-    def get(self, request, material_id):
+    def get(self, request, material_id=None):
         try:
-            cola = consultar_cola_material(material_id)
+            if material_id:
+                cola = consultar_cola_material(material_id)
+            else:
+                cola = consultar_cola_general()
         except ReservaError as error:
             return Response(
                 {error.campo: [error.mensaje]},
@@ -185,19 +189,20 @@ class ReservasConfirmadasView(APIView):
 
 
 class CancelarReservaView(APIView):
-    """Cancela manualmente una reserva confirmada: POST /api/reservas/<uuid:id>/cancelar/."""
+    """Cancela una reserva activa (el gestor o el titular): POST /api/reservas/<uuid:id>/cancelar/."""
 
-    permission_classes = [EsGestorDeAlmacen]
+    permission_classes = [EsGestorOPrestatarioTitularReserva]
     parser_classes = [JSONParser, FormParser, MultiPartParser]
 
     def post(self, request, id):
-        serializer = MotivoAccionReservaSerializer(data=request.data)
+        serializer = MotivoAccionReservaSerializer(data=request.data or {})
         serializer.is_valid(raise_exception=True)
 
         try:
+            motivo = serializer.validated_data.get("motivo") or "Cancelada por el prestatario."
             reserva = cancelar_reserva(
                 reserva_id=id,
-                motivo=serializer.validated_data["motivo"],
+                motivo=motivo,
                 realizado_por=request.usuario_autenticado,
             )
         except ReservaError as error:

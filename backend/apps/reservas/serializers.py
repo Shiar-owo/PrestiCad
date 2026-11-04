@@ -145,16 +145,13 @@ class CrearReservaExcepcionalSerializer(CrearReservaSerializer):
 
 
 class MotivoAccionReservaSerializer(serializers.Serializer):
-    """Valida el motivo obligatorio para cancelar o rechazar una reserva."""
+    """Valida el motivo para cancelar o rechazar una reserva (opcional en cancelación de prestatario)."""
 
     motivo = serializers.CharField(
-        allow_blank=False,
+        required=False,
+        default="Cancelada por el usuario prestatario.",
+        allow_blank=True,
         trim_whitespace=True,
-        error_messages={
-            "required": MENSAJES_ERROR_RESERVA["motivo_obligatorio"],
-            "null": MENSAJES_ERROR_RESERVA["motivo_obligatorio"],
-            "blank": MENSAJES_ERROR_RESERVA["motivo_obligatorio"],
-        },
     )
 
 
@@ -291,7 +288,7 @@ class ReservaDetalleSerializer(serializers.ModelSerializer):
 
 
 class ColaMaterialSerializer(serializers.Serializer):
-    material = MaterialResumenReservaSerializer(read_only=True)
+    material = MaterialResumenReservaSerializer(read_only=True, required=False, allow_null=True)
     en_espera = ReservaDetalleSerializer(many=True, read_only=True)
     en_espera_normales = ReservaDetalleSerializer(many=True, read_only=True)
     en_espera_excepciones = ReservaDetalleSerializer(many=True, read_only=True)

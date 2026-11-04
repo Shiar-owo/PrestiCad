@@ -626,12 +626,10 @@ def expirar_reservas(*, ahora=None):
 
 
 @transaction.atomic
-def cancelar_reserva(*, reserva_id, motivo, realizado_por=None, ahora=None):
-    """Cancela manualmente una reserva confirmada sin penalización y libera su ejemplar (HU07, HU08)."""
+def cancelar_reserva(*, reserva_id, motivo="Cancelada por el usuario.", realizado_por=None, ahora=None):
+    """Cancela una reserva activa (reservada o en espera) sin penalización y libera su ejemplar si tenía uno (HU07, HU08)."""
     ahora = ahora or timezone.now()
-    motivo_limpio = str(motivo or "").strip()
-    if not motivo_limpio:
-        raise ReservaError("motivo", MENSAJES_ERROR_RESERVA["motivo_obligatorio"])
+    motivo_limpio = str(motivo or "").strip() or "Cancelada por el usuario."
 
     try:
         reserva = (
@@ -646,7 +644,7 @@ def cancelar_reserva(*, reserva_id, motivo, realizado_por=None, ahora=None):
             status_code=404,
         ) from error
 
-    if reserva.estado != "reservada":
+    if reserva.estado not in ESTADOS_ACTIVOS:
         raise ReservaError(
             "estado",
             MENSAJES_ERROR_RESERVA["estado_invalido_cancelar"],
@@ -774,6 +772,41 @@ def consultar_cola_material(material_id):
         "en_espera_excepciones": en_espera_excepciones,
         "reservas_confirmadas": reservas_confirmadas,
         "instancias_disponibles": instancias_disponibles,
+    }
+
+
+def consultar_cola_general():
+    """Devuelve el estado consolidado de todas las reservas (en espera y confirmadas) de todos los materiales."""
+    en_espera_normales = list(
+        _anotar_orden_cola(
+            Reserva.objects.select_related("usuario", "material", "instancia")
+            .filter(estado="en_espera", es_excepcion=False)
+        )
+    )
+    for indice, solicitud in enumerate(en_espera_normales, start=1):
+        solicitud.posicion_cola = indice
+
+    en_espera_excepciones = list(
+        Reserva.objects.select_related("usuario", "material", "instancia")
+        .filter(estado="en_espera", es_excepcion=True)
+        .order_by("fecha_solicitud", "id")
+    )
+    for solicitud in en_espera_excepciones:
+        solicitud.posicion_cola = None
+
+    reservas_confirmadas = list(
+        Reserva.objects.select_related("usuario", "material", "instancia")
+        .filter(estado="reservada")
+        .order_by("fecha_limite_recojo", "fecha_confirmacion", "id")
+    )
+
+    return {
+        "material": None,
+        "en_espera": en_espera_normales + en_espera_excepciones,
+        "en_espera_normales": en_espera_normales,
+        "en_espera_excepciones": en_espera_excepciones,
+        "reservas_confirmadas": reservas_confirmadas,
+        "instancias_disponibles": [],
     }
 
 

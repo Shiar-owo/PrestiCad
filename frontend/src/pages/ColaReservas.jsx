@@ -81,9 +81,6 @@ export default function ColaReservas() {
             ? datos.results
             : []
         setMateriales(lista)
-        if (!materialIdSeleccionado && lista.length > 0) {
-          setMaterialIdSeleccionado(String(lista[0].id))
-        }
       })
       .catch(() => {
         if (activa) {
@@ -100,23 +97,22 @@ export default function ColaReservas() {
   }, [])
 
   useEffect(() => {
-    if (!materialIdSeleccionado) {
-      setCola(null)
-      return
-    }
-
     let activa = true
     setCargandoCola(true)
     setErrorCola('')
 
+    const url = materialIdSeleccionado
+      ? `/reservas/cola/${materialIdSeleccionado}/`
+      : `/reservas/cola/`
+
     api
-      .get(`/reservas/cola/${materialIdSeleccionado}/`)
+      .get(url)
       .then((datos) => {
         if (activa) setCola(datos)
       })
       .catch(() => {
         if (activa) {
-          setErrorCola('No fue posible consultar la cola de reservas para este material.')
+          setErrorCola('No fue posible consultar la cola de reservas.')
         }
       })
       .finally(() => {
@@ -254,7 +250,7 @@ export default function ColaReservas() {
           tamanio="pequeno"
           icono={RefreshCw}
           onClick={() => setRecarga((v) => v + 1)}
-          deshabilitado={!materialIdSeleccionado || cargandoCola}
+          deshabilitado={cargandoCola}
         >
           Actualizar cola
         </Boton>
@@ -299,7 +295,7 @@ export default function ColaReservas() {
               onChange={(e) => seleccionarMaterial(e.target.value)}
               className="mt-1 w-full rounded-lg border border-borde bg-white px-3 py-2 text-sm text-texto dark:bg-superficie"
             >
-              <option value="">Selecciona un material…</option>
+              <option value="">Todas las reservas (todos los materiales)</option>
               {materialesFiltrados.map((m) => {
                 const disp = m.unidades_disponibles ?? m.resumen_instancias?.disponible ?? 0
                 return (
@@ -391,21 +387,30 @@ export default function ColaReservas() {
 
       {!cargandoCola && cola && (
         <div className="space-y-6">
-          {/* Resumen del material y ejemplares libres */}
+          {/* Resumen del material y ejemplares libres o vista general */}
           <Tarjeta className="p-5 space-y-3">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <span className="text-xs font-semibold uppercase tracking-wide text-acento-700 dark:text-acento-300">
-                  Código de Material: {cola.material?.codigo_material} · Tier mínimo:{' '}
-                  {ETIQUETAS_TIER[cola.material?.tier_minimo_requerido] ||
-                    cola.material?.tier_minimo_requerido}
+                  {cola.material ? (
+                    `Código de Material: ${cola.material.codigo_material} · Tier mínimo: ${
+                      ETIQUETAS_TIER[cola.material.tier_minimo_requerido] ||
+                      cola.material.tier_minimo_requerido
+                    }`
+                  ) : (
+                    'Vista general del almacén (sin filtros aplicados)'
+                  )}
                 </span>
-                <h3 className="text-lg font-bold text-texto">{cola.material?.nombre}</h3>
+                <h3 className="text-lg font-bold text-texto">
+                  {cola.material ? cola.material.nombre : 'Todas las reservas y solicitudes activas'}
+                </h3>
               </div>
               <div className="flex flex-wrap gap-2 text-xs font-semibold">
-                <span className="rounded-lg bg-marca-100 px-3 py-1 text-marca-800 dark:bg-marca-950/60 dark:text-marca-300">
-                  {instanciasDisponibles.length} disponible(s)
-                </span>
+                {cola.material && (
+                  <span className="rounded-lg bg-marca-100 px-3 py-1 text-marca-800 dark:bg-marca-950/60 dark:text-marca-300">
+                    {instanciasDisponibles.length} disponible(s)
+                  </span>
+                )}
                 <span className="rounded-lg bg-amber-100 px-3 py-1 text-amber-900 dark:bg-amber-950/60 dark:text-amber-200">
                   {enEsperaNormales.length + enEsperaExcepciones.length} en espera
                 </span>
@@ -415,28 +420,30 @@ export default function ColaReservas() {
               </div>
             </div>
 
-            <div>
-              <p className="text-xs font-semibold text-texto-suave">
-                Ejemplares físicos disponibles actualmente:
-              </p>
-              {instanciasDisponibles.length === 0 ? (
-                <p className="mt-1 text-xs text-texto-suave">
-                  No hay ejemplares en estado Disponible en este momento.
+            {cola.material && (
+              <div>
+                <p className="text-xs font-semibold text-texto-suave">
+                  Ejemplares físicos disponibles actualmente:
                 </p>
-              ) : (
-                <div className="mt-1.5 flex flex-wrap gap-1.5">
-                  {instanciasDisponibles.map((inst) => (
-                    <span
-                      key={inst.id}
-                      className="rounded-md border border-marca-300 bg-marca-50 px-2.5 py-1 font-mono text-xs font-semibold text-marca-800 dark:border-marca-800 dark:bg-marca-950/40 dark:text-marca-300"
-                    >
-                      {inst.codigo_ejemplar}
-                      {inst.ubicacion ? ` (${inst.ubicacion})` : ''}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
+                {instanciasDisponibles.length === 0 ? (
+                  <p className="mt-1 text-xs text-texto-suave">
+                    No hay ejemplares en estado Disponible en este momento.
+                  </p>
+                ) : (
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {instanciasDisponibles.map((inst) => (
+                      <span
+                        key={inst.id}
+                        className="rounded-md border border-marca-300 bg-marca-50 px-2.5 py-1 font-mono text-xs font-semibold text-marca-800 dark:border-marca-800 dark:bg-marca-950/40 dark:text-marca-300"
+                      >
+                        {inst.codigo_ejemplar}
+                        {inst.ubicacion ? ` (${inst.ubicacion})` : ''}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </Tarjeta>
 
           {/* 1. Excepciones académicas en espera */}
@@ -473,6 +480,11 @@ export default function ColaReservas() {
                               Excepción académica
                             </span>
                           </div>
+                          {reserva.material && (
+                            <p className="mt-0.5 text-xs font-semibold text-acento-700 dark:text-acento-300">
+                              Material: {reserva.material.nombre} ({reserva.material.codigo_material})
+                            </p>
+                          )}
                           <p className="mt-1 text-xs text-texto-suave">
                             Prioridad:{' '}
                             <strong className="text-texto">
@@ -604,6 +616,11 @@ export default function ColaReservas() {
                                 ({reserva.usuario?.reputacion_puntaje} pts)
                               </span>
                             </p>
+                            {reserva.material && (
+                              <p className="mt-0.5 text-xs font-semibold text-acento-700 dark:text-acento-300">
+                                Material: {reserva.material.nombre} ({reserva.material.codigo_material})
+                              </p>
+                            )}
                             <p className="text-xs text-texto-suave">
                               Prioridad:{' '}
                               <strong className="text-texto">
@@ -686,6 +703,11 @@ export default function ColaReservas() {
                               </span>
                             )}
                           </div>
+                          {reserva.material && (
+                            <p className="mt-0.5 text-xs font-semibold text-acento-700 dark:text-acento-300">
+                              Material: {reserva.material.nombre} ({reserva.material.codigo_material})
+                            </p>
+                          )}
                           <p className="mt-1 text-xs text-texto-suave">
                             Ejemplar reservado:{' '}
                             <strong className="font-mono text-texto">

@@ -20,6 +20,7 @@ urlpatterns = [
         name="crear-reserva-excepcion",
     ),
     path("reservas/mis-reservas/", MisReservasView.as_view(), name="mis-reservas"),
+    path("reservas/cola/", ColaMaterialView.as_view(), name="cola-reservas-general"),
     path(
         "reservas/cola/<uuid:material_id>/",
         ColaMaterialView.as_view(),

@@ -13,7 +13,6 @@ import { ETIQUETAS_TIER } from '../constantes/catalogo'
 import useTituloPagina from '../hooks/useTituloPagina'
 import {
   MAXIMO_RESERVAS_ACTIVAS,
-  ETIQUETAS_PRIORIDAD,
   contarReservasActivas,
   esReservaActiva,
   formatearFechaReserva,
@@ -203,10 +202,6 @@ export default function MisReservas() {
                       <p className="mt-1 text-xs text-texto-suave">
                         Código de Material: <span className="font-semibold">{material.codigo_material}</span>
                         {tierLegible && <> · Tier mínimo: {tierLegible}</>}
-                        {' · '}Prioridad:{' '}
-                        <span className="font-semibold text-texto">
-                          {ETIQUETAS_PRIORIDAD[reserva.prioridad] || reserva.prioridad}
-                        </span>
                       </p>
                     </div>
 

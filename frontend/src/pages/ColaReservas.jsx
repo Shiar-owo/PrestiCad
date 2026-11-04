@@ -22,7 +22,6 @@ import { ETIQUETAS_TIER } from '../constantes/catalogo'
 import SesionContext from '../contextos/SesionContext'
 import useTituloPagina from '../hooks/useTituloPagina'
 import {
-  ETIQUETAS_PRIORIDAD,
   formatearFechaReserva,
   ordenarColaReservas,
   textoEstadoReserva,
@@ -474,11 +473,7 @@ export default function ColaReservas() {
                             </span>
                           </div>
                           <p className="mt-1 text-xs text-texto-suave">
-                            Prioridad:{' '}
-                            <strong className="text-texto">
-                              {ETIQUETAS_PRIORIDAD[reserva.prioridad] || reserva.prioridad}
-                            </strong>{' '}
-                            · Solicitada: {formatearFechaReserva(reserva.fecha_solicitud || reserva.fecha_creacion || reserva.created_at)} · Expira
+                            Solicitada: {formatearFechaReserva(reserva.fecha_solicitud || reserva.fecha_creacion || reserva.created_at)} · Expira
                             en espera: {formatearFechaReserva(reserva.fecha_limite_espera)}
                           </p>
                         </div>
@@ -605,11 +600,7 @@ export default function ColaReservas() {
                               </span>
                             </p>
                             <p className="text-xs text-texto-suave">
-                              Prioridad:{' '}
-                              <strong className="text-texto">
-                                {ETIQUETAS_PRIORIDAD[reserva.prioridad] || reserva.prioridad}
-                              </strong>{' '}
-                              · Creada: {formatearFechaReserva(reserva.fecha_solicitud || reserva.fecha_creacion || reserva.created_at)} · Expira:{' '}
+                              Creada: {formatearFechaReserva(reserva.fecha_solicitud || reserva.fecha_creacion || reserva.created_at)} · Expira:{' '}
                               {formatearFechaReserva(reserva.fecha_limite_espera)}
                             </p>
                           </div>

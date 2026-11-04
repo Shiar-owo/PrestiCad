@@ -6,7 +6,6 @@ from django.utils import timezone
 from apps.reservas.constants import (
     ESTADOS_ACTIVOS,
     ESTADOS_RESERVA,
-    PRIORIDADES_RESERVA,
 )
 
 
@@ -41,11 +40,6 @@ class Reserva(models.Model):
         related_name="reserva",
         null=True,
         blank=True,
-    )
-    prioridad = models.CharField(
-        max_length=10,
-        choices=PRIORIDADES_RESERVA,
-        default="media",
     )
     justificacion = models.TextField()
     estado = models.CharField(

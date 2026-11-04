@@ -30,24 +30,6 @@ export const PRESENTACION_ESTADOS_RESERVA = {
   },
 }
 
-export const ETIQUETAS_PRIORIDAD = {
-  alta: 'Alta',
-  media: 'Media',
-  baja: 'Baja',
-}
-
-export const OPCIONES_PRIORIDAD = [
-  { valor: 'alta', etiqueta: 'Alta (necesidad urgente)' },
-  { valor: 'media', etiqueta: 'Media (uso académico regular)' },
-  { valor: 'baja', etiqueta: 'Baja (consulta flexible)' },
-]
-
-const ORDEN_PRIORIDAD = {
-  alta: 3,
-  media: 2,
-  baja: 1,
-}
-
 const ORDEN_TIER = {
   avanzado: 3,
   estandar: 2,
@@ -100,10 +82,6 @@ export function requiereExcepcionAcademica(tierUsuario, tierMaterial) {
 export function ordenarColaReservas(reservas = []) {
   if (!Array.isArray(reservas)) return []
   return [...reservas].sort((a, b) => {
-    const prioA = ORDEN_PRIORIDAD[a.prioridad] || 0
-    const prioB = ORDEN_PRIORIDAD[b.prioridad] || 0
-    if (prioA !== prioB) return prioB - prioA
-
     const fechaA = new Date(a.fecha_solicitud || a.fecha_creacion || a.created_at).getTime()
     const fechaB = new Date(b.fecha_solicitud || b.fecha_creacion || b.created_at).getTime()
     if (!Number.isNaN(fechaA) && !Number.isNaN(fechaB) && fechaA !== fechaB) {
@@ -120,14 +98,12 @@ export function ordenarColaReservas(reservas = []) {
 
 export function construirFormularioReservaExcepcional({
   materialId,
-  prioridad,
   justificacion,
   documentoIdentidad,
   compromisoResponsabilidad,
 }) {
   const formulario = new FormData()
   formulario.append('material_id', String(materialId || '').trim())
-  formulario.append('prioridad', String(prioridad || '').trim())
   formulario.append('justificacion', String(justificacion || '').trim())
 
   if (documentoIdentidad) {
@@ -142,7 +118,6 @@ export function construirFormularioReservaExcepcional({
 
 export function validarFormularioReserva({
   materialId,
-  prioridad,
   justificacion,
   esExcepcion = false,
   documentoIdentidad = null,
@@ -152,10 +127,6 @@ export function validarFormularioReserva({
 
   if (!String(materialId || '').trim()) {
     errores.materialId = 'Debes seleccionar un material.'
-  }
-
-  if (!['alta', 'media', 'baja'].includes(prioridad)) {
-    errores.prioridad = 'Selecciona una prioridad válida (alta, media o baja).'
   }
 
   if (!String(justificacion || '').trim()) {
@@ -175,7 +146,6 @@ export function validarFormularioReserva({
     if (documentoIdentidad || compromisoResponsabilidad) {
       const formTemp = construirFormularioReservaExcepcional({
         materialId,
-        prioridad,
         justificacion,
         documentoIdentidad,
         compromisoResponsabilidad,

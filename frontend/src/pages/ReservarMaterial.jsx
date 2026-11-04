@@ -13,7 +13,6 @@ import SesionContext from '../contextos/SesionContext'
 import useTituloPagina from '../hooks/useTituloPagina'
 import {
   MAXIMO_RESERVAS_ACTIVAS,
-  OPCIONES_PRIORIDAD,
   construirFormularioReservaExcepcional,
   contarReservasActivas,
   esElegiblePorTier,
@@ -46,7 +45,6 @@ export default function ReservarMaterial() {
   const [errorCarga, setErrorCarga] = useState('')
 
   const [materialId, setMaterialId] = useState(materialIdParam)
-  const [prioridad, setPrioridad] = useState('media')
   const [justificacion, setJustificacion] = useState('')
   const [documentoIdentidad, setDocumentoIdentidad] = useState(null)
   const [compromisoResponsabilidad, setCompromisoResponsabilidad] = useState(null)
@@ -127,7 +125,6 @@ export default function ReservarMaterial() {
 
     const nuevosErrores = validarFormularioReserva({
       materialId,
-      prioridad,
       justificacion,
       esExcepcion: aplicaExcepcion,
       documentoIdentidad,
@@ -147,7 +144,6 @@ export default function ReservarMaterial() {
       if (aplicaExcepcion) {
         const formData = construirFormularioReservaExcepcional({
           materialId,
-          prioridad,
           justificacion,
           documentoIdentidad,
           compromisoResponsabilidad,
@@ -156,7 +152,6 @@ export default function ReservarMaterial() {
       } else {
         respuesta = await api.post('/reservas/', {
           material_id: materialId,
-          prioridad,
           justificacion: justificacion.trim(),
         })
       }
@@ -426,32 +421,6 @@ export default function ReservarMaterial() {
               )}
             </div>
           )}
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <label
-                htmlFor="select-prioridad-reserva"
-                className="block text-sm font-semibold text-texto"
-              >
-                Nivel de prioridad *
-              </label>
-              <select
-                id="select-prioridad-reserva"
-                value={prioridad}
-                onChange={(e) => setPrioridad(e.target.value)}
-                className="mt-1.5 w-full rounded-lg border border-borde bg-white px-3 py-2 text-sm text-texto dark:bg-superficie"
-              >
-                {OPCIONES_PRIORIDAD.map((op) => (
-                  <option key={op.valor} value={op.valor}>
-                    {op.etiqueta}
-                  </option>
-                ))}
-              </select>
-              {errores.prioridad && (
-                <p className="mt-1 text-xs font-medium text-error">{errores.prioridad}</p>
-              )}
-            </div>
-          </div>
 
           <div>
             <label

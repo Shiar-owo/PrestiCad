@@ -88,7 +88,7 @@ class CrearReservaExcepcionalView(APIView):
 class AprobarExcepcionReservaView(APIView):
     """Aprueba una solicitud excepcional en espera: POST/PUT /api/reservas/<uuid:id>/aprobar-excepcion/."""
 
-    permission_classes = [EsGestorDeAlmacen]
+    permission_classes = [EsGestorOAdministrador]
     parser_classes = [JSONParser, FormParser, MultiPartParser]
 
     def _aprobar(self, request, id):
@@ -187,7 +187,7 @@ class ReservasConfirmadasView(APIView):
 class CancelarReservaView(APIView):
     """Cancela manualmente una reserva confirmada: POST /api/reservas/<uuid:id>/cancelar/."""
 
-    permission_classes = [EsGestorDeAlmacen]
+    permission_classes = [EsGestorOAdministrador]
     parser_classes = [JSONParser, FormParser, MultiPartParser]
 
     def post(self, request, id):
@@ -212,7 +212,7 @@ class CancelarReservaView(APIView):
 class RechazarReservaView(APIView):
     """Rechaza una solicitud en espera indicando el motivo: POST /api/reservas/<uuid:id>/rechazar/."""
 
-    permission_classes = [EsGestorDeAlmacen]
+    permission_classes = [EsGestorOAdministrador]
     parser_classes = [JSONParser, FormParser, MultiPartParser]
 
     def post(self, request, id):

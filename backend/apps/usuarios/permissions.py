@@ -22,4 +22,4 @@ class EsGestorAlmacen(BasePermission):
 
     def has_permission(self, request, view):
         usuario = getattr(request, "usuario_autenticado", None)
-        return bool(usuario and usuario.rol.nombre == "gestor")
+        return bool(usuario and usuario.rol.nombre in ("gestor", "administrador"))

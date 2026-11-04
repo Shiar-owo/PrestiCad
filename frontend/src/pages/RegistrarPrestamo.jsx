@@ -68,11 +68,17 @@ function fechaLegible(valor) {
   }).format(new Date(valor))
 }
 
-const OPCIONES_MATERIAL = (materiales) => [
+const OPCIONES_MATERIAL = (materiales, reservaActiva = false) => [
   { valor: '', etiqueta: 'Selecciona un material' },
   ...materiales.map((material) => ({
     valor: String(material.id),
-    etiqueta: `${material.nombre} — Código de Material: ${material.codigo_material || material.codigo_inventario} (${material.unidades_disponibles} disponibles)`,
+    etiqueta: `${material.nombre} — Código de Material: ${material.codigo_material || material.codigo_inventario} (${
+      material.unidades_disponibles > 0
+        ? `${material.unidades_disponibles} disponibles`
+        : reservaActiva
+          ? 'Ejemplar reservado asignado'
+          : '0 disponibles'
+    })`,
   })),
 ]
 
@@ -630,8 +636,8 @@ function RegistrarPrestamo() {
               opciones={
                 reservaSeleccionada?.material &&
                 !materiales.some((m) => String(m.id) === String(reservaSeleccionada.material.id))
-                  ? OPCIONES_MATERIAL([reservaSeleccionada.material, ...materiales])
-                  : OPCIONES_MATERIAL(materiales)
+                  ? OPCIONES_MATERIAL([reservaSeleccionada.material, ...materiales], true)
+                  : OPCIONES_MATERIAL(materiales, Boolean(reservaSeleccionada))
               }
               valor={formulario.materialId}
               onCambio={(evento) => actualizar('materialId', evento.target.value)}
@@ -945,11 +951,7 @@ function RegistrarPrestamo() {
               <Boton
                 tipo="submit"
                 cargando={guardando}
-                deshabilitado={bloqueadoPorElegibilidad || Boolean(
-                  requiereGarantia
-                  && !garantiaReutilizada
-                  && (!formulario.documentoIdentidad || !formulario.compromisoResponsabilidad)
-                )}
+                deshabilitado={bloqueadoPorElegibilidad}
               >
                 {reservaSeleccionada ? 'Convertir reserva y confirmar entrega' : 'Confirmar entrega'}
               </Boton>

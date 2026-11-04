@@ -107,7 +107,7 @@ class RegistrarPrestamoSerializer(
     reserva_id = serializers.UUIDField(required=False, allow_null=True)
     tiempo_prestamo_minutos = serializers.IntegerField(
         required=False,
-        min_value=MINIMO_MINUTOS_PRESTAMO,
+        min_value=60,
         max_value=MAXIMO_MINUTOS_PRESTAMO,
         error_messages={
             "min_value": "El tiempo mínimo de préstamo es de 15 minutos.",
@@ -186,18 +186,24 @@ class RegistrarPrestamoSerializer(
             data = datos
         return super().to_internal_value(data)
 
+    
     def validate(self, attrs):
-        datos_iniciales = self.initial_data
-        archivos_permitidos = {
-            f"foto_checklist_{indice}"
-            for indice in range(len(attrs["checklist_inicial"]))
-        }
-        if hasattr(datos_iniciales, "keys"):
-            self.initial_data = {
-                campo: datos_iniciales.get(campo)
-                for campo in datos_iniciales.keys()
-                if campo not in archivos_permitidos
-            }
+        attrs = super().validate(attrs)
+        material_id = attrs.get('material_id')
+        minutos = attrs.get('tiempo_prestamo_minutos')
+        if material_id and minutos:
+            from apps.inventario.models import Material
+            try:
+                material = Material.objects.get(pk=material_id)
+            except Material.DoesNotExist:
+                raise serializers.ValidationError({
+                    'material_id': 'Material no encontrado.'
+                })
+            if material.tier_minimo_requerido == 'avanzado' and minutos > 480:
+                raise serializers.ValidationError({
+                    'tiempo_prestamo_minutos': 'El tiempo máximo de préstamo para materiales de tier avanzado es 8 h (480 min).'
+                })
+        return attrs
         try:
             super().validate(attrs)
         finally:

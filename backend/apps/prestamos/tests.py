@@ -18,6 +18,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import close_old_connections
 from django.test import SimpleTestCase, TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from PIL import Image
 from rest_framework.test import APIClient, APITestCase
 
@@ -1232,6 +1233,29 @@ class HistorialPrestamosAPITestCase(APITestCase):
         self.assertTrue(all("condicion" not in item for item in datos["checklist_inicial"]))
         self.assertEqual(FotoChecklist.objects.filter(prestamo_id=datos["id"]).count(), 2)
         self.assertEqual(datos["estado"], "activo")
+        self.assertIsNone(datos["fecha_devolucion"])
+
+    def test_detalle_expone_fecha_de_devolucion_del_prestamo_devuelto(self):
+        prestamo = self._crear_prestamo(self.prestatario, "HIST-DETALLE-FECHA")
+        devolucion = registrar_devolucion(
+            prestamo_id=prestamo.id,
+            checklist_devolucion=[
+                {"elemento": "Carcasa", "estado": "sin_cambios", "observacion": ""},
+                {"elemento": "Cable", "estado": "sin_cambios", "observacion": ""},
+            ],
+            realizado_por=self.gestor,
+        )
+        self._iniciar_sesion(self.prestatario)
+
+        respuesta = self.client.get(self.URL_DETALLE.format(prestamo_id=prestamo.id))
+
+        self.assertEqual(respuesta.status_code, 200)
+        datos = respuesta.json()
+        self.assertEqual(datos["estado"], "devuelto")
+        self.assertEqual(
+            parse_datetime(datos["fecha_devolucion"]),
+            devolucion.fecha_devolucion,
+        )
 
     def test_detalle_permite_gestion_y_rechaza_a_otro_prestatario(self):
         prestamo = self._crear_prestamo(self.prestatario, "HIST-DETALLE-002")

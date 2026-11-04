@@ -215,6 +215,7 @@ class PrestamoHistorialDetalleSerializer(serializers.ModelSerializer):
     estado = serializers.CharField(source="estado_consulta", read_only=True)
     checklist_inicial = serializers.SerializerMethodField()
     checklist_final = serializers.SerializerMethodField()
+    fecha_devolucion = serializers.SerializerMethodField()
     hay_dano = serializers.SerializerMethodField()
     reporte_url = serializers.SerializerMethodField()
 
@@ -234,6 +235,7 @@ class PrestamoHistorialDetalleSerializer(serializers.ModelSerializer):
             "es_excepcion",
             "checklist_inicial",
             "checklist_final",
+            "fecha_devolucion",
             "hay_dano",
             "reporte_url",
             "documentos_garantia",
@@ -248,6 +250,12 @@ class PrestamoHistorialDetalleSerializer(serializers.ModelSerializer):
 
     def get_checklist_final(self, obj):
         return serializar_checklist_devolucion(obj)
+
+    def get_fecha_devolucion(self, obj):
+        try:
+            return obj.devolucion.fecha_devolucion
+        except Devolucion.DoesNotExist:
+            return None
 
     def get_hay_dano(self, obj):
         try:

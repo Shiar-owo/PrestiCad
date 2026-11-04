@@ -210,6 +210,11 @@ export default function DetallePrestamo({
               </CampoDetalle>
             )}
             <CampoDetalle etiqueta="Fecha de entrega">{mostrarFecha(detalle.fecha_entrega)}</CampoDetalle>
+            <CampoDetalle etiqueta="Fecha de devolución">
+              {detalle.fecha_devolucion
+                ? mostrarFecha(detalle.fecha_devolucion)
+                : 'Pendiente de devolución'}
+            </CampoDetalle>
             <CampoDetalle etiqueta="Fecha límite">{mostrarFecha(detalle.fecha_limite)}</CampoDetalle>
             <CampoDetalle etiqueta="Duración">
               {detalle.tiempo_prestamo_minutos

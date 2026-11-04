@@ -4,6 +4,13 @@ export const MAXIMO_RESERVAS_ACTIVAS = 3
 
 export const ESTADOS_ACTIVOS_RESERVA = ['en_espera', 'reservada']
 
+export const HORARIO_ATENCION_INICIO = 8
+export const HORARIO_ATENCION_FIN = 18
+export const HORA_RESERVA_MINIMO_INICIO = 9
+export const HORA_RESERVA_MAXIMO_FIN = 17
+export const DIAS_LABORABLES = [0, 1, 2, 3, 4]
+export const TOLERANCIA_RECOJO_MINUTOS = 30
+
 export const ETIQUETAS_ESTADO_RESERVA = {
   en_espera: 'En espera',
   reservada: 'Reservada',
@@ -142,6 +149,9 @@ export function construirFormularioReservaExcepcional({
 
 export function validarFormularioReserva({
   materialId,
+  instanciaId,
+  fechaInicio,
+  fechaFin,
   prioridad,
   justificacion,
   esExcepcion = false,
@@ -152,6 +162,11 @@ export function validarFormularioReserva({
 
   if (!String(materialId || '').trim()) {
     errores.materialId = 'Debes seleccionar un material.'
+  }
+
+  const erroresHorario = validarHorarioReserva(fechaInicio, fechaFin)
+  if (Object.keys(erroresHorario).length > 0) {
+    Object.assign(errores, erroresHorario)
   }
 
   if (!['alta', 'media', 'baja'].includes(prioridad)) {
@@ -213,4 +228,48 @@ export function obtenerMotivoVisibleReserva(reserva) {
     return reserva.motivo_cancelacion
   }
   return reserva.motivo_rechazo || reserva.motivo_cancelacion || ''
+}
+
+export function formatearFechaHoraInput(fecha) {
+  if (!fecha) return ''
+  const valor = new Date(fecha)
+  if (Number.isNaN(valor.getTime())) return ''
+  const offset = valor.getTimezoneOffset()
+  const local = new Date(valor.getTime() - offset * 60 * 1000)
+  return local.toISOString().slice(0, 16)
+}
+
+export function validarHorarioReserva(fechaInicio, fechaFin) {
+  const errores = {}
+  if (!fechaInicio) {
+    errores.fechaInicio = 'Debe indicar la fecha y hora de inicio de la reserva.'
+    return errores
+  }
+  if (!fechaFin) {
+    errores.fechaFin = 'Debe indicar la fecha y hora de fin de la reserva.'
+    return errores
+  }
+  const inicio = new Date(fechaInicio)
+  const fin = new Date(fechaFin)
+  if (Number.isNaN(inicio.getTime()) || Number.isNaN(fin.getTime())) {
+    errores.fechaInicio = 'La fecha y hora de inicio no es válida.'
+    errores.fechaFin = 'La fecha y hora de fin no es válida.'
+    return errores
+  }
+  if (fin <= inicio) {
+    errores.fechaFin = 'La fecha y hora de fin debe ser posterior a la de inicio.'
+  }
+  const validarDiaYHora = (valor, campo) => {
+    if (!DIAS_LABORABLES.includes(valor.getDay())) {
+      errores[campo] = 'La reserva solo puede realizarse de lunes a viernes (días laborables).'
+      return
+    }
+    const minutos = valor.getHours() * 60 + valor.getMinutes()
+    if (minutos < HORA_RESERVA_MINIMO_INICIO * 60 || minutos > HORA_RESERVA_MAXIMO_FIN * 60) {
+      errores[campo] = `La reserva debe estar dentro del horario de atención (${HORA_RESERVA_MINIMO_INICIO}:00 a ${HORA_RESERVA_MAXIMO_FIN}:00).`
+    }
+  }
+  validarDiaYHora(inicio, 'fechaInicio')
+  validarDiaYHora(fin, 'fechaFin')
+  return errores
 }

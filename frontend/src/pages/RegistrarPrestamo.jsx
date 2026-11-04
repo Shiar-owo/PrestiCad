@@ -298,6 +298,7 @@ function RegistrarPrestamo() {
   }
 
   function actualizar(campo, valor) {
+    if (campo === 'dni' && reservaSeleccionada) return
     const camposError = {
       dni: 'dni',
       materialId: 'material',
@@ -588,7 +589,6 @@ function RegistrarPrestamo() {
                   onChange={(e) => seleccionarReserva(e.target.value)}
                   className="w-full rounded-lg border border-borde bg-white px-3 py-2 text-sm text-texto dark:bg-superficie"
                 >
-                  <option value="">Préstamo directo (sin usar reserva confirmada)</option>
                   {reservasConfirmadas.map((res) => (
                     <option key={res.id} value={res.id}>
                       {res.material?.nombre} ({res.material?.codigo_material}) — Ejemplar{' '}

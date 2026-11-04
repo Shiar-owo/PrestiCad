@@ -1,6 +1,6 @@
 import { useContext, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
-import { ArrowLeft, CalendarCheck, Clock, ShieldAlert } from 'lucide-react'
+import { ArrowLeft, CalendarCheck, Clock, Download, ShieldAlert } from 'lucide-react'
 
 import { api, ErrorApi } from '../api/client'
 import BadgeEstado from '../components/ui/BadgeEstado'
@@ -415,7 +415,19 @@ export default function ReservarMaterial() {
                     <strong>{ETIQUETAS_TIER[tierMaterial] || tierMaterial}</strong>. Puedes registrar una solicitud excepcional adjuntando obligatoriamente tu documento de identidad y el compromiso de responsabilidad firmado en PDF (máximo 4 MB en total).
                   </p>
                   <p>
-                    La solicitud quedará en estado <strong>En espera</strong> hasta que el Gestor de Almacén verifique la garantía y la apruebe manualmente.
+                    <a
+                      href="/compromiso_responsabilidad.pdf"
+                      download="compromiso_responsabilidad.pdf"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 font-bold text-amber-900 underline hover:text-amber-950 dark:text-amber-200"
+                    >
+                      <Download aria-hidden="true" className="size-4" />
+                      Descargar formato oficial de compromiso de responsabilidad (.pdf)
+                    </a>
+                  </p>
+                  <p>
+                    La solicitud quedará en estado <strong>En espera</strong> hasta que el Gestor de Almacén verifique la garantía y la apruebe manualmente para entrar a la lista de espera.
                   </p>
                 </div>
               )}
@@ -480,12 +492,25 @@ export default function ReservarMaterial() {
                 </div>
 
                 <div>
-                  <label
-                    htmlFor="archivo-compromiso-reserva"
-                    className="block text-xs font-semibold text-texto"
-                  >
-                    Compromiso de responsabilidad firmado (PDF) *
-                  </label>
+                  <div className="flex flex-wrap items-center justify-between gap-1">
+                    <label
+                      htmlFor="archivo-compromiso-reserva"
+                      className="block text-xs font-semibold text-texto"
+                    >
+                      Compromiso de responsabilidad firmado (PDF) *
+                    </label>
+                    <a
+                      href="/compromiso_responsabilidad.pdf"
+                      download="compromiso_responsabilidad.pdf"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-marca-700 hover:text-marca-800 underline dark:text-marca-400"
+                      title="Descargar formato oficial de compromiso de responsabilidad"
+                    >
+                      <Download aria-hidden="true" className="size-3.5" />
+                      Descargar formato PDF
+                    </a>
+                  </div>
                   <input
                     id="archivo-compromiso-reserva"
                     type="file"

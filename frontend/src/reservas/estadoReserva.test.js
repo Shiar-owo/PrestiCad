@@ -30,6 +30,13 @@ describe('helpers de estado y elegibilidad de reserva', () => {
     expect(textoEstadoReserva({ estado: 'en_espera', es_excepcion: true })).toBe(
       'En espera - Excepción',
     )
+    expect(
+      textoEstadoReserva({
+        estado: 'en_espera',
+        es_excepcion: true,
+        excepcion_aprobada: true,
+      }),
+    ).toBe('En espera (Excepción aprobada)')
     expect(textoEstadoReserva({ estado: 'reservada', es_excepcion: false })).toBe(
       'Reservada',
     )

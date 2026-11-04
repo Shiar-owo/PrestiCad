@@ -20,6 +20,7 @@ export default function SelectorPrestatario({
   error = '',
   ayuda = '',
   requerido = false,
+  deshabilitado = false,
 }) {
   const id = useId()
   const [seleccionado, setSeleccionado] = useState(null)
@@ -94,6 +95,7 @@ export default function SelectorPrestatario({
         autoComplete="off"
         maxLength={8}
         requerido={requerido}
+        deshabilitado={deshabilitado}
         role="combobox"
         aria-autocomplete="list"
         aria-expanded={sugerencias.length > 0}

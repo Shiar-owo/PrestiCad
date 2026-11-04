@@ -395,6 +395,7 @@ class RegistrarPrestamoServiceTestCase(TestCase):
             nombre="Gafas VR",
             tipo="equipo",
             tier_minimo_requerido="avanzado",
+            tiempo_maximo_prestamo=480,
             stock=2,
         )
         self.assertEqual(gafas_vr.tiempo_maximo_prestamo, 480)

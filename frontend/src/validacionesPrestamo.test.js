@@ -126,11 +126,11 @@ describe('validarFormularioPrestamo', () => {
     expect(fechaLimite).toBeInstanceOf(Date)
     expect(calcularFechaLimiteEstimada(59, 'minutos')).toBeNull()
     expect(calcularFechaLimiteEstimada(9, 'horas', { tiempo_maximo_prestamo: 480 })).toBeNull()
-    expect(calcularFechaLimiteEstimada(8, 'horas', { tier_minimo_requerido: 'avanzado' })).not.toBeNull()
+    expect(calcularFechaLimiteEstimada(6, 'horas', { tier_minimo_requerido: 'avanzado' })).not.toBeNull()
   })
 
   it('limita la duración mínima a 1 hora y la máxima según el material (defaults por Tier)', () => {
-    expect(obtenerMinutosMaximosMaterial({ tier_minimo_requerido: 'avanzado' })).toBe(480)
+    expect(obtenerMinutosMaximosMaterial({ tier_minimo_requerido: 'avanzado' })).toBe(360)
     expect(obtenerMinutosMaximosMaterial({ tier_minimo_requerido: 'estandar' })).toBe(1440)
     expect(obtenerMinutosMaximosMaterial({ tier_minimo_requerido: 'restringido' })).toBe(4320)
     expect(obtenerMinutosMaximosMaterial({ tiempo_maximo_prestamo: 180 })).toBe(180)
@@ -141,27 +141,27 @@ describe('validarFormularioPrestamo', () => {
         duracionValor: '59',
         duracionUnidad: 'minutos',
       }).dias,
-    ).toBe('El tiempo mínimo de préstamo es de 60 minutos.')
+    ).toBe('El tiempo mínimo de préstamo es de 1 hora (60 minutos).')
 
     expect(
       validarFormularioPrestamo({
         ...formularioValido,
         material: { id: 'vr-1', es_alto_valor: false, tier_minimo_requerido: 'avanzado' },
-        duracionValor: '9',
+        duracionValor: '7',
         duracionUnidad: 'horas',
       }).dias,
-    ).toBe('El tiempo solicitado supera el máximo permitido para este material (8 horas).')
+    ).toBe('El tiempo solicitado supera el máximo permitido para este material (6 horas).')
 
     expect(
       validarFormularioPrestamo({
         ...formularioValido,
         material: { id: 'vr-1', es_alto_valor: false, tier_minimo_requerido: 'avanzado' },
-        duracionValor: '8',
+        duracionValor: '6',
         duracionUnidad: 'horas',
       }),
     ).toEqual({})
 
-    expect(ayudaRangoDuracion({ tier_minimo_requerido: 'avanzado' })).toMatch(/8 horas/)
+    expect(ayudaRangoDuracion({ tier_minimo_requerido: 'avanzado' })).toMatch(/6 horas/)
     expect(ayudaRangoDuracion({ tier_minimo_requerido: 'avanzado' })).toMatch(/30 min de tiempo de gracia/)
   })
 
@@ -169,25 +169,25 @@ describe('validarFormularioPrestamo', () => {
     const materialVr = { tier_minimo_requerido: 'avanzado' }
     expect(evaluarCambioDuracion('59', '30', 'minutos', materialVr)).toEqual({
       valor: '30',
-      error: 'El tiempo mínimo de préstamo es de 60 minutos.',
+      error: 'El tiempo mínimo de préstamo es de 1 hora (60 minutos).',
     })
-    expect(evaluarCambioDuracion('9', '8', 'horas', materialVr)).toEqual({
-      valor: '8',
-      error: 'El tiempo solicitado supera el máximo permitido para este material (8 horas).',
+    expect(evaluarCambioDuracion('7', '6', 'horas', materialVr)).toEqual({
+      valor: '6',
+      error: 'El tiempo solicitado supera el máximo permitido para este material (6 horas).',
     })
     expect(evaluarCambioDuracion('-1', '3', 'horas', materialVr)).toEqual({
       valor: '3',
-      error: 'La duración debe ser de al menos 60 minutos y máximo 8 horas.',
+      error: 'La duración debe ser de al menos 1 hora (60 minutos) y máximo 6 horas.',
     })
     expect(evaluarCambioDuracion('0', '3', 'horas', materialVr)).toEqual({
       valor: '3',
-      error: 'La duración debe ser de al menos 60 minutos y máximo 8 horas.',
+      error: 'La duración debe ser de al menos 1 hora (60 minutos) y máximo 6 horas.',
     })
     expect(evaluarCambioDuracion('1.5', '3', 'horas', materialVr)).toEqual({
       valor: '3',
-      error: 'La duración debe ser de al menos 60 minutos y máximo 8 horas.',
+      error: 'La duración debe ser de al menos 1 hora (60 minutos) y máximo 6 horas.',
     })
-    expect(evaluarCambioDuracion('8', '3', 'horas', materialVr)).toEqual({ valor: '8', error: '' })
+    expect(evaluarCambioDuracion('6', '3', 'horas', materialVr)).toEqual({ valor: '6', error: '' })
     expect(evaluarCambioDuracion('60', '30', 'minutos', materialVr)).toEqual({ valor: '60', error: '' })
     expect(evaluarCambioDuracion('', '3', 'horas', materialVr)).toEqual({ valor: '', error: '' })
   })

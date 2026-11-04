@@ -44,6 +44,29 @@ export default function MisReservas() {
   const [filtro, setFiltro] = useState('todas')
   const [intento, setIntento] = useState(0)
 
+  const [reservaACancelar, setReservaACancelar] = useState(null)
+  const [cancelando, setCancelando] = useState(false)
+  const [errorCancelacion, setErrorCancelacion] = useState('')
+
+  async function confirmarCancelacion() {
+    if (!reservaACancelar) return
+    setCancelando(true)
+    setErrorCancelacion('')
+    try {
+      await api.post(`/reservas/${reservaACancelar.id}/cancelar/`, {
+        motivo: 'Cancelada por el prestatario.',
+      })
+      setReservaACancelar(null)
+      setIntento((v) => v + 1)
+    } catch (err) {
+      const datos = err?.datos
+      const mensaje = datos?.detail || (datos && Object.values(datos).flat()[0]) || 'No se pudo cancelar la reserva.'
+      setErrorCancelacion(String(mensaje))
+    } finally {
+      setCancelando(false)
+    }
+  }
+
   useEffect(() => {
     let activa = true
     setCargando(true)
@@ -260,6 +283,13 @@ export default function MisReservas() {
                               </span>
                             )}
                           </dd>
+                          {instancia?.foto && (
+                            <img
+                              src={instancia.foto}
+                              alt={`Foto del ejemplar ${instancia.codigo_ejemplar}`}
+                              className="mt-2 h-16 w-16 rounded-lg border border-borde object-cover"
+                            />
+                          )}
                         </div>
                         <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3 dark:border-amber-800 dark:bg-amber-950/30">
                           <dt className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-300">
@@ -336,11 +366,67 @@ export default function MisReservas() {
                       )}
                     </div>
                   )}
+                  {esReservaActiva(reserva) && (
+                    <div className="mt-4 flex justify-end border-t border-borde pt-3">
+                      <Boton
+                        variante="peligro"
+                        tamanio="pequeno"
+                        onClick={() => {
+                          setReservaACancelar(reserva)
+                          setErrorCancelacion('')
+                        }}
+                      >
+                        Cancelar reserva
+                      </Boton>
+                    </div>
+                  )}
                 </Tarjeta>
               </li>
             )
           })}
         </ul>
+      )}
+
+      {reservaACancelar && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4"
+          role="presentation"
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="titulo-modal-cancelar"
+            className="w-full max-w-md rounded-xl border border-borde bg-superficie p-6 shadow-2xl space-y-4"
+          >
+            <h3 id="titulo-modal-cancelar" className="text-lg font-bold text-texto">
+              ¿Cancelar esta reserva?
+            </h3>
+            <p className="text-sm text-texto-suave">
+              ¿Estás seguro de que deseas cancelar tu reserva para{' '}
+              <strong>{reservaACancelar.material?.nombre}</strong>? Esta acción no se puede deshacer y liberará tu lugar.
+            </p>
+            {errorCancelacion && <ErrorAlerta mensaje={errorCancelacion} />}
+            <div className="flex justify-end gap-3 pt-2">
+              <Boton
+                variante="secundario"
+                deshabilitado={cancelando}
+                onClick={() => {
+                  setReservaACancelar(null)
+                  setErrorCancelacion('')
+                }}
+              >
+                No, mantener reserva
+              </Boton>
+              <Boton
+                variante="peligro"
+                cargando={cancelando}
+                onClick={confirmarCancelacion}
+              >
+                Sí, cancelar reserva
+              </Boton>
+            </div>
+          </div>
+        </div>
       )}
     </section>
   )

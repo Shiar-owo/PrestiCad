@@ -906,7 +906,7 @@ function RegistrarPrestamo() {
                   archivo={formulario.documentoIdentidad}
                   onCambio={(archivo) => actualizar('documentoIdentidad', archivo)}
                   error={errores.documento_identidad}
-                  ayuda={`Solo se acepta application/pdf, hasta ${TAMANO_MAXIMO_GARANTIA_MB} MB.`}
+                  ayuda={`Solo se aceptan archivos PDF (.pdf), hasta ${TAMANO_MAXIMO_GARANTIA_MB} MB.`}
                 />
                 <SubidaDocumentoPDF
                   etiqueta={
@@ -917,7 +917,7 @@ function RegistrarPrestamo() {
                   archivo={formulario.compromisoResponsabilidad}
                   onCambio={(archivo) => actualizar('compromisoResponsabilidad', archivo)}
                   error={errores.compromiso_responsabilidad}
-                  ayuda={`Solo se acepta application/pdf, hasta ${TAMANO_MAXIMO_GARANTIA_MB} MB.`}
+                  ayuda={`Solo se aceptan archivos PDF (.pdf), hasta ${TAMANO_MAXIMO_GARANTIA_MB} MB.`}
                 />
               </fieldset>
             )}

@@ -51,14 +51,14 @@ class EsGestorOAdministrador(BasePermission):
 
 
 class EsGestorOPrestatarioTitularReserva(BasePermission):
-    """Permite consultar los documentos de garantía de una reserva al gestor o al titular."""
+    """Permite consultar los documentos de garantía de una reserva al gestor, administrador o al titular."""
 
     def has_permission(self, request, view):
         usuario = getattr(request, "usuario_autenticado", None)
         if usuario is None:
             raise PermissionDenied(detail="Inicia sesión para consultar esta garantía.")
 
-        if usuario.rol.nombre == "gestor":
+        if usuario.rol.nombre in ("gestor", "administrador"):
             return True
         reserva_id = view.kwargs.get("id") or view.kwargs.get("reserva_id")
         if usuario.rol.nombre == "prestatario" and Reserva.objects.filter(
@@ -68,5 +68,5 @@ class EsGestorOPrestatarioTitularReserva(BasePermission):
             return True
 
         raise PermissionDenied(
-            detail="Solo el gestor de almacén o el prestatario titular puede consultar esta garantía."
+            detail="Solo gestión de almacén, administración o el prestatario titular pueden consultar esta garantía."
         )

@@ -3,7 +3,7 @@ from rest_framework import serializers
 from apps.inventario.models import InstanciaMaterial, Material
 from apps.prestamos.constants import TAMANO_MAXIMO_SOLICITUD_BYTES
 from apps.prestamos.validators import validar_pdf_garantia
-from apps.reservas.constants import MENSAJES_ERROR_RESERVA, VALORES_PRIORIDAD_RESERVA
+from apps.reservas.constants import MENSAJES_ERROR_RESERVA
 from apps.reservas.models import Reserva
 from apps.reservas.services import calcular_posicion_en_cola
 
@@ -17,14 +17,6 @@ class CrearReservaSerializer(serializers.Serializer):
             "null": "Selecciona un material para reservar.",
             "invalid": "El identificador del material no es válido.",
         }
-    )
-    prioridad = serializers.ChoiceField(
-        choices=VALORES_PRIORIDAD_RESERVA,
-        error_messages={
-            "required": MENSAJES_ERROR_RESERVA["prioridad_invalida"],
-            "null": MENSAJES_ERROR_RESERVA["prioridad_invalida"],
-            "invalid_choice": MENSAJES_ERROR_RESERVA["prioridad_invalida"],
-        },
     )
     justificacion = serializers.CharField(
         allow_blank=False,
@@ -153,6 +145,7 @@ class ReservaDetalleSerializer(serializers.ModelSerializer):
     prestamo_id = serializers.IntegerField(read_only=True)
     posicion_cola = serializers.SerializerMethodField()
     garantia = serializers.SerializerMethodField()
+    fecha_creacion = serializers.DateTimeField(source="fecha_solicitud", read_only=True)
 
     class Meta:
         model = Reserva
@@ -162,13 +155,13 @@ class ReservaDetalleSerializer(serializers.ModelSerializer):
             "material",
             "instancia",
             "prestamo_id",
-            "prioridad",
             "justificacion",
             "estado",
             "es_excepcion",
             "motivo_rechazo",
             "motivo_cancelacion",
             "fecha_solicitud",
+            "fecha_creacion",
             "fecha_limite_espera",
             "fecha_confirmacion",
             "fecha_limite_recojo",
@@ -188,15 +181,19 @@ class ReservaDetalleSerializer(serializers.ModelSerializer):
         garantia = getattr(obj, "garantia", None)
         if garantia is None:
             return None
+        doc_disp = bool(garantia.documento_identidad)
+        comp_disp = bool(garantia.compromiso_responsabilidad)
         return {
             "id": garantia.id,
             "estado": garantia.estado,
-            "tiene_documento_identidad": bool(garantia.documento_identidad),
-            "tiene_compromiso_responsabilidad": bool(garantia.compromiso_responsabilidad),
+            "tiene_documento_identidad": doc_disp,
+            "tiene_compromiso_responsabilidad": comp_disp,
+            "documento_identidad_disponible": doc_disp,
+            "compromiso_responsabilidad_disponible": comp_disp,
             "garantia_completa": bool(
                 garantia.estado == "registrada"
-                and garantia.documento_identidad
-                and garantia.compromiso_responsabilidad
+                and doc_disp
+                and comp_disp
             ),
             "fecha_registro": garantia.fecha_registro,
         }

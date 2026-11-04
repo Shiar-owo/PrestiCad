@@ -66,29 +66,25 @@ describe('helpers de estado y elegibilidad de reserva', () => {
 })
 
 describe('ordenarColaReservas', () => {
-  it('ordena por prioridad descendente, antigüedad FIFO y Tier descendente', () => {
+  it('ordena por antigüedad FIFO y desempata por Tier descendente', () => {
     const desordenadas = [
       {
-        id: 'baja-1',
-        prioridad: 'baja',
+        id: 'temprana-restringido',
         fecha_creacion: '2026-04-10T08:00:00Z',
+        usuario: { reputacion_tier: 'restringido' },
+      },
+      {
+        id: 'tardia-avanzado',
+        fecha_creacion: '2026-04-10T10:00:00Z',
         usuario: { reputacion_tier: 'avanzado' },
       },
       {
-        id: 'alta-tardia',
-        prioridad: 'alta',
-        fecha_creacion: '2026-04-10T10:00:00Z',
-        usuario: { reputacion_tier: 'estandar' },
-      },
-      {
-        id: 'alta-temprana-estandar',
-        prioridad: 'alta',
+        id: 'intermedia-estandar',
         fecha_creacion: '2026-04-10T09:00:00Z',
         usuario: { reputacion_tier: 'estandar' },
       },
       {
-        id: 'alta-temprana-avanzado',
-        prioridad: 'alta',
+        id: 'intermedia-avanzado',
         fecha_creacion: '2026-04-10T09:00:00Z',
         usuario: { reputacion_tier: 'avanzado' },
       },
@@ -96,16 +92,16 @@ describe('ordenarColaReservas', () => {
 
     const ordenadas = ordenarColaReservas(desordenadas)
     expect(ordenadas.map((r) => r.id)).toEqual([
-      'alta-temprana-avanzado',
-      'alta-temprana-estandar',
-      'alta-tardia',
-      'baja-1',
+      'temprana-restringido',
+      'intermedia-avanzado',
+      'intermedia-estandar',
+      'tardia-avanzado',
     ])
   })
 })
 
 describe('construirFormularioReservaExcepcional y validarFormularioReserva', () => {
-  it('construye FormData con material_id, prioridad, justificacion y ambos PDFs', () => {
+  it('construye FormData con material_id, justificacion y ambos PDFs', () => {
     const dniPdf = new File(['%PDF-1.4'], 'dni.pdf', { type: 'application/pdf' })
     const compromisoPdf = new File(['%PDF-1.4'], 'compromiso.pdf', {
       type: 'application/pdf',
@@ -113,7 +109,6 @@ describe('construirFormularioReservaExcepcional y validarFormularioReserva', () 
 
     const form = construirFormularioReservaExcepcional({
       materialId: 'mat-uuid-1',
-      prioridad: 'alta',
       justificacion: ' Práctica de laboratorio final ',
       documentoIdentidad: dniPdf,
       compromisoResponsabilidad: compromisoPdf,
@@ -121,7 +116,6 @@ describe('construirFormularioReservaExcepcional y validarFormularioReserva', () 
 
     expect(form).toBeInstanceOf(FormData)
     expect(form.get('material_id')).toBe('mat-uuid-1')
-    expect(form.get('prioridad')).toBe('alta')
     expect(form.get('justificacion')).toBe('Práctica de laboratorio final')
     expect(form.get('documento_identidad')).toBe(dniPdf)
     expect(form.get('compromiso_responsabilidad')).toBe(compromisoPdf)
@@ -130,12 +124,10 @@ describe('construirFormularioReservaExcepcional y validarFormularioReserva', () 
   it('valida campos obligatorios y límite total de 4 MB en excepción académica', () => {
     const erroresVacio = validarFormularioReserva({
       materialId: '',
-      prioridad: 'invalida',
       justificacion: '   ',
       esExcepcion: true,
     })
     expect(erroresVacio).toHaveProperty('materialId')
-    expect(erroresVacio).toHaveProperty('prioridad')
     expect(erroresVacio).toHaveProperty('justificacion')
     expect(erroresVacio).toHaveProperty('documentoIdentidad')
     expect(erroresVacio).toHaveProperty('compromisoResponsabilidad')
@@ -146,7 +138,6 @@ describe('construirFormularioReservaExcepcional y validarFormularioReserva', () 
     )
     const erroresPeso = validarFormularioReserva({
       materialId: 'mat-1',
-      prioridad: 'alta',
       justificacion: 'Tesis',
       esExcepcion: true,
       documentoIdentidad: archivoPesado,

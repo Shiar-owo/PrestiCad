@@ -13,7 +13,6 @@ import { ETIQUETAS_TIER } from '../constantes/catalogo'
 import useTituloPagina from '../hooks/useTituloPagina'
 import {
   MAXIMO_RESERVAS_ACTIVAS,
-  ETIQUETAS_PRIORIDAD,
   contarReservasActivas,
   esReservaActiva,
   formatearFechaReserva,
@@ -203,10 +202,6 @@ export default function MisReservas() {
                       <p className="mt-1 text-xs text-texto-suave">
                         Código de Material: <span className="font-semibold">{material.codigo_material}</span>
                         {tierLegible && <> · Tier mínimo: {tierLegible}</>}
-                        {' · '}Prioridad:{' '}
-                        <span className="font-semibold text-texto">
-                          {ETIQUETAS_PRIORIDAD[reserva.prioridad] || reserva.prioridad}
-                        </span>
                       </p>
                     </div>
 
@@ -222,7 +217,7 @@ export default function MisReservas() {
                         Fecha de solicitud
                       </dt>
                       <dd className="mt-1 font-medium text-texto">
-                        {formatearFechaReserva(reserva.fecha_creacion)}
+                        {formatearFechaReserva(reserva.fecha_solicitud || reserva.fecha_creacion || reserva.created_at)}
                       </dd>
                     </div>
 
@@ -317,7 +312,7 @@ export default function MisReservas() {
                   {reserva.garantia && (
                     <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-borde bg-superficie-alta/40 p-3 text-xs">
                       <span className="font-semibold text-texto">Documentos de garantía adjuntos:</span>
-                      {reserva.garantia.documento_identidad_disponible && (
+                      {(reserva.garantia.documento_identidad_disponible || reserva.garantia.tiene_documento_identidad) && (
                         <a
                           href={`/api/reservas/${reserva.id}/garantia/documento-identidad/`}
                           target="_blank"
@@ -328,7 +323,7 @@ export default function MisReservas() {
                           Documento de identidad (PDF)
                         </a>
                       )}
-                      {reserva.garantia.compromiso_responsabilidad_disponible && (
+                      {(reserva.garantia.compromiso_responsabilidad_disponible || reserva.garantia.tiene_compromiso_responsabilidad) && (
                         <a
                           href={`/api/reservas/${reserva.id}/garantia/compromiso/`}
                           target="_blank"

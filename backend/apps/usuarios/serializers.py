@@ -211,3 +211,4 @@ class SesionUsuarioSerializer(serializers.Serializer):
     rol = serializers.ChoiceField(choices=ROLES)
     estado = serializers.ChoiceField(choices=ESTADOS_USUARIO)
     reputacion_tier = serializers.ChoiceField(choices=TIERS)
+    reputacion_puntaje = serializers.IntegerField(required=False, default=0)

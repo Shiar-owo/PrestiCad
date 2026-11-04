@@ -22,7 +22,6 @@ from apps.reservas.constants import (
     HORAS_ESPERA,
     HORAS_RECOJO,
     MENSAJES_ERROR_RESERVA,
-    VALORES_PRIORIDAD_RESERVA,
 )
 from apps.reservas.models import Reserva
 from apps.usuarios.models import Usuario
@@ -40,15 +39,8 @@ class ReservaError(Exception):
 
 
 def _anotar_orden_cola(queryset):
-    """Ordena determinísticamente la cola: prioridad -> fecha_solicitud -> Tier -> id (RN11)."""
+    """Ordena determinísticamente la cola: fecha_solicitud (FIFO) -> Tier -> id (RN11)."""
     return queryset.annotate(
-        _orden_prioridad=Case(
-            When(prioridad="alta", then=Value(0)),
-            When(prioridad="media", then=Value(1)),
-            When(prioridad="baja", then=Value(2)),
-            default=Value(9),
-            output_field=IntegerField(),
-        ),
         _orden_tier=Case(
             When(usuario__reputacion_tier="avanzado", then=Value(0)),
             When(usuario__reputacion_tier="estandar", then=Value(1)),
@@ -56,7 +48,7 @@ def _anotar_orden_cola(queryset):
             default=Value(9),
             output_field=IntegerField(),
         ),
-    ).order_by("_orden_prioridad", "fecha_solicitud", "_orden_tier", "id")
+    ).order_by("fecha_solicitud", "_orden_tier", "id")
 
 
 def _validar_usuario_prestatario(usuario):
@@ -106,16 +98,11 @@ def _validar_maximo_reservas_activas(usuario_id):
         )
 
 
-def _validar_campos_solicitud(prioridad, justificacion):
-    prioridad_limpia = str(prioridad or "").strip().lower()
-    if prioridad_limpia not in VALORES_PRIORIDAD_RESERVA:
-        raise ReservaError("prioridad", MENSAJES_ERROR_RESERVA["prioridad_invalida"])
-
+def _validar_justificacion(justificacion):
     justificacion_limpia = str(justificacion or "").strip()
     if not justificacion_limpia:
         raise ReservaError("justificacion", MENSAJES_ERROR_RESERVA["justificacion_obligatoria"])
-
-    return prioridad_limpia, justificacion_limpia
+    return justificacion_limpia
 
 
 @transaction.atomic
@@ -196,7 +183,6 @@ def crear_reserva(
     *,
     usuario,
     material_id,
-    prioridad,
     justificacion,
     ahora=None,
 ):
@@ -210,7 +196,7 @@ def crear_reserva(
     """
     ahora = ahora or timezone.now()
     _validar_usuario_prestatario(usuario)
-    prioridad_limpia, justificacion_limpia = _validar_campos_solicitud(prioridad, justificacion)
+    justificacion_limpia = _validar_justificacion(justificacion)
 
     usuario_bloqueado = (
         Usuario.objects.select_for_update().select_related("rol").get(pk=usuario.pk)
@@ -263,7 +249,6 @@ def crear_reserva(
             usuario=usuario_bloqueado,
             material=material,
             instancia=instancia_libre,
-            prioridad=prioridad_limpia,
             justificacion=justificacion_limpia,
             estado="reservada",
             es_excepcion=False,
@@ -277,7 +262,6 @@ def crear_reserva(
             usuario=usuario_bloqueado,
             material=material,
             instancia=None,
-            prioridad=prioridad_limpia,
             justificacion=justificacion_limpia,
             estado="en_espera",
             es_excepcion=False,
@@ -321,7 +305,6 @@ def crear_reserva_excepcional(
     *,
     usuario,
     material_id,
-    prioridad,
     justificacion,
     documento_identidad,
     compromiso_responsabilidad,
@@ -330,7 +313,7 @@ def crear_reserva_excepcional(
     """Crea una solicitud excepcional para un prestatario Restringido o Estándar (HU06, HU13)."""
     ahora = ahora or timezone.now()
     _validar_usuario_prestatario(usuario)
-    prioridad_limpia, justificacion_limpia = _validar_campos_solicitud(prioridad, justificacion)
+    justificacion_limpia = _validar_justificacion(justificacion)
     _validar_documentos_garantia_reserva(documento_identidad, compromiso_responsabilidad)
 
     usuario_bloqueado = (
@@ -357,7 +340,6 @@ def crear_reserva_excepcional(
         usuario=usuario_bloqueado,
         material=material,
         instancia=None,
-        prioridad=prioridad_limpia,
         justificacion=justificacion_limpia,
         estado="en_espera",
         es_excepcion=True,

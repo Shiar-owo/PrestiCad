@@ -30,12 +30,12 @@ export function obtenerMinutosMaximosMaterial(material) {
 
 export function mensajeRangoDuracion(material = null) {
   const maximoMinutos = obtenerMinutosMaximosMaterial(material)
-  return `La duración debe ser de al menos ${DURACION_MINIMA_PRESTAMO_MINUTOS} minutos y máximo ${formatearDuracionMinutos(maximoMinutos)}.`
+  return `La duración debe ser de al menos 1 hora (60 minutos) y máximo ${formatearDuracionMinutos(maximoMinutos)}.`
 }
 
 export function ayudaRangoDuracion(material = null) {
   const maximoMinutos = obtenerMinutosMaximosMaterial(material)
-  return `Mínimo ${DURACION_MINIMA_PRESTAMO_MINUTOS} minutos · Máximo para este material: ${formatearDuracionMinutos(maximoMinutos)} · Incluye 30 min de tiempo de gracia en la devolución.`
+  return `Mínimo 1 hora (60 minutos) · Máximo para este material: ${formatearDuracionMinutos(maximoMinutos)} · Incluye 30 min de tiempo de gracia en la devolución.`
 }
 
 export function validarFormularioPrestamo({
@@ -79,7 +79,7 @@ export function validarFormularioPrestamo({
   ) {
     errores.dias = mensajeRangoDuracion(material)
   } else if (minutos < DURACION_MINIMA_PRESTAMO_MINUTOS) {
-    errores.dias = `El tiempo mínimo de préstamo es de ${DURACION_MINIMA_PRESTAMO_MINUTOS} minutos.`
+    errores.dias = 'El tiempo mínimo de préstamo es de 1 hora (60 minutos).'
   } else if (minutos > maximoMinutos) {
     errores.dias = `El tiempo solicitado supera el máximo permitido para este material (${formatearDuracionMinutos(maximoMinutos)}).`
   }
@@ -139,7 +139,7 @@ export function evaluarCambioDuracion(duracion, duracionAnterior, unidad = 'hora
   if (minutos < DURACION_MINIMA_PRESTAMO_MINUTOS) {
     return {
       valor: String(duracionAnterior),
-      error: `El tiempo mínimo de préstamo es de ${DURACION_MINIMA_PRESTAMO_MINUTOS} minutos.`,
+      error: 'El tiempo mínimo de préstamo es de 1 hora (60 minutos).',
     }
   }
   if (minutos > maximoMinutos) {

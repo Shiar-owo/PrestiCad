@@ -10,7 +10,7 @@ export const DURACION_MINIMA_PRESTAMO_DIAS = 1
 export const DURACION_MAXIMA_PRESTAMO_DIAS = 15
 
 export const TIEMPO_MAXIMO_DEFAULT_POR_TIER = {
-  avanzado: { valor: 8, unidad: 'horas', minutos: 480 },
+  avanzado: { valor: 6, unidad: 'horas', minutos: 360 },
   estandar: { valor: 24, unidad: 'horas', minutos: 1440 },
   restringido: { valor: 3, unidad: 'dias', minutos: 4320 },
 }

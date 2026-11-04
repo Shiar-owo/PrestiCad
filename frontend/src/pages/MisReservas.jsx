@@ -265,6 +265,13 @@ export default function MisReservas() {
                               </span>
                             )}
                           </dd>
+                          {instancia?.foto && (
+                            <img
+                              src={instancia.foto}
+                              alt={`Foto del ejemplar ${instancia.codigo_ejemplar}`}
+                              className="mt-2 h-16 w-16 rounded-lg border border-borde object-cover"
+                            />
+                          )}
                         </div>
                         <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3 dark:border-amber-800 dark:bg-amber-950/30">
                           <dt className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-300">

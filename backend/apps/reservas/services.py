@@ -197,13 +197,15 @@ def autopromover_material(material_id, *, ahora=None):
     return promovidas
 
 
-def _validar_horario_reserva(fecha_inicio, fecha_fin):
-    """Valida que la reserva esté dentro del horario de atención y días laborables."""
+def _validar_horario_reserva(fecha_inicio, fecha_fin, *, es_avanzado=False):
+    """Valida que la reserva esté dentro del horario de atención y días laborables.
+    Las reservas no pueden extenderse fuera de la misma semana (no pueden cruzar fin de semana).
+    Para materiales de Tier avanzado, inicio y fin deben ser el mismo día."""
     for etiqueta, valor in (("fecha_inicio", fecha_inicio), ("fecha_fin", fecha_fin)):
         if valor.weekday() not in DIAS_LABORABLES:
             raise ReservaError(
                 etiqueta,
-                "La reserva solo puede realizarse de lunes a viernes (días laborables).",
+                "Solo se permite reservar de lunes a viernes (días laborables).",
             )
         minutos_dia = valor.hour * 60 + valor.minute
         if not (
@@ -211,14 +213,30 @@ def _validar_horario_reserva(fecha_inicio, fecha_fin):
         ):
             raise ReservaError(
                 etiqueta,
-                f"La reserva debe estar dentro del horario de atención "
-                f"({HORA_RESERVA_MINIMO_INICIO}:00 a {HORA_RESERVA_MAXIMO_FIN}:00).",
+                f"El horario de atención es de {HORA_RESERVA_MINIMO_INICIO}:00 a {HORA_RESERVA_MAXIMO_FIN}:00.",
             )
+
     if fecha_fin <= fecha_inicio:
         raise ReservaError(
             "fecha_fin",
             "La fecha y hora de fin debe ser posterior a la de inicio.",
         )
+
+    # La reserva debe estar dentro de la misma semana (lunes a viernes, sin cruzar fin de semana)
+    lunes_inicio = fecha_inicio.date() - timedelta(days=fecha_inicio.weekday())
+    lunes_fin = fecha_fin.date() - timedelta(days=fecha_fin.weekday())
+    if lunes_inicio != lunes_fin:
+        raise ReservaError(
+            "fecha_fin",
+            "La reserva debe realizarse dentro de la misma semana (lunes a viernes) y no puede extenderse cruzando el fin de semana.",
+        )
+
+    if es_avanzado:
+        if fecha_inicio.date() != fecha_fin.date():
+            raise ReservaError(
+                "fecha_inicio",
+                "Para materiales de Tier avanzado, el inicio y el fin deben ser el mismo día.",
+            )
 
 
 @transaction.atomic
@@ -245,14 +263,25 @@ def crear_reserva(
     _validar_usuario_prestatario(usuario)
     prioridad_limpia, justificacion_limpia = _validar_campos_solicitud(prioridad, justificacion)
 
+    material = _obtener_material_bloqueado(material_id)
+
+    # Para materiales de Tier avanzado, inicio y fin deben ser el mismo día; solo se eligen horas.
+    es_avanzado = material.tier_minimo_requerido == "avanzado"
+    if es_avanzado:
+        if fecha_inicio is not None and fecha_fin is not None:
+            if fecha_inicio.date() != fecha_fin.date():
+                raise ReservaError(
+                    "fecha_fin",
+                    "Para materiales de Tier avanzado, el inicio y el fin deben ser el mismo día.",
+                )
+
     if fecha_inicio is not None or fecha_fin is not None:
-        _validar_horario_reserva(fecha_inicio, fecha_fin)
+        _validar_horario_reserva(fecha_inicio, fecha_fin, es_avanzado=es_avanzado)
 
     usuario_bloqueado = (
         Usuario.objects.select_for_update().select_related("rol").get(pk=usuario.pk)
     )
     _validar_usuario_prestatario(usuario_bloqueado)
-    material = _obtener_material_bloqueado(material_id)
 
     tiers_permitidos = TIERS_ACCESIBLES.get(usuario_bloqueado.reputacion_tier, ())
     if material.tier_minimo_requerido not in tiers_permitidos:

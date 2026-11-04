@@ -1,3 +1,6 @@
+from datetime import timedelta
+
+from django.conf import settings
 from rest_framework import serializers
 
 from apps.inventario.models import InstanciaMaterial, Material
@@ -89,6 +92,13 @@ class CrearReservaSerializer(serializers.Serializer):
                             f"({HORA_RESERVA_MINIMO_INICIO}:00 a {HORA_RESERVA_MAXIMO_FIN}:00)."
                         ),
                     })
+
+            lunes_inicio = fecha_inicio.date() - timedelta(days=fecha_inicio.weekday())
+            lunes_fin = fecha_fin.date() - timedelta(days=fecha_fin.weekday())
+            if lunes_inicio != lunes_fin:
+                raise serializers.ValidationError({
+                    "fecha_fin": "La reserva debe realizarse dentro de la misma semana (lunes a viernes) y no puede extenderse cruzando el fin de semana.",
+                })
         return attrs
 
 
@@ -165,6 +175,7 @@ class UsuarioResumenReservaSerializer(serializers.Serializer):
 class MaterialResumenReservaSerializer(serializers.ModelSerializer):
     unidades_disponibles = serializers.SerializerMethodField()
     resumen_estados = serializers.ReadOnlyField()
+    foto = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Material
@@ -180,11 +191,21 @@ class MaterialResumenReservaSerializer(serializers.ModelSerializer):
             "es_alto_valor",
             "unidades_disponibles",
             "resumen_estados",
+            "foto",
         ]
 
     def get_unidades_disponibles(self, obj):
         resumen = obj.resumen_estados
         return resumen.get("disponible", 0)
+
+    def get_foto(self, obj):
+        if obj.foto:
+            url = obj.foto.url
+            if url.startswith(("http://", "https://")):
+                return url
+            base = getattr(settings, "MEDIA_URL_PUBLICA", "").rstrip("/")
+            return f"{base}{url}" if base else url
+        return None
 
 
 class InstanciaResumenReservaSerializer(serializers.ModelSerializer):
@@ -205,10 +226,11 @@ class InstanciaResumenReservaSerializer(serializers.ModelSerializer):
 
     def get_foto(self, obj):
         if obj.foto:
-            try:
-                return obj.foto.url
-            except ValueError:
-                return obj.foto.name
+            url = obj.foto.url
+            if url.startswith(("http://", "https://")):
+                return url
+            base = getattr(settings, "MEDIA_URL_PUBLICA", "").rstrip("/")
+            return f"{base}{url}" if base else url
         return None
 
 

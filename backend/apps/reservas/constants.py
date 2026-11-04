@@ -43,7 +43,7 @@ MENSAJES_ERROR_RESERVA = {
     "usuario_inactivo": "El usuario no está habilitado para realizar reservas.",
     "tier_insuficiente": "El Tier de reputación del usuario no permite reservar este material.",
     "tier_insuficiente_excepcion_disponible": (
-        "Tu Tier actual es Restringido y el material requiere un Tier superior. "
+        "Tu Tier actual no permite reservar este material. "
         "Puedes solicitar una reserva excepcional por necesidad académica adjuntando los documentos de garantía."
     ),
     "maximo_reservas_activas": "Has alcanzado el límite máximo de solicitudes de reserva activas.",
@@ -53,7 +53,7 @@ MENSAJES_ERROR_RESERVA = {
     "estado_invalido_cancelar": "Solo se pueden cancelar reservas en estado reservada.",
     "estado_invalido_rechazar": "Solo se pueden rechazar solicitudes que se encuentran en espera.",
     "excepcion_solo_restringido": (
-        "La solicitud excepcional solo aplica a usuarios en Tier Restringido "
+        "La solicitud excepcional solo aplica a usuarios en Tier Restringido o Estándar "
         "para materiales de un Tier superior."
     ),
     "sin_instancia_disponible": "No hay ejemplares disponibles para confirmar la reserva en este momento.",

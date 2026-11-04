@@ -91,7 +91,10 @@ export function esElegiblePorTier(tierUsuario, tierMaterial) {
 }
 
 export function requiereExcepcionAcademica(tierUsuario, tierMaterial) {
-  return tierUsuario === 'restringido' && !esElegiblePorTier(tierUsuario, tierMaterial)
+  return (
+    ['restringido', 'estandar'].includes(tierUsuario)
+    && !esElegiblePorTier(tierUsuario, tierMaterial)
+  )
 }
 
 export function ordenarColaReservas(reservas = []) {

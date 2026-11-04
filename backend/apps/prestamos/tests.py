@@ -388,7 +388,7 @@ class RegistrarPrestamoServiceTestCase(TestCase):
         self.assertEqual(contexto.exception.campo, "tiempo_prestamo_dias")
         self.assertEqual(Prestamo.objects.count(), 0)
 
-    def test_limita_duracion_minima_15_min_y_maxima_del_material(self):
+    def test_limita_duracion_minima_1_hora_y_maxima_del_material(self):
         gafas_vr = crear_material(
             codigo_material="EQ-VR-01",
             nombre="Gafas VR",
@@ -396,7 +396,7 @@ class RegistrarPrestamoServiceTestCase(TestCase):
             tier_minimo_requerido="avanzado",
             stock=2,
         )
-        self.assertEqual(gafas_vr.tiempo_maximo_prestamo, 360)
+        self.assertEqual(gafas_vr.tiempo_maximo_prestamo, 480)
         avanzado = crear_usuario(
             "avanzado@unsa.edu.pe",
             "10000011",
@@ -408,44 +408,44 @@ class RegistrarPrestamoServiceTestCase(TestCase):
             self._registrar(
                 dni_prestatario=avanzado.dni,
                 material_id=gafas_vr.id,
-                tiempo_prestamo_minutos=14,
+                tiempo_prestamo_minutos=59,
                 tiempo_prestamo_dias=None,
             )
         self.assertEqual(error_minimo.exception.campo, "tiempo_prestamo_minutos")
-        self.assertIn("15 minutos", error_minimo.exception.mensaje)
+        self.assertIn("1 h (60 min)", error_minimo.exception.mensaje)
 
         prestamo_minimo = self._registrar(
             dni_prestatario=avanzado.dni,
             material_id=gafas_vr.id,
-            tiempo_prestamo_minutos=15,
+            tiempo_prestamo_minutos=60,
             tiempo_prestamo_dias=None,
         )
-        self.assertEqual(prestamo_minimo.tiempo_prestamo_minutos, 15)
+        self.assertEqual(prestamo_minimo.tiempo_prestamo_minutos, 60)
         self.assertEqual(
             prestamo_minimo.fecha_limite - prestamo_minimo.fecha_entrega,
-            timedelta(minutes=15),
+            timedelta(hours=1),
         )
 
         with self.assertRaises(PrestamoError) as error_maximo_vr:
             self._registrar(
                 dni_prestatario=avanzado.dni,
                 material_id=gafas_vr.id,
-                tiempo_prestamo_minutos=361,
+                tiempo_prestamo_minutos=481,
                 tiempo_prestamo_dias=None,
             )
         self.assertEqual(error_maximo_vr.exception.campo, "tiempo_prestamo_minutos")
-        self.assertIn("6 horas", error_maximo_vr.exception.mensaje)
+        self.assertIn("8 horas", error_maximo_vr.exception.mensaje)
 
-        prestamo_vr_6h = self._registrar(
+        prestamo_vr_8h = self._registrar(
             dni_prestatario=avanzado.dni,
             material_id=gafas_vr.id,
-            tiempo_prestamo_minutos=360,
+            tiempo_prestamo_minutos=480,
             tiempo_prestamo_dias=None,
         )
-        self.assertEqual(prestamo_vr_6h.tiempo_prestamo_minutos, 360)
+        self.assertEqual(prestamo_vr_8h.tiempo_prestamo_minutos, 480)
         self.assertEqual(
-            prestamo_vr_6h.fecha_limite - prestamo_vr_6h.fecha_entrega,
-            timedelta(hours=6),
+            prestamo_vr_8h.fecha_limite - prestamo_vr_8h.fecha_entrega,
+            timedelta(hours=8),
         )
 
     def test_rechaza_alta_sin_una_foto_por_elemento(self):
@@ -608,7 +608,39 @@ class RegistrarPrestamoServiceTestCase(TestCase):
             self.assertTrue(prestamo.requiere_garantia)
             self.assertTrue(prestamo.garantia_completa)
 
-    def test_excepcion_directa_rechaza_usuario_no_restringido(self):
+    def test_excepcion_directa_permite_usuario_estandar_con_material_avanzado(self):
+        estandar = crear_usuario(
+            "estandar-excepcion@unsa.edu.pe",
+            "10000033",
+            reputacion_puntaje=50,
+            reputacion_tier="estandar",
+        )
+        material = crear_material(
+            codigo_material="EQ-EXC-04",
+            tier_minimo_requerido="avanzado",
+        )
+
+        with storage_garantias_temporal():
+            prestamo = self._registrar(
+                dni_prestatario=estandar.dni,
+                material_id=material.id,
+                tiempo_prestamo_minutos=60,
+                tiempo_prestamo_dias=None,
+                es_excepcion=True,
+                documento_identidad=crear_pdf("dni-estandar.pdf"),
+                compromiso_responsabilidad=crear_pdf("compromiso-estandar.pdf"),
+            )
+
+        self.assertTrue(prestamo.es_excepcion)
+        self.assertTrue(prestamo.garantia_completa)
+
+    def test_excepcion_directa_rechaza_usuario_avanzado(self):
+        avanzado = crear_usuario(
+            "avanzado-excepcion@unsa.edu.pe",
+            "10000034",
+            reputacion_puntaje=300,
+            reputacion_tier="avanzado",
+        )
         material = crear_material(
             codigo_material="EQ-EXC-02",
             tier_minimo_requerido="avanzado",
@@ -616,6 +648,7 @@ class RegistrarPrestamoServiceTestCase(TestCase):
 
         with self.assertRaises(PrestamoError) as contexto:
             self._registrar(
+                dni_prestatario=avanzado.dni,
                 material_id=material.id,
                 tiempo_prestamo_minutos=60,
                 tiempo_prestamo_dias=None,
@@ -1417,16 +1450,17 @@ class RegistrarPrestamoAPITestCase(APITestCase):
         self.assertEqual(Prestamo.objects.count(), 0)
         self.assertEqual(FotoChecklist.objects.count(), 0)
 
-    def test_post_rechaza_duracion_menor_a_15_min_o_mayor_al_maximo_del_material(self):
+    def test_post_rechaza_duracion_menor_a_1_hora_o_mayor_al_maximo_del_material(self):
         self._iniciar_sesion(self.gestor)
 
         menor_minimo = self.client.post(
             self.URL,
-            self._payload_multipart(tiempo_prestamo_minutos=10),
+            self._payload_multipart(tiempo_prestamo_minutos=59),
             format="multipart",
         )
         self.assertEqual(menor_minimo.status_code, 400)
         self.assertIn("tiempo_prestamo_minutos", menor_minimo.json())
+        self.assertIn("1 h (60 min)", str(menor_minimo.json()["tiempo_prestamo_minutos"]))
 
         fuera_material = self.client.post(
             self.URL,
@@ -1436,6 +1470,34 @@ class RegistrarPrestamoAPITestCase(APITestCase):
         self.assertEqual(fuera_material.status_code, 400)
         self.assertIn("tiempo_prestamo_minutos", fuera_material.json())
         self.assertIn("3 días", str(fuera_material.json()["tiempo_prestamo_minutos"]))
+        self.assertEqual(Prestamo.objects.count(), 0)
+
+    def test_post_rechaza_mas_de_8_horas_para_material_avanzado(self):
+        avanzado = crear_usuario(
+            "avanzado-api@unsa.edu.pe",
+            "20000035",
+            reputacion_puntaje=300,
+            reputacion_tier="avanzado",
+        )
+        material = crear_material(
+            codigo_material="API-AVANZADO-01",
+            tier_minimo_requerido="avanzado",
+        )
+        self._iniciar_sesion(self.gestor)
+
+        respuesta = self.client.post(
+            self.URL,
+            self._payload_multipart(
+                dni_prestatario=avanzado.dni,
+                material_id=str(material.id),
+                instancia_id=str(material.instancias.get().id),
+                tiempo_prestamo_minutos=481,
+            ),
+            format="multipart",
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn("8 h (480 min)", str(respuesta.json()["tiempo_prestamo_minutos"]))
         self.assertEqual(Prestamo.objects.count(), 0)
 
     def test_post_multipart_registra_garantia_y_parsea_checklist_json(self):

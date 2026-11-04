@@ -107,7 +107,7 @@ class RegistrarPrestamoSerializer(
     reserva_id = serializers.UUIDField(required=False, allow_null=True)
     tiempo_prestamo_minutos = serializers.IntegerField(
         required=False,
-        min_value=60,
+        min_value=MINIMO_MINUTOS_PRESTAMO,
         max_value=MAXIMO_MINUTOS_PRESTAMO,
         error_messages={
             "min_value": "El tiempo mínimo de préstamo es de 1 h (60 min).",

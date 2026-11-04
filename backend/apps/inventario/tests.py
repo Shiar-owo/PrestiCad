@@ -198,7 +198,7 @@ class RegistrarMaterialServiceTestCase(TestCase):
         )
 
         self.assertEqual(material.tier_minimo_requerido, "avanzado")
-        self.assertEqual(material.tiempo_maximo_prestamo, 360)
+        self.assertEqual(material.tiempo_maximo_prestamo, 480)
         self.assertEqual(material.bonificacion_tiempo, 20)
         self.assertEqual(material.deduccion_tardanza, 15)
         self.assertEqual(material.deduccion_dano_parcial, 40)
@@ -225,7 +225,7 @@ class RegistrarMaterialServiceTestCase(TestCase):
         )
         self.assertEqual(material_restringido.tiempo_maximo_prestamo, 4320)
         self.assertEqual(material_estandar.tiempo_maximo_prestamo, 1440)
-        self.assertEqual(material_avanzado.tiempo_maximo_prestamo, 360)
+        self.assertEqual(material_avanzado.tiempo_maximo_prestamo, 480)
 
         material_personalizado = registrar_material(
             **self._datos_validos(
@@ -651,6 +651,34 @@ class MaterialSerializerContratoTestCase(SimpleTestCase):
 
         self.assertFalse(serializer.is_valid())
         self.assertIn("bonificacion_tiempo", serializer.errors)
+
+    def test_alta_rechaza_mas_de_8_horas_para_tier_avanzado(self):
+        serializer = MaterialRegistroSerializer(
+            data={
+                "nombre": "Cable",
+                "codigo_material": "OBJ-1",
+                "tipo": "objeto",
+                "tier_minimo_requerido": "avanzado",
+                "tiempo_maximo_prestamo": 481,
+            }
+        )
+
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("tiempo_maximo_prestamo", serializer.errors)
+
+    def test_edicion_rechaza_mas_de_8_horas_para_tier_avanzado(self):
+        material = Material(
+            tier_minimo_requerido="avanzado",
+            tiempo_maximo_prestamo=480,
+        )
+        serializer = MaterialActualizacionSerializer(
+            instance=material,
+            data={"tiempo_maximo_prestamo": 481},
+            partial=True,
+        )
+
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("tiempo_maximo_prestamo", serializer.errors)
 
     def test_alta_rechaza_campos_no_permitidos(self):
         serializer = MaterialRegistroSerializer(

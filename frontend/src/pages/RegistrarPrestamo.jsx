@@ -246,7 +246,7 @@ function RegistrarPrestamo() {
   const perfilHabilitado = perfilVerificadoActual?.rol === 'prestatario' && perfilVerificadoActual?.estado === 'activo'
   const puedeSolicitarExcepcion = Boolean(
     perfilHabilitado && materialSeleccionado && !tierCumple
-    && perfilVerificadoActual?.reputacion_tier === 'restringido',
+    && ['restringido', 'estandar'].includes(perfilVerificadoActual?.reputacion_tier),
   )
   const excepcionActiva = Boolean(
     reservaSeleccionada?.es_excepcion || (puedeSolicitarExcepcion && formulario.esExcepcion),
@@ -671,7 +671,7 @@ function RegistrarPrestamo() {
                 <span>
                   <span className="block font-semibold">Registrar como préstamo excepcional</span>
                   <span className="mt-1 block text-texto-suave">
-                    Autoriza este material pese al Tier Restringido del prestatario. Exige ambos
+                    Autoriza este material pese al Tier insuficiente del prestatario. Exige ambos
                     documentos de garantía y duplica la deducción por daño; el cobro económico no se duplica.
                   </span>
                 </span>

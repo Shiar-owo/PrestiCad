@@ -327,7 +327,7 @@ def crear_reserva_excepcional(
     compromiso_responsabilidad,
     ahora=None,
 ):
-    """Crea una solicitud de reserva por excepción académica para un prestatario Restringido (HU06, HU13)."""
+    """Crea una solicitud excepcional para un prestatario Restringido o Estándar (HU06, HU13)."""
     ahora = ahora or timezone.now()
     _validar_usuario_prestatario(usuario)
     prioridad_limpia, justificacion_limpia = _validar_campos_solicitud(prioridad, justificacion)
@@ -340,10 +340,11 @@ def crear_reserva_excepcional(
     material = _obtener_material_bloqueado(material_id)
 
     tiers_permitidos = TIERS_ACCESIBLES.get(usuario_bloqueado.reputacion_tier, ())
-    if (
-        usuario_bloqueado.reputacion_tier != "restringido"
-        or material.tier_minimo_requerido in tiers_permitidos
-    ):
+    aplica_excepcion = (
+        usuario_bloqueado.reputacion_tier in ("restringido", "estandar")
+        and material.tier_minimo_requerido not in tiers_permitidos
+    )
+    if not aplica_excepcion:
         raise ReservaError(
             "es_excepcion",
             MENSAJES_ERROR_RESERVA["excepcion_solo_restringido"],

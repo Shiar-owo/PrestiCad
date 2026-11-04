@@ -209,6 +209,9 @@ function validar(datos) {
     ) {
       errores.tiempo_maximo_prestamo =
         'El tiempo máximo de préstamo del material debe estar entre 30 minutos y 15 días (21600 minutos).'
+    } else if (datos.tier_minimo_requerido === 'avanzado' && minutos > 480) {
+      errores.tiempo_maximo_prestamo =
+        'El tiempo máximo de préstamo para materiales de tier avanzado no puede superar 8 horas (480 minutos).'
     }
   }
 

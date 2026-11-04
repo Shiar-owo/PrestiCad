@@ -420,6 +420,36 @@ class ReservasServiceTestCase(TestCase):
             )
         self.assertEqual(ctx.exception.status_code, 409)
 
+    def test_reserva_excepcional_permite_estandar_con_material_avanzado(self):
+        material = crear_material(
+            codigo_material="EQ-EXC-ESTANDAR",
+            stock=1,
+            tier_minimo_requerido="avanzado",
+        )
+
+        with self.assertRaises(ReservaError) as ctx:
+            crear_reserva(
+                usuario=self.prestatario_estandar,
+                material_id=material.id,
+                prioridad="alta",
+                justificacion="Intento normal",
+            )
+        self.assertIn("excepcional", ctx.exception.mensaje)
+
+        with storage_garantias_temporal():
+            reserva = crear_reserva_excepcional(
+                usuario=self.prestatario_estandar,
+                material_id=material.id,
+                prioridad="alta",
+                justificacion="Práctica de laboratorio avanzada",
+                documento_identidad=crear_pdf("dni-estandar.pdf"),
+                compromiso_responsabilidad=crear_pdf("compromiso-estandar.pdf"),
+            )
+
+        self.assertEqual(reserva.estado, "en_espera")
+        self.assertTrue(reserva.es_excepcion)
+        self.assertTrue(reserva.garantia_completa)
+
     def test_reserva_excepcional_no_autopromueve_aprueba_y_convierte_reutilizando_garantia(self):
         material = crear_material(
             codigo_material="EQ-EXC-01",

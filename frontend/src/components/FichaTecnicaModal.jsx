@@ -386,7 +386,7 @@ function FichaTecnicaModal({
               <ItemRegla
                 etiqueta="Tiempo Máximo de Préstamo"
                 valor={ficha.tiempoMaximoPrestamoLegible}
-                descripcion="Mínimo 15 min · 30 min de tiempo de gracia"
+                descripcion="Mínimo 1 h · 30 min de tiempo de gracia"
                 tipo="neutral"
               />
               <ItemRegla

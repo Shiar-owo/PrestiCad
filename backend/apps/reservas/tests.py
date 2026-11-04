@@ -119,7 +119,6 @@ def crear_material(**cambios):
         "stock": 1,
         "precio": 150,
         "tier_minimo_requerido": "estandar",
-        "tiempo_maximo_prestamo": 1440,
     }
     datos.update(cambios)
     return registrar_material(**datos)
@@ -309,7 +308,7 @@ class ReservasServiceTestCase(TestCase):
             prioridad="baja",
             justificacion="Espera tras reserva 2",
         )
-        futuro = reserva_2.fecha_limite_recojo + timedelta(minutes=5)
+        futuro = reserva_2.fecha_limite_recojo + timedelta(minutes=31)
         resumen = expirar_reservas(ahora=futuro)
         self.assertEqual(resumen["reservas_vencidas"], 1)
         self.assertEqual(resumen["reservas_promovidas"], 1)

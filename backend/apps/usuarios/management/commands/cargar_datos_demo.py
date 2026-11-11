@@ -294,7 +294,37 @@ class Command(BaseCommand):
                     },
                 )
         return materiales
-        return materiales
+
+    def _crear_snapshots(self, material, instancia):
+        material_snapshot = {
+            "nombre": material.nombre,
+            "descripcion": material.descripcion,
+            "codigo_material": material.codigo_material,
+            "tipo": material.tipo,
+            "marca": material.marca,
+            "modelo": material.modelo,
+            "numero_serie": material.numero_serie,
+            "color": material.color,
+            "precio": str(material.precio) if material.precio is not None else None,
+            "es_alto_valor": material.es_alto_valor,
+            "tier_minimo_requerido": material.tier_minimo_requerido,
+            "tiempo_maximo_prestamo": material.tiempo_maximo_prestamo,
+            "bonificacion_tiempo": material.bonificacion_tiempo,
+            "deduccion_tardanza": material.deduccion_tardanza,
+            "deduccion_dano_parcial": material.deduccion_dano_parcial,
+            "deduccion_dano_total": material.deduccion_dano_total,
+            "costo_reparacion": str(material.costo_reparacion) if material.costo_reparacion else None,
+            "costo_reposicion": str(material.costo_reposicion) if material.costo_reposicion else None,
+        }
+        instancia_snapshot = {
+            "codigo_ejemplar": instancia.codigo_ejemplar,
+            "numero_serie": instancia.numero_serie,
+            "estado": instancia.estado,
+            "color": instancia.color,
+            "observaciones": instancia.observaciones,
+            "ubicacion": instancia.ubicacion,
+        }
+        return material_snapshot, instancia_snapshot
 
     def _cargar_prestamos(self, usuarios, materiales):
         ahora = timezone.now()
@@ -309,6 +339,7 @@ class Command(BaseCommand):
         # IDs fijos hacen que la carga sea idempotente y que --reiniciar pueda
         # identificar exclusivamente los préstamos que pertenecen al escenario.
         instancia_vr = InstanciaMaterial.objects.get(codigo_ejemplar="DEMO-VR-001-01")
+        mat_snap_vr, inst_snap_vr = self._crear_snapshots(gafas_vr, instancia_vr)
         prestamo_gafas_vr, _ = Prestamo.objects.update_or_create(
             pk=PRESTAMOS_DEMO[0],
             defaults={
@@ -325,23 +356,8 @@ class Command(BaseCommand):
                     {"elemento": "Visor de realidad virtual", "estado": "sin_cambios"},
                     {"elemento": "Controles", "estado": "sin_cambios"},
                 ],
-                "material_snapshot": {
-                    "nombre": gafas_vr.nombre,
-                    "descripcion": gafas_vr.descripcion,
-                    "codigo_material": gafas_vr.codigo_material,
-                    "tipo": gafas_vr.tipo,
-                    "marca": gafas_vr.marca,
-                    "modelo": gafas_vr.modelo,
-                    "numero_serie": gafas_vr.numero_serie,
-                    "color": gafas_vr.color,
-                },
-                "instancia_snapshot": {
-                    "codigo_ejemplar": instancia_vr.codigo_ejemplar,
-                    "numero_serie": instancia_vr.numero_serie,
-                    "color": instancia_vr.color,
-                    "observaciones": instancia_vr.observaciones,
-                    "ubicacion": instancia_vr.ubicacion,
-                },
+                "material_snapshot": mat_snap_vr,
+                "instancia_snapshot": inst_snap_vr,
             },
         )
         Garantia.objects.update_or_create(
@@ -350,6 +366,7 @@ class Command(BaseCommand):
         )
 
         instancia_lap = InstanciaMaterial.objects.get(codigo_ejemplar="DEMO-LAP-001-01")
+        mat_snap_lap, inst_snap_lap = self._crear_snapshots(laptop, instancia_lap)
         Prestamo.objects.update_or_create(
             pk=PRESTAMOS_DEMO[1],
             defaults={
@@ -363,28 +380,14 @@ class Command(BaseCommand):
                 "tiempo_prestamo_dias": 1,
                 "estado": "activo",
                 "checklist_inicial": [{"elemento": "Laptop", "estado": "sin_cambios"}],
-                "material_snapshot": {
-                    "nombre": laptop.nombre,
-                    "descripcion": laptop.descripcion,
-                    "codigo_material": laptop.codigo_material,
-                    "tipo": laptop.tipo,
-                    "marca": laptop.marca,
-                    "modelo": laptop.modelo,
-                    "numero_serie": laptop.numero_serie,
-                    "color": laptop.color,
-                },
-                "instancia_snapshot": {
-                    "codigo_ejemplar": instancia_lap.codigo_ejemplar,
-                    "numero_serie": instancia_lap.numero_serie,
-                    "color": instancia_lap.color,
-                    "observaciones": instancia_lap.observaciones,
-                    "ubicacion": instancia_lap.ubicacion,
-                },
+                "material_snapshot": mat_snap_lap,
+                "instancia_snapshot": inst_snap_lap,
             },
         )
 
         fecha_entrega = ahora - timedelta(days=20)
         instancia_devuelta = InstanciaMaterial.objects.get(codigo_ejemplar="DEMO-CALC-001-01")
+        mat_snap_calc, inst_snap_calc = self._crear_snapshots(calculadora, instancia_devuelta)
         prestamo_devuelto, _ = Prestamo.objects.update_or_create(
             pk=PRESTAMOS_DEMO[2],
             defaults={
@@ -398,31 +401,8 @@ class Command(BaseCommand):
                 "tiempo_prestamo_dias": 3,
                 "estado": "devuelto",
                 "checklist_inicial": [{"elemento": "Calculadora científica", "estado": "sin_cambios"}],
-                "material_snapshot": {
-                    "nombre": calculadora.nombre,
-                    "descripcion": calculadora.descripcion,
-                    "codigo_material": calculadora.codigo_material,
-                    "tipo": calculadora.tipo,
-                    "marca": calculadora.marca,
-                    "modelo": calculadora.modelo,
-                    "numero_serie": calculadora.numero_serie,
-                    "color": calculadora.color,
-                    "tier_minimo_requerido": calculadora.tier_minimo_requerido,
-                    "tiempo_maximo_prestamo": calculadora.tiempo_maximo_prestamo,
-                    "bonificacion_tiempo": calculadora.bonificacion_tiempo,
-                    "deduccion_tardanza": calculadora.deduccion_tardanza,
-                    "deduccion_dano_parcial": calculadora.deduccion_dano_parcial,
-                    "deduccion_dano_total": calculadora.deduccion_dano_total,
-                    "costo_reparacion": str(calculadora.costo_reparacion) if calculadora.costo_reparacion else None,
-                    "costo_reposicion": str(calculadora.costo_reposicion) if calculadora.costo_reposicion else None,
-                },
-                "instancia_snapshot": {
-                    "codigo_ejemplar": "DEMO-CALC-001-01",
-                    "numero_serie": "DEMO-CAS-991",
-                    "color": "Negro",
-                    "observaciones": "Operativo",
-                    "ubicacion": "Almacén B-03",
-                },
+                "material_snapshot": mat_snap_calc,
+                "instancia_snapshot": inst_snap_calc,
             },
         )
         Devolucion.objects.update_or_create(

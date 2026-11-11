@@ -10,7 +10,7 @@ from django.utils import timezone
 
 from apps.inventario import services as servicios_inventario
 from apps.inventario.constants import TIERS_ACCESIBLES
-from apps.inventario.models import Material
+from apps.inventario.models import InstanciaMaterial, Material
 from apps.prestamos.constants import (
     ESTADOS_DEVOLUBLES,
     ESTADOS_QUE_OCUPAN_UNIDAD,
@@ -805,6 +805,45 @@ def registrar_prestamo(
             status_code=409,
         )
 
+    # Snapshot inmutable de los datos del Material e InstanciaMaterial
+    # al momento del préstamo, para preservar trazabilidad histórica
+    # incluso si posteriormente se editan estado, observaciones, número de
+    # serie, parámetros o cualquier otro campo editable.
+    material_snapshot = {
+        "nombre": material.nombre,
+        "descripcion": material.descripcion,
+        "codigo_material": material.codigo_material,
+        "tipo": material.tipo,
+        "marca": material.marca,
+        "modelo": material.modelo,
+        "numero_serie": material.numero_serie,
+        "color": material.color,
+        "precio": str(material.precio),
+        "estado_fisico": material.estado_fisico,
+        "es_alto_valor": material.es_alto_valor,
+        "tier_minimo_requerido": material.tier_minimo_requerido,
+        "tiempo_maximo_prestamo": material.tiempo_maximo_prestamo,
+        "bonificacion_tiempo": material.bonificacion_tiempo,
+        "deduccion_tardanza": material.deduccion_tardanza,
+        "deduccion_dano_parcial": material.deduccion_dano_parcial,
+        "deduccion_dano_total": material.deduccion_dano_total,
+        "costo_reparacion": str(material.costo_reparacion) if material.costo_reparacion else None,
+        "costo_reposicion": str(material.costo_reposicion) if material.costo_reposicion else None,
+    }
+
+    instancia_snapshot = {}
+    if instancia_elegida and instancia_elegida.get("id"):
+        instancia = InstanciaMaterial.objects.get(pk=instancia_elegida["id"])
+        instancia_snapshot = {
+            "codigo_ejemplar": instancia.codigo_ejemplar,
+            "numero_serie": instancia.numero_serie,
+            "estado": instancia.estado,
+            "color": instancia.color,
+            "observaciones": instancia.observaciones,
+            "ubicacion": instancia.ubicacion,
+            "foto": instancia.foto.name if instancia.foto else None,
+        }
+
     prestamo = Prestamo.objects.create(
         usuario=prestatario,
         material=material,
@@ -817,6 +856,8 @@ def registrar_prestamo(
         es_excepcion=es_excepcion,
         checklist_inicial=checklist_inicial,
         instancia_id=instancia_elegida["id"],
+        material_snapshot=material_snapshot,
+        instancia_snapshot=instancia_snapshot,
     )
 
     if reserva is not None:

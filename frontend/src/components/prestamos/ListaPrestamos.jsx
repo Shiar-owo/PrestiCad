@@ -6,8 +6,9 @@ import BadgeEstado from '../ui/BadgeEstado'
 import EstadoVacio from '../ui/EstadoVacio'
 import DetallePrestamo from './DetallePrestamo'
 import FiltroPrestamos from './FiltroPrestamos'
+import { esDevoluble } from '../../constantes/devolucion'
 
-export default function ListaPrestamos({ prestamos, onSeleccionar }) {
+export default function ListaPrestamos({ prestamos, onSeleccionar, onDevolucion }) {
   const [filtro, setFiltro] = useState('todos')
   const [seleccionado, setSeleccionado] = useState(null)
   const ordenados = ordenarPrestamos(prestamos)
@@ -24,7 +25,7 @@ export default function ListaPrestamos({ prestamos, onSeleccionar }) {
 
   return (
     <section aria-label="Mis préstamos">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
         <h3 className="text-lg font-bold text-texto">Mis préstamos</h3>
         <FiltroPrestamos estado={filtro} onCambiar={setFiltro} />
       </div>
@@ -41,32 +42,89 @@ export default function ListaPrestamos({ prestamos, onSeleccionar }) {
           />
         </div>
       ) : (
-        <ul className="mt-4 grid gap-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {visibles.map((prestamo) => (
-            <li key={prestamo.id}>
-              <button
-                type="button"
-                className="w-full rounded-xl border border-borde bg-white p-4 text-left transition-colors hover:border-acento-400 hover:bg-superficie-alta dark:bg-superficie"
-                onClick={() => {
-                  setSeleccionado(prestamo)
-                  onSeleccionar?.(prestamo)
-                }}
-              >
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-bold text-texto">{prestamo.material_nombre}</span>
-                  <BadgeEstado
-                    estado={prestamo.estado_visible}
-                    texto={textoEstadoPrestamo(prestamo, prestamo.estado_visible)}
-                  />
+            <article
+              key={prestamo.id}
+              className="rounded-xl border border-borde bg-white dark:bg-superficie p-5 hover:shadow-md hover:border-acento-200 transition-all cursor-pointer group"
+              onClick={() => {
+                setSeleccionado(prestamo)
+                onSeleccionar?.(prestamo)
+              }}
+            >
+              <div className="flex items-start justify-between mb-3">
+                <div>
+                  <h4 className="font-bold text-texto text-sm leading-tight group-hover:text-acento-700 dark:group-hover:text-acento-300">
+                    {prestamo.material_nombre}
+                  </h4>
+                  <p className="text-xs text-texto-suave font-mono mt-0.5">
+                    {prestamo.material_codigo}
+                  </p>
                 </div>
-                <p className="mt-1 text-sm text-texto-suave">
-                  Código de Material: {prestamo.material_codigo}
-                  {prestamo.codigo_ejemplar && <> · Código de Ejemplar: {prestamo.codigo_ejemplar}</>}
-                </p>
-              </button>
-            </li>
+                <BadgeEstado
+                  estado={prestamo.estado_visible}
+                  texto={textoEstadoPrestamo(prestamo, prestamo.estado_visible)}
+                  className="text-[10px]"
+                />
+              </div>
+
+              <div className="space-y-2 mb-4">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-texto-suave">Código Material</span>
+                  <span className="font-medium text-texto-suave font-mono">
+                    {prestamo.material_codigo}
+                  </span>
+                </div>
+                {prestamo.codigo_ejemplar && (
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-texto-suave">Código Ejemplar</span>
+                    <span className="font-medium text-texto-suave font-mono">
+                      {prestamo.codigo_ejemplar}
+                    </span>
+                  </div>
+                )}
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-texto-suave">Fecha entrega</span>
+                  <span className="font-medium text-texto-suave">
+                    {prestamo.fecha_entrega
+                      ? new Intl.DateTimeFormat('es-PE', { dateStyle: 'short' }).format(new Date(prestamo.fecha_entrega))
+                      : '—'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-texto-suave">Fecha límite</span>
+                  <span className="font-medium text-texto-suave">
+                    {prestamo.fecha_limite
+                      ? new Intl.DateTimeFormat('es-PE', { dateStyle: 'short' }).format(new Date(prestamo.fecha_limite))
+                      : '—'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="mt-4 pt-4 border-t border-borde flex items-center justify-between gap-2">
+                <button
+                  type="button"
+                  className="flex-1 text-sm font-medium text-acento-700 hover:text-acento-900 dark:text-acento-300 dark:hover:text-acento-100 underline underline-offset-4 px-3 py-2 rounded-lg hover:bg-acento-50 dark:hover:bg-acento-900/20 transition-colors"
+                  onClick={() => {
+                    setSeleccionado(prestamo)
+                    onSeleccionar?.(prestamo)
+                  }}
+                >
+                  Ver detalle
+                </button>
+                {esDevoluble(prestamo.estado) && onDevolucion && (
+                  <button
+                    type="button"
+                    className="flex-1 text-sm font-medium text-marca-700 hover:text-marca-900 dark:text-marca-300 dark:hover:text-marca-100 px-3 py-2 rounded-lg hover:bg-marca-50 dark:hover:bg-marca-900/20 transition-colors border border-marca-200 dark:border-marca-800"
+                    onClick={() => onDevolucion(prestamo.id)}
+                  >
+                    Devolver
+                  </button>
+                )}
+              </div>
+            </article>
           ))}
-        </ul>
+        </div>
       )}
     </section>
   )

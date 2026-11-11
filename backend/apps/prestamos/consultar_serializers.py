@@ -125,6 +125,8 @@ class PrestamoHistorialSerializer(serializers.ModelSerializer):
     )
     codigo_ejemplar = serializers.SerializerMethodField()
     estado = serializers.CharField(source="estado_consulta", read_only=True)
+    material_snapshot = serializers.SerializerMethodField()
+    instancia_snapshot = serializers.SerializerMethodField()
 
     class Meta:
         model = Prestamo
@@ -141,6 +143,8 @@ class PrestamoHistorialSerializer(serializers.ModelSerializer):
             "tiempo_prestamo_dias",
             "estado",
             "es_excepcion",
+            "material_snapshot",
+            "instancia_snapshot",
         )
         read_only_fields = fields
 
@@ -149,6 +153,12 @@ class PrestamoHistorialSerializer(serializers.ModelSerializer):
 
     def get_codigo_ejemplar(self, prestamo):
         return prestamo.instancia.codigo_ejemplar if prestamo.instancia_id else None
+
+    def get_material_snapshot(self, obj):
+        return obj.material_snapshot or {}
+
+    def get_instancia_snapshot(self, obj):
+        return obj.instancia_snapshot or {}
 
 
 class MaterialPrestamoHistorialSerializer(serializers.ModelSerializer):
@@ -208,6 +218,8 @@ class PrestamoHistorialDetalleSerializer(serializers.ModelSerializer):
     prestatario_dni = serializers.CharField(source="usuario.dni", read_only=True)
     material = MaterialPrestamoHistorialSerializer(read_only=True)
     instancia = InstanciaMaterialSerializer(read_only=True, allow_null=True)
+    material_snapshot = serializers.SerializerMethodField()
+    instancia_snapshot = serializers.SerializerMethodField()
     documentos_garantia = DocumentosGarantiaHistorialSerializer(
         source="*",
         read_only=True,
@@ -227,6 +239,8 @@ class PrestamoHistorialDetalleSerializer(serializers.ModelSerializer):
             "prestatario_dni",
             "material",
             "instancia",
+            "material_snapshot",
+            "instancia_snapshot",
             "fecha_entrega",
             "fecha_limite",
             "tiempo_prestamo_minutos",

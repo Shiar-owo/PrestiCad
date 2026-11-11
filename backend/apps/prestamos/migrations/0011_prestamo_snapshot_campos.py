@@ -4,7 +4,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("prestamos", "0009_garantia_reserva"),
+        ("prestamos", "0010_alter_prestamo_tiempo_prestamo_minutos"),
     ]
 
     operations = [

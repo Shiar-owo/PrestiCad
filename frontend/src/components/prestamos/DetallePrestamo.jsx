@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, ChevronLeft, ChevronRight, RotateCcw, Trash2, Upload } from 'lucide-react'
+import { ArrowLeft, ChevronLeft, ChevronRight, ExternalLink, RotateCcw, Trash2, Upload } from 'lucide-react'
 
 import { api, ErrorApi } from '../../api/client'
 import { ETIQUETAS_ESTADO, esMaterialAltoValor } from '../../constantes/catalogo'
@@ -538,6 +538,84 @@ export default function DetallePrestamo({
               <p className="mt-2 text-xs text-texto-suave">No se registró checklist inicial.</p>
             )}
           </section>
+
+          {/* Checklist al devolver - solo si está devuelto */}
+          {detalle.estado === 'devuelto' && (
+            <section className="rounded-xl border border-borde bg-white dark:bg-superficie p-3">
+              <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-marca-100 text-marca-800 dark:bg-marca-900/30 dark:text-marca-300 text-[11px] font-bold uppercase tracking-wider">
+                  Checklist al devolver
+                </span>
+                {detalle.hay_dano !== null && (
+                  <span className={`px-1.5 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider ${
+                    detalle.hay_dano
+                      ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+                      : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+                  }`}>
+                    {detalle.hay_dano ? 'Con daño detectado' : 'Sin daño'}
+                  </span>
+                )}
+              </div>
+              {detalle.checklist_final?.length ? (
+                <div className="space-y-1.5">
+                  {detalle.checklist_final.map((elemento, indice) => (
+                    <div key={`final-${elemento.elemento}-${indice}`} className="rounded border border-borde bg-superficie p-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-texto-suave shrink-0">
+                          {elemento.elemento}
+                        </span>
+                        {elemento.estado && (
+                          <span className={`px-1.5 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider shrink-0 ${
+                            elemento.estado === 'sin_cambios'
+                              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+                              : elemento.estado === 'dano_parcial'
+                              ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300'
+                              : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+                          }`}>
+                            {elemento.estado === 'sin_cambios' ? 'Sin cambios'
+                              : elemento.estado === 'dano_parcial' ? 'Daño parcial'
+                              : 'Daño total'}
+                          </span>
+                        )}
+                      </div>
+                      {elemento.foto_url && (
+                        <figure className="mt-1 aspect-[4/3] w-full max-w-xs overflow-hidden rounded border border-borde bg-white dark:bg-superficie">
+                          <img
+                            src={elemento.foto_url}
+                            alt={`Foto devolución de ${elemento.elemento}`}
+                            className="h-full w-full object-contain"
+                          />
+                        </figure>
+                      )}
+                      {elemento.observacion && (
+                        <div className="mt-1">
+                          <span className="text-[11px] font-bold uppercase tracking-wider text-texto-suave block mb-0.5">
+                            Observación
+                          </span>
+                          <span className="text-sm text-texto-suave">{elemento.observacion}</span>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-2 text-xs text-texto-suave">No se registró checklist de devolución.</p>
+              )}
+              {detalle.hay_dano && detalle.reporte_url && (
+                <div className="mt-2">
+                  <a
+                    href={detalle.reporte_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs font-semibold text-acento-700 underline dark:text-acento-300"
+                  >
+                    <ExternalLink aria-hidden="true" className="size-3.5" />
+                    Descargar reporte de daño (PDF)
+                  </a>
+                </div>
+              )}
+            </section>
+          )}
 
           {/* Documentos de garantía */}
           <section className="rounded-xl border border-borde bg-white dark:bg-superficie p-3">

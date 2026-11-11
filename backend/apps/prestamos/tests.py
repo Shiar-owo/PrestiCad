@@ -1049,6 +1049,8 @@ class HistorialPrestamosAPITestCase(APITestCase):
         "tiempo_prestamo_dias",
         "estado",
         "es_excepcion",
+        "material_snapshot",
+        "instancia_snapshot",
     }
 
     def setUp(self):
@@ -1186,8 +1188,13 @@ class HistorialPrestamosAPITestCase(APITestCase):
                 self.assertIn("dni", respuesta.json())
 
     def test_detalle_expone_ficha_individual_checklist_y_estado_visible(self):
-        prestamo = self._crear_prestamo(self.prestatario, "HIST-DETALLE-001")
-        instancia = prestamo.instancia
+        material = crear_material(
+            codigo_material="HIST-DETALLE-001",
+            marca="Marca de prueba",
+            modelo="Modelo de prueba",
+            descripcion="Ficha técnica del préstamo",
+        )
+        instancia = material.instancias.first()
         instancia.numero_serie = "SERIE-DETALLE"
         instancia.color = "Azul"
         instancia.observaciones = "Sin accesorios adicionales"
@@ -1200,10 +1207,13 @@ class HistorialPrestamosAPITestCase(APITestCase):
                 "ubicacion",
             ]
         )
-        prestamo.material.marca = "Marca de prueba"
-        prestamo.material.modelo = "Modelo de prueba"
-        prestamo.material.descripcion = "Ficha técnica del préstamo"
-        prestamo.material.save(update_fields=["marca", "modelo", "descripcion"])
+        prestamo = registrar_prestamo(
+            dni_prestatario=self.prestatario.dni,
+            material_id=material.id,
+            tiempo_prestamo_dias=3,
+            checklist_inicial=CHECKLIST,
+            registrado_por=self.gestor,
+        )
         self._iniciar_sesion(self.prestatario)
 
         respuesta = self.client.get(self.URL_DETALLE.format(prestamo_id=prestamo.id))
@@ -1257,6 +1267,25 @@ class HistorialPrestamosAPITestCase(APITestCase):
             parse_datetime(datos["fecha_devolucion"]),
             devolucion.fecha_devolucion,
         )
+
+    def test_detalle_historial_mantiene_datos_inmutables_tras_modificar_instancia_posteriormente(self):
+        prestamo = self._crear_prestamo(self.prestatario, "HIST-INMUTABLE-001")
+        instancia = prestamo.instancia
+        obs_originales = instancia.observaciones
+
+        # Modificar las observaciones y el color de la instancia en inventario después del préstamo
+        instancia.observaciones = "NUEVAS OBSERVACIONES DE INVENTARIO POST-PRESTAMO"
+        instancia.color = "Dorado Nuevo"
+        instancia.save(update_fields=["observaciones", "color"])
+
+        self._iniciar_sesion(self.gestor)
+        respuesta = self.client.get(self.URL_DETALLE.format(prestamo_id=prestamo.id))
+
+        self.assertEqual(respuesta.status_code, 200)
+        datos = respuesta.json()
+        # El detalle histórico debe mantener las observaciones y datos del momento del préstamo (snapshot)
+        self.assertEqual(datos["instancia"]["observaciones"], obs_originales)
+        self.assertNotEqual(datos["instancia"]["observaciones"], "NUEVAS OBSERVACIONES DE INVENTARIO POST-PRESTAMO")
 
     def test_detalle_permite_gestion_y_rechaza_a_otro_prestatario(self):
         prestamo = self._crear_prestamo(self.prestatario, "HIST-DETALLE-002")

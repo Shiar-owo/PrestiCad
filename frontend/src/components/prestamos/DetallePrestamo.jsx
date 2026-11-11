@@ -124,8 +124,31 @@ export default function DetallePrestamo({
 
   const estado = detalle?.estado ?? prestamo.estado_visible ?? prestamo.estado
   const esExcepcion = detalle?.es_excepcion ?? prestamo.es_excepcion
-  const material = detalle?.material
-  const instancia = detalle?.instancia
+
+  // Priorizar snapshots históricos para que los cambios posteriores en catálogo o
+  // inventario no alteren la información registrada al momento del préstamo/devolución.
+  const tieneMaterialSnapshot = Boolean(detalle?.material_snapshot && Object.keys(detalle.material_snapshot).length > 0)
+  const tieneInstanciaSnapshot = Boolean(detalle?.instancia_snapshot && Object.keys(detalle.instancia_snapshot).length > 0)
+
+  const material = tieneMaterialSnapshot
+    ? {
+        ...detalle.material,
+        ...detalle.material_snapshot,
+        // Conservar URL pública de la foto del material relacional si el snapshot no tiene una URL utilizable
+        foto: detalle.material?.foto || detalle.material_snapshot.foto,
+      }
+    : detalle?.material
+
+  const instancia = tieneInstanciaSnapshot
+    ? {
+        ...detalle.instancia,
+        ...detalle.instancia_snapshot,
+        // Conservar URL pública de la foto de instancia si existe en la relación viva
+        foto: detalle.instancia?.foto || detalle.instancia_snapshot.foto,
+      }
+    : detalle?.instancia
+
+  const esRegistroHistorico = tieneMaterialSnapshot || tieneInstanciaSnapshot
   const documentos = detalle?.documentos_garantia
   const totalDocumentos = DOCUMENTOS_GARANTIA.filter((documento) => (
     documentos?.[documento.campo]
@@ -176,6 +199,14 @@ export default function DetallePrestamo({
           <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-acento-100 text-acento-800 dark:bg-acento-200 dark:text-acento-900">
             #{prestamo.id}
           </span>
+          {esRegistroHistorico && (
+            <span
+              className="px-2 py-0.5 rounded text-[9px] font-bold bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-borde"
+              title="Los datos mostrados reflejan el estado del material y ejemplar al momento en que se realizó el préstamo."
+            >
+              Registro Histórico
+            </span>
+          )}
         </div>
       </header>
 

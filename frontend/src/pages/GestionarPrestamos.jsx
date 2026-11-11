@@ -1,5 +1,5 @@
 import { useContext } from 'react'
-import { Link, NavLink, Outlet } from 'react-router'
+import { Link, NavLink, Outlet, useLocation } from 'react-router'
 import {
   ArrowUpRight,
   CalendarClock,
@@ -34,7 +34,9 @@ function clasePestana({ isActive }) {
 
 export function SeccionGestionPrestamosLayout() {
   const { usuario } = useContext(SesionContext)
+  const location = useLocation()
   const opcionesDisponibles = obtenerOpcionesGestionPrestamos(usuario?.rol)
+  const esIndex = location.pathname.replace(/\/+$/, '') === '/panel/gestion-prestamos'
 
   return (
     <div className="space-y-6">
@@ -51,20 +53,22 @@ export function SeccionGestionPrestamosLayout() {
               Sección centralizada para entregas, devoluciones, historial y reportes de préstamos.
             </p>
           </div>
-          <nav
-            aria-label="Opciones de Gestionar Préstamos"
-            className="flex flex-wrap gap-1.5"
-          >
-            {opcionesDisponibles.map(({ id, etiqueta, a }) => {
-              const Icono = ICONOS_OPCION[id] || History
-              return (
-                <NavLink key={id} to={a} className={clasePestana}>
-                  <Icono aria-hidden="true" className="size-4" />
-                  <span>{etiqueta}</span>
-                </NavLink>
-              )
-            })}
-          </nav>
+          {!esIndex && (
+            <nav
+              aria-label="Opciones de Gestionar Préstamos"
+              className="flex flex-wrap gap-1.5"
+            >
+              {opcionesDisponibles.map(({ id, etiqueta, a }) => {
+                const Icono = ICONOS_OPCION[id] || History
+                return (
+                  <NavLink key={id} to={a} className={clasePestana}>
+                    <Icono aria-hidden="true" className="size-4" />
+                    <span>{etiqueta}</span>
+                  </NavLink>
+                )
+              })}
+            </nav>
+          )}
         </div>
       </div>
 

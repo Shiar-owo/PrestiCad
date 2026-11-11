@@ -119,7 +119,6 @@ def crear_material(**cambios):
         "stock": 1,
         "precio": 150,
         "tier_minimo_requerido": "estandar",
-        "tiempo_maximo_prestamo": 1440,
     }
     datos.update(cambios)
     return registrar_material(**datos)
@@ -163,7 +162,6 @@ class ReservasServiceTestCase(TestCase):
         reserva = crear_reserva(
             usuario=self.prestatario_estandar,
             material_id=material.id,
-            prioridad="alta",
             justificacion="Práctica de laboratorio",
             ahora=ahora,
         )
@@ -180,7 +178,6 @@ class ReservasServiceTestCase(TestCase):
         crear_reserva(
             usuario=self.prestatario_estandar,
             material_id=material.id,
-            prioridad="media",
             justificacion="Primera reserva",
         )
         ahora = timezone.now()
@@ -188,7 +185,6 @@ class ReservasServiceTestCase(TestCase):
         en_espera = crear_reserva(
             usuario=self.prestatario_avanzado,
             material_id=material.id,
-            prioridad="alta",
             justificacion="Segunda solicitud",
             ahora=ahora,
         )
@@ -212,25 +208,22 @@ class ReservasServiceTestCase(TestCase):
             reputacion_tier="estandar",
         )
 
-        r_baja = crear_reserva(
-            usuario=self.prestatario_avanzado,
-            material_id=material.id,
-            prioridad="baja",
-            justificacion="Prioridad baja",
-            ahora=base,
-        )
-        r_alta_estandar = crear_reserva(
+        r_primero = crear_reserva(
             usuario=otro_estandar,
             material_id=material.id,
-            prioridad="alta",
-            justificacion="Misma fecha, tier estándar",
+            justificacion="Primera solicitud en fecha",
+            ahora=base,
+        )
+        r_mismo_tiempo_estandar = crear_reserva(
+            usuario=self.prestatario_estandar,
+            material_id=material.id,
+            justificacion="Misma fecha posterior, tier estándar",
             ahora=base + timedelta(minutes=5),
         )
-        r_alta_avanzado = crear_reserva(
+        r_mismo_tiempo_avanzado = crear_reserva(
             usuario=self.prestatario_avanzado,
             material_id=material.id,
-            prioridad="alta",
-            justificacion="Misma fecha, tier avanzado",
+            justificacion="Misma fecha posterior, tier avanzado",
             ahora=base + timedelta(minutes=5),
         )
 
@@ -241,13 +234,13 @@ class ReservasServiceTestCase(TestCase):
         promovidas = autopromover_material(material.id)
 
         self.assertEqual(len(promovidas), 1)
-        self.assertEqual(promovidas[0].id, r_alta_avanzado.id)
-        r_alta_avanzado.refresh_from_db()
-        r_alta_estandar.refresh_from_db()
-        r_baja.refresh_from_db()
-        self.assertEqual(r_alta_avanzado.estado, "reservada")
-        self.assertEqual(r_alta_estandar.estado, "en_espera")
-        self.assertEqual(r_baja.estado, "en_espera")
+        self.assertEqual(promovidas[0].id, r_primero.id)
+        r_primero.refresh_from_db()
+        r_mismo_tiempo_avanzado.refresh_from_db()
+        r_mismo_tiempo_estandar.refresh_from_db()
+        self.assertEqual(r_primero.estado, "reservada")
+        self.assertEqual(r_mismo_tiempo_avanzado.estado, "en_espera")
+        self.assertEqual(r_mismo_tiempo_estandar.estado, "en_espera")
 
     def test_autopromocion_tras_devolucion_cancelacion_vencimiento_mantenimiento_y_alta(self):
         material = crear_material(codigo_material="EQ-RES-04", stock=1)
@@ -262,7 +255,6 @@ class ReservasServiceTestCase(TestCase):
         reserva_1 = crear_reserva(
             usuario=self.prestatario_avanzado,
             material_id=material.id,
-            prioridad="alta",
             justificacion="Espera tras préstamo",
         )
         self.assertEqual(reserva_1.estado, "en_espera")
@@ -285,7 +277,6 @@ class ReservasServiceTestCase(TestCase):
         reserva_2 = crear_reserva(
             usuario=self.prestatario_estandar,
             material_id=material.id,
-            prioridad="media",
             justificacion="Espera tras reserva 1",
         )
         self.assertEqual(reserva_2.estado, "en_espera")
@@ -306,10 +297,9 @@ class ReservasServiceTestCase(TestCase):
         reserva_3 = crear_reserva(
             usuario=self.prestatario_avanzado,
             material_id=material.id,
-            prioridad="baja",
             justificacion="Espera tras reserva 2",
         )
-        futuro = reserva_2.fecha_limite_recojo + timedelta(minutes=5)
+        futuro = reserva_2.fecha_limite_recojo + timedelta(minutes=31)
         resumen = expirar_reservas(ahora=futuro)
         self.assertEqual(resumen["reservas_vencidas"], 1)
         self.assertEqual(resumen["reservas_promovidas"], 1)
@@ -325,7 +315,6 @@ class ReservasServiceTestCase(TestCase):
         reserva_4 = crear_reserva(
             usuario=self.prestatario_estandar,
             material_id=material.id,
-            prioridad="alta",
             justificacion="Espera de nuevo ejemplar",
         )
         self.assertEqual(reserva_4.estado, "en_espera")
@@ -348,7 +337,6 @@ class ReservasServiceTestCase(TestCase):
         reserva_5 = crear_reserva(
             usuario=otro,
             material_id=material.id,
-            prioridad="alta",
             justificacion="Espera de salida de mantenimiento",
         )
         self.assertEqual(reserva_5.estado, "en_espera")
@@ -368,14 +356,12 @@ class ReservasServiceTestCase(TestCase):
         r1 = crear_reserva(
             usuario=self.prestatario_estandar,
             material_id=material.id,
-            prioridad="media",
             justificacion="Espera que vencerá",
             ahora=ahora,
         )
         r2 = crear_reserva(
             usuario=self.prestatario_avanzado,
             material_id=material.id,
-            prioridad="alta",
             justificacion="Espera que será rechazada",
             ahora=ahora,
         )
@@ -401,13 +387,11 @@ class ReservasServiceTestCase(TestCase):
         crear_reserva(
             usuario=self.prestatario_estandar,
             material_id=m1.id,
-            prioridad="media",
             justificacion="Uno",
         )
         crear_reserva(
             usuario=self.prestatario_estandar,
             material_id=m2.id,
-            prioridad="media",
             justificacion="Dos",
         )
 
@@ -415,10 +399,37 @@ class ReservasServiceTestCase(TestCase):
             crear_reserva(
                 usuario=self.prestatario_estandar,
                 material_id=m3.id,
-                prioridad="media",
                 justificacion="Tres",
             )
         self.assertEqual(ctx.exception.status_code, 409)
+
+    def test_reserva_excepcional_permite_estandar_con_material_avanzado(self):
+        material = crear_material(
+            codigo_material="EQ-EXC-ESTANDAR",
+            stock=1,
+            tier_minimo_requerido="avanzado",
+        )
+
+        with self.assertRaises(ReservaError) as ctx:
+            crear_reserva(
+                usuario=self.prestatario_estandar,
+                material_id=material.id,
+                justificacion="Intento normal",
+            )
+        self.assertIn("excepcional", ctx.exception.mensaje)
+
+        with storage_garantias_temporal():
+            reserva = crear_reserva_excepcional(
+                usuario=self.prestatario_estandar,
+                material_id=material.id,
+                justificacion="Práctica de laboratorio avanzada",
+                documento_identidad=crear_pdf("dni-estandar.pdf"),
+                compromiso_responsabilidad=crear_pdf("compromiso-estandar.pdf"),
+            )
+
+        self.assertEqual(reserva.estado, "en_espera")
+        self.assertTrue(reserva.es_excepcion)
+        self.assertTrue(reserva.garantia_completa)
 
     def test_reserva_excepcional_no_autopromueve_aprueba_y_convierte_reutilizando_garantia(self):
         material = crear_material(
@@ -432,7 +443,6 @@ class ReservasServiceTestCase(TestCase):
             crear_reserva(
                 usuario=self.prestatario_restringido,
                 material_id=material.id,
-                prioridad="alta",
                 justificacion="Intento normal",
             )
         self.assertIn("excepcional", ctx.exception.mensaje)
@@ -441,7 +451,6 @@ class ReservasServiceTestCase(TestCase):
             reserva_exc = crear_reserva_excepcional(
                 usuario=self.prestatario_restringido,
                 material_id=material.id,
-                prioridad="alta",
                 justificacion="Tesis de grado urgente",
                 documento_identidad=crear_pdf("dni.pdf"),
                 compromiso_responsabilidad=crear_pdf("compromiso.pdf"),
@@ -510,6 +519,53 @@ class ReservasServiceTestCase(TestCase):
                 material.deduccion_dano_parcial * 2,
             )
 
+    def test_aprobar_excepcion_sin_instancias_disponibles_entra_a_cola_y_se_autopromueve(self):
+        material = crear_material(
+            codigo_material="EQ-EXC-SIN-INSTANCIA",
+            stock=1,
+            estado_inicial_ejemplares="en_mantenimiento",
+            estado="en_mantenimiento",
+            tier_minimo_requerido="estandar",
+        )
+        with storage_garantias_temporal():
+            reserva_exc = crear_reserva_excepcional(
+                usuario=self.prestatario_restringido,
+                material_id=material.id,
+                justificacion="Tesis sin copias libres",
+                documento_identidad=crear_pdf("dni.pdf"),
+                compromiso_responsabilidad=crear_pdf("compromiso.pdf"),
+            )
+            self.assertEqual(reserva_exc.estado, "en_espera")
+            self.assertFalse(reserva_exc.excepcion_aprobada)
+
+            # El gestor aprueba la excepción aunque NO haya ejemplares disponibles
+            aprobada = aprobar_excepcion(
+                reserva_id=reserva_exc.id,
+                realizado_por=self.gestor,
+            )
+            self.assertEqual(aprobada.estado, "en_espera")
+            self.assertTrue(aprobada.excepcion_aprobada)
+            self.assertIsNone(aprobada.instancia_id)
+
+            # Aparece en la cola activa con posición 1
+            cola = consultar_cola_material(material.id)
+            self.assertEqual(len(cola["en_espera_normales"]), 1)
+            self.assertEqual(cola["en_espera_normales"][0].id, aprobada.id)
+            self.assertEqual(cola["en_espera_normales"][0].posicion_cola, 1)
+            self.assertEqual(len(cola["en_espera_excepciones"]), 0)
+
+            # Cuando se libera un ejemplar (pasa de mantenimiento a disponible), se autopromueve
+            instancia = material.instancias.first()
+            instancia.estado = "disponible"
+            instancia.save(update_fields=["estado", "updated_at"])
+
+            promovidas = autopromover_material(material.id)
+            self.assertEqual(len(promovidas), 1)
+            self.assertEqual(promovidas[0].id, aprobada.id)
+            aprobada.refresh_from_db()
+            self.assertEqual(aprobada.estado, "reservada")
+            self.assertIsNotNone(aprobada.instancia_id)
+
 
 class ReservasAPITestCase(APITestCase):
     def setUp(self):
@@ -540,7 +596,6 @@ class ReservasAPITestCase(APITestCase):
             "/api/reservas/",
             {
                 "material_id": str(self.material.id),
-                "prioridad": "alta",
                 "justificacion": "Uso en proyecto final",
             },
             format="json",
@@ -580,7 +635,6 @@ class ReservasAPITestCase(APITestCase):
                 "/api/reservas/excepcion/",
                 {
                     "material_id": str(self.material.id),
-                    "prioridad": "alta",
                     "justificacion": "Excepción académica laboratorio",
                     "documento_identidad": crear_pdf("dni.pdf"),
                     "compromiso_responsabilidad": crear_pdf("compromiso.pdf"),
@@ -628,7 +682,6 @@ class ReservasConcurrenciaTestCase(TransactionTestCase):
                 return crear_reserva(
                     usuario=usuario,
                     material_id=self.material.id,
-                    prioridad="alta",
                     justificacion="Solicitud concurrente",
                 )
             finally:

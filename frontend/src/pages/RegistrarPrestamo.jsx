@@ -81,6 +81,7 @@ function RegistrarPrestamo() {
   const [searchParams] = useSearchParams()
   const dniInicial = searchParams.get('dni') || ''
   const reservaIdInicial = searchParams.get('reservaId') || ''
+  const esConversionFija = Boolean(reservaIdInicial)
 
   const [materiales, setMateriales] = useState([])
   const [instancias, setInstancias] = useState([])
@@ -114,6 +115,31 @@ function RegistrarPrestamo() {
   useEffect(() => {
     cargarMateriales()
   }, [])
+
+  useEffect(() => {
+    if (!reservaIdInicial) return undefined
+    let vigente = true
+    api.get(`/reservas/${reservaIdInicial}/`)
+      .then((reserva) => {
+        if (!vigente || !reserva) return
+        setReservasConfirmadas((prev) => {
+          const existe = prev.some((r) => String(r.id) === String(reserva.id))
+          return existe ? prev : [reserva, ...prev]
+        })
+        setFormulario((actual) => ({
+          ...actual,
+          dni: reserva.usuario?.dni || actual.dni,
+          reservaId: String(reserva.id),
+          materialId: String(reserva.material?.id || ''),
+          instanciaId: String(reserva.instancia?.id || ''),
+          esExcepcion: Boolean(reserva.es_excepcion),
+        }))
+      })
+      .catch(() => {})
+    return () => {
+      vigente = false
+    }
+  }, [reservaIdInicial])
 
   useEffect(() => {
     const dni = formulario.dni.trim()
@@ -152,6 +178,15 @@ function RegistrarPrestamo() {
               esExcepcion: Boolean(coincide.es_excepcion),
             }))
           }
+        } else if (listaConfirmadas.length > 0) {
+          const primera = listaConfirmadas[0]
+          setFormulario((actual) => ({
+            ...actual,
+            reservaId: String(primera.id),
+            materialId: String(primera.material?.id || ''),
+            instanciaId: String(primera.instancia?.id || ''),
+            esExcepcion: Boolean(primera.es_excepcion),
+          }))
         }
       })
       .catch((errorApi) => {
@@ -246,7 +281,7 @@ function RegistrarPrestamo() {
   const perfilHabilitado = perfilVerificadoActual?.rol === 'prestatario' && perfilVerificadoActual?.estado === 'activo'
   const puedeSolicitarExcepcion = Boolean(
     perfilHabilitado && materialSeleccionado && !tierCumple
-    && perfilVerificadoActual?.reputacion_tier === 'restringido',
+    && ['restringido', 'estandar'].includes(perfilVerificadoActual?.reputacion_tier),
   )
   const excepcionActiva = Boolean(
     reservaSeleccionada?.es_excepcion || (puedeSolicitarExcepcion && formulario.esExcepcion),
@@ -298,6 +333,7 @@ function RegistrarPrestamo() {
   }
 
   function actualizar(campo, valor) {
+    if (campo === 'dni' && reservaSeleccionada) return
     const camposError = {
       dni: 'dni',
       materialId: 'material',
@@ -571,25 +607,37 @@ function RegistrarPrestamo() {
               valor={formulario.dni}
               onCambio={(valor) => actualizar('dni', valor)}
               error={errores.dni}
-              ayuda="Al completar o seleccionar el DNI se consultará la reputación y las reservas confirmadas del prestatario."
+              ayuda={esConversionFija ? "DNI vinculado a la reserva seleccionada." : "Al completar o seleccionar el DNI se consultará la reputación y las reservas confirmadas del prestatario."}
+              deshabilitado={esConversionFija}
               requerido
             />
             {reservasConfirmadas.length > 0 && (
               <div className="rounded-xl border border-marca-300 bg-marca-50/50 p-4 space-y-2 dark:border-marca-700 dark:bg-marca-950/30">
-                <label
-                  htmlFor="select-reserva-confirmada"
-                  className="block text-sm font-bold text-marca-900 dark:text-marca-200"
-                >
-                  Convertir reserva confirmada vigente ({reservasConfirmadas.length})
-                </label>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+                      <label
+                        htmlFor="select-reserva-confirmada"
+                        className="block text-sm font-bold text-marca-900 dark:text-marca-200"
+                      >
+                        {esConversionFija ? 'Reserva confirmada a convertir' : `Convertir reserva confirmada vigente (${reservasConfirmadas.length})`}
+                      </label>
+                      {reservaIdInicial && (
+                        <span className="rounded-full bg-marca-100 px-2.5 py-0.5 text-xs font-semibold text-marca-800 dark:bg-marca-950/80 dark:text-marca-300">
+                          Modo conversión de reserva
+                        </span>
+                      )}
+                    </div>
+
                 <select
                   id="select-reserva-confirmada"
                   value={formulario.reservaId}
+                  disabled={esConversionFija}
                   onChange={(e) => seleccionarReserva(e.target.value)}
-                  className="w-full rounded-lg border border-borde bg-white px-3 py-2 text-sm text-texto dark:bg-superficie"
+                  className="w-full rounded-lg border border-borde bg-white px-3 py-2 text-sm text-texto disabled:bg-superficie-alta disabled:cursor-not-allowed dark:bg-superficie"
                 >
-                  <option value="">Préstamo directo (sin usar reserva confirmada)</option>
-                  {reservasConfirmadas.map((res) => (
+                  {(esConversionFija && reservaSeleccionada
+                    ? [reservaSeleccionada]
+                    : reservasConfirmadas
+                  ).map((res) => (
                     <option key={res.id} value={res.id}>
                       {res.material?.nombre} ({res.material?.codigo_material}) — Ejemplar{' '}
                       {res.instancia?.codigo_ejemplar}
@@ -600,8 +648,16 @@ function RegistrarPrestamo() {
                 </select>
                 {reservaSeleccionada && (
                   <p className="text-xs text-texto-suave">
-                    Se ha precargado automáticamente el material y el ejemplar{' '}
-                    <strong>{reservaSeleccionada.instancia?.codigo_ejemplar}</strong> asignado a la reserva.
+                    {esConversionFija ? (
+                      <span className="font-semibold text-marca-800 dark:text-marca-300">
+                        Conversión de reserva fija: el material y el ejemplar {reservaSeleccionada.instancia?.codigo_ejemplar} están cargados y bloqueados para esta entrega.
+                      </span>
+                    ) : (
+                      <>
+                        Se ha precargado automáticamente el material y el ejemplar{' '}
+                        <strong>{reservaSeleccionada.instancia?.codigo_ejemplar}</strong> asignado a la reserva.
+                      </>
+                    )}
                   </p>
                 )}
               </div>
@@ -671,7 +727,7 @@ function RegistrarPrestamo() {
                 <span>
                   <span className="block font-semibold">Registrar como préstamo excepcional</span>
                   <span className="mt-1 block text-texto-suave">
-                    Autoriza este material pese al Tier Restringido del prestatario. Exige ambos
+                    Autoriza este material pese al Tier insuficiente del prestatario. Exige ambos
                     documentos de garantía y duplica la deducción por daño; el cobro económico no se duplica.
                   </span>
                 </span>
@@ -906,7 +962,7 @@ function RegistrarPrestamo() {
                   archivo={formulario.documentoIdentidad}
                   onCambio={(archivo) => actualizar('documentoIdentidad', archivo)}
                   error={errores.documento_identidad}
-                  ayuda={`Solo se acepta application/pdf, hasta ${TAMANO_MAXIMO_GARANTIA_MB} MB.`}
+                  ayuda={`Solo se aceptan archivos PDF (.pdf), hasta ${TAMANO_MAXIMO_GARANTIA_MB} MB.`}
                 />
                 <SubidaDocumentoPDF
                   etiqueta={
@@ -917,7 +973,7 @@ function RegistrarPrestamo() {
                   archivo={formulario.compromisoResponsabilidad}
                   onCambio={(archivo) => actualizar('compromisoResponsabilidad', archivo)}
                   error={errores.compromiso_responsabilidad}
-                  ayuda={`Solo se acepta application/pdf, hasta ${TAMANO_MAXIMO_GARANTIA_MB} MB.`}
+                  ayuda={`Solo se aceptan archivos PDF (.pdf), hasta ${TAMANO_MAXIMO_GARANTIA_MB} MB.`}
                 />
               </fieldset>
             )}

@@ -22,7 +22,6 @@ import { ETIQUETAS_TIER } from '../constantes/catalogo'
 import SesionContext from '../contextos/SesionContext'
 import useTituloPagina from '../hooks/useTituloPagina'
 import {
-  ETIQUETAS_PRIORIDAD,
   formatearFechaReserva,
   ordenarColaReservas,
   textoEstadoReserva,
@@ -81,9 +80,6 @@ export default function ColaReservas() {
             ? datos.results
             : []
         setMateriales(lista)
-        if (!materialIdSeleccionado && lista.length > 0) {
-          setMaterialIdSeleccionado(String(lista[0].id))
-        }
       })
       .catch(() => {
         if (activa) {
@@ -100,23 +96,22 @@ export default function ColaReservas() {
   }, [])
 
   useEffect(() => {
-    if (!materialIdSeleccionado) {
-      setCola(null)
-      return
-    }
-
     let activa = true
     setCargandoCola(true)
     setErrorCola('')
 
+    const url = materialIdSeleccionado
+      ? `/reservas/cola/${materialIdSeleccionado}/`
+      : `/reservas/cola/`
+
     api
-      .get(`/reservas/cola/${materialIdSeleccionado}/`)
+      .get(url)
       .then((datos) => {
         if (activa) setCola(datos)
       })
       .catch(() => {
         if (activa) {
-          setErrorCola('No fue posible consultar la cola de reservas para este material.')
+          setErrorCola('No fue posible consultar la cola de reservas.')
         }
       })
       .finally(() => {
@@ -154,16 +149,22 @@ export default function ColaReservas() {
     setProcesandoId(reserva.id)
 
     try {
-      await api.post(`/reservas/${reserva.id}/aprobar-excepcion/`, {})
-      setMensajeExito(
-        `Excepción académica aprobada para ${reserva.usuario?.nombre_completo || reserva.usuario?.dni}. Se asignó un ejemplar por 24 horas.`,
-      )
+      const respuesta = await api.post(`/reservas/${reserva.id}/aprobar-excepcion/`, {})
+      if (respuesta?.estado === 'reservada') {
+        setMensajeExito(
+          `Excepción académica aprobada para ${reserva.usuario?.nombre_completo || reserva.usuario?.dni}. Se asignó un ejemplar con recojo por 24 horas.`,
+        )
+      } else {
+        setMensajeExito(
+          `Excepción académica aprobada para ${reserva.usuario?.nombre_completo || reserva.usuario?.dni}. Ha ingresado a la lista de espera con turno por orden de llegada.`,
+        )
+      }
       setRecarga((v) => v + 1)
     } catch (err) {
       setErrorAccion(
         extraerMensajeError(
           err,
-          'No se pudo aprobar la excepción académica. Verifica que existan ejemplares libres.',
+          'No se pudo aprobar la excepción académica.',
         ),
       )
     } finally {
@@ -254,7 +255,7 @@ export default function ColaReservas() {
           tamanio="pequeno"
           icono={RefreshCw}
           onClick={() => setRecarga((v) => v + 1)}
-          deshabilitado={!materialIdSeleccionado || cargandoCola}
+          deshabilitado={cargandoCola}
         >
           Actualizar cola
         </Boton>
@@ -299,7 +300,7 @@ export default function ColaReservas() {
               onChange={(e) => seleccionarMaterial(e.target.value)}
               className="mt-1 w-full rounded-lg border border-borde bg-white px-3 py-2 text-sm text-texto dark:bg-superficie"
             >
-              <option value="">Selecciona un material…</option>
+              <option value="">Todas las reservas (todos los materiales)</option>
               {materialesFiltrados.map((m) => {
                 const disp = m.unidades_disponibles ?? m.resumen_instancias?.disponible ?? 0
                 return (
@@ -391,21 +392,30 @@ export default function ColaReservas() {
 
       {!cargandoCola && cola && (
         <div className="space-y-6">
-          {/* Resumen del material y ejemplares libres */}
+          {/* Resumen del material y ejemplares libres o vista general */}
           <Tarjeta className="p-5 space-y-3">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <span className="text-xs font-semibold uppercase tracking-wide text-acento-700 dark:text-acento-300">
-                  Código de Material: {cola.material?.codigo_material} · Tier mínimo:{' '}
-                  {ETIQUETAS_TIER[cola.material?.tier_minimo_requerido] ||
-                    cola.material?.tier_minimo_requerido}
+                  {cola.material ? (
+                    `Código de Material: ${cola.material.codigo_material} · Tier mínimo: ${
+                      ETIQUETAS_TIER[cola.material.tier_minimo_requerido] ||
+                      cola.material.tier_minimo_requerido
+                    }`
+                  ) : (
+                    'Vista general del almacén (sin filtros aplicados)'
+                  )}
                 </span>
-                <h3 className="text-lg font-bold text-texto">{cola.material?.nombre}</h3>
+                <h3 className="text-lg font-bold text-texto">
+                  {cola.material ? cola.material.nombre : 'Todas las reservas y solicitudes activas'}
+                </h3>
               </div>
               <div className="flex flex-wrap gap-2 text-xs font-semibold">
-                <span className="rounded-lg bg-marca-100 px-3 py-1 text-marca-800 dark:bg-marca-950/60 dark:text-marca-300">
-                  {instanciasDisponibles.length} disponible(s)
-                </span>
+                {cola.material && (
+                  <span className="rounded-lg bg-marca-100 px-3 py-1 text-marca-800 dark:bg-marca-950/60 dark:text-marca-300">
+                    {instanciasDisponibles.length} disponible(s)
+                  </span>
+                )}
                 <span className="rounded-lg bg-amber-100 px-3 py-1 text-amber-900 dark:bg-amber-950/60 dark:text-amber-200">
                   {enEsperaNormales.length + enEsperaExcepciones.length} en espera
                 </span>
@@ -415,28 +425,30 @@ export default function ColaReservas() {
               </div>
             </div>
 
-            <div>
-              <p className="text-xs font-semibold text-texto-suave">
-                Ejemplares físicos disponibles actualmente:
-              </p>
-              {instanciasDisponibles.length === 0 ? (
-                <p className="mt-1 text-xs text-texto-suave">
-                  No hay ejemplares en estado Disponible en este momento.
+            {cola.material && (
+              <div>
+                <p className="text-xs font-semibold text-texto-suave">
+                  Ejemplares físicos disponibles actualmente:
                 </p>
-              ) : (
-                <div className="mt-1.5 flex flex-wrap gap-1.5">
-                  {instanciasDisponibles.map((inst) => (
-                    <span
-                      key={inst.id}
-                      className="rounded-md border border-marca-300 bg-marca-50 px-2.5 py-1 font-mono text-xs font-semibold text-marca-800 dark:border-marca-800 dark:bg-marca-950/40 dark:text-marca-300"
-                    >
-                      {inst.codigo_ejemplar}
-                      {inst.ubicacion ? ` (${inst.ubicacion})` : ''}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
+                {instanciasDisponibles.length === 0 ? (
+                  <p className="mt-1 text-xs text-texto-suave">
+                    No hay ejemplares en estado Disponible en este momento.
+                  </p>
+                ) : (
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {instanciasDisponibles.map((inst) => (
+                      <span
+                        key={inst.id}
+                        className="rounded-md border border-marca-300 bg-marca-50 px-2.5 py-1 font-mono text-xs font-semibold text-marca-800 dark:border-marca-800 dark:bg-marca-950/40 dark:text-marca-300"
+                      >
+                        {inst.codigo_ejemplar}
+                        {inst.ubicacion ? ` (${inst.ubicacion})` : ''}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </Tarjeta>
 
           {/* 1. Excepciones académicas en espera */}
@@ -473,12 +485,13 @@ export default function ColaReservas() {
                               Excepción académica
                             </span>
                           </div>
+                          {reserva.material && (
+                            <p className="mt-0.5 text-xs font-semibold text-acento-700 dark:text-acento-300">
+                              Material: {reserva.material.nombre} ({reserva.material.codigo_material})
+                            </p>
+                          )}
                           <p className="mt-1 text-xs text-texto-suave">
-                            Prioridad:{' '}
-                            <strong className="text-texto">
-                              {ETIQUETAS_PRIORIDAD[reserva.prioridad] || reserva.prioridad}
-                            </strong>{' '}
-                            · Solicitada: {formatearFechaReserva(reserva.fecha_creacion)} · Expira
+                            Solicitada: {formatearFechaReserva(reserva.fecha_solicitud || reserva.fecha_creacion || reserva.created_at)} · Expira
                             en espera: {formatearFechaReserva(reserva.fecha_limite_espera)}
                           </p>
                         </div>
@@ -496,7 +509,7 @@ export default function ColaReservas() {
                       <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
                         <div className="flex flex-wrap items-center gap-3 text-xs">
                           <span className="font-semibold text-texto">Garantía adjunta:</span>
-                          {reserva.garantia?.documento_identidad_disponible ? (
+                          {(reserva.garantia?.documento_identidad_disponible ?? reserva.garantia?.tiene_documento_identidad) ? (
                             <a
                               href={`/api/reservas/${reserva.id}/garantia/documento-identidad/`}
                               target="_blank"
@@ -509,7 +522,7 @@ export default function ColaReservas() {
                           ) : (
                             <span className="text-error">Sin DNI</span>
                           )}
-                          {reserva.garantia?.compromiso_responsabilidad_disponible ? (
+                          {(reserva.garantia?.compromiso_responsabilidad_disponible ?? reserva.garantia?.tiene_compromiso_responsabilidad) ? (
                             <a
                               href={`/api/reservas/${reserva.id}/garantia/compromiso/`}
                               target="_blank"
@@ -532,17 +545,16 @@ export default function ColaReservas() {
                               cargando={procesandoId === reserva.id}
                               deshabilitado={
                                 Boolean(procesandoId) ||
-                                instanciasDisponibles.length === 0 ||
                                 !reserva.garantia?.garantia_completa
                               }
                               title={
-                                instanciasDisponibles.length === 0
-                                  ? 'Se requiere al menos un ejemplar disponible para aprobar la excepción.'
+                                !reserva.garantia?.garantia_completa
+                                  ? 'La solicitud requiere que ambos documentos de garantía estén completos para poder ser aprobada.'
                                   : undefined
                               }
                               onClick={() => manejarAprobarExcepcion(reserva)}
                             >
-                              Aprobar excepción (24 h)
+                              Aprobar excepción
                             </Boton>
                             <Boton
                               variante="peligro"
@@ -578,11 +590,11 @@ export default function ColaReservas() {
               className="flex items-center gap-2 text-base font-bold text-texto"
             >
               <Clock aria-hidden="true" className="size-5 text-acento-600" />
-              Cola de espera normal ordenada ({enEsperaNormales.length})
+              Cola de espera ordenada ({enEsperaNormales.length})
             </h3>
             {enEsperaNormales.length === 0 ? (
               <p className="rounded-xl border border-borde bg-superficie p-4 text-sm text-texto-suave">
-                No hay solicitudes normales en lista de espera para este material.
+                No hay solicitudes en lista de espera para este material.
               </p>
             ) : (
               <ul className="grid gap-3">
@@ -595,21 +607,29 @@ export default function ColaReservas() {
                             #{reserva.posicion_cola || indice + 1}
                           </span>
                           <div>
-                            <p className="font-bold text-texto">
-                              {reserva.usuario?.nombre_completo}{' '}
-                              <span className="font-normal text-xs text-texto-suave">
-                                · DNI {reserva.usuario?.dni} · Tier{' '}
-                                {ETIQUETAS_TIER[reserva.usuario?.reputacion_tier] ||
-                                  reserva.usuario?.reputacion_tier}{' '}
-                                ({reserva.usuario?.reputacion_puntaje} pts)
-                              </span>
-                            </p>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="font-bold text-texto">
+                                {reserva.usuario?.nombre_completo}{' '}
+                                <span className="font-normal text-xs text-texto-suave">
+                                  · DNI {reserva.usuario?.dni} · Tier{' '}
+                                  {ETIQUETAS_TIER[reserva.usuario?.reputacion_tier] ||
+                                    reserva.usuario?.reputacion_tier}{' '}
+                                  ({reserva.usuario?.reputacion_puntaje} pts)
+                                </span>
+                              </p>
+                              {reserva.es_excepcion && (
+                                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900 dark:bg-amber-950/60 dark:text-amber-200">
+                                  Excepción aprobada
+                                </span>
+                              )}
+                            </div>
+                            {reserva.material && (
+                              <p className="mt-0.5 text-xs font-semibold text-acento-700 dark:text-acento-300">
+                                Material: {reserva.material.nombre} ({reserva.material.codigo_material})
+                              </p>
+                            )}
                             <p className="text-xs text-texto-suave">
-                              Prioridad:{' '}
-                              <strong className="text-texto">
-                                {ETIQUETAS_PRIORIDAD[reserva.prioridad] || reserva.prioridad}
-                              </strong>{' '}
-                              · Creada: {formatearFechaReserva(reserva.fecha_creacion)} · Expira:{' '}
+                              Creada: {formatearFechaReserva(reserva.fecha_solicitud || reserva.fecha_creacion || reserva.created_at)} · Expira:{' '}
                               {formatearFechaReserva(reserva.fecha_limite_espera)}
                             </p>
                           </div>
@@ -686,6 +706,11 @@ export default function ColaReservas() {
                               </span>
                             )}
                           </div>
+                          {reserva.material && (
+                            <p className="mt-0.5 text-xs font-semibold text-acento-700 dark:text-acento-300">
+                              Material: {reserva.material.nombre} ({reserva.material.codigo_material})
+                            </p>
+                          )}
                           <p className="mt-1 text-xs text-texto-suave">
                             Ejemplar reservado:{' '}
                             <strong className="font-mono text-texto">

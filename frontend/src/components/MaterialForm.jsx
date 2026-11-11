@@ -71,7 +71,6 @@ const DEFAULTS_REPUTACION_POR_TIER = {
 
 const OPCIONES_ESTADO_INICIAL_EJEMPLAR = [
   { valor: 'disponible', etiqueta: 'Disponible' },
-  { valor: 'en_mantenimiento', etiqueta: 'En mantenimiento' },
 ]
 
 const ETIQUETAS_CAMPOS_ERROR = {
@@ -209,7 +208,10 @@ function validar(datos) {
       || minutos > DURACION_MAXIMA_MATERIAL_MINUTOS
     ) {
       errores.tiempo_maximo_prestamo =
-        'El tiempo máximo de préstamo del material debe estar entre 30 minutos y 15 días (21600 minutos).'
+        'El tiempo máximo de préstamo del material debe estar entre 1 hora (60 minutos) y 15 días (21600 minutos).'
+    } else if (datos.tier_minimo_requerido === 'avanzado' && minutos > 480) {
+      errores.tiempo_maximo_prestamo =
+        'El tiempo máximo de préstamo para materiales de tier avanzado no puede superar 8 horas (480 minutos).'
     }
   }
 
@@ -1217,11 +1219,8 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Campo
-              etiqueta={esEdicion ? 'Tier mínimo requerido (opcional)' : 'Tier mínimo (opcional)'}
-              opciones={[
-                { valor: '', etiqueta: 'Sin especificar' },
-                ...OPCIONES_TIER,
-              ]}
+              etiqueta={esEdicion ? 'Tier mínimo requerido' : 'Tier mínimo'}
+              opciones={OPCIONES_TIER}
               valor={datos.tier_minimo_requerido}
               onCambio={(evento) => actualizar('tier_minimo_requerido', evento.target.value)}
               deshabilitado={Number(datos.precio) > UMBRAL_PRECIO_ALTO_VALOR}
@@ -1248,7 +1247,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
                 />
               </div>
               <p className="text-xs text-texto-suave">
-                Mínimo 30 minutos y máximo 15 días (por defecto según Tier: Avanzado 6 h, Estándar 24 h, Restringido 3 días).
+                Mínimo 1 hora y máximo 15 días (por defecto según Tier: Avanzado 6 h, Estándar 24 h, Restringido 3 días).
               </p>
             </div>
             {CAMPOS_PUNTOS.map(({ campo, etiqueta }) => (

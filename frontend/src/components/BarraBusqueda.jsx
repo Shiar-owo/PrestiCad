@@ -2,7 +2,6 @@ import { useState } from 'react'
 
 import {
   OPCIONES_FILTRO_CATEGORIA,
-  OPCIONES_FILTRO_ESTADO,
 } from '../constantes/catalogo'
 import Campo from './ui/Campo'
 import Boton from './ui/Boton'
@@ -10,7 +9,6 @@ import Boton from './ui/Boton'
 function BarraBusqueda({ onBuscar, cargando = false, valoresIniciales = {} }) {
   const [q, setQ] = useState(valoresIniciales.q || '')
   const [categoria, setCategoria] = useState(valoresIniciales.categoria || '')
-  const [estado, setEstado] = useState(valoresIniciales.estado || '')
 
   function manejarEnvio(evento) {
     evento.preventDefault()
@@ -18,7 +16,6 @@ function BarraBusqueda({ onBuscar, cargando = false, valoresIniciales = {} }) {
       onBuscar({
         q: q.trim(),
         categoria,
-        estado,
       })
     }
   }
@@ -26,17 +23,15 @@ function BarraBusqueda({ onBuscar, cargando = false, valoresIniciales = {} }) {
   function manejarLimpiar() {
     setQ('')
     setCategoria('')
-    setEstado('')
     if (onBuscar) {
       onBuscar({
         q: '',
         categoria: '',
-        estado: '',
       })
     }
   }
 
-  const hayFiltrosActivos = q.trim() !== '' || categoria !== '' || estado !== ''
+  const hayFiltrosActivos = q.trim() !== '' || categoria !== ''
 
   return (
     <form
@@ -44,7 +39,7 @@ function BarraBusqueda({ onBuscar, cargando = false, valoresIniciales = {} }) {
       onSubmit={manejarEnvio}
       className="rounded-xl border border-borde bg-superficie p-5"
     >
-      <div className="grid gap-4 md:grid-cols-[minmax(0,2fr)_1fr_1fr]">
+      <div className="grid gap-4 md:grid-cols-[minmax(0,2fr)_1fr]">
         <Campo
           etiqueta="Buscar por nombre"
           tipo="search"
@@ -58,13 +53,6 @@ function BarraBusqueda({ onBuscar, cargando = false, valoresIniciales = {} }) {
           opciones={OPCIONES_FILTRO_CATEGORIA}
           valor={categoria}
           onCambio={(evento) => setCategoria(evento.target.value)}
-          deshabilitado={cargando}
-        />
-        <Campo
-          etiqueta="Estado"
-          opciones={OPCIONES_FILTRO_ESTADO}
-          valor={estado}
-          onCambio={(evento) => setEstado(evento.target.value)}
           deshabilitado={cargando}
         />
       </div>

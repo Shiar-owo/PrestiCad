@@ -1,9 +1,19 @@
+from datetime import timedelta
+
+from django.conf import settings
 from rest_framework import serializers
 
 from apps.inventario.models import InstanciaMaterial, Material
 from apps.prestamos.constants import TAMANO_MAXIMO_SOLICITUD_BYTES
 from apps.prestamos.validators import validar_pdf_garantia
-from apps.reservas.constants import MENSAJES_ERROR_RESERVA, VALORES_PRIORIDAD_RESERVA
+from apps.reservas.constants import (
+    DIAS_LABORABLES,
+    HORA_RESERVA_MAXIMO_FIN,
+    HORA_RESERVA_MINIMO_INICIO,
+    HORARIO_ATENCION_FIN,
+    HORARIO_ATENCION_INICIO,
+    MENSAJES_ERROR_RESERVA,
+)
 from apps.reservas.models import Reserva
 from apps.reservas.services import calcular_posicion_en_cola
 
@@ -18,13 +28,23 @@ class CrearReservaSerializer(serializers.Serializer):
             "invalid": "El identificador del material no es válido.",
         }
     )
-    prioridad = serializers.ChoiceField(
-        choices=VALORES_PRIORIDAD_RESERVA,
+    instancia_id = serializers.UUIDField(
+        required=False,
         error_messages={
-            "required": MENSAJES_ERROR_RESERVA["prioridad_invalida"],
-            "null": MENSAJES_ERROR_RESERVA["prioridad_invalida"],
-            "invalid_choice": MENSAJES_ERROR_RESERVA["prioridad_invalida"],
-        },
+            "invalid": "El identificador de la instancia no es válido.",
+        }
+    )
+    fecha_inicio = serializers.DateTimeField(
+        required=False,
+        error_messages={
+            "invalid": "La fecha y hora de inicio de la reserva no es válida.",
+        }
+    )
+    fecha_fin = serializers.DateTimeField(
+        required=False,
+        error_messages={
+            "invalid": "La fecha y hora de fin de la reserva no es válida.",
+        }
     )
     justificacion = serializers.CharField(
         allow_blank=False,
@@ -35,6 +55,42 @@ class CrearReservaSerializer(serializers.Serializer):
             "blank": MENSAJES_ERROR_RESERVA["justificacion_obligatoria"],
         },
     )
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        fecha_inicio = attrs.get("fecha_inicio")
+        fecha_fin = attrs.get("fecha_fin")
+        if fecha_inicio is not None or fecha_fin is not None:
+            if fecha_inicio is None or fecha_fin is None:
+                raise serializers.ValidationError({
+                    "fecha_inicio": "Debe indicar tanto la fecha de inicio como la de fin de la reserva.",
+                    "fecha_fin": "Debe indicar tanto la fecha de inicio como la de fin de la reserva.",
+                })
+            if fecha_fin <= fecha_inicio:
+                raise serializers.ValidationError({
+                    "fecha_fin": "La fecha y hora de fin debe ser posterior a la de inicio.",
+                })
+            for etiqueta, valor in (("fecha_inicio", fecha_inicio), ("fecha_fin", fecha_fin)):
+                if valor.weekday() not in DIAS_LABORABLES:
+                    raise serializers.ValidationError({
+                        etiqueta: "La reserva solo puede realizarse de lunes a viernes (días laborables).",
+                    })
+                minutos_dia = valor.hour * 60 + valor.minute
+                if not (HORA_RESERVA_MINIMO_INICIO * 60 <= minutos_dia <= HORA_RESERVA_MAXIMO_FIN * 60):
+                    raise serializers.ValidationError({
+                        etiqueta: (
+                            f"La reserva debe estar dentro del horario de atención "
+                            f"({HORA_RESERVA_MINIMO_INICIO}:00 a {HORA_RESERVA_MAXIMO_FIN}:00)."
+                        ),
+                    })
+
+            lunes_inicio = fecha_inicio.date() - timedelta(days=fecha_inicio.weekday())
+            lunes_fin = fecha_fin.date() - timedelta(days=fecha_fin.weekday())
+            if lunes_inicio != lunes_fin:
+                raise serializers.ValidationError({
+                    "fecha_fin": "La reserva debe realizarse dentro de la misma semana (lunes a viernes) y no puede extenderse cruzando el fin de semana.",
+                })
+        return attrs
 
 
 class CrearReservaExcepcionalSerializer(CrearReservaSerializer):
@@ -80,16 +136,13 @@ class CrearReservaExcepcionalSerializer(CrearReservaSerializer):
 
 
 class MotivoAccionReservaSerializer(serializers.Serializer):
-    """Valida el motivo obligatorio para cancelar o rechazar una reserva."""
+    """Valida el motivo para cancelar o rechazar una reserva (opcional en cancelación de prestatario)."""
 
     motivo = serializers.CharField(
-        allow_blank=False,
+        required=False,
+        default="Cancelada por el usuario prestatario.",
+        allow_blank=True,
         trim_whitespace=True,
-        error_messages={
-            "required": MENSAJES_ERROR_RESERVA["motivo_obligatorio"],
-            "null": MENSAJES_ERROR_RESERVA["motivo_obligatorio"],
-            "blank": MENSAJES_ERROR_RESERVA["motivo_obligatorio"],
-        },
     )
 
 
@@ -110,6 +163,7 @@ class UsuarioResumenReservaSerializer(serializers.Serializer):
 class MaterialResumenReservaSerializer(serializers.ModelSerializer):
     unidades_disponibles = serializers.SerializerMethodField()
     resumen_estados = serializers.ReadOnlyField()
+    foto = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Material
@@ -125,14 +179,26 @@ class MaterialResumenReservaSerializer(serializers.ModelSerializer):
             "es_alto_valor",
             "unidades_disponibles",
             "resumen_estados",
+            "foto",
         ]
 
     def get_unidades_disponibles(self, obj):
         resumen = obj.resumen_estados
         return resumen.get("disponible", 0)
 
+    def get_foto(self, obj):
+        if obj.foto:
+            url = obj.foto.url
+            if url.startswith(("http://", "https://")):
+                return url
+            base = getattr(settings, "MEDIA_URL_PUBLICA", "").rstrip("/")
+            return f"{base}{url}" if base else url
+        return None
+
 
 class InstanciaResumenReservaSerializer(serializers.ModelSerializer):
+    foto = serializers.SerializerMethodField(read_only=True)
+
     class Meta:
         model = InstanciaMaterial
         fields = [
@@ -143,7 +209,17 @@ class InstanciaResumenReservaSerializer(serializers.ModelSerializer):
             "color",
             "ubicacion",
             "observaciones",
+            "foto",
         ]
+
+    def get_foto(self, obj):
+        if obj.foto:
+            url = obj.foto.url
+            if url.startswith(("http://", "https://")):
+                return url
+            base = getattr(settings, "MEDIA_URL_PUBLICA", "").rstrip("/")
+            return f"{base}{url}" if base else url
+        return None
 
 
 class ReservaDetalleSerializer(serializers.ModelSerializer):
@@ -153,6 +229,7 @@ class ReservaDetalleSerializer(serializers.ModelSerializer):
     prestamo_id = serializers.IntegerField(read_only=True)
     posicion_cola = serializers.SerializerMethodField()
     garantia = serializers.SerializerMethodField()
+    fecha_creacion = serializers.DateTimeField(source="fecha_solicitud", read_only=True)
 
     class Meta:
         model = Reserva
@@ -162,13 +239,14 @@ class ReservaDetalleSerializer(serializers.ModelSerializer):
             "material",
             "instancia",
             "prestamo_id",
-            "prioridad",
             "justificacion",
             "estado",
             "es_excepcion",
+            "excepcion_aprobada",
             "motivo_rechazo",
             "motivo_cancelacion",
             "fecha_solicitud",
+            "fecha_creacion",
             "fecha_limite_espera",
             "fecha_confirmacion",
             "fecha_limite_recojo",
@@ -188,22 +266,26 @@ class ReservaDetalleSerializer(serializers.ModelSerializer):
         garantia = getattr(obj, "garantia", None)
         if garantia is None:
             return None
+        doc_disp = bool(garantia.documento_identidad)
+        comp_disp = bool(garantia.compromiso_responsabilidad)
         return {
             "id": garantia.id,
             "estado": garantia.estado,
-            "tiene_documento_identidad": bool(garantia.documento_identidad),
-            "tiene_compromiso_responsabilidad": bool(garantia.compromiso_responsabilidad),
+            "tiene_documento_identidad": doc_disp,
+            "tiene_compromiso_responsabilidad": comp_disp,
+            "documento_identidad_disponible": doc_disp,
+            "compromiso_responsabilidad_disponible": comp_disp,
             "garantia_completa": bool(
                 garantia.estado == "registrada"
-                and garantia.documento_identidad
-                and garantia.compromiso_responsabilidad
+                and doc_disp
+                and comp_disp
             ),
             "fecha_registro": garantia.fecha_registro,
         }
 
 
 class ColaMaterialSerializer(serializers.Serializer):
-    material = MaterialResumenReservaSerializer(read_only=True)
+    material = MaterialResumenReservaSerializer(read_only=True, required=False, allow_null=True)
     en_espera = ReservaDetalleSerializer(many=True, read_only=True)
     en_espera_normales = ReservaDetalleSerializer(many=True, read_only=True)
     en_espera_excepciones = ReservaDetalleSerializer(many=True, read_only=True)

@@ -286,12 +286,6 @@ class PrestamoHistorialDetalleSerializer(serializers.ModelSerializer):
         except Devolucion.DoesNotExist:
             return None
 
-    def get_material_snapshot(self, obj):
-        return obj.material_snapshot or {}
-
-    def get_instancia_snapshot(self, obj):
-        return obj.instancia_snapshot or {}
-
 
 class PrestamoDevolucionDetalleSerializer(serializers.ModelSerializer):
     """Datos para el formulario de devolución: estado visible, actores,

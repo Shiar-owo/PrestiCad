@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useContext, useEffect, useState } from 'react'
 import {
   Award,
   Box,
@@ -15,6 +15,9 @@ import {
 } from 'lucide-react'
 
 import { obtenerDatosFichaTecnica } from '../catalogo/fichaTecnica'
+import { ETIQUETAS_TIER } from '../constantes/catalogo'
+import SesionContext from '../contextos/SesionContext'
+import { esElegiblePorTier, requiereExcepcionAcademica } from '../reservas/estadoReserva'
 import AgregarEjemplaresMaterial from './AgregarEjemplaresMaterial'
 import BadgeEstado from './ui/BadgeEstado'
 import Boton from './ui/Boton'
@@ -60,8 +63,15 @@ function FichaTecnicaModal({
   onAgregarInstancias,
   onReservar = null,
 }) {
+  const { usuario } = useContext(SesionContext) || {}
   const [mostrarAltaInstancias, setMostrarAltaInstancias] = useState(false)
   const ficha = obtenerDatosFichaTecnica(material)
+
+  const tierUsuario = usuario?.reputacion_tier || 'estandar'
+  const tierMaterial = material?.tier_minimo_requerido || 'estandar'
+  const esPrestatario = usuario?.rol === 'prestatario'
+  const elegibleNormal = esPrestatario ? esElegiblePorTier(tierUsuario, tierMaterial) : true
+  const aplicaExcepcion = esPrestatario ? requiereExcepcionAcademica(tierUsuario, tierMaterial) : false
 
   useEffect(() => {
     function manejarTecla(evento) {
@@ -386,7 +396,7 @@ function FichaTecnicaModal({
               <ItemRegla
                 etiqueta="Tiempo Máximo de Préstamo"
                 valor={ficha.tiempoMaximoPrestamoLegible}
-                descripcion="Mínimo 15 min · 30 min de tiempo de gracia"
+                descripcion="Mínimo 1 h · 30 min de tiempo de gracia"
                 tipo="neutral"
               />
               <ItemRegla
@@ -436,12 +446,27 @@ function FichaTecnicaModal({
         {/* Pie de modal con botón de cierre y acción de reserva */}
         <footer className="flex flex-wrap items-center justify-end gap-2.5 border-t border-borde bg-superficie-alta/60 px-6 py-4">
           {onReservar && (
-            <Boton
-              tipo="button"
-              onClick={() => onReservar(material)}
-            >
-              Reservar material
-            </Boton>
+            <div className="flex flex-wrap items-center gap-2">
+              {!elegibleNormal && aplicaExcepcion && (
+                <span className="text-xs font-medium text-amber-700 dark:text-amber-400">
+                  Requiere excepción académica (tu Tier: {ETIQUETAS_TIER[tierUsuario] || tierUsuario})
+                </span>
+              )}
+              {!elegibleNormal && !aplicaExcepcion && (
+                <span className="text-xs font-medium text-error">
+                  Requiere Tier {ETIQUETAS_TIER[tierMaterial] || tierMaterial} (tu Tier: {ETIQUETAS_TIER[tierUsuario] || tierUsuario})
+                </span>
+              )}
+              <Boton
+                tipo="button"
+                deshabilitado={!elegibleNormal && !aplicaExcepcion}
+                onClick={() => onReservar(material)}
+              >
+                {!elegibleNormal && aplicaExcepcion
+                  ? 'Solicitar por excepción académica'
+                  : 'Reservar material'}
+              </Boton>
+            </div>
           )}
           <Boton variante="secundario" tipo="button" onClick={onCerrar}>
             Cerrar ficha técnica

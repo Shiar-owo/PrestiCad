@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ArrowLeft, ChevronLeft, ChevronRight, ExternalLink, RotateCcw, Trash2, Upload } from 'lucide-react'
 
 import { api, ErrorApi } from '../../api/client'
@@ -201,74 +201,86 @@ export default function DetallePrestamo({
       )}
 
       {!cargando && detalle && (
-        <div className="p-3 space-y-3">
-          {/* Fila: Datos del préstamo */}
-          <section className="rounded-xl border border-borde bg-white dark:bg-superficie p-3">
-            <div className="flex items-center gap-1 mb-2">
-              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-marca-100 text-marca-800 dark:bg-marca-900/30 dark:text-marca-300 text-[11px] font-bold uppercase tracking-wider">
-                Datos del préstamo
-              </span>
-            </div>
-            <table className="w-full border-collapse">
-              <tbody>
-                <tr className="border-b border-borde/50 last:border-0">
-                  <td className="w-1/4 p-2">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-texto-suave block mb-0.5">
-                      Prestatario
-                    </span>
-                    <span className="text-lg font-bold text-texto break-words">
-                      {detalle.prestatario_nombre} · DNI {detalle.prestatario_dni}
-                    </span>
-                  </td>
-                  <td className="w-1/4 p-2">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-texto-suave block mb-0.5">
-                      Fecha entrega
-                    </span>
-                    <span className="text-lg font-bold text-texto">{mostrarFecha(detalle.fecha_entrega)}</span>
-                  </td>
-                  <td className="w-1/4 p-2">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-texto-suave block mb-0.5">
-                      Fecha límite
-                    </span>
-                    <span className="text-lg font-bold text-texto">{mostrarFecha(detalle.fecha_limite)}</span>
-                  </td>
-                  <td className="w-1/4 p-2">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-texto-suave block mb-0.5">
-                      Duración
-                    </span>
-                    <span className="text-lg font-bold text-texto">
-                      {detalle.tiempo_prestamo_minutos
-                        ? formatearDuracionMinutos(detalle.tiempo_prestamo_minutos)
-                        : detalle.tiempo_prestamo_dias + ' días'}
-                    </span>
-                  </td>
-                </tr>
-                <tr className="border-b border-borde/50 last:border-0">
-                  <td className="w-1/4 p-2">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-texto-suave block mb-0.5">
-                      Estado
-                    </span>
-                    <span className="text-base">
-                      <BadgeEstado estado={estado} texto={textoEstadoPrestamo({ es_excepcion: esExcepcion }, estado)} className="text-[11px]" />
-                    </span>
-                  </td>
-                  {esExcepcion && (
-                    <td className="w-1/4 p-2">
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-texto-suave block mb-0.5">
-                        Tipo
-                      </span>
-                      <span className="text-lg font-bold text-texto">Excepción académica</span>
-                    </td>
-                  )}
-                  <td className="w-1/4 p-2">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-texto-suave block mb-0.5">
-                      Registrado por
-                    </span>
-                    <span className="text-lg font-bold text-texto">{detalle.prestatario_nombre}</span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+        <>
+          <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {detalle.prestatario_nombre && (
+              <CampoDetalle etiqueta="Prestatario">
+                {detalle.prestatario_nombre} · DNI {detalle.prestatario_dni}
+              </CampoDetalle>
+            )}
+            <CampoDetalle etiqueta="Fecha de entrega">{mostrarFecha(detalle.fecha_entrega)}</CampoDetalle>
+            <CampoDetalle etiqueta="Fecha de devolución">
+              {detalle.fecha_devolucion
+                ? mostrarFecha(detalle.fecha_devolucion)
+                : 'Pendiente de devolución'}
+            </CampoDetalle>
+            <CampoDetalle etiqueta="Fecha límite">{mostrarFecha(detalle.fecha_limite)}</CampoDetalle>
+            <CampoDetalle etiqueta="Duración">
+              {detalle.tiempo_prestamo_minutos
+                ? formatearDuracionMinutos(detalle.tiempo_prestamo_minutos)
+                : `${detalle.tiempo_prestamo_dias} días`}
+            </CampoDetalle>
+            <CampoDetalle etiqueta="Estado">
+              <BadgeEstado estado={estado} texto={textoEstadoPrestamo({ es_excepcion: esExcepcion }, estado)} />
+            </CampoDetalle>
+            {esExcepcion && (
+              <CampoDetalle etiqueta="Tipo de préstamo">
+                Excepción académica
+              </CampoDetalle>
+            )}
+          </dl>
+
+          <section className="mt-6 rounded-xl border border-borde p-4" aria-labelledby="titulo-ficha-prestamo">
+            <h4 id="titulo-ficha-prestamo" className="font-bold text-texto">Ficha del material</h4>
+            {material?.foto && (
+              <img
+                src={material.foto}
+                alt={`Foto de ${material.nombre}`}
+                className="mt-3 h-44 w-44 rounded-lg border border-borde object-cover"
+              />
+            )}
+            <dl className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <CampoDetalle etiqueta="Material">{material?.nombre || prestamo.material_nombre}</CampoDetalle>
+              <CampoDetalle etiqueta="Código de Material">
+                {material?.codigo_material || material?.codigo_inventario || prestamo.material_codigo}
+              </CampoDetalle>
+              <CampoDetalle etiqueta="Descripción">{material?.descripcion || 'Sin descripción'}</CampoDetalle>
+              <CampoDetalle etiqueta="Tipo">{material?.tipo || 'No especificado'}</CampoDetalle>
+              <CampoDetalle etiqueta="Marca y modelo">
+                {[material?.marca, material?.modelo].filter(Boolean).join(' · ') || 'No especificados'}
+              </CampoDetalle>
+              <CampoDetalle etiqueta="Número de serie general">
+                {material?.numero_serie || 'No registrado'}
+              </CampoDetalle>
+              <CampoDetalle etiqueta="Color general">{material?.color || 'No registrado'}</CampoDetalle>
+              <CampoDetalle etiqueta="Estado">
+                {ETIQUETAS_ESTADO[material?.estado] || material?.estado || 'No registrado'}
+              </CampoDetalle>
+              <CampoDetalle etiqueta="Alto valor">
+                {esMaterialAltoValor(material) ? 'Sí' : 'No'}
+              </CampoDetalle>
+              <CampoDetalle etiqueta="Tier mínimo">{material?.tier_minimo_requerido}</CampoDetalle>
+              {material?.tiempo_maximo_prestamo && (
+                <CampoDetalle etiqueta="Tiempo máximo del material">
+                  {formatearDuracionMinutos(material.tiempo_maximo_prestamo)}
+                </CampoDetalle>
+              )}
+              <CampoDetalle etiqueta="Bonificación por entrega a tiempo">
+                {material?.bonificacion_tiempo} puntos
+              </CampoDetalle>
+              <CampoDetalle etiqueta="Deducción por tardanza">
+                {material?.deduccion_tardanza} puntos por día
+              </CampoDetalle>
+              <CampoDetalle etiqueta="Deducción por daño parcial">
+                {material?.deduccion_dano_parcial} puntos
+              </CampoDetalle>
+              <CampoDetalle etiqueta="Deducción por daño total">
+                {material?.deduccion_dano_total} puntos
+              </CampoDetalle>
+              <CampoDetalle etiqueta="Costos de reparación y reposición">
+                {material?.costo_reparacion ?? 'No definido'} / {material?.costo_reposicion ?? 'No definido'}
+              </CampoDetalle>
+            </dl>
           </section>
 
           {/* Dos columnas: Material e Instancia con tamaño uniforme */}
@@ -539,15 +551,13 @@ export default function DetallePrestamo({
             )}
           </section>
 
-          {/* Checklist al devolver - solo si está devuelto */}
+          {/* Checklist final de devolución (solo si está devuelto) */}
           {detalle.estado === 'devuelto' && (
-            <section className="rounded-xl border border-borde bg-white dark:bg-superficie p-3">
-              <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-marca-100 text-marca-800 dark:bg-marca-900/30 dark:text-marca-300 text-[11px] font-bold uppercase tracking-wider">
-                  Checklist al devolver
-                </span>
+            <section className="mt-6 rounded-xl border border-borde p-4" aria-labelledby="titulo-checklist-final">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h4 id="titulo-checklist-final" className="font-bold text-texto">Checklist al devolver</h4>
                 {detalle.hay_dano !== null && (
-                  <span className={`px-1.5 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider ${
+                  <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
                     detalle.hay_dano
                       ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
                       : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
@@ -557,15 +567,13 @@ export default function DetallePrestamo({
                 )}
               </div>
               {detalle.checklist_final?.length ? (
-                <div className="space-y-1.5">
+                <ul className="mt-3 grid min-w-0 gap-3 sm:grid-cols-2">
                   {detalle.checklist_final.map((elemento, indice) => (
-                    <div key={`final-${elemento.elemento}-${indice}`} className="rounded border border-borde bg-superficie p-2">
-                      <div className="flex items-start justify-between gap-2">
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-texto-suave shrink-0">
-                          {elemento.elemento}
-                        </span>
+                    <li key={`final-${elemento.elemento}-${indice}`} className="min-w-0 rounded-lg bg-superficie p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="font-semibold text-texto">{elemento.elemento}</p>
                         {elemento.estado && (
-                          <span className={`px-1.5 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider shrink-0 ${
+                          <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
                             elemento.estado === 'sin_cambios'
                               ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
                               : elemento.estado === 'dano_parcial'
@@ -579,7 +587,7 @@ export default function DetallePrestamo({
                         )}
                       </div>
                       {elemento.foto_url && (
-                        <figure className="mt-1 aspect-[4/3] w-full max-w-xs overflow-hidden rounded border border-borde bg-white dark:bg-superficie">
+                        <figure className="mt-2 aspect-[4/3] w-full max-w-sm overflow-hidden rounded-lg border border-borde bg-superficie">
                           <img
                             src={elemento.foto_url}
                             alt={`Foto devolución de ${elemento.elemento}`}
@@ -588,28 +596,23 @@ export default function DetallePrestamo({
                         </figure>
                       )}
                       {elemento.observacion && (
-                        <div className="mt-1">
-                          <span className="text-[11px] font-bold uppercase tracking-wider text-texto-suave block mb-0.5">
-                            Observación
-                          </span>
-                          <span className="text-sm text-texto-suave">{elemento.observacion}</span>
-                        </div>
+                        <p className="mt-1 text-sm text-texto-suave">Observación: {elemento.observacion}</p>
                       )}
-                    </div>
+                    </li>
                   ))}
-                </div>
+                </ul>
               ) : (
-                <p className="mt-2 text-xs text-texto-suave">No se registró checklist de devolución.</p>
+                <p className="mt-2 text-sm text-texto-suave">No se registró checklist de devolución.</p>
               )}
               {detalle.hay_dano && detalle.reporte_url && (
-                <div className="mt-2">
+                <div className="mt-4">
                   <a
                     href={detalle.reporte_url}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs font-semibold text-acento-700 underline dark:text-acento-300"
+                    className="inline-flex items-center gap-2 rounded-lg bg-marca-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-marca-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-acento-600"
                   >
-                    <ExternalLink aria-hidden="true" className="size-3.5" />
+                    <ExternalLink aria-hidden="true" className="size-4" />
                     Descargar reporte de daño (PDF)
                   </a>
                 </div>
@@ -617,13 +620,8 @@ export default function DetallePrestamo({
             </section>
           )}
 
-          {/* Documentos de garantía */}
-          <section className="rounded-xl border border-borde bg-white dark:bg-superficie p-3">
-            <div className="flex items-center gap-1 mb-2">
-              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-marca-100 text-marca-800 dark:bg-marca-900/30 dark:text-marca-300 text-[11px] font-bold uppercase tracking-wider">
-                Documentos de garantía
-              </span>
-            </div>
+          <section className="mt-6 rounded-xl border border-borde p-4" aria-labelledby="titulo-documentos-garantia">
+            <h4 id="titulo-documentos-garantia" className="font-bold text-texto">Documentos de garantía</h4>
             {!esExcepcion && !esMaterialAltoValor(material) ? (
               <p className="mt-2 text-xs text-texto-suave">
                 Este material no requiere documentos de garantía.

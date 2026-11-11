@@ -1,6 +1,6 @@
 import { useContext, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
-import { ArrowLeft, CalendarCheck, Clock, ShieldAlert } from 'lucide-react'
+import { ArrowLeft, CalendarCheck, Clock, Download, ShieldAlert } from 'lucide-react'
 
 import { api, ErrorApi } from '../api/client'
 import BadgeEstado from '../components/ui/BadgeEstado'
@@ -13,15 +13,18 @@ import SesionContext from '../contextos/SesionContext'
 import useTituloPagina from '../hooks/useTituloPagina'
 import {
   MAXIMO_RESERVAS_ACTIVAS,
-  OPCIONES_PRIORIDAD,
   construirFormularioReservaExcepcional,
   contarReservasActivas,
   esElegiblePorTier,
   esReservaActiva,
   formatearFechaReserva,
+  formatearFechaHoraInput,
+  HORA_RESERVA_MAXIMO_FIN,
+  HORA_RESERVA_MINIMO_INICIO,
   requiereExcepcionAcademica,
   textoEstadoReserva,
   validarFormularioReserva,
+  validarHorarioReserva,
 } from '../reservas/estadoReserva'
 
 function extraerMensajeError(error) {
@@ -46,14 +49,22 @@ export default function ReservarMaterial() {
   const [errorCarga, setErrorCarga] = useState('')
 
   const [materialId, setMaterialId] = useState(materialIdParam)
-  const [prioridad, setPrioridad] = useState('media')
   const [justificacion, setJustificacion] = useState('')
+  const [instanciaId, setInstanciaId] = useState('')
+  const [fechaInicio, setFechaInicio] = useState('')
+  const [fechaFin, setFechaFin] = useState('')
   const [documentoIdentidad, setDocumentoIdentidad] = useState(null)
   const [compromisoResponsabilidad, setCompromisoResponsabilidad] = useState(null)
   const [errores, setErrores] = useState({})
   const [errorEnvio, setErrorEnvio] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [reservaCreada, setReservaCreada] = useState(null)
+
+  const [instancias, setInstancias] = useState([])
+  const [cargandoInstancias, setCargandoInstancias] = useState(false)
+  const [fechaSeleccionada, setFechaSeleccionada] = useState('')
+  const [horaInicio, setHoraInicio] = useState('')
+  const [horaFin, setHoraFin] = useState('')
 
   useEffect(() => {
     let activa = true
@@ -85,6 +96,42 @@ export default function ReservarMaterial() {
     }
   }, [])
 
+  useEffect(() => {
+    let activa = true
+    setInstancias([])
+    setInstanciaId('')
+    setCargandoInstancias(false)
+
+    if (!materialId) {
+      return () => {
+        activa = false
+      }
+    }
+
+    setCargandoInstancias(true)
+    api
+      .get(`/materiales/${materialId}/instancias/?estado=disponible`)
+      .then((resultado) => {
+        if (!activa) return
+        const lista = Array.isArray(resultado)
+          ? resultado
+          : Array.isArray(resultado?.results)
+            ? resultado.results
+            : []
+        setInstancias(lista)
+      })
+      .catch(() => {
+        if (activa) setInstancias([])
+      })
+      .finally(() => {
+        if (activa) setCargandoInstancias(false)
+      })
+
+    return () => {
+      activa = false
+    }
+  }, [materialId])
+
   const materialSeleccionado = useMemo(
     () => materiales.find((m) => String(m.id) === String(materialId)) || null,
     [materiales, materialId],
@@ -92,6 +139,7 @@ export default function ReservarMaterial() {
 
   const tierUsuario = usuario?.reputacion_tier || 'estandar'
   const tierMaterial = materialSeleccionado?.tier_minimo_requerido || 'estandar'
+  const esAvanzado = tierMaterial === 'avanzado'
   const elegibleNormal = materialSeleccionado
     ? esElegiblePorTier(tierUsuario, tierMaterial)
     : true
@@ -127,9 +175,15 @@ export default function ReservarMaterial() {
 
     const nuevosErrores = validarFormularioReserva({
       materialId,
-      prioridad,
+      instanciaId,
+      fechaSeleccionada: esAvanzado ? fechaSeleccionada : undefined,
+      horaInicio: esAvanzado ? horaInicio : undefined,
+      horaFin: esAvanzado ? horaFin : undefined,
+      fechaInicio: esAvanzado ? undefined : fechaInicio,
+      fechaFin: esAvanzado ? undefined : fechaFin,
       justificacion,
       esExcepcion: aplicaExcepcion,
+      esAvanzado,
       documentoIdentidad,
       compromisoResponsabilidad,
     })
@@ -147,16 +201,23 @@ export default function ReservarMaterial() {
       if (aplicaExcepcion) {
         const formData = construirFormularioReservaExcepcional({
           materialId,
-          prioridad,
           justificacion,
           documentoIdentidad,
           compromisoResponsabilidad,
         })
         respuesta = await api.post('/reservas/excepcion/', formData)
       } else {
+        const fechaI = esAvanzado
+          ? `${fechaSeleccionada}T${horaInicio}:00`
+          : fechaInicio || undefined
+        const fechaF = esAvanzado
+          ? `${fechaSeleccionada}T${horaFin}:00`
+          : fechaFin || undefined
         respuesta = await api.post('/reservas/', {
           material_id: materialId,
-          prioridad,
+          instancia_id: instanciaId || undefined,
+          fecha_inicio: fechaI,
+          fecha_fin: fechaF,
           justificacion: justificacion.trim(),
         })
       }
@@ -245,8 +306,15 @@ export default function ReservarMaterial() {
                 <dd className="mt-1 font-bold text-texto">
                   {reservaCreada.instancia?.codigo_ejemplar || 'Asignado'}
                 </dd>
+                {reservaCreada.instancia?.foto && (
+                  <img
+                    src={reservaCreada.instancia.foto}
+                    alt={`Foto del ejemplar ${reservaCreada.instancia.codigo_ejemplar}`}
+                    className="mt-2 h-16 w-16 rounded-lg border border-borde object-cover"
+                  />
+                )}
               </div>
-              <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3 dark:border-amber-800 dark:bg-amber-950/30">
+              <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3 dark:border-amber-800 dark:bg-marca-950/30">
                 <dt className="text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-300">
                   Límite de recojo (24 h)
                 </dt>
@@ -327,7 +395,7 @@ export default function ReservarMaterial() {
       {errorEnvio && <ErrorAlerta mensaje={errorEnvio} />}
 
       <Tarjeta className="p-6">
-        <form onSubmit={manejarSubmit} className="space-y-5" noValidate>
+        <form onSubmit={manejarSubmit} noValidate className="space-y-5">
           <p className="text-xs text-texto-suave">* Campos obligatorios.</p>
 
           <div>
@@ -364,7 +432,7 @@ export default function ReservarMaterial() {
 
           {materialSeleccionado && (
             <div className="rounded-xl border border-borde bg-superficie-alta/40 p-4 space-y-3">
-              <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
                   <span className="text-xs font-semibold uppercase tracking-wide text-acento-700 dark:text-acento-300">
                     {ETIQUETAS_TIPO[materialSeleccionado.tipo] || materialSeleccionado.tipo} · Código:{' '}
@@ -382,6 +450,14 @@ export default function ReservarMaterial() {
                   {unidadesDisponibles} de {materialSeleccionado.stock} disponible(s)
                 </span>
               </div>
+
+              {materialSeleccionado.foto && (
+                <img
+                  src={materialSeleccionado.foto}
+                  alt={`Foto del material ${materialSeleccionado.nombre}`}
+                  className="mt-3 h-24 w-24 rounded-lg border border-borde object-cover"
+                />
+              )}
 
               <div className="grid gap-2 sm:grid-cols-2 text-xs text-texto-suave">
                 <p>
@@ -415,42 +491,178 @@ export default function ReservarMaterial() {
                     Solicitud de Excepción por Necesidad Académica (HU13)
                   </p>
                   <p>
-                    Tu cuenta se encuentra en Tier <strong>Restringido</strong> y este material exige Tier{' '}
+                    Tu cuenta se encuentra en Tier{' '}
+                    <strong>{ETIQUETAS_TIER[tierUsuario] || tierUsuario}</strong> y este material exige Tier{' '}
                     <strong>{ETIQUETAS_TIER[tierMaterial] || tierMaterial}</strong>. Puedes registrar una solicitud excepcional adjuntando obligatoriamente tu documento de identidad y el compromiso de responsabilidad firmado en PDF (máximo 4 MB en total).
                   </p>
                   <p>
-                    La solicitud quedará en estado <strong>En espera</strong> hasta que el Gestor de Almacén verifique la garantía y la apruebe manualmente.
+                    <a
+                      href="/compromiso_responsabilidad.pdf"
+                      download="compromiso_responsabilidad.pdf"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 font-bold text-amber-900 underline hover:text-amber-950 dark:text-amber-200"
+                    >
+                      <Download aria-hidden="true" className="size-4" />
+                      Descargar formato oficial de compromiso de responsabilidad (.pdf)
+                    </a>
+                  </p>
+                  <p>
+                    La solicitud quedará en estado <strong>En espera</strong> hasta que el Gestor de Almacén verifique la garantía y la apruebe manualmente para entrar a la lista de espera.
                   </p>
                 </div>
               )}
             </div>
           )}
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          {materialSeleccionado && instancias.length > 0 && (
             <div>
               <label
-                htmlFor="select-prioridad-reserva"
+                htmlFor="select-instancia-reserva"
                 className="block text-sm font-semibold text-texto"
               >
-                Nivel de prioridad *
+                Instancia / ejemplar *
               </label>
               <select
-                id="select-prioridad-reserva"
-                value={prioridad}
-                onChange={(e) => setPrioridad(e.target.value)}
+                id="select-instancia-reserva"
+                value={instanciaId}
+                onChange={(e) => {
+                  setInstanciaId(e.target.value)
+                  setErrores((actual) => ({ ...actual, instanciaId: '' }))
+                }}
                 className="mt-1.5 w-full rounded-lg border border-borde bg-white px-3 py-2 text-sm text-texto dark:bg-superficie"
               >
-                {OPCIONES_PRIORIDAD.map((op) => (
-                  <option key={op.valor} value={op.valor}>
-                    {op.etiqueta}
+                <option value="">Selecciona una instancia disponible…</option>
+                {instancias.map((inst) => (
+                  <option key={inst.id} value={inst.id}>
+                    {inst.codigo_ejemplar}{inst.ubicacion ? ` (${inst.ubicacion})` : ''}
                   </option>
                 ))}
               </select>
-              {errores.prioridad && (
-                <p className="mt-1 text-xs font-medium text-error">{errores.prioridad}</p>
+              {errores.instanciaId && (
+                <p className="mt-1 text-xs font-medium text-error">{errores.instanciaId}</p>
               )}
             </div>
-          </div>
+          )}
+
+          {materialSeleccionado && esAvanzado ? (
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div>
+                <label
+                  htmlFor="input-fecha-reserva"
+                  className="block text-sm font-semibold text-texto"
+                >
+                  Fecha *
+                </label>
+                <input
+                  id="input-fecha-reserva"
+                  type="date"
+                  value={fechaSeleccionada}
+                  onChange={(e) => {
+                    setFechaSeleccionada(e.target.value)
+                    setErrores((actual) => ({ ...actual, fecha: '' }))
+                  }}
+                  className="mt-1.5 w-full rounded-lg border border-borde bg-white px-3 py-2 text-sm text-texto dark:bg-superficie"
+                />
+                {errores.fecha && (
+                  <p className="mt-1 text-xs font-medium text-error">{errores.fecha}</p>
+                )}
+              </div>
+              <div>
+                <label
+                  htmlFor="input-hora-inicio-reserva"
+                  className="block text-sm font-semibold text-texto"
+                >
+                  Hora de inicio *
+                </label>
+                <input
+                  id="input-hora-inicio-reserva"
+                  type="time"
+                  value={horaInicio}
+                  onChange={(e) => {
+                    setHoraInicio(e.target.value)
+                    setErrores((actual) => ({ ...actual, horaInicio: '' }))
+                  }}
+                  className="mt-1.5 w-full rounded-lg border border-borde bg-white px-3 py-2 text-sm text-texto dark:bg-superficie"
+                />
+                {errores.horaInicio && (
+                  <p className="mt-1 text-xs font-medium text-error">{errores.horaInicio}</p>
+                )}
+              </div>
+              <div>
+                <label
+                  htmlFor="input-hora-fin-reserva"
+                  className="block text-sm font-semibold text-texto"
+                >
+                  Hora de fin *
+                </label>
+                <input
+                  id="input-hora-fin-reserva"
+                  type="time"
+                  value={horaFin}
+                  onChange={(e) => {
+                    setHoraFin(e.target.value)
+                    setErrores((actual) => ({ ...actual, horaFin: '' }))
+                  }}
+                  className="mt-1.5 w-full rounded-lg border border-borde bg-white px-3 py-2 text-sm text-texto dark:bg-superficie"
+                />
+                {errores.horaFin && (
+                  <p className="mt-1 text-xs font-medium text-error">{errores.horaFin}</p>
+                )}
+              </div>
+              <p className="text-xs text-texto-suave col-span-3">
+                Horario de atención: lunes a viernes, de {HORA_RESERVA_MINIMO_INICIO}:00 a {HORA_RESERVA_MAXIMO_FIN}:00.
+              </p>
+            </div>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label
+                  htmlFor="input-fecha-inicio-reserva"
+                  className="block text-sm font-semibold text-texto"
+                >
+                  Fecha y hora de inicio *
+                </label>
+                <input
+                  id="input-fecha-inicio-reserva"
+                  type="datetime-local"
+                  value={fechaInicio}
+                  onChange={(e) => {
+                    setFechaInicio(e.target.value)
+                    setErrores((actual) => ({ ...actual, fechaInicio: '' }))
+                  }}
+                  className="mt-1.5 w-full rounded-lg border border-borde bg-white px-3 py-2 text-sm text-texto dark:bg-superficie"
+                />
+                {errores.fechaInicio && (
+                  <p className="mt-1 text-xs font-medium text-error">{errores.fechaInicio}</p>
+                )}
+              </div>
+              <div>
+                <label
+                  htmlFor="input-fecha-fin-reserva"
+                  className="block text-sm font-semibold text-texto"
+                >
+                  Fecha y hora de fin *
+                </label>
+                <input
+                  id="input-fecha-fin-reserva"
+                  type="datetime-local"
+                  value={fechaFin}
+                  onChange={(e) => {
+                    setFechaFin(e.target.value)
+                    setErrores((actual) => ({ ...actual, fechaFin: '' }))
+                  }}
+                  className="mt-1.5 w-full rounded-lg border border-borde bg-white px-3 py-2 text-sm text-texto dark:bg-superficie"
+                />
+                {errores.fechaFin && (
+                  <p className="mt-1 text-xs font-medium text-error">{errores.fechaFin}</p>
+                )}
+              </div>
+              <p className="text-xs text-texto-suave col-span-2">
+                Horario de atención: lunes a viernes, de {HORA_RESERVA_MINIMO_INICIO}:00 a {HORA_RESERVA_MAXIMO_FIN}:00.
+              </p>
+            </div>
+          )}
 
           <div>
             <label
@@ -510,12 +722,25 @@ export default function ReservarMaterial() {
                 </div>
 
                 <div>
-                  <label
-                    htmlFor="archivo-compromiso-reserva"
-                    className="block text-xs font-semibold text-texto"
-                  >
-                    Compromiso de responsabilidad firmado (PDF) *
-                  </label>
+                  <div className="flex flex-wrap items-center justify-between gap-1">
+                    <label
+                      htmlFor="archivo-compromiso-reserva"
+                      className="block text-xs font-semibold text-texto"
+                    >
+                      Compromiso de responsabilidad firmado (PDF) *
+                    </label>
+                    <a
+                      href="/compromiso_responsabilidad.pdf"
+                      download="compromiso_responsabilidad.pdf"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-marca-700 hover:text-marca-800 underline dark:text-marca-400"
+                      title="Descargar formato oficial de compromiso de responsabilidad"
+                    >
+                      <Download aria-hidden="true" className="size-3.5" />
+                      Descargar formato PDF
+                    </a>
+                  </div>
                   <input
                     id="archivo-compromiso-reserva"
                     type="file"

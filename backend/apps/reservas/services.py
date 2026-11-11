@@ -4,7 +4,7 @@ from datetime import timedelta
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import Case, IntegerField, Value, When
+from django.db.models import Case, IntegerField, Q, Value, When
 from django.utils import timezone
 
 from apps.inventario import services as servicios_inventario
@@ -18,11 +18,16 @@ from apps.prestamos.services import (
 )
 from apps.prestamos.validators import validar_pdf_garantia
 from apps.reservas.constants import (
+    DIAS_LABORABLES,
     ESTADOS_ACTIVOS,
+    HORA_RESERVA_MAXIMO_FIN,
+    HORA_RESERVA_MINIMO_INICIO,
+    HORARIO_ATENCION_FIN,
+    HORARIO_ATENCION_INICIO,
     HORAS_ESPERA,
     HORAS_RECOJO,
     MENSAJES_ERROR_RESERVA,
-    VALORES_PRIORIDAD_RESERVA,
+    TOLERANCIA_RECOJO_MINUTOS,
 )
 from apps.reservas.models import Reserva
 from apps.usuarios.models import Usuario
@@ -40,15 +45,8 @@ class ReservaError(Exception):
 
 
 def _anotar_orden_cola(queryset):
-    """Ordena determinísticamente la cola: prioridad -> fecha_solicitud -> Tier -> id (RN11)."""
+    """Ordena determinísticamente la cola: fecha_solicitud (FIFO) -> Tier -> id (RN11)."""
     return queryset.annotate(
-        _orden_prioridad=Case(
-            When(prioridad="alta", then=Value(0)),
-            When(prioridad="media", then=Value(1)),
-            When(prioridad="baja", then=Value(2)),
-            default=Value(9),
-            output_field=IntegerField(),
-        ),
         _orden_tier=Case(
             When(usuario__reputacion_tier="avanzado", then=Value(0)),
             When(usuario__reputacion_tier="estandar", then=Value(1)),
@@ -56,7 +54,7 @@ def _anotar_orden_cola(queryset):
             default=Value(9),
             output_field=IntegerField(),
         ),
-    ).order_by("_orden_prioridad", "fecha_solicitud", "_orden_tier", "id")
+    ).order_by("fecha_solicitud", "_orden_tier", "id")
 
 
 def _validar_usuario_prestatario(usuario):
@@ -106,16 +104,11 @@ def _validar_maximo_reservas_activas(usuario_id):
         )
 
 
-def _validar_campos_solicitud(prioridad, justificacion):
-    prioridad_limpia = str(prioridad or "").strip().lower()
-    if prioridad_limpia not in VALORES_PRIORIDAD_RESERVA:
-        raise ReservaError("prioridad", MENSAJES_ERROR_RESERVA["prioridad_invalida"])
-
+def _validar_justificacion(justificacion):
     justificacion_limpia = str(justificacion or "").strip()
     if not justificacion_limpia:
         raise ReservaError("justificacion", MENSAJES_ERROR_RESERVA["justificacion_obligatoria"])
-
-    return prioridad_limpia, justificacion_limpia
+    return justificacion_limpia
 
 
 @transaction.atomic
@@ -140,7 +133,9 @@ def autopromover_material(material_id, *, ahora=None):
             .filter(
                 material_id=material.id,
                 estado="en_espera",
-                es_excepcion=False,
+            )
+            .filter(
+                Q(es_excepcion=False) | Q(excepcion_aprobada=True)
             )
         )
     )
@@ -191,13 +186,57 @@ def autopromover_material(material_id, *, ahora=None):
     return promovidas
 
 
+def _validar_horario_reserva(fecha_inicio, fecha_fin, *, es_avanzado=False):
+    """Valida que la reserva esté dentro del horario de atención y días laborables.
+    Las reservas no pueden extenderse fuera de la misma semana (no pueden cruzar fin de semana).
+    Para materiales de Tier avanzado, inicio y fin deben ser el mismo día."""
+    for etiqueta, valor in (("fecha_inicio", fecha_inicio), ("fecha_fin", fecha_fin)):
+        if valor.weekday() not in DIAS_LABORABLES:
+            raise ReservaError(
+                etiqueta,
+                "Solo se permite reservar de lunes a viernes (días laborables).",
+            )
+        minutos_dia = valor.hour * 60 + valor.minute
+        if not (
+            HORA_RESERVA_MINIMO_INICIO * 60 <= minutos_dia <= HORA_RESERVA_MAXIMO_FIN * 60
+        ):
+            raise ReservaError(
+                etiqueta,
+                f"El horario de atención es de {HORA_RESERVA_MINIMO_INICIO}:00 a {HORA_RESERVA_MAXIMO_FIN}:00.",
+            )
+
+    if fecha_fin <= fecha_inicio:
+        raise ReservaError(
+            "fecha_fin",
+            "La fecha y hora de fin debe ser posterior a la de inicio.",
+        )
+
+    # La reserva debe estar dentro de la misma semana (lunes a viernes, sin cruzar fin de semana)
+    lunes_inicio = fecha_inicio.date() - timedelta(days=fecha_inicio.weekday())
+    lunes_fin = fecha_fin.date() - timedelta(days=fecha_fin.weekday())
+    if lunes_inicio != lunes_fin:
+        raise ReservaError(
+            "fecha_fin",
+            "La reserva debe realizarse dentro de la misma semana (lunes a viernes) y no puede extenderse cruzando el fin de semana.",
+        )
+
+    if es_avanzado:
+        if fecha_inicio.date() != fecha_fin.date():
+            raise ReservaError(
+                "fecha_inicio",
+                "Para materiales de Tier avanzado, el inicio y el fin deben ser el mismo día.",
+            )
+
+
 @transaction.atomic
 def crear_reserva(
     *,
     usuario,
     material_id,
-    prioridad,
     justificacion,
+    instancia_id=None,
+    fecha_inicio=None,
+    fecha_fin=None,
     ahora=None,
 ):
     """Crea una solicitud de reserva normal o la registra en lista de espera (HU06).
@@ -210,17 +249,31 @@ def crear_reserva(
     """
     ahora = ahora or timezone.now()
     _validar_usuario_prestatario(usuario)
-    prioridad_limpia, justificacion_limpia = _validar_campos_solicitud(prioridad, justificacion)
+    justificacion_limpia = _validar_justificacion(justificacion)
+
+    material = _obtener_material_bloqueado(material_id)
+
+    # Para materiales de Tier avanzado, inicio y fin deben ser el mismo día; solo se eligen horas.
+    es_avanzado = material.tier_minimo_requerido == "avanzado"
+    if es_avanzado:
+        if fecha_inicio is not None and fecha_fin is not None:
+            if fecha_inicio.date() != fecha_fin.date():
+                raise ReservaError(
+                    "fecha_fin",
+                    "Para materiales de Tier avanzado, el inicio y el fin deben ser el mismo día.",
+                )
+
+    if fecha_inicio is not None or fecha_fin is not None:
+        _validar_horario_reserva(fecha_inicio, fecha_fin, es_avanzado=es_avanzado)
 
     usuario_bloqueado = (
         Usuario.objects.select_for_update().select_related("rol").get(pk=usuario.pk)
     )
     _validar_usuario_prestatario(usuario_bloqueado)
-    material = _obtener_material_bloqueado(material_id)
 
     tiers_permitidos = TIERS_ACCESIBLES.get(usuario_bloqueado.reputacion_tier, ())
     if material.tier_minimo_requerido not in tiers_permitidos:
-        if usuario_bloqueado.reputacion_tier == "restringido":
+        if usuario_bloqueado.reputacion_tier in ("restringido", "estandar"):
             raise ReservaError(
                 "material_id",
                 MENSAJES_ERROR_RESERVA["tier_insuficiente_excepcion_disponible"],
@@ -238,50 +291,72 @@ def crear_reserva(
     # autopromover la cola existente para que no se salte a quienes ya esperan.
     autopromover_material(material.id, ahora=ahora)
 
-    cola_pendiente = Reserva.objects.filter(
-        material_id=material.id,
-        estado="en_espera",
-        es_excepcion=False,
-    ).exists()
+    cola_pendiente = (
+        Reserva.objects.filter(material_id=material.id, estado="en_espera")
+        .filter(Q(es_excepcion=False) | Q(excepcion_aprobada=True))
+        .exists()
+    )
 
-    instancia_libre = None
-    if not cola_pendiente and material.estado != "en_mantenimiento":
-        instancia_libre = (
+    instancia_elegida = None
+    if instancia_id is not None:
+        try:
+            instancia_elegida = (
+                InstanciaMaterial.objects.select_for_update()
+                .get(pk=instancia_id, material_id=material.id)
+            )
+        except (InstanciaMaterial.DoesNotExist, ValueError, TypeError):
+            raise ReservaError(
+                "instancia_id",
+                "No existe la instancia indicada para este material.",
+                status_code=404,
+            )
+        if instancia_elegida.estado != "disponible":
+            raise ReservaError(
+                "instancia_id",
+                "La instancia seleccionada no está disponible para reservar.",
+                status_code=409,
+            )
+    elif not cola_pendiente and material.estado != "en_mantenimiento":
+        instancia_elegida = (
             InstanciaMaterial.objects.select_for_update()
             .filter(material_id=material.id, estado="disponible")
             .order_by("codigo_ejemplar")
             .first()
         )
 
-    if instancia_libre is not None:
+    fecha_limite_recojo = fecha_fin or (ahora + timedelta(hours=HORAS_RECOJO))
+
+    if instancia_elegida is not None:
         servicios_inventario.marcar_instancia_reservada(
             material.id,
-            instancia_id=instancia_libre.id,
+            instancia_id=instancia_elegida.id,
         )
-        instancia_libre.estado = "reservado"
+        instancia_elegida.estado = "reservado"
         reserva = Reserva.objects.create(
             usuario=usuario_bloqueado,
             material=material,
-            instancia=instancia_libre,
-            prioridad=prioridad_limpia,
+            instancia=instancia_elegida,
             justificacion=justificacion_limpia,
             estado="reservada",
             es_excepcion=False,
             fecha_solicitud=ahora,
-            fecha_limite_espera=ahora + timedelta(hours=HORAS_ESPERA),
+            fecha_inicio=fecha_inicio,
+            fecha_fin=fecha_fin,
             fecha_confirmacion=ahora,
-            fecha_limite_recojo=ahora + timedelta(hours=HORAS_RECOJO),
+            fecha_limite_espera=ahora + timedelta(hours=HORAS_ESPERA),
+            fecha_limite_recojo=fecha_limite_recojo,
         )
     else:
         reserva = Reserva.objects.create(
             usuario=usuario_bloqueado,
             material=material,
             instancia=None,
-            prioridad=prioridad_limpia,
             justificacion=justificacion_limpia,
             estado="en_espera",
             es_excepcion=False,
             fecha_solicitud=ahora,
+            fecha_inicio=fecha_inicio,
+            fecha_fin=fecha_fin,
             fecha_limite_espera=ahora + timedelta(hours=HORAS_ESPERA),
         )
 
@@ -321,16 +396,15 @@ def crear_reserva_excepcional(
     *,
     usuario,
     material_id,
-    prioridad,
     justificacion,
     documento_identidad,
     compromiso_responsabilidad,
     ahora=None,
 ):
-    """Crea una solicitud de reserva por excepción académica para un prestatario Restringido (HU06, HU13)."""
+    """Crea una solicitud excepcional para un prestatario Restringido o Estándar (HU06, HU13)."""
     ahora = ahora or timezone.now()
     _validar_usuario_prestatario(usuario)
-    prioridad_limpia, justificacion_limpia = _validar_campos_solicitud(prioridad, justificacion)
+    justificacion_limpia = _validar_justificacion(justificacion)
     _validar_documentos_garantia_reserva(documento_identidad, compromiso_responsabilidad)
 
     usuario_bloqueado = (
@@ -340,10 +414,11 @@ def crear_reserva_excepcional(
     material = _obtener_material_bloqueado(material_id)
 
     tiers_permitidos = TIERS_ACCESIBLES.get(usuario_bloqueado.reputacion_tier, ())
-    if (
-        usuario_bloqueado.reputacion_tier != "restringido"
-        or material.tier_minimo_requerido in tiers_permitidos
-    ):
+    aplica_excepcion = (
+        usuario_bloqueado.reputacion_tier in ("restringido", "estandar")
+        and material.tier_minimo_requerido not in tiers_permitidos
+    )
+    if not aplica_excepcion:
         raise ReservaError(
             "es_excepcion",
             MENSAJES_ERROR_RESERVA["excepcion_solo_restringido"],
@@ -356,7 +431,6 @@ def crear_reserva_excepcional(
         usuario=usuario_bloqueado,
         material=material,
         instancia=None,
-        prioridad=prioridad_limpia,
         justificacion=justificacion_limpia,
         estado="en_espera",
         es_excepcion=True,
@@ -374,7 +448,7 @@ def crear_reserva_excepcional(
 
 @transaction.atomic
 def aprobar_excepcion(*, reserva_id, realizado_por=None, ahora=None):
-    """Aprueba una reserva excepcional asignándole un ejemplar disponible tras promover la cola normal (HU08, HU13)."""
+    """Aprueba una solicitud de excepción académica: la valida e ingresa a la cola de espera, asignándole ejemplar si hay disponibilidad (HU08, HU13)."""
     ahora = ahora or timezone.now()
     try:
         reserva = (
@@ -415,34 +489,19 @@ def aprobar_excepcion(*, reserva_id, realizado_por=None, ahora=None):
             "La solicitud excepcional requiere la garantía completa registrada (DNI y compromiso firmado).",
             status_code=409,
         )
+    if reserva.excepcion_aprobada:
+        raise ReservaError(
+            "estado",
+            "La excepción académica ya fue aprobada previamente.",
+            status_code=409,
+        )
 
-    # Primero autopromover la cola normal para no saltar a quienes esperan con Tier suficiente
+    reserva.excepcion_aprobada = True
+    reserva.save(update_fields=["excepcion_aprobada", "updated_at"])
+
+    # Promover la cola (incluyendo a esta excepción aprobada según FIFO si hay ejemplares libres)
     autopromover_material(reserva.material_id, ahora=ahora)
 
-    try:
-        instancia_reservada = servicios_inventario.marcar_instancia_reservada(
-            reserva.material_id,
-        )
-    except servicios_inventario.InventarioError as error:
-        raise ReservaError(
-            "instancia",
-            MENSAJES_ERROR_RESERVA["sin_instancia_disponible"],
-            status_code=409,
-        ) from error
-
-    reserva.instancia_id = instancia_reservada["id"]
-    reserva.estado = "reservada"
-    reserva.fecha_confirmacion = ahora
-    reserva.fecha_limite_recojo = ahora + timedelta(hours=HORAS_RECOJO)
-    reserva.save(
-        update_fields=[
-            "instancia",
-            "estado",
-            "fecha_confirmacion",
-            "fecha_limite_recojo",
-            "updated_at",
-        ]
-    )
     reserva.refresh_from_db()
     return reserva
 
@@ -470,7 +529,7 @@ def expirar_reservas(*, ahora=None):
         .select_related("usuario", "material", "instancia")
         .filter(
             estado="reservada",
-            fecha_limite_recojo__lt=ahora,
+            fecha_limite_recojo__lt=ahora - timedelta(minutes=TOLERANCIA_RECOJO_MINUTOS),
         )
         .order_by("fecha_limite_recojo", "id")
     )
@@ -536,12 +595,10 @@ def expirar_reservas(*, ahora=None):
 
 
 @transaction.atomic
-def cancelar_reserva(*, reserva_id, motivo, realizado_por=None, ahora=None):
-    """Cancela manualmente una reserva confirmada sin penalización y libera su ejemplar (HU07, HU08)."""
+def cancelar_reserva(*, reserva_id, motivo="Cancelada por el usuario.", realizado_por=None, ahora=None):
+    """Cancela una reserva activa (reservada o en espera) sin penalización y libera su ejemplar si tenía uno (HU07, HU08)."""
     ahora = ahora or timezone.now()
-    motivo_limpio = str(motivo or "").strip()
-    if not motivo_limpio:
-        raise ReservaError("motivo", MENSAJES_ERROR_RESERVA["motivo_obligatorio"])
+    motivo_limpio = str(motivo or "").strip() or "Cancelada por el usuario."
 
     try:
         reserva = (
@@ -556,7 +613,7 @@ def cancelar_reserva(*, reserva_id, motivo, realizado_por=None, ahora=None):
             status_code=404,
         ) from error
 
-    if reserva.estado != "reservada":
+    if reserva.estado not in ESTADOS_ACTIVOS:
         raise ReservaError(
             "estado",
             MENSAJES_ERROR_RESERVA["estado_invalido_cancelar"],
@@ -612,15 +669,18 @@ def rechazar_reserva(*, reserva_id, motivo, realizado_por=None):
 
 
 def calcular_posicion_en_cola(reserva):
-    """Calcula la posición 1-based en la cola normal si la reserva está en espera y no es excepción."""
-    if reserva.estado != "en_espera" or reserva.es_excepcion:
+    """Calcula la posición 1-based en la cola normal o excepción aprobada en espera."""
+    if reserva.estado != "en_espera":
+        return None
+    if reserva.es_excepcion and not getattr(reserva, "excepcion_aprobada", False):
         return None
     ids_ordenados = list(
         _anotar_orden_cola(
             Reserva.objects.filter(
                 material_id=reserva.material_id,
                 estado="en_espera",
-                es_excepcion=False,
+            ).filter(
+                Q(es_excepcion=False) | Q(excepcion_aprobada=True)
             )
         ).values_list("id", flat=True)
     )
@@ -653,7 +713,8 @@ def consultar_cola_material(material_id):
     en_espera_normales = list(
         _anotar_orden_cola(
             Reserva.objects.select_related("usuario", "material", "instancia")
-            .filter(material_id=material.id, estado="en_espera", es_excepcion=False)
+            .filter(material_id=material.id, estado="en_espera")
+            .filter(Q(es_excepcion=False) | Q(excepcion_aprobada=True))
         )
     )
     for indice, solicitud in enumerate(en_espera_normales, start=1):
@@ -661,7 +722,12 @@ def consultar_cola_material(material_id):
 
     en_espera_excepciones = list(
         Reserva.objects.select_related("usuario", "material", "instancia")
-        .filter(material_id=material.id, estado="en_espera", es_excepcion=True)
+        .filter(
+            material_id=material.id,
+            estado="en_espera",
+            es_excepcion=True,
+            excepcion_aprobada=False,
+        )
         .order_by("fecha_solicitud", "id")
     )
     for solicitud in en_espera_excepciones:
@@ -684,6 +750,41 @@ def consultar_cola_material(material_id):
         "en_espera_excepciones": en_espera_excepciones,
         "reservas_confirmadas": reservas_confirmadas,
         "instancias_disponibles": instancias_disponibles,
+    }
+
+
+def consultar_cola_general():
+    """Devuelve el estado consolidado de todas las reservas (en espera y confirmadas) de todos los materiales."""
+    en_espera_normales = list(
+        _anotar_orden_cola(
+            Reserva.objects.select_related("usuario", "material", "instancia")
+            .filter(estado="en_espera", es_excepcion=False)
+        )
+    )
+    for indice, solicitud in enumerate(en_espera_normales, start=1):
+        solicitud.posicion_cola = indice
+
+    en_espera_excepciones = list(
+        Reserva.objects.select_related("usuario", "material", "instancia")
+        .filter(estado="en_espera", es_excepcion=True)
+        .order_by("fecha_solicitud", "id")
+    )
+    for solicitud in en_espera_excepciones:
+        solicitud.posicion_cola = None
+
+    reservas_confirmadas = list(
+        Reserva.objects.select_related("usuario", "material", "instancia")
+        .filter(estado="reservada")
+        .order_by("fecha_limite_recojo", "fecha_confirmacion", "id")
+    )
+
+    return {
+        "material": None,
+        "en_espera": en_espera_normales + en_espera_excepciones,
+        "en_espera_normales": en_espera_normales,
+        "en_espera_excepciones": en_espera_excepciones,
+        "reservas_confirmadas": reservas_confirmadas,
+        "instancias_disponibles": [],
     }
 
 

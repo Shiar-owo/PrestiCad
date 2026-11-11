@@ -6,7 +6,6 @@ from django.utils import timezone
 from apps.reservas.constants import (
     ESTADOS_ACTIVOS,
     ESTADOS_RESERVA,
-    PRIORIDADES_RESERVA,
 )
 
 
@@ -42,12 +41,17 @@ class Reserva(models.Model):
         null=True,
         blank=True,
     )
-    prioridad = models.CharField(
-        max_length=10,
-        choices=PRIORIDADES_RESERVA,
-        default="media",
-    )
     justificacion = models.TextField()
+    fecha_inicio = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Fecha y hora de inicio de la reserva (dentro del horario de atención).",
+    )
+    fecha_fin = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Fecha y hora de fin de la reserva (dentro del horario de atención).",
+    )
     estado = models.CharField(
         max_length=30,
         choices=ESTADOS_RESERVA,
@@ -56,6 +60,10 @@ class Reserva(models.Model):
     es_excepcion = models.BooleanField(
         default=False,
         help_text="Reserva solicitada por excepción académica para un prestatario en Tier Restringido.",
+    )
+    excepcion_aprobada = models.BooleanField(
+        default=False,
+        help_text="Indica si la excepción académica fue aprobada por el gestor para ingresar a la cola.",
     )
     motivo_rechazo = models.TextField(blank=True, default="")
     motivo_cancelacion = models.TextField(blank=True, default="")

@@ -43,46 +43,51 @@ export default function ListaPrestamos({ prestamos, onSeleccionar, onDevolucion 
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {visibles.map((prestamo) => (
-            <article
-              key={prestamo.id}
-              className="rounded-xl border border-borde bg-white dark:bg-superficie p-5 hover:shadow-md hover:border-acento-200 transition-all cursor-pointer group"
-              onClick={() => {
-                setSeleccionado(prestamo)
-                onSeleccionar?.(prestamo)
-              }}
-            >
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <h4 className="font-bold text-texto text-sm leading-tight group-hover:text-acento-700 dark:group-hover:text-acento-300">
-                    {prestamo.material_nombre}
-                  </h4>
-                  <p className="text-xs text-texto-suave font-mono mt-0.5">
-                    {prestamo.material_codigo}
-                  </p>
-                </div>
-                <BadgeEstado
-                  estado={prestamo.estado_visible}
-                  texto={textoEstadoPrestamo(prestamo, prestamo.estado_visible)}
-                  className="text-[10px]"
-                />
-              </div>
+          {visibles.map((prestamo) => {
+            const materialNombre = prestamo.material_snapshot?.nombre || prestamo.material_nombre
+            const materialCodigo = prestamo.material_snapshot?.codigo_material || prestamo.material_codigo
+            const codigoEjemplar = prestamo.instancia_snapshot?.codigo_ejemplar || prestamo.codigo_ejemplar
 
-              <div className="space-y-2 mb-4">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-texto-suave">Código Material</span>
-                  <span className="font-medium text-texto-suave font-mono">
-                    {prestamo.material_codigo}
-                  </span>
+            return (
+              <article
+                key={prestamo.id}
+                className="rounded-xl border border-borde bg-white dark:bg-superficie p-5 hover:shadow-md hover:border-acento-200 transition-all cursor-pointer group"
+                onClick={() => {
+                  setSeleccionado(prestamo)
+                  onSeleccionar?.(prestamo)
+                }}
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <h4 className="font-bold text-texto text-sm leading-tight group-hover:text-acento-700 dark:group-hover:text-acento-300">
+                      {materialNombre}
+                    </h4>
+                    <p className="text-xs text-texto-suave font-mono mt-0.5">
+                      {materialCodigo}
+                    </p>
+                  </div>
+                  <BadgeEstado
+                    estado={prestamo.estado_visible}
+                    texto={textoEstadoPrestamo(prestamo, prestamo.estado_visible)}
+                    className="text-[10px]"
+                  />
                 </div>
-                {prestamo.codigo_ejemplar && (
+
+                <div className="space-y-2 mb-4">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-texto-suave">Código Ejemplar</span>
+                    <span className="text-texto-suave">Código Material</span>
                     <span className="font-medium text-texto-suave font-mono">
-                      {prestamo.codigo_ejemplar}
+                      {materialCodigo}
                     </span>
                   </div>
-                )}
+                  {codigoEjemplar && (
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-texto-suave">Código Ejemplar</span>
+                      <span className="font-medium text-texto-suave font-mono">
+                        {codigoEjemplar}
+                      </span>
+                    </div>
+                  )}
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-texto-suave">Fecha entrega</span>
                   <span className="font-medium text-texto-suave">
@@ -123,7 +128,7 @@ export default function ListaPrestamos({ prestamos, onSeleccionar, onDevolucion 
                 )}
               </div>
             </article>
-          ))}
+          )})}
         </div>
       )}
     </section>

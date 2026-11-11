@@ -402,6 +402,7 @@ class MaterialActualizacionSerializer(RechazarCamposNoPermitidosMixin, serialize
     A diferencia del alta, aquí `estado` sí es editable: es el mecanismo para
     poner un material en 'En Mantenimiento' (HU04 criterio 8). El resto de
     campos son opcionales para que un PATCH pueda cambiar solo el estado.
+    `codigo_material` es inmutable tras el registro.
     """
 
     nombre = serializers.CharField(max_length=150, required=False, error_messages=MENSAJES_NOMBRE)

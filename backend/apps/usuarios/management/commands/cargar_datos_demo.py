@@ -125,6 +125,16 @@ class Command(BaseCommand):
         if options["reiniciar"]:
             self._reiniciar_prestamos()
 
+        # Si se corrió flush, asegurar que los roles base del sistema existan
+        from apps.usuarios.models import Rol
+        ROLES_BASE = [
+            ("prestatario", "Rol por defecto: puede solicitar préstamos."),
+            ("gestor", "Administra el inventario y las reservas."),
+            ("administrador", "Gestiona usuarios, roles y configuración del sistema."),
+        ]
+        for nombre, descripcion in ROLES_BASE:
+            Rol.objects.get_or_create(nombre=nombre, defaults={"descripcion": descripcion})
+
         roles = {rol.nombre: rol for rol in Rol.objects.all()}
         usuarios = {}
         for datos in USUARIOS:
@@ -285,6 +295,37 @@ class Command(BaseCommand):
                 )
         return materiales
 
+    def _crear_snapshots(self, material, instancia):
+        material_snapshot = {
+            "nombre": material.nombre,
+            "descripcion": material.descripcion,
+            "codigo_material": material.codigo_material,
+            "tipo": material.tipo,
+            "marca": material.marca,
+            "modelo": material.modelo,
+            "numero_serie": material.numero_serie,
+            "color": material.color,
+            "precio": str(material.precio) if material.precio is not None else None,
+            "es_alto_valor": material.es_alto_valor,
+            "tier_minimo_requerido": material.tier_minimo_requerido,
+            "tiempo_maximo_prestamo": material.tiempo_maximo_prestamo,
+            "bonificacion_tiempo": material.bonificacion_tiempo,
+            "deduccion_tardanza": material.deduccion_tardanza,
+            "deduccion_dano_parcial": material.deduccion_dano_parcial,
+            "deduccion_dano_total": material.deduccion_dano_total,
+            "costo_reparacion": str(material.costo_reparacion) if material.costo_reparacion else None,
+            "costo_reposicion": str(material.costo_reposicion) if material.costo_reposicion else None,
+        }
+        instancia_snapshot = {
+            "codigo_ejemplar": instancia.codigo_ejemplar,
+            "numero_serie": instancia.numero_serie,
+            "estado": instancia.estado,
+            "color": instancia.color,
+            "observaciones": instancia.observaciones,
+            "ubicacion": instancia.ubicacion,
+        }
+        return material_snapshot, instancia_snapshot
+
     def _cargar_prestamos(self, usuarios, materiales):
         ahora = timezone.now()
         gestor = usuarios["gestor@presticad.test"]
@@ -297,12 +338,14 @@ class Command(BaseCommand):
 
         # IDs fijos hacen que la carga sea idempotente y que --reiniciar pueda
         # identificar exclusivamente los préstamos que pertenecen al escenario.
+        instancia_vr = InstanciaMaterial.objects.get(codigo_ejemplar="DEMO-VR-001-01")
+        mat_snap_vr, inst_snap_vr = self._crear_snapshots(gafas_vr, instancia_vr)
         prestamo_gafas_vr, _ = Prestamo.objects.update_or_create(
             pk=PRESTAMOS_DEMO[0],
             defaults={
                 "usuario": avanzado,
                 "material": gafas_vr,
-                "instancia": InstanciaMaterial.objects.get(codigo_ejemplar="DEMO-VR-001-01"),
+                "instancia": instancia_vr,
                 "registrado_por": gestor,
                 "fecha_entrega": ahora - timedelta(hours=2),
                 "fecha_limite": ahora + timedelta(hours=4),
@@ -313,6 +356,8 @@ class Command(BaseCommand):
                     {"elemento": "Visor de realidad virtual", "estado": "sin_cambios"},
                     {"elemento": "Controles", "estado": "sin_cambios"},
                 ],
+                "material_snapshot": mat_snap_vr,
+                "instancia_snapshot": inst_snap_vr,
             },
         )
         Garantia.objects.update_or_create(
@@ -320,12 +365,14 @@ class Command(BaseCommand):
             defaults={"tipo": "documento_y_compromiso", "estado": "pendiente"},
         )
 
+        instancia_lap = InstanciaMaterial.objects.get(codigo_ejemplar="DEMO-LAP-001-01")
+        mat_snap_lap, inst_snap_lap = self._crear_snapshots(laptop, instancia_lap)
         Prestamo.objects.update_or_create(
             pk=PRESTAMOS_DEMO[1],
             defaults={
                 "usuario": estandar,
                 "material": laptop,
-                "instancia": InstanciaMaterial.objects.get(codigo_ejemplar="DEMO-LAP-001-01"),
+                "instancia": instancia_lap,
                 "registrado_por": gestor,
                 "fecha_entrega": ahora - timedelta(hours=6),
                 "fecha_limite": ahora + timedelta(hours=18),
@@ -333,16 +380,20 @@ class Command(BaseCommand):
                 "tiempo_prestamo_dias": 1,
                 "estado": "activo",
                 "checklist_inicial": [{"elemento": "Laptop", "estado": "sin_cambios"}],
+                "material_snapshot": mat_snap_lap,
+                "instancia_snapshot": inst_snap_lap,
             },
         )
 
         fecha_entrega = ahora - timedelta(days=20)
+        instancia_devuelta = InstanciaMaterial.objects.get(codigo_ejemplar="DEMO-CALC-001-01")
+        mat_snap_calc, inst_snap_calc = self._crear_snapshots(calculadora, instancia_devuelta)
         prestamo_devuelto, _ = Prestamo.objects.update_or_create(
             pk=PRESTAMOS_DEMO[2],
             defaults={
                 "usuario": restringido,
                 "material": calculadora,
-                "instancia": InstanciaMaterial.objects.get(codigo_ejemplar="DEMO-CALC-001-01"),
+                "instancia": instancia_devuelta,
                 "registrado_por": gestor,
                 "fecha_entrega": fecha_entrega,
                 "fecha_limite": fecha_entrega + timedelta(days=3),
@@ -350,6 +401,8 @@ class Command(BaseCommand):
                 "tiempo_prestamo_dias": 3,
                 "estado": "devuelto",
                 "checklist_inicial": [{"elemento": "Calculadora científica", "estado": "sin_cambios"}],
+                "material_snapshot": mat_snap_calc,
+                "instancia_snapshot": inst_snap_calc,
             },
         )
         Devolucion.objects.update_or_create(

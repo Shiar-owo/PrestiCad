@@ -34,7 +34,6 @@ CAMPOS_EDITABLES = frozenset(
     {
         "nombre",
         "descripcion",
-        "codigo_material",
         "tipo",
         "estado",
         "es_alto_valor",
@@ -533,6 +532,12 @@ def actualizar_material(material_id, **campos):
                 obtener_tiempo_maximo_por_defecto_tier(tier_nuevo),
             )
 
+    if "codigo_material" in campos:
+        codigo = normalizar_codigo(campos["codigo_material"])
+        if codigo != normalizar_codigo(material.codigo_material):
+            raise InventarioError("codigo_material", "El código de material es inmutable y no se puede modificar.")
+        campos.pop("codigo_material", None)
+
     no_permitidos = set(campos) - CAMPOS_EDITABLES
     if no_permitidos:
         raise InventarioError(
@@ -542,11 +547,6 @@ def actualizar_material(material_id, **campos):
 
     actualizar_estado_general = "estado" in campos
     estado_general_solicitado = campos.pop("estado", None)
-
-    if "codigo_material" in campos:
-        codigo = normalizar_codigo(campos["codigo_material"])
-        _verificar_codigo_disponible(codigo, material.id)
-        campos["codigo_material"] = codigo
 
     if actualizar_estado_general:
         _verificar_estado(estado_general_solicitado)
@@ -1106,13 +1106,9 @@ def actualizar_instancia_material(instancia_id, **campos):
 
     if "codigo_ejemplar" in campos:
         codigo = normalizar_codigo(campos["codigo_ejemplar"])
-        if (
-            InstanciaMaterial.objects.filter(codigo_ejemplar__iexact=codigo)
-            .exclude(pk=instancia.pk)
-            .exists()
-        ):
-            raise InventarioError("codigo_ejemplar", "El código de ejemplar ya pertenece a otra unidad.")
-        instancia.codigo_ejemplar = codigo
+        if codigo != normalizar_codigo(instancia.codigo_ejemplar):
+            raise InventarioError("codigo_ejemplar", "El código de ejemplar es inmutable y no se puede modificar.")
+        campos.pop("codigo_ejemplar", None)
 
     estado_anterior = instancia.estado
     if "estado" in campos:

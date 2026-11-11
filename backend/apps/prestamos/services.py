@@ -819,7 +819,6 @@ def registrar_prestamo(
         "numero_serie": material.numero_serie,
         "color": material.color,
         "precio": str(material.precio),
-        "estado_fisico": material.estado_fisico,
         "es_alto_valor": material.es_alto_valor,
         "tier_minimo_requerido": material.tier_minimo_requerido,
         "tiempo_maximo_prestamo": material.tiempo_maximo_prestamo,

@@ -917,7 +917,9 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
               onCambio={(evento) => actualizar('codigo_material', evento.target.value)}
               error={errores.codigo_material}
               maxLength={30}
-              requerido
+              requerido={!esEdicion}
+              deshabilitado={esEdicion}
+              ayuda={esEdicion ? 'El código del material no se puede modificar una vez registrado.' : ''}
             />
             {!esEdicion && datos.modo === 'unico' && (
               <Campo
@@ -1144,7 +1146,9 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
                           onCambio={(evento) => actualizarFila(indice, 'codigo_ejemplar', evento.target.value)}
                           error={erroresFilas[indice]?.codigo_ejemplar}
                           maxLength={50}
-                          requerido
+                          requerido={!esEdicion}
+                          deshabilitado={esEdicion}
+                          ayuda={esEdicion ? 'El código del ejemplar es inmutable.' : ''}
                         />
                       )}
                       <Campo

@@ -286,12 +286,14 @@ class ActualizarMaterialServiceTestCase(TestCase):
         self.assertEqual(actualizado.descripcion, "Proyector de sala")
         self.assertEqual(actualizado.stock, 4)
 
-    def test_actualiza_el_codigo_y_lo_normaliza(self):
-        actualizado = actualizar_material(self.material.id, codigo_material=" inv-009 ")
+    def test_rechaza_cambio_de_codigo_material_por_inmutabilidad(self):
+        with self.assertRaises(InventarioError) as contexto:
+            actualizar_material(self.material.id, codigo_material="INV-999")
 
-        self.assertEqual(actualizado.codigo_material, "INV-009")
+        self.assertEqual(contexto.exception.campo, "codigo_material")
+        self.assertIn("inmutable", contexto.exception.mensaje.lower())
 
-    def test_no_permite_ceder_el_codigo_a_otro_material(self):
+    def test_rechaza_ceder_codigo_de_otro_material(self):
         otro = registrar_material(
             nombre="Libro de álgebra",
             codigo_material="LIB-001",
@@ -962,7 +964,7 @@ class MaterialesAPITestCase(EscenariosDeMaterialApi):
             self._url_detalle(material),
             {
                 "nombre": "Cable HDMI 2m",
-                "codigo_material": "OBJ-002",
+                "codigo_material": "OBJ-001",
                 "tipo": "objeto",
                 "stock": 5,
             },
@@ -972,9 +974,28 @@ class MaterialesAPITestCase(EscenariosDeMaterialApi):
         self.assertEqual(respuesta.status_code, 200, respuesta.content)
         material.refresh_from_db()
         self.assertEqual(material.nombre, "Cable HDMI 2m")
-        self.assertEqual(material.codigo_material, "OBJ-002")
+        self.assertEqual(material.codigo_material, "OBJ-001")
         self.assertEqual(material.stock, 5)
         self.assertEqual(respuesta.json()["unidades_disponibles"], 5)
+
+    def test_put_rechaza_cambio_de_codigo_material(self):
+        material = registrar_material(
+            nombre="Cable HDMI", codigo_material="OBJ-001", tipo="objeto", stock=1
+        )
+        self._autenticar("gestor@unsa.edu.pe", "gestor")
+
+        respuesta = self.client.put(
+            self._url_detalle(material),
+            {
+                "nombre": "Cable HDMI 2m",
+                "codigo_material": "OBJ-002",
+                "tipo": "objeto",
+            },
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, 409)
+        self.assertIn("codigo_material", respuesta.json())
 
     def test_editar_con_codigo_duplicado_responde_409(self):
         registrar_material(nombre="Libro", codigo_material="LIB-001", tipo="libro")
@@ -2054,6 +2075,23 @@ class InstanciaMaterialAPITestCase(ConMediaTemporal, APITestCase):
         self.assertEqual(respuesta.status_code, 409)
         instancia.refresh_from_db()
         self.assertEqual(instancia.estado, "prestado")
+
+    def test_no_permite_modificar_codigo_de_ejemplar_por_inmutabilidad(self):
+        self._autenticar("gestor.inst.inmutable@unsa.edu.pe", "gestor")
+        instancia = self.material.instancias.first()
+        codigo_original = instancia.codigo_ejemplar
+
+        respuesta = self.client.patch(
+            f"/api/instancias/{instancia.id}/",
+            {"codigo_ejemplar": "COD-NUEVO-99"},
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, 409)
+        self.assertIn("codigo_ejemplar", respuesta.json())
+        self.assertIn("inmutable", respuesta.json()["codigo_ejemplar"][0].lower())
+        instancia.refresh_from_db()
+        self.assertEqual(instancia.codigo_ejemplar, codigo_original)
 
     def test_cambiar_estado_general_propaga_solo_a_instancias_disponibles_o_mantenimiento(self):
         self._autenticar("gestor.estado.general@unsa.edu.pe", "gestor")

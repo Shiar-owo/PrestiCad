@@ -260,8 +260,9 @@ function EditorInstanciasMaterial({ material, alcance, onCambiarAlcance, onGuard
               etiqueta="Código de Ejemplar"
               valor={datos.codigo_ejemplar}
               maxLength={50}
-              requerido
-              onCambio={(evento) => setDatos((actuales) => ({ ...actuales, codigo_ejemplar: evento.target.value }))}
+              requerido={false}
+              deshabilitado
+              ayuda="El código patrimonial del ejemplar es inmutable y no puede modificarse."
             />
             <Campo
               etiqueta="Estado"

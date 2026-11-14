@@ -19,10 +19,81 @@ from apps.usuarios.services import (
     UsuariosError,
     autenticar_usuario,
     actualizar_perfil,
+    actualizar_reputacion,
     obtener_perfil,
+    puntaje_reputacion_ajustado,
     registrar_usuario,
+    tier_por_puntaje,
 )
 from apps.usuarios.sesiones import CLAVE_SESION_USUARIO_ID, CLAVE_SESION_ULTIMA_ACTIVIDAD
+
+
+class ReputacionServiceTestCase(SimpleTestCase):
+    """Reglas puras de puntaje y asignación de Tier (HU12)."""
+
+    def test_tier_por_puntaje_respeta_limites_de_cada_tier(self):
+        casos = (
+            (-500, "restringido"),
+            (-51, "restringido"),
+            (-50, "estandar"),
+            (200, "estandar"),
+            (201, "avanzado"),
+            (500, "avanzado"),
+        )
+
+        for puntaje, tier_esperado in casos:
+            with self.subTest(puntaje=puntaje):
+                self.assertEqual(tier_por_puntaje(puntaje), tier_esperado)
+
+    def test_puntaje_reputacion_se_recorta_a_los_limites_inclusivos(self):
+        casos = (
+            (-501, -500),
+            (-500, -500),
+            (500, 500),
+            (501, 500),
+        )
+
+        for puntaje, esperado in casos:
+            with self.subTest(puntaje=puntaje):
+                self.assertEqual(puntaje_reputacion_ajustado(puntaje), esperado)
+
+
+class ActualizarReputacionTestCase(TestCase):
+    """El ajuste persiste el puntaje acotado y recalcula el Tier."""
+
+    def setUp(self):
+        self.usuario = Usuario.objects.create(
+            nombre="Ana",
+            apellido="García",
+            email="ana.reputacion@unsa.edu.pe",
+            dni="12345679",
+            tipo="alumno",
+            facultad="Ciencias de la Computación",
+        )
+
+    def test_aplicar_delta_persiste_puntaje_y_tier_recalculado(self):
+        self.usuario.reputacion_puntaje = 195
+        self.usuario.reputacion_tier = "estandar"
+        self.usuario.save(update_fields=["reputacion_puntaje", "reputacion_tier"])
+
+        puntaje = actualizar_reputacion(self.usuario, 10)
+        self.usuario.refresh_from_db()
+
+        self.assertEqual(puntaje, 205)
+        self.assertEqual(self.usuario.reputacion_puntaje, 205)
+        self.assertEqual(self.usuario.reputacion_tier, "avanzado")
+
+    def test_delta_no_permite_superar_quinientos_y_recalcula_tier(self):
+        self.usuario.reputacion_puntaje = 490
+        self.usuario.reputacion_tier = "avanzado"
+        self.usuario.save(update_fields=["reputacion_puntaje", "reputacion_tier"])
+
+        puntaje = actualizar_reputacion(self.usuario, 25)
+        self.usuario.refresh_from_db()
+
+        self.assertEqual(puntaje, 500)
+        self.assertEqual(self.usuario.reputacion_puntaje, 500)
+        self.assertEqual(self.usuario.reputacion_tier, "avanzado")
 
 
 class ModuloUsuariosTestCase(SimpleTestCase):

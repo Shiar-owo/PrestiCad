@@ -8,6 +8,7 @@ import Skeleton from '../components/ui/Skeleton'
 import ErrorAlerta from '../components/ui/ErrorAlerta'
 import EstadoVacio from '../components/ui/EstadoVacio'
 import BadgeEstado from '../components/ui/BadgeEstado'
+import ResumenTier from '../components/ui/ResumenTier'
 import Boton from '../components/ui/Boton'
 
 const OPCIONES_ROL = [
@@ -25,12 +26,6 @@ const ETIQUETAS_ROL = {
   prestatario: 'Prestatario',
   ...Object.fromEntries(OPCIONES_ROL.map(({ valor, etiqueta }) => [valor, etiqueta])),
 }
-const ETIQUETAS_TIER = {
-  avanzado: 'Avanzado',
-  estandar: 'Estándar',
-  restringido: 'Restringido',
-}
-
 function UsuariosRoles() {
   useTituloPagina('Gestionar roles')
   const [usuarios, setUsuarios] = useState([])
@@ -191,7 +186,6 @@ function UsuariosRoles() {
                 ['Rol', ETIQUETAS_ROL[perfilSeleccionado.rol] || perfilSeleccionado.rol],
                 ['Estado', perfilSeleccionado.estado],
                 ['Puntaje de reputación', perfilSeleccionado.reputacion_puntaje],
-                ['Tier de reputación', ETIQUETAS_TIER[perfilSeleccionado.reputacion_tier] || perfilSeleccionado.reputacion_tier],
               ].map(([etiqueta, valor]) => (
                 <div key={etiqueta} className="rounded-lg border border-borde bg-superficie p-3">
                   <dt className="text-xs font-semibold uppercase tracking-wide text-texto-suave">{etiqueta}</dt>
@@ -199,6 +193,7 @@ function UsuariosRoles() {
                 </div>
               ))}
             </dl>
+            <ResumenTier tier={perfilSeleccionado.reputacion_tier} className="mt-3" />
           </section>
         </div>
       )}

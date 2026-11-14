@@ -7,6 +7,7 @@ import Campo from '../components/ui/Campo'
 import CampoTelefono from '../components/ui/CampoTelefono'
 import Boton from '../components/ui/Boton'
 import Tarjeta from '../components/ui/Tarjeta'
+import ResumenTier from '../components/ui/ResumenTier'
 import Skeleton from '../components/ui/Skeleton'
 import ErrorAlerta from '../components/ui/ErrorAlerta'
 
@@ -14,12 +15,6 @@ const ETIQUETAS_TIPO = {
   alumno: 'Alumno',
   docente: 'Docente',
   administrativo: 'Administrativo',
-}
-
-const ETIQUETAS_TIER = {
-  avanzado: 'Avanzado',
-  estandar: 'Estándar',
-  restringido: 'Restringido',
 }
 
 function Dato({ etiqueta, valor }) {
@@ -70,8 +65,10 @@ function FormularioPerfil({ perfil, onGuardar, guardando = false, mensajeExito }
           <Dato etiqueta="Teléfono" valor={perfil.telefono || 'Sin teléfono registrado'} />
           <Dato etiqueta="Tipo de usuario" valor={ETIQUETAS_TIPO[perfil.tipo] || perfil.tipo} />
           <Dato etiqueta="Puntaje de reputación" valor={perfil.reputacion_puntaje} />
-          <Dato etiqueta="Tier" valor={ETIQUETAS_TIER[perfil.reputacion_tier] || perfil.reputacion_tier} />
         </dl>
+        <div className="mt-3">
+          <ResumenTier tier={perfil.reputacion_tier} />
+        </div>
       </div>
 
       <Tarjeta className="p-6">

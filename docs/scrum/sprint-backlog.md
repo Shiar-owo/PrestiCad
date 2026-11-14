@@ -290,7 +290,7 @@ InstanciaMaterial               Reserva
 | T12.01 | Implementar servicio de reputación con rango [-500, 500] sobre campos de Usuario | Backend |
 | T12.02 | Implementar cálculo automático de Tier según puntaje | Backend |
 | T12.03 | Implementar clamping de puntos (no salir del rango) | Backend |
-| T12.04 | Crear endpoint GET /api/usuarios/{id}/reputacion | Backend |
+| T12.04 | Absorbida por `GET /api/usuarios/perfil/`, que ya expone puntaje y Tier; no crear endpoint redundante | Backend |
 | T12.05 | Mostrar puntaje y Tier en perfil de usuario | Frontend |
 
 ---

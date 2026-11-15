@@ -8,6 +8,7 @@ from apps.reservas.views import (
     CrearReservaView,
     DescargarDocumentoGarantiaReservaView,
     MisReservasView,
+    ReservaConfirmadaConversionView,
     RechazarReservaView,
     ReservasConfirmadasView,
 )
@@ -25,6 +26,11 @@ urlpatterns = [
         "reservas/cola/<uuid:material_id>/",
         ColaMaterialView.as_view(),
         name="cola-reservas-material",
+    ),
+    path(
+        "reservas/confirmadas/<uuid:id>/",
+        ReservaConfirmadaConversionView.as_view(),
+        name="reserva-confirmada-conversion",
     ),
     path(
         "reservas/confirmadas/",

@@ -26,6 +26,7 @@ from apps.prestamos.constants import (
 from apps.prestamos.models import Devolucion, FotoChecklist, Garantia, Prestamo
 from apps.prestamos.reportes import generar_reporte_dano
 from apps.prestamos.validators import validar_foto_checklist, validar_pdf_garantia
+from apps.reservas.constants import TOLERANCIA_RECOJO_MINUTOS
 from apps.usuarios.models import Usuario
 from apps.usuarios.services import (
     actualizar_reputacion,
@@ -666,6 +667,7 @@ def registrar_prestamo(
     documento_identidad=None,
     compromiso_responsabilidad=None,
     fecha_entrega=None,
+    fecha_fin=None,
     es_excepcion=False,
 ):
     """Registra la entrega con elegibilidad, garantía, conversión opcional de reserva y control atómico de stock."""
@@ -693,7 +695,17 @@ def registrar_prestamo(
             status_code=404,
         ) from error
 
-    fecha_entrega = fecha_entrega or timezone.now()
+    # La fecha de entrega es siempre la hora del servidor; nunca se acepta una fecha
+    # de inicio controlada por el cliente.
+    ahora_entrega = timezone.now()
+    fecha_entrega = ahora_entrega
+    if fecha_fin is not None and reserva_id is None:
+        if fecha_fin <= fecha_entrega:
+            raise PrestamoError("fecha_fin", "La fecha de fin debe ser posterior al momento de entrega.")
+        minutos_prestamo = int((fecha_fin - fecha_entrega).total_seconds() // 60)
+        if minutos_prestamo < MINIMO_MINUTOS_PRESTAMO:
+            raise PrestamoError("fecha_fin", "El préstamo debe durar al menos 1 h (60 min).")
+        dias_prestamo = max(1, math.ceil(minutos_prestamo / 1440))
     reserva = None
     garantia_reserva_reutilizable = None
     if reserva_id is not None:
@@ -722,7 +734,14 @@ def registrar_prestamo(
                 "reserva_id",
                 "La reserva indicada no corresponde al material seleccionado.",
             )
-        if reserva.estado != "reservada" or reserva.expiro(fecha_entrega):
+        limite_conversion = reserva.fecha_limite_recojo + timedelta(
+            minutes=TOLERANCIA_RECOJO_MINUTOS
+        ) if reserva.fecha_limite_recojo else None
+        if (
+            reserva.estado != "reservada"
+            or limite_conversion is None
+            or ahora_entrega > limite_conversion
+        ):
             raise PrestamoError(
                 "reserva_id",
                 "La reserva no se encuentra confirmada y vigente para su conversión.",
@@ -740,6 +759,26 @@ def registrar_prestamo(
                 "Debe entregarse el ejemplar asignado a la reserva confirmada.",
             )
         instancia_id = reserva.instancia_id
+        if reserva.fecha_inicio is None or reserva.fecha_fin is None:
+            raise PrestamoError(
+                "reserva_id",
+                "La reserva no tiene un rango de fechas válido.",
+                status_code=409,
+            )
+        if ahora_entrega < reserva.fecha_inicio:
+            raise PrestamoError(
+                "reserva_id",
+                "No se puede entregar el ejemplar antes de la fecha de inicio reservada.",
+                status_code=409,
+            )
+        minutos_prestamo = int((reserva.fecha_fin - reserva.fecha_inicio).total_seconds() // 60)
+        if minutos_prestamo < MINIMO_MINUTOS_PRESTAMO:
+            raise PrestamoError(
+                "reserva_id",
+                "El rango de fechas de la reserva no es válido.",
+                status_code=409,
+            )
+        dias_prestamo = max(1, math.ceil(minutos_prestamo / 1440))
         if reserva.es_excepcion:
             es_excepcion = True
         try:
@@ -847,8 +886,8 @@ def registrar_prestamo(
         usuario=prestatario,
         material=material,
         registrado_por=registrado_por,
-        fecha_entrega=fecha_entrega,
-        fecha_limite=fecha_entrega + timedelta(minutes=minutos_prestamo),
+        fecha_entrega=reserva.fecha_inicio if reserva is not None else fecha_entrega,
+        fecha_limite=reserva.fecha_fin if reserva is not None else fecha_entrega + timedelta(minutes=minutos_prestamo),
         tiempo_prestamo_minutos=minutos_prestamo,
         tiempo_prestamo_dias=dias_prestamo,
         estado="activo",
@@ -861,7 +900,7 @@ def registrar_prestamo(
 
     if reserva is not None:
         reserva.estado = "convertida_en_prestamo"
-        reserva.fecha_recojo = fecha_entrega
+        reserva.fecha_recojo = ahora_entrega
         reserva.prestamo = prestamo
         reserva.save(update_fields=["estado", "fecha_recojo", "prestamo", "updated_at"])
 

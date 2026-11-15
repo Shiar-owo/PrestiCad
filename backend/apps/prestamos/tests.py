@@ -1415,6 +1415,7 @@ class RegistrarPrestamoAPITestCase(APITestCase):
             "dni_prestatario": self.prestatario.dni,
             "material_id": str(self.material.id),
             "tiempo_prestamo_dias": 3,
+            "fecha_fin": (timezone.now() + timedelta(days=3)).isoformat(),
             "checklist_inicial": CHECKLIST,
         }
         datos.update(cambios)

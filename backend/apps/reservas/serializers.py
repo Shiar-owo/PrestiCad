@@ -1,6 +1,7 @@
 from datetime import timedelta
 
 from django.conf import settings
+from django.utils import timezone
 from rest_framework import serializers
 
 from apps.inventario.models import InstanciaMaterial, Material
@@ -35,13 +36,13 @@ class CrearReservaSerializer(serializers.Serializer):
         }
     )
     fecha_inicio = serializers.DateTimeField(
-        required=False,
+        required=True,
         error_messages={
             "invalid": "La fecha y hora de inicio de la reserva no es válida.",
         }
     )
     fecha_fin = serializers.DateTimeField(
-        required=False,
+        required=True,
         error_messages={
             "invalid": "La fecha y hora de fin de la reserva no es válida.",
         }
@@ -60,12 +61,11 @@ class CrearReservaSerializer(serializers.Serializer):
         attrs = super().validate(attrs)
         fecha_inicio = attrs.get("fecha_inicio")
         fecha_fin = attrs.get("fecha_fin")
-        if fecha_inicio is not None or fecha_fin is not None:
-            if fecha_inicio is None or fecha_fin is None:
-                raise serializers.ValidationError({
-                    "fecha_inicio": "Debe indicar tanto la fecha de inicio como la de fin de la reserva.",
-                    "fecha_fin": "Debe indicar tanto la fecha de inicio como la de fin de la reserva.",
-                })
+        if fecha_inicio is not None and fecha_fin is not None:
+            if fecha_inicio <= timezone.now():
+                raise serializers.ValidationError(
+                    {"fecha_inicio": "La fecha de inicio debe ser posterior al momento actual."}
+                )
             if fecha_fin <= fecha_inicio:
                 raise serializers.ValidationError({
                     "fecha_fin": "La fecha y hora de fin debe ser posterior a la de inicio.",
@@ -247,6 +247,8 @@ class ReservaDetalleSerializer(serializers.ModelSerializer):
             "motivo_cancelacion",
             "fecha_solicitud",
             "fecha_creacion",
+            "fecha_inicio",
+            "fecha_fin",
             "fecha_limite_espera",
             "fecha_confirmacion",
             "fecha_limite_recojo",

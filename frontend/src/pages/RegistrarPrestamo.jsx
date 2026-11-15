@@ -4,8 +4,6 @@ import { useSearchParams } from 'react-router'
 import { api, ErrorApi } from '../api/client'
 import {
   ayudaRangoDuracion,
-  calcularFechaLimiteEstimada,
-  evaluarCambioDuracion,
   mapearErroresFotoChecklist,
   obtenerElementosSinFoto,
   validarFormularioPrestamo,
@@ -24,8 +22,7 @@ import { TAMANO_MAXIMO_GARANTIA_MB } from '../constantes/garantia'
 import { esMaterialAltoValor } from '../constantes/catalogo'
 import {
   TAMANO_MAXIMO_FOTO_CHECKLIST_MB,
-  UNIDADES_TIEMPO_PRESTAMO,
-  convertirTiempoAMinutos,
+  formatearDuracionMinutos,
 } from '../constantes/checklistPrestamo'
 import { construirSolicitudPrestamo } from '../prestamos/solicitudPrestamo'
 import { validarTamanoSolicitud } from '../prestamos/tamanoSolicitud'
@@ -39,8 +36,6 @@ const FORMULARIO_INICIAL = {
   reservaId: '',
   materialId: '',
   instanciaId: '',
-  dias: '1',
-  unidadTiempo: 'horas',
   checklist: [{ elemento: '', observacion: '', foto: null, fotoPrevia: '' }],
   documentoIdentidad: null,
   compromisoResponsabilidad: null,
@@ -68,6 +63,18 @@ function fechaLegible(valor) {
   }).format(new Date(valor))
 }
 
+function fechaParaCalendario(valor = new Date()) {
+  const fecha = new Date(valor)
+  if (Number.isNaN(fecha.getTime())) return ''
+  const local = new Date(fecha.getTime() - fecha.getTimezoneOffset() * 60000)
+  return local.toISOString().slice(0, 16)
+}
+
+function calcularMinutosEntreFechas(inicio, fin) {
+  if (!inicio || !fin) return NaN
+  return (new Date(fin).getTime() - new Date(inicio).getTime()) / 60000
+}
+
 const OPCIONES_MATERIAL = (materiales) => [
   { valor: '', etiqueta: 'Selecciona un material' },
   ...materiales.map((material) => ({
@@ -86,6 +93,11 @@ function RegistrarPrestamo() {
   const [materiales, setMateriales] = useState([])
   const [instancias, setInstancias] = useState([])
   const [reservasConfirmadas, setReservasConfirmadas] = useState([])
+  const [reservaFija, setReservaFija] = useState(null)
+  const [cargandoReservaConversion, setCargandoReservaConversion] = useState(esConversionFija)
+  const [errorReservaConversion, setErrorReservaConversion] = useState('')
+  const [fechaInicioPrestamo, setFechaInicioPrestamo] = useState(() => fechaParaCalendario())
+  const [fechaFinPrestamo, setFechaFinPrestamo] = useState(() => fechaParaCalendario(Date.now() + 120 * 60000))
   const [formulario, setFormulario] = useState(() => ({
     ...FORMULARIO_INICIAL,
     dni: dniInicial,
@@ -119,13 +131,12 @@ function RegistrarPrestamo() {
   useEffect(() => {
     if (!reservaIdInicial) return undefined
     let vigente = true
-    api.get(`/reservas/${reservaIdInicial}/`)
+    setCargandoReservaConversion(true)
+    setErrorReservaConversion('')
+    api.get(`/reservas/confirmadas/${reservaIdInicial}/`)
       .then((reserva) => {
         if (!vigente || !reserva) return
-        setReservasConfirmadas((prev) => {
-          const existe = prev.some((r) => String(r.id) === String(reserva.id))
-          return existe ? prev : [reserva, ...prev]
-        })
+        setReservaFija(reserva)
         setFormulario((actual) => ({
           ...actual,
           dni: reserva.usuario?.dni || actual.dni,
@@ -134,8 +145,23 @@ function RegistrarPrestamo() {
           instanciaId: String(reserva.instancia?.id || ''),
           esExcepcion: Boolean(reserva.es_excepcion),
         }))
+        if (reserva.fecha_inicio && reserva.fecha_fin) {
+          setFechaInicioPrestamo(fechaParaCalendario(reserva.fecha_inicio))
+          setFechaFinPrestamo(fechaParaCalendario(reserva.fecha_fin))
+        }
       })
-      .catch(() => {})
+      .catch((fallo) => {
+        if (!vigente) return
+        setReservaFija(null)
+        setErrorReservaConversion(
+          fallo instanceof ErrorApi && fallo.datos?.detail
+            ? fallo.datos.detail
+            : 'No se pudo validar la reserva para la entrega. Vuelve a Cola de reservas e inténtalo nuevamente.',
+        )
+      })
+      .finally(() => {
+        if (vigente) setCargandoReservaConversion(false)
+      })
     return () => {
       vigente = false
     }
@@ -202,11 +228,12 @@ function RegistrarPrestamo() {
   }, [formulario.dni, reservaIdInicial])
 
   const reservaSeleccionada = useMemo(
-    () =>
-      reservasConfirmadas.find(
+    () => esConversionFija
+      ? reservaFija
+      : reservasConfirmadas.find(
         (r) => String(r.id) === String(formulario.reservaId),
       ) || null,
-    [reservasConfirmadas, formulario.reservaId],
+    [esConversionFija, reservaFija, reservasConfirmadas, formulario.reservaId],
   )
 
   useEffect(() => {
@@ -270,9 +297,9 @@ function RegistrarPrestamo() {
   const perfilVerificadoActual = dniPerfilVerificado === formulario.dni.trim()
     ? perfilPrestatario
     : null
-  const fechaLimiteEstimada = useMemo(
-    () => calcularFechaLimiteEstimada(formulario.dias, formulario.unidadTiempo, materialSeleccionado),
-    [formulario.dias, formulario.unidadTiempo, materialSeleccionado],
+  const duracionPrestamoMinutos = calcularMinutosEntreFechas(fechaInicioPrestamo, fechaFinPrestamo)
+  const duracionBloqueadaPorReserva = Boolean(
+    reservaSeleccionada?.fecha_inicio && reservaSeleccionada?.fecha_fin,
   )
   const tierCumple = Boolean(
     perfilVerificadoActual && materialSeleccionado
@@ -299,12 +326,19 @@ function RegistrarPrestamo() {
       || (!tierCumple && !excepcionActiva)
     ),
   )
+  const bloqueadoPorReservaConversion = esConversionFija && (
+    cargandoReservaConversion || !reservaSeleccionada || Boolean(errorReservaConversion)
+  )
 
   function seleccionarReserva(nuevoReservaId) {
     const reserva = reservasConfirmadas.find(
       (r) => String(r.id) === String(nuevoReservaId),
     )
     if (reserva) {
+      if (reserva.fecha_inicio && reserva.fecha_fin) {
+        setFechaInicioPrestamo(fechaParaCalendario(reserva.fecha_inicio))
+        setFechaFinPrestamo(fechaParaCalendario(reserva.fecha_fin))
+      }
       setFormulario((actual) => ({
         ...actual,
         reservaId: String(reserva.id),
@@ -313,6 +347,8 @@ function RegistrarPrestamo() {
         esExcepcion: Boolean(reserva.es_excepcion),
       }))
     } else {
+      setFechaInicioPrestamo(fechaParaCalendario())
+      setFechaFinPrestamo(fechaParaCalendario(Date.now() + 120 * 60000))
       setFormulario((actual) => ({
         ...actual,
         reservaId: '',
@@ -378,25 +414,6 @@ function RegistrarPrestamo() {
     }
     setError('')
     setPrestamoCreado(null)
-  }
-
-  function cambiarDuracion(duracion) {
-    const cambio = evaluarCambioDuracion(
-      duracion,
-      formulario.dias,
-      formulario.unidadTiempo,
-      materialSeleccionado,
-    )
-    if (cambio.error) {
-      setErrores((actual) => ({ ...actual, dias: cambio.error }))
-      return
-    }
-    actualizar('dias', cambio.valor)
-  }
-
-  function cambiarUnidadTiempo(nuevaUnidad) {
-    setFormulario((actual) => ({ ...actual, unidadTiempo: nuevaUnidad }))
-    setErrores((actual) => ({ ...actual, dias: undefined }))
   }
 
   function actualizarChecklist(indice, campo, valor) {
@@ -466,13 +483,14 @@ function RegistrarPrestamo() {
 
   async function registrar(evento) {
     evento.preventDefault()
-    if (bloqueadoPorElegibilidad) return
+    if (bloqueadoPorElegibilidad || bloqueadoPorReservaConversion) return
+    const duracionMinutos = calcularMinutosEntreFechas(fechaInicioPrestamo, fechaFinPrestamo)
     const datosValidacion = {
       dni: formulario.dni,
       material: materialSeleccionado,
       instanciaId: formulario.instanciaId,
-      duracionValor: formulario.dias,
-      duracionUnidad: formulario.unidadTiempo,
+      duracionValor: duracionMinutos,
+      duracionUnidad: 'minutos',
       checklist: formulario.checklist,
       documentoIdentidad: formulario.documentoIdentidad,
       compromisoResponsabilidad: formulario.compromisoResponsabilidad,
@@ -492,13 +510,14 @@ function RegistrarPrestamo() {
 
     setGuardando(true)
     try {
-      const minutosPrestamo = convertirTiempoAMinutos(formulario.dias, formulario.unidadTiempo)
+      const minutosPrestamo = duracionMinutos
       const solicitud = construirSolicitudPrestamo({
         dni: formulario.dni,
         material: materialSeleccionado,
         instanciaId: formulario.instanciaId,
         reservaId: formulario.reservaId,
         minutos: minutosPrestamo,
+        fechaFin: fechaFinPrestamo,
         checklist: formulario.checklist,
         documentoIdentidad: formulario.documentoIdentidad,
         compromisoResponsabilidad: formulario.compromisoResponsabilidad,
@@ -527,6 +546,7 @@ function RegistrarPrestamo() {
       const camposApi = {
         dni_prestatario: 'dni',
         instancia_id: 'instancia_id',
+        fecha_fin: 'dias',
         tiempo_prestamo_minutos: 'dias',
         tiempo_prestamo_dias: 'dias',
         documento_identidad: 'documento_identidad',
@@ -569,6 +589,14 @@ function RegistrarPrestamo() {
       </header>
 
       {error && <ErrorAlerta mensaje={error} className="mb-4" />}
+      {cargandoReservaConversion && (
+        <p className="mb-4 text-sm text-texto-suave" role="status" aria-live="polite">
+          Validando la reserva confirmada y cargando el ejemplar asignado…
+        </p>
+      )}
+      {errorReservaConversion && (
+        <ErrorAlerta mensaje={errorReservaConversion} className="mb-4" />
+      )}
 
       {prestamoCreado && (
         <div
@@ -607,11 +635,13 @@ function RegistrarPrestamo() {
               valor={formulario.dni}
               onCambio={(valor) => actualizar('dni', valor)}
               error={errores.dni}
-              ayuda={esConversionFija ? "DNI vinculado a la reserva seleccionada." : "Al completar o seleccionar el DNI se consultará la reputación y las reservas confirmadas del prestatario."}
-              deshabilitado={esConversionFija}
+              ayuda={reservaSeleccionada || esConversionFija
+                ? 'DNI vinculado a la reserva seleccionada.'
+                : 'Al completar o seleccionar el DNI se consultará la reputación y las reservas confirmadas del prestatario.'}
+              deshabilitado={Boolean(reservaSeleccionada) || esConversionFija}
               requerido
             />
-            {reservasConfirmadas.length > 0 && (
+            {(reservasConfirmadas.length > 0 || reservaSeleccionada) && (
               <div className="rounded-xl border border-marca-300 bg-marca-50/50 p-4 space-y-2 dark:border-marca-700 dark:bg-marca-950/30">
         <div className="flex flex-wrap items-center justify-between gap-2">
                       <label
@@ -819,30 +849,58 @@ function RegistrarPrestamo() {
                 mensaje="Este material no tiene ejemplares disponibles para prestar."
               />
             )}
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Campo
-                etiqueta="Duración del préstamo"
-                tipo="number"
-                min="1"
-                step="1"
-                valor={formulario.dias}
-                onCambio={(evento) => cambiarDuracion(evento.target.value)}
-                error={errores.dias}
-                ayuda={ayudaRangoDuracion(materialSeleccionado)}
-                requerido
-              />
-              <Campo
-                etiqueta="Unidad de tiempo"
-                opciones={UNIDADES_TIEMPO_PRESTAMO}
-                valor={formulario.unidadTiempo}
-                onCambio={(evento) => cambiarUnidadTiempo(evento.target.value)}
-              />
-            </div>
-            {fechaLimiteEstimada && (
+            <fieldset className="grid gap-4 rounded-xl border border-borde p-4">
+              <legend className="px-2 text-sm font-bold text-texto">Duración del préstamo</legend>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label htmlFor="fecha-inicio-prestamo" className="block text-sm font-semibold text-texto">
+                    Fecha y hora de inicio *
+                  </label>
+                  <input
+                    id="fecha-inicio-prestamo"
+                    type="datetime-local"
+                    value={fechaInicioPrestamo}
+                    max={fechaFinPrestamo || undefined}
+                    disabled
+                    onChange={(evento) => {
+                      setFechaInicioPrestamo(evento.target.value)
+                      setErrores((actual) => ({ ...actual, dias: undefined }))
+                    }}
+                    className="mt-1.5 w-full rounded-lg border border-borde bg-white px-3 py-2 text-sm text-texto disabled:cursor-not-allowed disabled:bg-superficie-alta dark:bg-superficie"
+                    required
+                  />
+                </div>
+                <div>
+                  <label htmlFor="fecha-fin-prestamo" className="block text-sm font-semibold text-texto">
+                    Fecha y hora de fin *
+                  </label>
+                  <input
+                    id="fecha-fin-prestamo"
+                    type="datetime-local"
+                    value={fechaFinPrestamo}
+                    min={fechaInicioPrestamo || undefined}
+                    disabled={duracionBloqueadaPorReserva}
+                    onChange={(evento) => {
+                      setFechaFinPrestamo(evento.target.value)
+                      setErrores((actual) => ({ ...actual, dias: undefined }))
+                    }}
+                    className="mt-1.5 w-full rounded-lg border border-borde bg-white px-3 py-2 text-sm text-texto disabled:cursor-not-allowed disabled:bg-superficie-alta dark:bg-superficie"
+                    required
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-texto-suave">
+                {duracionBloqueadaPorReserva
+                  ? 'Fechas y duración fijadas por la reserva confirmada.'
+                  : `${ayudaRangoDuracion(materialSeleccionado)} El vencimiento se contará desde la entrega efectiva.`}
+              </p>
+              {errores.dias && <p className="text-xs font-medium text-error">{errores.dias}</p>}
+            </fieldset>
+            {Number.isFinite(duracionPrestamoMinutos) && duracionPrestamoMinutos > 0 && (
               <p className="text-sm text-texto-suave">
-                Fecha límite estimada:{' '}
-                <strong className="text-texto">{fechaLegible(fechaLimiteEstimada)}</strong>
-                <small className="block">La fecha confirmada por el servidor aparecerá al registrar.</small>
+                Duración seleccionada:{' '}
+                <strong className="text-texto">{formatearDuracionMinutos(duracionPrestamoMinutos)}</strong>
+                <small className="block">La fecha límite se calculará desde el momento de la entrega.</small>
               </p>
             )}
 
@@ -982,7 +1040,7 @@ function RegistrarPrestamo() {
               <Boton
                 tipo="submit"
                 cargando={guardando}
-                deshabilitado={bloqueadoPorElegibilidad || Boolean(
+                deshabilitado={bloqueadoPorElegibilidad || bloqueadoPorReservaConversion || Boolean(
                   requiereGarantia
                   && !garantiaReutilizada
                   && (!formulario.documentoIdentidad || !formulario.compromisoResponsabilidad)

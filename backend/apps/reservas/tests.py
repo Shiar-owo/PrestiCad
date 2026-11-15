@@ -37,8 +37,8 @@ from apps.reservas.services import (
     consultar_cola_material,
     consultar_mis_reservas,
     consultar_reservas_confirmadas,
-    crear_reserva,
-    crear_reserva_excepcional,
+    crear_reserva as crear_reserva_real,
+    crear_reserva_excepcional as crear_reserva_excepcional_real,
     expirar_reservas,
     rechazar_reserva,
 )
@@ -54,6 +54,26 @@ CHECKLIST = [
     {"elemento": "Carcasa", "observacion": ""},
     {"elemento": "Cable", "observacion": ""},
 ]
+
+
+def _rango_reserva_futuro():
+    inicio = timezone.localtime(timezone.now()).replace(second=0, microsecond=0) + timedelta(days=1)
+    while inicio.weekday() > 4:
+        inicio += timedelta(days=1)
+    inicio = inicio.replace(hour=10, minute=0)
+    return inicio, inicio + timedelta(hours=1)
+
+
+def crear_reserva(**datos):
+    if datos.get("fecha_inicio") is None and datos.get("fecha_fin") is None:
+        datos["fecha_inicio"], datos["fecha_fin"] = _rango_reserva_futuro()
+    return crear_reserva_real(**datos)
+
+
+def crear_reserva_excepcional(**datos):
+    if datos.get("fecha_inicio") is None and datos.get("fecha_fin") is None:
+        datos["fecha_inicio"], datos["fecha_fin"] = _rango_reserva_futuro()
+    return crear_reserva_excepcional_real(**datos)
 
 
 def crear_foto_checklist(nombre="elemento.png"):
@@ -169,7 +189,7 @@ class ReservasServiceTestCase(TestCase):
         self.assertEqual(reserva.estado, "reservada")
         self.assertIsNotNone(reserva.instancia_id)
         self.assertEqual(reserva.instancia.estado, "reservado")
-        self.assertEqual(reserva.fecha_limite_recojo, ahora + timedelta(hours=24))
+        self.assertEqual(reserva.fecha_limite_recojo, reserva.fecha_fin)
         material.refresh_from_db()
         self.assertEqual(material.estado, "reservado")
 
@@ -474,6 +494,18 @@ class ReservasServiceTestCase(TestCase):
             self.assertIsNotNone(aprobada.instancia_id)
             self.assertEqual(aprobada.instancia.estado, "reservado")
 
+            with self.assertRaises(PrestamoError) as antes_del_inicio:
+                registrar_prestamo_real(
+                    dni_prestatario=self.prestatario_restringido.dni,
+                    material_id=material.id,
+                    reserva_id=aprobada.id,
+                    tiempo_prestamo_dias=1,
+                    checklist_inicial=CHECKLIST,
+                    fotos_checklist=[crear_foto_checklist() for _ in CHECKLIST],
+                    registrado_por=self.gestor,
+                )
+            self.assertIn("antes de la fecha de inicio", antes_del_inicio.exception.mensaje)
+
             # Préstamo directo sobre instancia reservada sin reserva_id es rechazado
             with self.assertRaises(PrestamoError) as err_directo:
                 registrar_prestamo_real(
@@ -488,6 +520,10 @@ class ReservasServiceTestCase(TestCase):
             self.assertEqual(err_directo.exception.status_code, 409)
 
             # Conversión válida con reserva_id reutilizando la garantía sin volver a subir PDFs
+            ahora_entrega = timezone.now()
+            aprobada.fecha_inicio = ahora_entrega - timedelta(minutes=1)
+            aprobada.fecha_fin = ahora_entrega + timedelta(hours=23)
+            aprobada.save(update_fields=["fecha_inicio", "fecha_fin", "updated_at"])
             prestamo = registrar_prestamo_real(
                 dni_prestatario=self.prestatario_restringido.dni,
                 material_id=material.id,
@@ -498,6 +534,8 @@ class ReservasServiceTestCase(TestCase):
                 registrado_por=self.gestor,
             )
             self.assertTrue(prestamo.es_excepcion)
+            self.assertEqual(prestamo.fecha_entrega, aprobada.fecha_inicio)
+            self.assertEqual(prestamo.fecha_limite, aprobada.fecha_fin)
             self.assertTrue(prestamo.garantia_completa)
             aprobada.refresh_from_db()
             self.assertEqual(aprobada.estado, "convertida_en_prestamo")
@@ -590,6 +628,10 @@ class ReservasAPITestCase(APITestCase):
         sesion[CLAVE_SESION_ULTIMA_ACTIVIDAD] = timezone.now().isoformat()
         sesion.save()
 
+    def _rango_fechas(self):
+        inicio, fin = _rango_reserva_futuro()
+        return {"fecha_inicio": inicio.isoformat(), "fecha_fin": fin.isoformat()}
+
     def test_flujo_api_reserva_normal_cola_confirmadas_y_cancelacion(self):
         self._autenticar(self.prestatario)
         respuesta = self.client.post(
@@ -597,6 +639,7 @@ class ReservasAPITestCase(APITestCase):
             {
                 "material_id": str(self.material.id),
                 "justificacion": "Uso en proyecto final",
+                **self._rango_fechas(),
             },
             format="json",
         )
@@ -620,6 +663,13 @@ class ReservasAPITestCase(APITestCase):
         self.assertEqual(confirmadas.status_code, 200)
         self.assertEqual(len(confirmadas.data), 1)
 
+        detalle = self.client.get(f"/api/reservas/confirmadas/{reserva_id}/")
+        self.assertEqual(detalle.status_code, 200)
+        self.assertEqual(detalle.data["id"], reserva_id)
+        self.assertEqual(detalle.data["usuario"]["dni"], self.prestatario.dni)
+        self.assertEqual(detalle.data["material"]["id"], str(self.material.id))
+        self.assertTrue(detalle.data["instancia"]["id"])
+
         cancelada = self.client.post(
             f"/api/reservas/{reserva_id}/cancelar/",
             {"motivo": "Cancelado a solicitud"},
@@ -627,6 +677,94 @@ class ReservasAPITestCase(APITestCase):
         )
         self.assertEqual(cancelada.status_code, 200)
         self.assertEqual(cancelada.data["estado"], "cancelada")
+
+    def test_api_reserva_rechaza_fechas_ausentes_o_inicio_actual(self):
+        self._autenticar(self.prestatario)
+        base = {"material_id": str(self.material.id), "justificacion": "Prueba de fechas"}
+        sin_fechas = self.client.post("/api/reservas/", base, format="json")
+        self.assertEqual(sin_fechas.status_code, 400)
+        inicio, fin = _rango_reserva_futuro()
+        pasado = self.client.post(
+            "/api/reservas/",
+            {**base, "fecha_inicio": (timezone.now() - timedelta(minutes=1)).isoformat(), "fecha_fin": fin.isoformat()},
+            format="json",
+        )
+        self.assertEqual(pasado.status_code, 400)
+        self.assertIn("fecha_inicio", pasado.data)
+
+    def test_endpoint_conversion_rechaza_reserva_vencida_o_sin_instancia(self):
+        self._autenticar(self.prestatario)
+        respuesta = self.client.post(
+            "/api/reservas/",
+            {"material_id": str(self.material.id), "justificacion": "Prueba de vigencia", **self._rango_fechas()},
+            format="json",
+        )
+        reserva = Reserva.objects.get(pk=respuesta.data["id"])
+        self._autenticar(self.gestor)
+
+        reserva.fecha_limite_recojo = timezone.now() - timedelta(minutes=31)
+        reserva.save(update_fields=["fecha_limite_recojo", "updated_at"])
+        vencida = self.client.get(f"/api/reservas/confirmadas/{reserva.id}/")
+        self.assertEqual(vencida.status_code, 404)
+        cola_vencida = self.client.get("/api/reservas/cola/")
+        self.assertNotIn(
+            str(reserva.id),
+            [r["id"] for r in cola_vencida.data["reservas_confirmadas"]],
+        )
+
+        reserva.fecha_limite_recojo = timezone.now() + timedelta(hours=1)
+        reserva.instancia = None
+        reserva.save(update_fields=["fecha_limite_recojo", "instancia", "updated_at"])
+        sin_instancia = self.client.get(f"/api/reservas/confirmadas/{reserva.id}/")
+        self.assertEqual(sin_instancia.status_code, 404)
+        cola_sin_instancia = self.client.get("/api/reservas/cola/")
+        self.assertNotIn(
+            str(reserva.id),
+            [r["id"] for r in cola_sin_instancia.data["reservas_confirmadas"]],
+        )
+
+        reserva.instancia = self.material.instancias.first()
+        reserva.save(update_fields=["instancia", "updated_at"])
+        reserva.instancia.estado = "disponible"
+        reserva.instancia.save(update_fields=["estado", "updated_at"])
+        instancia_libre = self.client.get(f"/api/reservas/confirmadas/{reserva.id}/")
+        self.assertEqual(instancia_libre.status_code, 404)
+        cola_instancia_libre = self.client.get("/api/reservas/cola/")
+        self.assertNotIn(
+            str(reserva.id),
+            [r["id"] for r in cola_instancia_libre.data["reservas_confirmadas"]],
+        )
+
+    def test_endpoint_conversion_conserva_tolerancia_de_recojo_de_30_minutos(self):
+        self._autenticar(self.prestatario)
+        respuesta = self.client.post(
+            "/api/reservas/",
+            {"material_id": str(self.material.id), "justificacion": "Prueba de tolerancia", **self._rango_fechas()},
+            format="json",
+        )
+        reserva = Reserva.objects.get(pk=respuesta.data["id"])
+        reserva.fecha_limite_recojo = timezone.now() - timedelta(minutes=29)
+        reserva.save(update_fields=["fecha_limite_recojo", "updated_at"])
+        self._autenticar(self.gestor)
+
+        detalle = self.client.get(f"/api/reservas/confirmadas/{reserva.id}/")
+        self.assertEqual(detalle.status_code, 200)
+        cola = self.client.get("/api/reservas/cola/")
+        self.assertIn(
+            str(reserva.id),
+            [r["id"] for r in cola.data["reservas_confirmadas"]],
+        )
+
+    def test_endpoint_conversion_solo_permite_acceso_al_gestor(self):
+        self._autenticar(self.prestatario)
+        respuesta = self.client.post(
+            "/api/reservas/",
+            {"material_id": str(self.material.id), "justificacion": "Prueba de permisos", **self._rango_fechas()},
+            format="json",
+        )
+
+        denegada = self.client.get(f"/api/reservas/confirmadas/{respuesta.data['id']}/")
+        self.assertEqual(denegada.status_code, 403)
 
     def test_flujo_api_reserva_excepcional_aprobacion_y_descarga_garantia(self):
         with storage_garantias_temporal():
@@ -636,6 +774,7 @@ class ReservasAPITestCase(APITestCase):
                 {
                     "material_id": str(self.material.id),
                     "justificacion": "Excepción académica laboratorio",
+                    **self._rango_fechas(),
                     "documento_identidad": crear_pdf("dni.pdf"),
                     "compromiso_responsabilidad": crear_pdf("compromiso.pdf"),
                 },

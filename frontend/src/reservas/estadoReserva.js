@@ -110,12 +110,16 @@ export function ordenarColaReservas(reservas = []) {
 export function construirFormularioReservaExcepcional({
   materialId,
   justificacion,
+  fechaInicio,
+  fechaFin,
   documentoIdentidad,
   compromisoResponsabilidad,
 }) {
   const formulario = new FormData()
   formulario.append('material_id', String(materialId || '').trim())
   formulario.append('justificacion', String(justificacion || '').trim())
+  formulario.append('fecha_inicio', String(fechaInicio || ''))
+  formulario.append('fecha_fin', String(fechaFin || ''))
 
   if (documentoIdentidad) {
     formulario.append('documento_identidad', documentoIdentidad)
@@ -224,6 +228,53 @@ export function formatearFechaHoraInput(fecha) {
   return local.toISOString().slice(0, 16)
 }
 
+export function obtenerMinimoInicioReserva(ahora = new Date()) {
+  const minimo = new Date(ahora)
+  minimo.setSeconds(0, 0)
+  minimo.setMinutes(minimo.getMinutes() + 1)
+  return formatearFechaHoraInput(minimo)
+}
+
+export function obtenerMinimoFinReserva(fechaInicio) {
+  if (!fechaInicio) return ''
+  const minimo = new Date(fechaInicio)
+  if (Number.isNaN(minimo.getTime())) return ''
+  minimo.setMinutes(minimo.getMinutes() + 1)
+  return formatearFechaHoraInput(minimo)
+}
+
+export function obtenerMaximoFinReserva(fechaInicio) {
+  if (!fechaInicio) return ''
+  const maximo = new Date(fechaInicio)
+  if (Number.isNaN(maximo.getTime())) return ''
+  maximo.setDate(maximo.getDate() + (5 - (maximo.getDay() || 7)))
+  maximo.setHours(HORA_RESERVA_MAXIMO_FIN, 0, 0, 0)
+  return formatearFechaHoraInput(maximo)
+}
+
+export function obtenerFechaLocal(fecha = new Date()) {
+  const valor = new Date(fecha)
+  if (Number.isNaN(valor.getTime())) return ''
+  const local = new Date(valor.getTime() - valor.getTimezoneOffset() * 60000)
+  return local.toISOString().slice(0, 10)
+}
+
+export function obtenerMinimaHoraInicioReserva(fecha, ahora = new Date()) {
+  const minimoAtencion = HORA_RESERVA_MINIMO_INICIO * 60
+  let minutos = minimoAtencion
+  if (fecha && fecha === obtenerFechaLocal(ahora)) {
+    minutos = Math.max(minimoAtencion, ahora.getHours() * 60 + ahora.getMinutes() + 1)
+  }
+  return `${String(Math.floor(minutos / 60)).padStart(2, '0')}:${String(minutos % 60).padStart(2, '0')}`
+}
+
+export function obtenerMinimaHoraFinReserva(horaInicio) {
+  if (!horaInicio) return `${String(HORA_RESERVA_MINIMO_INICIO).padStart(2, '0')}:00`
+  const [hora, minuto] = horaInicio.split(':').map(Number)
+  const minutos = Math.max(HORA_RESERVA_MINIMO_INICIO * 60, hora * 60 + minuto + 1)
+  return `${String(Math.floor(minutos / 60)).padStart(2, '0')}:${String(minutos % 60).padStart(2, '0')}`
+}
+
 export function obtenerLunesSemana(fecha) {
   const d = new Date(fecha)
   if (Number.isNaN(d.getTime())) return null
@@ -253,6 +304,8 @@ export function validarHorarioReserva(
         errores.fecha = 'La fecha no es válida.'
       } else if (!DIAS_LABORABLES.includes(soloFecha.getDay())) {
         errores.fecha = 'Solo se permite reservar de lunes a viernes (días laborables).'
+      } else if (horaInicio && new Date(`${fechaSeleccionada}T${horaInicio}:00`) <= new Date()) {
+        errores.fecha = 'La fecha de inicio debe ser posterior al momento actual.'
       }
     }
 
@@ -298,6 +351,7 @@ export function validarHorarioReserva(
       if (Number.isNaN(inicio.getTime())) {
         errores.fechaInicio = 'La fecha u hora de inicio no es válida.'
       } else {
+        if (inicio <= new Date()) errores.fechaInicio = 'La fecha de inicio debe ser posterior al momento actual.'
         if (!DIAS_LABORABLES.includes(inicio.getDay())) {
           errores.fechaInicio = 'Solo se permite reservar de lunes a viernes (días laborables).'
         }
@@ -318,6 +372,7 @@ export function validarHorarioReserva(
       if (Number.isNaN(fin.getTime())) {
         errores.fechaFin = 'La fecha u hora de fin no es válida.'
       } else {
+        if (fin <= new Date()) errores.fechaFin = 'La fecha de fin debe ser futura.'
         if (!DIAS_LABORABLES.includes(fin.getDay())) {
           errores.fechaFin = 'Solo se permite reservar de lunes a viernes (días laborables).'
         }

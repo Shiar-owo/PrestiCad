@@ -123,7 +123,7 @@ docker compose exec backend python manage.py procesar_reservas
 3. **Autopromoción automática:** Al liberar ejemplares de reservas vencidas, promueve atómicamente a la solicitud en espera con mayor prioridad, antigüedad y Tier.
 
 **Ejecución periódica recomendada:**
-En entornos de producción o servidores locales, configurar una tarea cron periódica (por ejemplo, cada 5 minutos):
+En Docker Compose, el servicio `scheduler` ejecuta el comando cada cinco minutos. En producción o servidores locales fuera de Compose, configurar una tarea cron periódica (por ejemplo, cada 5 minutos):
 ```bash
 */5 * * * * docker compose exec -T backend python manage.py procesar_reservas >> /var/log/presticad_reservas.log 2>&1
 ```

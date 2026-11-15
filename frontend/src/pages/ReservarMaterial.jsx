@@ -19,6 +19,12 @@ import {
   esReservaActiva,
   formatearFechaReserva,
   formatearFechaHoraInput,
+  obtenerFechaLocal,
+  obtenerMaximoFinReserva,
+  obtenerMinimaHoraFinReserva,
+  obtenerMinimaHoraInicioReserva,
+  obtenerMinimoFinReserva,
+  obtenerMinimoInicioReserva,
   HORA_RESERVA_MAXIMO_FIN,
   HORA_RESERVA_MINIMO_INICIO,
   requiereExcepcionAcademica,
@@ -169,6 +175,139 @@ export default function ReservarMaterial() {
     materialSeleccionado?.resumen_instancias?.disponible ??
     0
 
+  const erroresInicioActuales = esAvanzado
+    ? validarHorarioReserva(fechaSeleccionada, horaInicio, '', true)
+    : validarHorarioReserva(undefined, undefined, undefined, false, fechaInicio, '')
+  const inicioValidoParaFin = esAvanzado
+    ? Boolean(fechaSeleccionada && horaInicio && !erroresInicioActuales.fecha && !erroresInicioActuales.horaInicio)
+    : Boolean(fechaInicio && !erroresInicioActuales.fechaInicio)
+
+  function actualizarFechaInicioReserva(valor) {
+    if (!valor) {
+      setFechaInicio('')
+      setFechaFin('')
+      setErrores((actuales) => ({ ...actuales, fechaInicio: '', fechaFin: '' }))
+      return
+    }
+    const validacion = validarHorarioReserva(undefined, undefined, undefined, false, valor, fechaFin)
+    if (validacion.fechaInicio) {
+      setFechaInicio('')
+      setFechaFin('')
+      setErrores((actuales) => ({
+        ...actuales,
+        fechaInicio: validacion.fechaInicio,
+        fechaFin: '',
+      }))
+      return
+    }
+    setFechaInicio(valor)
+    const finActual = fechaFin && new Date(fechaFin)
+    const maximoFin = valor ? new Date(obtenerMaximoFinReserva(valor)) : null
+    const finDebeLimpiarse = Boolean(
+      finActual
+      && (!Number.isNaN(finActual.getTime())
+        && (finActual <= new Date(valor)
+          || !maximoFin
+          || Number.isNaN(maximoFin.getTime())
+          || finActual > maximoFin)),
+    )
+    if (finDebeLimpiarse) setFechaFin('')
+    setErrores((actuales) => ({
+      ...actuales,
+      fechaInicio: validacion.fechaInicio || '',
+      fechaFin: finDebeLimpiarse
+        ? 'El inicio cambió. Selecciona un fin posterior dentro de esta semana.'
+        : validacion.fechaFin || '',
+    }))
+  }
+
+  function actualizarFechaFinReserva(valor) {
+    if (!valor) {
+      setFechaFin('')
+      setErrores((actuales) => ({ ...actuales, fechaFin: '' }))
+      return
+    }
+    const validacion = validarHorarioReserva(undefined, undefined, undefined, false, fechaInicio, valor)
+    if (validacion.fechaFin) {
+      setFechaFin('')
+      setErrores((actuales) => ({ ...actuales, fechaFin: validacion.fechaFin }))
+      return
+    }
+    setFechaFin(valor)
+    setErrores((actuales) => ({
+      ...actuales,
+      fechaFin: validacion.fechaFin || '',
+    }))
+  }
+
+  function actualizarFechaAvanzada(valor) {
+    if (!valor) {
+      setFechaSeleccionada('')
+      setErrores((actuales) => ({ ...actuales, fecha: '' }))
+      return
+    }
+    const validacion = validarHorarioReserva(valor, horaInicio, horaFin, true)
+    if (validacion.fecha) {
+      setFechaSeleccionada('')
+      setErrores((actuales) => ({ ...actuales, fecha: validacion.fecha }))
+      return
+    }
+    setFechaSeleccionada(valor)
+    setErrores((actuales) => ({
+      ...actuales,
+      fecha: validacion.fecha || '',
+      horaInicio: validacion.horaInicio || '',
+      horaFin: validacion.horaFin || '',
+    }))
+  }
+
+  function actualizarHoraInicioAvanzada(valor) {
+    if (!valor) {
+      setHoraInicio('')
+      setHoraFin('')
+      setErrores((actuales) => ({ ...actuales, horaInicio: '', horaFin: '' }))
+      return
+    }
+    const validacion = validarHorarioReserva(fechaSeleccionada, valor, horaFin, true)
+    if (validacion.horaInicio) {
+      setHoraInicio('')
+      setHoraFin('')
+      setErrores((actuales) => ({ ...actuales, horaInicio: validacion.horaInicio }))
+      return
+    }
+    setHoraInicio(valor)
+    if (validacion.horaFin && horaFin) setHoraFin('')
+    setErrores((actuales) => ({
+      ...actuales,
+      fecha: validacion.fecha || '',
+      horaInicio: validacion.horaInicio || '',
+      horaFin: validacion.horaFin && horaFin
+        ? 'La hora de fin anterior ya no es posterior al nuevo inicio. Selecciónala nuevamente.'
+        : validacion.horaFin || '',
+    }))
+  }
+
+  function actualizarHoraFinAvanzada(valor) {
+    if (!valor) {
+      setHoraFin('')
+      setErrores((actuales) => ({ ...actuales, horaFin: '' }))
+      return
+    }
+    const validacion = validarHorarioReserva(fechaSeleccionada, horaInicio, valor, true)
+    if (validacion.horaFin) {
+      setHoraFin('')
+      setErrores((actuales) => ({ ...actuales, horaFin: validacion.horaFin }))
+      return
+    }
+    setHoraFin(valor)
+    setErrores((actuales) => ({
+      ...actuales,
+      fecha: validacion.fecha || '',
+      horaInicio: validacion.horaInicio || '',
+      horaFin: validacion.horaFin || '',
+    }))
+  }
+
   async function manejarSubmit(evento) {
     evento.preventDefault()
     setErrorEnvio('')
@@ -199,9 +338,17 @@ export default function ReservarMaterial() {
     try {
       let respuesta
       if (aplicaExcepcion) {
+        const fechaI = esAvanzado
+          ? `${fechaSeleccionada}T${horaInicio}:00`
+          : fechaInicio
+        const fechaF = esAvanzado
+          ? `${fechaSeleccionada}T${horaFin}:00`
+          : fechaFin
         const formData = construirFormularioReservaExcepcional({
           materialId,
           justificacion,
+          fechaInicio: fechaI,
+          fechaFin: fechaF,
           documentoIdentidad,
           compromisoResponsabilidad,
         })
@@ -558,14 +705,13 @@ export default function ReservarMaterial() {
                   id="input-fecha-reserva"
                   type="date"
                   value={fechaSeleccionada}
-                  onChange={(e) => {
-                    setFechaSeleccionada(e.target.value)
-                    setErrores((actual) => ({ ...actual, fecha: '' }))
-                  }}
+                  min={obtenerFechaLocal()}
+                  aria-invalid={Boolean(errores.fecha)}
+                  onChange={(e) => actualizarFechaAvanzada(e.target.value)}
                   className="mt-1.5 w-full rounded-lg border border-borde bg-white px-3 py-2 text-sm text-texto dark:bg-superficie"
                 />
                 {errores.fecha && (
-                  <p className="mt-1 text-xs font-medium text-error">{errores.fecha}</p>
+                  <p className="mt-1 text-xs font-medium text-error" role="alert">{errores.fecha}</p>
                 )}
               </div>
               <div>
@@ -579,14 +725,15 @@ export default function ReservarMaterial() {
                   id="input-hora-inicio-reserva"
                   type="time"
                   value={horaInicio}
-                  onChange={(e) => {
-                    setHoraInicio(e.target.value)
-                    setErrores((actual) => ({ ...actual, horaInicio: '' }))
-                  }}
+                  min={obtenerMinimaHoraInicioReserva(fechaSeleccionada)}
+                  max={`${String(HORA_RESERVA_MAXIMO_FIN).padStart(2, '0')}:00`}
+                  step="60"
+                  aria-invalid={Boolean(errores.horaInicio)}
+                  onChange={(e) => actualizarHoraInicioAvanzada(e.target.value)}
                   className="mt-1.5 w-full rounded-lg border border-borde bg-white px-3 py-2 text-sm text-texto dark:bg-superficie"
                 />
                 {errores.horaInicio && (
-                  <p className="mt-1 text-xs font-medium text-error">{errores.horaInicio}</p>
+                  <p className="mt-1 text-xs font-medium text-error" role="alert">{errores.horaInicio}</p>
                 )}
               </div>
               <div>
@@ -600,18 +747,20 @@ export default function ReservarMaterial() {
                   id="input-hora-fin-reserva"
                   type="time"
                   value={horaFin}
-                  onChange={(e) => {
-                    setHoraFin(e.target.value)
-                    setErrores((actual) => ({ ...actual, horaFin: '' }))
-                  }}
+                  min={obtenerMinimaHoraFinReserva(horaInicio)}
+                  max={`${String(HORA_RESERVA_MAXIMO_FIN).padStart(2, '0')}:00`}
+                  step="60"
+                  disabled={!inicioValidoParaFin}
+                  aria-invalid={Boolean(errores.horaFin)}
+                  onChange={(e) => actualizarHoraFinAvanzada(e.target.value)}
                   className="mt-1.5 w-full rounded-lg border border-borde bg-white px-3 py-2 text-sm text-texto dark:bg-superficie"
                 />
                 {errores.horaFin && (
-                  <p className="mt-1 text-xs font-medium text-error">{errores.horaFin}</p>
+                  <p className="mt-1 text-xs font-medium text-error" role="alert">{errores.horaFin}</p>
                 )}
               </div>
               <p className="text-xs text-texto-suave col-span-3">
-                Horario de atención: lunes a viernes, de {HORA_RESERVA_MINIMO_INICIO}:00 a {HORA_RESERVA_MAXIMO_FIN}:00.
+                Elige un día laborable futuro. Para materiales avanzados, inicio y fin deben ser el mismo día, entre {HORA_RESERVA_MINIMO_INICIO}:00 y {HORA_RESERVA_MAXIMO_FIN}:00. El fin se habilita cuando el inicio sea válido.
               </p>
             </div>
           ) : (
@@ -627,14 +776,15 @@ export default function ReservarMaterial() {
                   id="input-fecha-inicio-reserva"
                   type="datetime-local"
                   value={fechaInicio}
-                  onChange={(e) => {
-                    setFechaInicio(e.target.value)
-                    setErrores((actual) => ({ ...actual, fechaInicio: '' }))
-                  }}
+                  min={obtenerMinimoInicioReserva()}
+                  max={obtenerMaximoFinReserva(fechaInicio) || undefined}
+                  step="60"
+                  aria-invalid={Boolean(errores.fechaInicio)}
+                  onChange={(e) => actualizarFechaInicioReserva(e.target.value)}
                   className="mt-1.5 w-full rounded-lg border border-borde bg-white px-3 py-2 text-sm text-texto dark:bg-superficie"
                 />
                 {errores.fechaInicio && (
-                  <p className="mt-1 text-xs font-medium text-error">{errores.fechaInicio}</p>
+                  <p className="mt-1 text-xs font-medium text-error" role="alert">{errores.fechaInicio}</p>
                 )}
               </div>
               <div>
@@ -648,18 +798,20 @@ export default function ReservarMaterial() {
                   id="input-fecha-fin-reserva"
                   type="datetime-local"
                   value={fechaFin}
-                  onChange={(e) => {
-                    setFechaFin(e.target.value)
-                    setErrores((actual) => ({ ...actual, fechaFin: '' }))
-                  }}
+                  min={obtenerMinimoFinReserva(fechaInicio) || undefined}
+                  max={obtenerMaximoFinReserva(fechaInicio) || undefined}
+                  step="60"
+                  disabled={!inicioValidoParaFin}
+                  aria-invalid={Boolean(errores.fechaFin)}
+                  onChange={(e) => actualizarFechaFinReserva(e.target.value)}
                   className="mt-1.5 w-full rounded-lg border border-borde bg-white px-3 py-2 text-sm text-texto dark:bg-superficie"
                 />
                 {errores.fechaFin && (
-                  <p className="mt-1 text-xs font-medium text-error">{errores.fechaFin}</p>
+                  <p className="mt-1 text-xs font-medium text-error" role="alert">{errores.fechaFin}</p>
                 )}
               </div>
               <p className="text-xs text-texto-suave col-span-2">
-                Horario de atención: lunes a viernes, de {HORA_RESERVA_MINIMO_INICIO}:00 a {HORA_RESERVA_MAXIMO_FIN}:00.
+                Selecciona primero el inicio. El fin solo permite una fecha posterior, hasta el viernes de esa misma semana. Ambos deben ser de lunes a viernes, entre {HORA_RESERVA_MINIMO_INICIO}:00 y {HORA_RESERVA_MAXIMO_FIN}:00. Si cambias el inicio y el fin deja de cumplir estas reglas, tendrás que elegirlo otra vez.
               </p>
             </div>
           )}

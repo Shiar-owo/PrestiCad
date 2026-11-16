@@ -1,7 +1,22 @@
+import uuid
+from pathlib import Path
+
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.utils import timezone
 
 from apps.usuarios.constants import ESTADOS_USUARIO, ROLES, TIERS, TIPOS_USUARIO
+from apps.usuarios.validators import validar_foto_usuario
+
+
+def ruta_foto_perfil(instance, filename):
+    """Destino de la foto de perfil: `usuarios/perfiles/<año>/<token>.<ext>`.
+
+    El token aleatorio evita colisiones de nombres de archivo y mantiene
+    consistencia con el almacenamiento de imágenes en inventario.
+    """
+    extension = Path(filename).suffix.lower() or ".jpg"
+    return f"usuarios/perfiles/{timezone.now():%Y}/{uuid.uuid4().hex[:12]}{extension}"
 
 
 def rol_prestatario_por_defecto():
@@ -46,10 +61,35 @@ class Usuario(models.Model):
     """
 
     email = models.EmailField(unique=True, verbose_name="Email (contacto)")
+    email_secundario = models.EmailField(
+        blank=True,
+        default="",
+        verbose_name="Email secundario o de recuperación",
+    )
     nombre = models.CharField(max_length=100)
     apellido = models.CharField(max_length=100)
     dni = models.CharField(max_length=8, unique=True)
-    telefono = models.CharField(max_length=20, blank=True, default="")
+    telefono = models.CharField(max_length=20, blank=True, default="", verbose_name="Teléfono principal")
+    telefono_secundario = models.CharField(
+        max_length=20,
+        blank=True,
+        default="",
+        verbose_name="Teléfono secundario",
+    )
+    telefono_terciario = models.CharField(
+        max_length=20,
+        blank=True,
+        default="",
+        verbose_name="Teléfono adicional",
+    )
+    foto_perfil = models.ImageField(
+        upload_to=ruta_foto_perfil,
+        blank=True,
+        null=True,
+        validators=[validar_foto_usuario],
+        verbose_name="Foto de perfil",
+        help_text="Imagen de perfil: JPG, PNG o WEBP, hasta 4 MB.",
+    )
     tipo = models.CharField(max_length=20, choices=TIPOS_USUARIO)
     facultad = models.CharField(max_length=100, verbose_name="Facultad")
     departamento_carrera = models.CharField(

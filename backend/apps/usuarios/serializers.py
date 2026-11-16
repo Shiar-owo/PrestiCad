@@ -206,6 +206,7 @@ class ActualizarPerfilSerializer(RechazarCamposNoPermitidosMixin, serializers.Se
         allow_null=True,
         validators=[validar_foto_usuario],
     )
+    eliminar_foto_perfil = serializers.BooleanField(required=False)
 
     def validate_telefono(self, value):
         if not value or not str(value).strip():
@@ -224,14 +225,27 @@ class ActualizarPerfilSerializer(RechazarCamposNoPermitidosMixin, serializers.Se
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
-        t1 = attrs.get("telefono")
-        t2 = attrs.get("telefono_secundario")
-        t3 = attrs.get("telefono_terciario")
+        usuario = self.context.get("usuario")
+
+        def _resolver_telefono(campo):
+            if campo in attrs:
+                return attrs.get(campo) or ""
+            if usuario is not None:
+                actual = (getattr(usuario, campo, "") or "").strip()
+                if actual:
+                    try:
+                        return validar_y_normalizar_telefono(actual, default_region="PE", obligatorio=False)
+                    except Exception:  # noqa: BLE001
+                        return actual
+            return ""
+
+        t1 = _resolver_telefono("telefono")
+        t2 = _resolver_telefono("telefono_secundario")
+        t3 = _resolver_telefono("telefono_terciario")
         telefonos_presentes = [t for t in [t1, t2, t3] if t and str(t).strip()]
         if len(telefonos_presentes) != len(set(telefonos_presentes)):
             raise serializers.ValidationError({"telefono": "No puedes registrar números de celular repetidos."})
 
-        usuario = self.context.get("usuario")
         email_sec = attrs.get("email_secundario")
         if usuario and email_sec and email_sec.strip().lower() == usuario.email.strip().lower():
             raise serializers.ValidationError(

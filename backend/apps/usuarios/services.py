@@ -184,6 +184,17 @@ def obtener_perfil(usuario):
     }
 
 
+_SIN_CAMBIO = object()
+
+
+def _eliminar_archivo_foto_perfil(storage, nombre):
+    """Borra del storage el archivo de foto de perfil anterior o eliminado."""
+    try:
+        storage.delete(nombre)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def actualizar_perfil(
     usuario,
     *,
@@ -191,9 +202,12 @@ def actualizar_perfil(
     telefono_secundario=None,
     telefono_terciario=None,
     email_secundario=None,
-    foto_perfil=None,
+    foto_perfil=_SIN_CAMBIO,
+    eliminar_foto_perfil=False,
 ):
     campos_actualizados = ["updated_at"]
+    foto_anterior = usuario.foto_perfil.name if usuario.foto_perfil else None
+    storage_foto = Usuario._meta.get_field("foto_perfil").storage
 
     if telefono is not None:
         telefono_limpio = telefono.strip()
@@ -232,11 +246,19 @@ def actualizar_perfil(
         usuario.email_secundario = email_secundario.strip().lower()
         campos_actualizados.append("email_secundario")
 
-    if foto_perfil is not None:
+    if eliminar_foto_perfil or foto_perfil is None:
+        usuario.foto_perfil = None
+        campos_actualizados.append("foto_perfil")
+    elif foto_perfil is not _SIN_CAMBIO:
         usuario.foto_perfil = foto_perfil
         campos_actualizados.append("foto_perfil")
 
     usuario.save(update_fields=campos_actualizados)
+
+    foto_nueva = usuario.foto_perfil.name if usuario.foto_perfil else None
+    if foto_anterior and foto_anterior != foto_nueva:
+        transaction.on_commit(lambda: _eliminar_archivo_foto_perfil(storage_foto, foto_anterior))
+
     return usuario
 
 

@@ -9,7 +9,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
-from apps.usuarios.models import Credencial, Usuario
+from apps.usuarios.models import Credencial, Rol, Usuario
 from apps.usuarios.middleware import (
     ExpiracionSesionInactividadMiddleware,
     SesionAutenticadaMiddleware,
@@ -451,6 +451,67 @@ class AuthEndpointsAPITestCase(APITestCase):
         errores = respuesta.json()
         self.assertIn("email", errores)
         self.assertIn("password", errores)
+
+
+class CambioRolUsuarioAPITestCase(APITestCase):
+    """La API impide cambiar el rol propio y permite gestionar otros usuarios."""
+
+    URL = "/api/usuarios/{}/rol/"
+
+    def setUp(self):
+        self.administrador = registrar_usuario(
+            nombre="Ada",
+            apellido="Admin",
+            email="ada.admin@unsa.edu.pe",
+            dni="70000001",
+            tipo="administrativo",
+            facultad="Administración",
+            password="ClaveSegura123",
+        )
+        self.administrador.rol = Rol.objects.get_or_create(nombre="administrador")[0]
+        self.administrador.save(update_fields=["rol"])
+
+        self.otro_usuario = registrar_usuario(
+            nombre="Luis",
+            apellido="Usuario",
+            email="luis.usuario@unsa.edu.pe",
+            dni="70000002",
+            tipo="alumno",
+            facultad="Ingeniería",
+            password="ClaveSegura123",
+        )
+        Rol.objects.get_or_create(nombre="gestor")
+
+        respuesta = self.client.post(
+            "/api/auth/login/",
+            {"email": "ada.admin@unsa.edu.pe", "password": "ClaveSegura123"},
+            format="json",
+        )
+        self.assertEqual(respuesta.status_code, status.HTTP_200_OK)
+
+    def test_no_permite_cambiar_el_rol_propio(self):
+        respuesta = self.client.put(
+            self.URL.format(self.administrador.pk),
+            {"rol": "gestor"},
+            format="json",
+        )
+        self.administrador.refresh_from_db()
+
+        self.assertEqual(respuesta.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(respuesta.json()["detail"], "No puedes cambiar tu propio rol.")
+        self.assertEqual(self.administrador.rol.nombre, "administrador")
+
+    def test_permite_cambiar_el_rol_de_otro_usuario(self):
+        respuesta = self.client.put(
+            self.URL.format(self.otro_usuario.pk),
+            {"rol": "gestor"},
+            format="json",
+        )
+        self.otro_usuario.refresh_from_db()
+
+        self.assertEqual(respuesta.status_code, status.HTTP_200_OK)
+        self.assertEqual(respuesta.json()["rol"], "gestor")
+        self.assertEqual(self.otro_usuario.rol.nombre, "gestor")
 
 
 class AutenticacionServiceTestCase(TestCase):

@@ -171,7 +171,9 @@ def autopromover_material(material_id, *, ahora=None):
         reserva.instancia = instancia
         reserva.estado = "reservada"
         reserva.fecha_confirmacion = ahora
-        reserva.fecha_limite_recojo = ahora + timedelta(hours=HORAS_RECOJO)
+        # Mismo criterio que `crear_reserva`: el plazo de recojo es el fin del
+        # rango reservado; las 24 h solo aplican a datos antiguos sin rango.
+        reserva.fecha_limite_recojo = reserva.fecha_fin or (ahora + timedelta(hours=HORAS_RECOJO))
         reserva.save(
             update_fields=[
                 "instancia",
@@ -586,13 +588,12 @@ def expirar_reservas(*, ahora=None):
         reserva.save(update_fields=["estado", "updated_at"])
         solicitudes_expiradas += 1
 
-    # Incluir también cualquier material que tenga solicitudes normales en espera
-    # y ejemplares disponibles (respaldo periódico RN11 / HU08).
+    # Incluir también cualquier material que tenga solicitudes en espera (normales
+    # o excepciones aprobadas) y ejemplares disponibles (respaldo periódico RN11 / HU08).
     materiales_con_espera = set(
-        Reserva.objects.filter(
-            estado="en_espera",
-            es_excepcion=False,
-        ).values_list("material_id", flat=True)
+        Reserva.objects.filter(estado="en_espera")
+        .filter(Q(es_excepcion=False) | Q(excepcion_aprobada=True))
+        .values_list("material_id", flat=True)
     )
     materiales_para_promover = materiales_afectados | materiales_con_espera
 
@@ -771,7 +772,8 @@ def consultar_cola_general():
     en_espera_normales = list(
         _anotar_orden_cola(
             Reserva.objects.select_related("usuario", "material", "instancia")
-            .filter(estado="en_espera", es_excepcion=False)
+            .filter(estado="en_espera")
+            .filter(Q(es_excepcion=False) | Q(excepcion_aprobada=True))
         )
     )
     for indice, solicitud in enumerate(en_espera_normales, start=1):
@@ -779,7 +781,11 @@ def consultar_cola_general():
 
     en_espera_excepciones = list(
         Reserva.objects.select_related("usuario", "material", "instancia")
-        .filter(estado="en_espera", es_excepcion=True)
+        .filter(
+            estado="en_espera",
+            es_excepcion=True,
+            excepcion_aprobada=False,
+        )
         .order_by("fecha_solicitud", "id")
     )
     for solicitud in en_espera_excepciones:

@@ -34,6 +34,7 @@ from apps.reservas.services import (
     aprobar_excepcion,
     autopromover_material,
     cancelar_reserva,
+    consultar_cola_general,
     consultar_cola_material,
     consultar_mis_reservas,
     consultar_reservas_confirmadas,
@@ -585,12 +586,16 @@ class ReservasServiceTestCase(TestCase):
             self.assertTrue(aprobada.excepcion_aprobada)
             self.assertIsNone(aprobada.instancia_id)
 
-            # Aparece en la cola activa con posición 1
+            # Aparece en la cola activa con posición 1 (tanto por material como general)
             cola = consultar_cola_material(material.id)
             self.assertEqual(len(cola["en_espera_normales"]), 1)
             self.assertEqual(cola["en_espera_normales"][0].id, aprobada.id)
             self.assertEqual(cola["en_espera_normales"][0].posicion_cola, 1)
             self.assertEqual(len(cola["en_espera_excepciones"]), 0)
+
+            cola_general = consultar_cola_general()
+            self.assertIn(aprobada.id, [r.id for r in cola_general["en_espera_normales"]])
+            self.assertNotIn(aprobada.id, [r.id for r in cola_general["en_espera_excepciones"]])
 
             # Cuando se libera un ejemplar (pasa de mantenimiento a disponible), se autopromueve
             instancia = material.instancias.first()
@@ -603,6 +608,59 @@ class ReservasServiceTestCase(TestCase):
             aprobada.refresh_from_db()
             self.assertEqual(aprobada.estado, "reservada")
             self.assertIsNotNone(aprobada.instancia_id)
+
+    def test_mismo_prestatario_reserva_su_unico_ejemplar_prestado_y_lo_convierte_tras_devolverlo(self):
+        material = crear_material(codigo_material="EQ-RES-MISMO", stock=1)
+        prestamo = registrar_prestamo(
+            dni_prestatario=self.prestatario_estandar.dni,
+            material_id=material.id,
+            tiempo_prestamo_dias=1,
+            checklist_inicial=CHECKLIST,
+            registrado_por=self.gestor,
+        )
+        inicio, fin = _rango_reserva_futuro()
+        reserva = crear_reserva(
+            usuario=self.prestatario_estandar,
+            material_id=material.id,
+            justificacion="Quiero seguir usándolo",
+            fecha_inicio=inicio,
+            fecha_fin=fin,
+        )
+        self.assertEqual(reserva.estado, "en_espera")
+
+        with self.captureOnCommitCallbacks(execute=True):
+            registrar_devolucion(
+                prestamo_id=prestamo.id,
+                checklist_devolucion=[
+                    {"elemento": "Carcasa", "estado": "sin_cambios", "observacion": ""},
+                    {"elemento": "Cable", "estado": "sin_cambios", "observacion": ""},
+                ],
+                realizado_por=self.gestor,
+            )
+
+        reserva.refresh_from_db()
+        self.assertEqual(reserva.estado, "reservada")
+        self.assertIsNotNone(reserva.instancia_id)
+        self.assertEqual(reserva.fecha_limite_recojo, reserva.fecha_fin)
+
+        confirmadas = list(consultar_reservas_confirmadas(self.prestatario_estandar.dni))
+        self.assertEqual([r.id for r in confirmadas], [reserva.id])
+
+        with patch(
+            "apps.prestamos.services.timezone.now",
+            return_value=inicio + timedelta(minutes=5),
+        ):
+            nuevo = registrar_prestamo(
+                dni_prestatario=self.prestatario_estandar.dni,
+                material_id=material.id,
+                reserva_id=reserva.id,
+                tiempo_prestamo_minutos=60,
+                checklist_inicial=CHECKLIST,
+                registrado_por=self.gestor,
+            )
+        reserva.refresh_from_db()
+        self.assertEqual(reserva.estado, "convertida_en_prestamo")
+        self.assertEqual(nuevo.instancia_id, reserva.instancia_id)
 
 
 class ReservasAPITestCase(APITestCase):

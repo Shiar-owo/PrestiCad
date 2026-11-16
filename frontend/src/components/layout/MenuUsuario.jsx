@@ -49,9 +49,17 @@ function MenuUsuario() {
         onClick={() => setAbierto((actual) => !actual)}
         className="flex items-center gap-2 rounded-lg border border-borde bg-superficie px-2 py-1.5 text-sm font-semibold text-texto transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-acento-600 hover:bg-superficie-alta"
       >
-        <span className="flex size-7 items-center justify-center rounded-full bg-marca-600 text-xs font-bold text-white">
-          {iniciales}
-        </span>
+        {usuario.foto_perfil ? (
+          <img
+            src={usuario.foto_perfil}
+            alt={`Foto de ${usuario.nombre}`}
+            className="size-7 rounded-full object-cover ring-1 ring-borde"
+          />
+        ) : (
+          <span className="flex size-7 items-center justify-center rounded-full bg-marca-600 text-xs font-bold text-white">
+            {iniciales}
+          </span>
+        )}
         <span className="hidden sm:inline">{usuario.nombre}</span>
         <ChevronDown
           aria-hidden="true"

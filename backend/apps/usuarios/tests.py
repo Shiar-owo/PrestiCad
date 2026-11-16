@@ -732,6 +732,8 @@ class PerfilUsuarioAPITestCase(APITestCase):
         self.assertEqual(respuesta.status_code, status.HTTP_200_OK)
         self.assertTrue(bool(self.usuario.foto_perfil))
         self.assertIn("perfil", self.usuario.foto_perfil.name)
+        self.assertTrue(respuesta.data["foto_perfil"].startswith("http"))
+        self.assertIn("perfil", respuesta.data["foto_perfil"])
 
 
 class ExpiracionSesionInactividadMiddlewareTestCase(TestCase):

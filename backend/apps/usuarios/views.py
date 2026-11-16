@@ -7,6 +7,7 @@ from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
 from django.views.decorators.http import require_GET
 from rest_framework import status
 from rest_framework.generics import ListCreateAPIView, RetrieveUpdateAPIView
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -50,7 +51,8 @@ class SesionActualView(APIView):
             "estado": usuario.estado,
             "reputacion_tier": usuario.reputacion_tier,
             "reputacion_puntaje": usuario.reputacion_puntaje,
-        }).data)
+            "foto_perfil": usuario.foto_perfil,
+        }, context={"request": request}).data)
 
 
 @method_decorator(ensure_csrf_cookie, name="dispatch")
@@ -84,7 +86,8 @@ class AuthLoginView(APIView):
                 "estado": usuario.estado,
                 "reputacion_tier": usuario.reputacion_tier,
                 "reputacion_puntaje": usuario.reputacion_puntaje,
-            }).data,
+                "foto_perfil": usuario.foto_perfil,
+            }, context={"request": request}).data,
         }, status=status.HTTP_200_OK)
 
 
@@ -176,6 +179,7 @@ class UsuarioEliminarView(APIView):
 class PerfilUsuarioView(APIView):
     authentication_classes = []
     permission_classes = []
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def _usuario_sesion(self, request):
         return getattr(request, "usuario_autenticado", None)
@@ -184,13 +188,19 @@ class PerfilUsuarioView(APIView):
         usuario = self._usuario_sesion(request)
         if usuario is None:
             return Response({"detail": "Debes iniciar sesión para consultar tu perfil."}, status=401)
-        return Response(PerfilUsuarioSerializer(services.obtener_perfil(usuario)).data)
+        return Response(PerfilUsuarioSerializer(services.obtener_perfil(usuario), context={"request": request}).data)
 
     def put(self, request, *args, **kwargs):
         usuario = self._usuario_sesion(request)
         if usuario is None:
             return Response({"detail": "Debes iniciar sesión para actualizar tu perfil."}, status=401)
-        serializer = ActualizarPerfilSerializer(data=request.data)
+        serializer = ActualizarPerfilSerializer(data=request.data, context={"usuario": usuario, "request": request})
         serializer.is_valid(raise_exception=True)
-        actualizado = services.actualizar_perfil(usuario, **serializer.validated_data)
-        return Response(PerfilUsuarioSerializer(services.obtener_perfil(actualizado)).data)
+        try:
+            actualizado = services.actualizar_perfil(usuario, **serializer.validated_data)
+        except services.UsuariosError as error:
+            return Response({error.campo: [error.mensaje]}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(PerfilUsuarioSerializer(services.obtener_perfil(actualizado), context={"request": request}).data)
+
+    def patch(self, request, *args, **kwargs):
+        return self.put(request, *args, **kwargs)

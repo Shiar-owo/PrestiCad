@@ -1,6 +1,9 @@
 """Tests del módulo usuarios."""
 from datetime import timedelta
+from io import BytesIO
+from PIL import Image
 
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.http import HttpResponse
 from django.test import RequestFactory
@@ -491,20 +494,33 @@ class PerfilUsuarioServiceTestCase(TestCase):
                 "nombre": "Ana",
                 "apellido": "García",
                 "email": "ana.garcia@unsa.edu.pe",
+                "email_secundario": "",
                 "dni": "12345678",
                 "telefono": "987654321",
+                "telefono_secundario": "",
+                "telefono_terciario": "",
                 "tipo": "alumno",
+                "facultad": "Ciencias de la Computación",
+                "departamento_carrera": "",
                 "reputacion_puntaje": 225,
                 "reputacion_tier": "avanzado",
+                "foto_perfil": None,
             },
         )
 
-    def test_actualizar_perfil_modifica_solo_nombre_y_telefono(self):
-        actualizar_perfil(self.usuario, nombre=" Ana María ", telefono=" 912345678 ")
+    def test_actualizar_perfil_modifica_contactos_y_mantiene_nombre_inmutable(self):
+        actualizar_perfil(
+            self.usuario,
+            telefono=" 912345678 ",
+            telefono_secundario=" 987111222 ",
+            email_secundario="recuperacion@gmail.com",
+        )
         self.usuario.refresh_from_db()
 
-        self.assertEqual(self.usuario.nombre, "Ana María")
+        self.assertEqual(self.usuario.nombre, "Ana")
         self.assertEqual(self.usuario.telefono, "+51912345678")
+        self.assertEqual(self.usuario.telefono_secundario, "+51987111222")
+        self.assertEqual(self.usuario.email_secundario, "recuperacion@gmail.com")
         self.assertEqual(self.usuario.apellido, "García")
         self.assertEqual(self.usuario.email, "ana.garcia@unsa.edu.pe")
         self.assertEqual(self.usuario.dni, "12345678")
@@ -513,11 +529,12 @@ class PerfilUsuarioServiceTestCase(TestCase):
         self.assertEqual(self.usuario.reputacion_tier, "avanzado")
 
     def test_actualizar_perfil_sin_telefono_conserva_el_actual(self):
-        actualizar_perfil(self.usuario, nombre="Ana Sofía")
+        actualizar_perfil(self.usuario, email_secundario="secundario@gmail.com")
         self.usuario.refresh_from_db()
 
-        self.assertEqual(self.usuario.nombre, "Ana Sofía")
+        self.assertEqual(self.usuario.nombre, "Ana")
         self.assertEqual(self.usuario.telefono, "987654321")
+        self.assertEqual(self.usuario.email_secundario, "secundario@gmail.com")
 
     def test_serializer_de_perfil_expone_solo_datos_del_perfil(self):
         serializer = PerfilUsuarioSerializer(instance=obtener_perfil(self.usuario))
@@ -528,31 +545,60 @@ class PerfilUsuarioServiceTestCase(TestCase):
         self.assertNotIn("id", serializer.data)
         self.assertNotIn("password", serializer.data)
 
-    def test_serializer_de_actualizacion_acepta_nombre_y_telefono(self):
+    def test_serializer_de_actualizacion_acepta_contactos_validos(self):
         serializer = ActualizarPerfilSerializer(
-            data={"nombre": "Ana María", "telefono": "912345678"}
+            data={
+                "telefono": "912345678",
+                "telefono_secundario": "987111222",
+                "email_secundario": "recupera@gmail.com",
+            },
+            context={"usuario": self.usuario},
         )
 
         self.assertTrue(serializer.is_valid(), serializer.errors)
         self.assertEqual(
             serializer.validated_data,
-            {"nombre": "Ana María", "telefono": "+51912345678"},
+            {
+                "telefono": "+51912345678",
+                "telefono_secundario": "+51987111222",
+                "email_secundario": "recupera@gmail.com",
+            },
         )
 
-    def test_serializer_de_actualizacion_requiere_nombre(self):
-        serializer = ActualizarPerfilSerializer(data={"telefono": ""})
+    def test_serializer_de_actualizacion_rechaza_nombre_como_campo_no_permitido(self):
+        serializer = ActualizarPerfilSerializer(
+            data={"nombre": "Ana María", "telefono": "912345678"},
+            context={"usuario": self.usuario},
+        )
 
         self.assertFalse(serializer.is_valid())
         self.assertIn("nombre", serializer.errors)
 
     def test_serializer_de_actualizacion_rechaza_campos_no_editables(self):
         serializer = ActualizarPerfilSerializer(
-            data={"nombre": "Ana", "email": "otra@unsa.edu.pe", "dni": "87654321"}
+            data={"email": "otra@unsa.edu.pe", "dni": "87654321"},
+            context={"usuario": self.usuario},
         )
 
         self.assertFalse(serializer.is_valid())
         self.assertIn("email", serializer.errors)
         self.assertIn("dni", serializer.errors)
+
+    def test_serializer_de_actualizacion_rechaza_telefonos_duplicados(self):
+        serializer = ActualizarPerfilSerializer(
+            data={"telefono": "912345678", "telefono_secundario": "912345678"},
+            context={"usuario": self.usuario},
+        )
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("telefono", serializer.errors)
+
+    def test_serializer_rechaza_email_secundario_igual_al_principal(self):
+        serializer = ActualizarPerfilSerializer(
+            data={"email_secundario": self.usuario.email},
+            context={"usuario": self.usuario},
+        )
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("email_secundario", serializer.errors)
 
 
 class PerfilUsuarioAPITestCase(APITestCase):
@@ -605,32 +651,39 @@ class PerfilUsuarioAPITestCase(APITestCase):
 
         respuesta = self.client.put(
             self.URL,
-            {"nombre": "Ana María", "telefono": "912345678"},
+            {"telefono": "912345678"},
             format="json",
         )
 
         self.assertEqual(respuesta.status_code, status.HTTP_403_FORBIDDEN)
 
-    def test_put_autenticado_actualiza_solo_nombre_y_telefono(self):
+    def test_put_autenticado_actualiza_contactos_y_rechaza_nombre(self):
         self._iniciar_sesion()
         token_csrf = self._obtener_token_csrf()
 
         respuesta = self.client.put(
             self.URL,
-            {"nombre": "Ana María", "telefono": "912345678"},
+            {
+                "telefono": "912345678",
+                "telefono_secundario": "987111222",
+                "email_secundario": "recupera.contacto@gmail.com",
+            },
             format="json",
             HTTP_X_CSRFTOKEN=token_csrf,
         )
         self.usuario.refresh_from_db()
 
         self.assertEqual(respuesta.status_code, status.HTTP_200_OK)
-        self.assertEqual(respuesta.json()["nombre"], "Ana María")
+        self.assertEqual(respuesta.json()["nombre"], "Ana")
         self.assertEqual(respuesta.json()["telefono"], "+51912345678")
+        self.assertEqual(respuesta.json()["telefono_secundario"], "+51987111222")
+        self.assertEqual(respuesta.json()["email_secundario"], "recupera.contacto@gmail.com")
+        self.assertEqual(self.usuario.nombre, "Ana")
         self.assertEqual(self.usuario.apellido, "García")
         self.assertEqual(self.usuario.email, "ana.garcia@unsa.edu.pe")
         self.assertEqual(self.usuario.dni, "12345678")
 
-    def test_put_rechaza_campos_protegidos_y_no_modifica_el_usuario(self):
+    def test_put_rechaza_campos_protegidos_incluyendo_nombre(self):
         self._iniciar_sesion()
         token_csrf = self._obtener_token_csrf()
 
@@ -643,6 +696,7 @@ class PerfilUsuarioAPITestCase(APITestCase):
         self.usuario.refresh_from_db()
 
         self.assertEqual(respuesta.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("nombre", respuesta.json())
         self.assertIn("email", respuesta.json())
         self.assertEqual(self.usuario.nombre, "Ana")
         self.assertEqual(self.usuario.email, "ana.garcia@unsa.edu.pe")
@@ -652,12 +706,32 @@ class PerfilUsuarioAPITestCase(APITestCase):
 
         respuesta = self.client.put(
             self.URL,
-            {"nombre": "Ana María"},
+            {"telefono": "912345678"},
             format="json",
             HTTP_X_CSRFTOKEN=token_csrf,
         )
 
         self.assertEqual(respuesta.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_put_autenticado_permite_actualizar_foto_perfil(self):
+        self._iniciar_sesion()
+        token_csrf = self._obtener_token_csrf()
+
+        buffer = BytesIO()
+        Image.new("RGB", (20, 20), (50, 100, 150)).save(buffer, format="JPEG")
+        foto = SimpleUploadedFile("perfil.jpg", buffer.getvalue(), content_type="image/jpeg")
+
+        respuesta = self.client.put(
+            self.URL,
+            {"foto_perfil": foto},
+            format="multipart",
+            HTTP_X_CSRFTOKEN=token_csrf,
+        )
+        self.usuario.refresh_from_db()
+
+        self.assertEqual(respuesta.status_code, status.HTTP_200_OK)
+        self.assertTrue(bool(self.usuario.foto_perfil))
+        self.assertIn("perfil", self.usuario.foto_perfil.name)
 
 
 class ExpiracionSesionInactividadMiddlewareTestCase(TestCase):

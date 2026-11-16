@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.core.validators import RegexValidator
 from rest_framework import serializers
 
@@ -136,6 +137,26 @@ class UsuarioRegistroSerializer(RechazarCamposNoPermitidosMixin, serializers.Mod
         }
 
 
+class FotoPerfilUsuario(serializers.ImageField):
+    """Devuelve la foto del usuario como una URL accesible para el navegador.
+
+    Al igual que en inventario, en desarrollo antepone `MEDIA_URL_PUBLICA` para
+    evitar el host interno del contenedor (`backend:8000`) generado por DRF
+    cuando hay contexto de request, permitiendo que el navegador del usuario
+    pueda cargar y persistir la imagen tras recargar la página.
+    """
+
+    def to_representation(self, value):
+        if not value:
+            return None
+
+        url = value.url
+        if url.startswith(("http://", "https://")):
+            return url
+
+        return f"{settings.MEDIA_URL_PUBLICA.rstrip('/')}/{url.lstrip('/')}"
+
+
 class PerfilUsuarioSerializer(serializers.Serializer):
     """Contrato de salida del perfil con los datos institucionales y de contacto."""
 
@@ -152,7 +173,7 @@ class PerfilUsuarioSerializer(serializers.Serializer):
     departamento_carrera = serializers.CharField(allow_blank=True, required=False, default="")
     reputacion_puntaje = serializers.IntegerField()
     reputacion_tier = serializers.CharField()
-    foto_perfil = serializers.ImageField(allow_null=True, required=False)
+    foto_perfil = FotoPerfilUsuario(allow_null=True, required=False)
 
 
 class PerfilElegibilidadPrestamoSerializer(serializers.ModelSerializer):
@@ -259,4 +280,4 @@ class SesionUsuarioSerializer(serializers.Serializer):
     estado = serializers.ChoiceField(choices=ESTADOS_USUARIO)
     reputacion_tier = serializers.ChoiceField(choices=TIERS)
     reputacion_puntaje = serializers.IntegerField(required=False, default=0)
-    foto_perfil = serializers.ImageField(read_only=True, required=False, allow_null=True)
+    foto_perfil = FotoPerfilUsuario(read_only=True, required=False, allow_null=True)

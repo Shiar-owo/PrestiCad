@@ -6,6 +6,7 @@ export function construirSolicitudPrestamo({
   instanciaId,
   reservaId = '',
   minutos,
+  fechaFin,
   dias,
   checklist,
   fotosChecklist = checklist.map((item) => item.foto),
@@ -20,6 +21,7 @@ export function construirSolicitudPrestamo({
   if (reservaId) {
     solicitud.append('reserva_id', String(reservaId).trim())
   }
+  if (fechaFin) solicitud.append('fecha_fin', fechaFin)
   if (minutos !== undefined && minutos !== null && minutos !== '') {
     solicitud.append('tiempo_prestamo_minutos', String(Number(minutos)))
   } else {

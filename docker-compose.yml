@@ -27,6 +27,17 @@ services:
       db:
         condition: service_healthy
 
+  scheduler:
+    build: ./backend
+    env_file:
+      - .env
+    volumes:
+      - ./backend:/app
+    command: ["sh", "-c", "while true; do python manage.py procesar_reservas; sleep 300; done"]
+    depends_on:
+      db:
+        condition: service_healthy
+
   frontend:
     build:
       context: ./frontend

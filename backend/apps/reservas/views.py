@@ -25,6 +25,7 @@ from apps.reservas.services import (
     consultar_cola_material,
     consultar_mis_reservas,
     consultar_reservas_confirmadas,
+    obtener_reserva_confirmada_para_conversion,
     crear_reserva,
     crear_reserva_excepcional,
     obtener_documento_garantia_reserva,
@@ -186,6 +187,21 @@ class ReservasConfirmadasView(APIView):
         dni = request.query_params.get("dni", "")
         reservas = consultar_reservas_confirmadas(dni=dni)
         return Response(ReservaDetalleSerializer(reservas, many=True).data)
+
+
+class ReservaConfirmadaConversionView(APIView):
+    """Obtiene una reserva vigente para precargar y convertir en préstamo."""
+
+    permission_classes = [EsGestorDeAlmacen]
+
+    def get(self, request, id):
+        reserva = obtener_reserva_confirmada_para_conversion(id)
+        if reserva is None:
+            return Response(
+                {"detail": "La reserva ya no está vigente o no tiene un ejemplar asignado para entregar."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(ReservaDetalleSerializer(reserva).data)
 
 
 class CancelarReservaView(APIView):

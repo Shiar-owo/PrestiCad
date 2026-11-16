@@ -186,10 +186,16 @@ def autopromover_material(material_id, *, ahora=None):
     return promovidas
 
 
-def _validar_horario_reserva(fecha_inicio, fecha_fin, *, es_avanzado=False):
+def _validar_horario_reserva(fecha_inicio, fecha_fin, *, es_avanzado=False, ahora=None):
     """Valida que la reserva esté dentro del horario de atención y días laborables.
     Las reservas no pueden extenderse fuera de la misma semana (no pueden cruzar fin de semana).
     Para materiales de Tier avanzado, inicio y fin deben ser el mismo día."""
+    ahora = ahora or timezone.now()
+    if fecha_inicio is None or fecha_fin is None:
+        campo = "fecha_inicio" if fecha_inicio is None else "fecha_fin"
+        raise ReservaError(campo, "Debe indicar la fecha y hora de inicio y fin de la reserva.")
+    if fecha_inicio <= ahora:
+        raise ReservaError("fecha_inicio", "La fecha de inicio debe ser posterior al momento actual.")
     for etiqueta, valor in (("fecha_inicio", fecha_inicio), ("fecha_fin", fecha_fin)):
         if valor.weekday() not in DIAS_LABORABLES:
             raise ReservaError(
@@ -263,8 +269,7 @@ def crear_reserva(
                     "Para materiales de Tier avanzado, el inicio y el fin deben ser el mismo día.",
                 )
 
-    if fecha_inicio is not None or fecha_fin is not None:
-        _validar_horario_reserva(fecha_inicio, fecha_fin, es_avanzado=es_avanzado)
+    _validar_horario_reserva(fecha_inicio, fecha_fin, es_avanzado=es_avanzado, ahora=ahora)
 
     usuario_bloqueado = (
         Usuario.objects.select_for_update().select_related("rol").get(pk=usuario.pk)
@@ -399,6 +404,8 @@ def crear_reserva_excepcional(
     justificacion,
     documento_identidad,
     compromiso_responsabilidad,
+    fecha_inicio=None,
+    fecha_fin=None,
     ahora=None,
 ):
     """Crea una solicitud excepcional para un prestatario Restringido o Estándar (HU06, HU13)."""
@@ -412,6 +419,12 @@ def crear_reserva_excepcional(
     )
     _validar_usuario_prestatario(usuario_bloqueado)
     material = _obtener_material_bloqueado(material_id)
+    _validar_horario_reserva(
+        fecha_inicio,
+        fecha_fin,
+        es_avanzado=material.tier_minimo_requerido == "avanzado",
+        ahora=ahora,
+    )
 
     tiers_permitidos = TIERS_ACCESIBLES.get(usuario_bloqueado.reputacion_tier, ())
     aplica_excepcion = (
@@ -435,6 +448,8 @@ def crear_reserva_excepcional(
         estado="en_espera",
         es_excepcion=True,
         fecha_solicitud=ahora,
+        fecha_inicio=fecha_inicio,
+        fecha_fin=fecha_fin,
         fecha_limite_espera=ahora + timedelta(hours=HORAS_ESPERA),
     )
 
@@ -734,9 +749,7 @@ def consultar_cola_material(material_id):
         solicitud.posicion_cola = None
 
     reservas_confirmadas = list(
-        Reserva.objects.select_related("usuario", "material", "instancia")
-        .filter(material_id=material.id, estado="reservada")
-        .order_by("fecha_limite_recojo", "fecha_confirmacion", "id")
+        _queryset_reservas_confirmadas_vigentes().filter(material_id=material.id)
     )
     instancias_disponibles = list(
         InstanciaMaterial.objects.filter(material_id=material.id, estado="disponible")
@@ -772,11 +785,7 @@ def consultar_cola_general():
     for solicitud in en_espera_excepciones:
         solicitud.posicion_cola = None
 
-    reservas_confirmadas = list(
-        Reserva.objects.select_related("usuario", "material", "instancia")
-        .filter(estado="reservada")
-        .order_by("fecha_limite_recojo", "fecha_confirmacion", "id")
-    )
+    reservas_confirmadas = list(_queryset_reservas_confirmadas_vigentes())
 
     return {
         "material": None,
@@ -788,18 +797,29 @@ def consultar_cola_general():
     }
 
 
-def consultar_reservas_confirmadas(dni=None, *, ahora=None):
-    """Lista las reservas confirmadas vigentes para convertirlas en préstamo, filtrando opcionalmente por DNI."""
+def _queryset_reservas_confirmadas_vigentes(ahora=None):
     ahora = ahora or timezone.now()
-    queryset = (
+    limite_conversion = ahora - timedelta(minutes=TOLERANCIA_RECOJO_MINUTOS)
+    return (
         Reserva.objects.select_related("usuario", "material", "instancia")
         .filter(
             estado="reservada",
             instancia__isnull=False,
+            instancia__estado="reservado",
+            fecha_limite_recojo__gte=limite_conversion,
         )
-        .exclude(fecha_limite_recojo__lt=ahora)
         .order_by("fecha_limite_recojo", "fecha_confirmacion", "id")
     )
+
+
+def obtener_reserva_confirmada_para_conversion(reserva_id, *, ahora=None):
+    """Obtiene una reserva que conserva un ejemplar reservado y aún puede convertirse."""
+    return _queryset_reservas_confirmadas_vigentes(ahora=ahora).filter(pk=reserva_id).first()
+
+
+def consultar_reservas_confirmadas(dni=None, *, ahora=None):
+    """Lista las reservas confirmadas vigentes para convertirlas en préstamo, filtrando opcionalmente por DNI."""
+    queryset = _queryset_reservas_confirmadas_vigentes(ahora=ahora)
     if dni is not None:
         dni_limpio = str(dni).strip()
         if dni_limpio:

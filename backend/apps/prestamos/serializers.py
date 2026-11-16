@@ -105,6 +105,7 @@ class RegistrarPrestamoSerializer(
     material_id = serializers.UUIDField()
     instancia_id = serializers.UUIDField(required=False)
     reserva_id = serializers.UUIDField(required=False, allow_null=True)
+    fecha_fin = serializers.DateTimeField(required=False)
     tiempo_prestamo_minutos = serializers.IntegerField(
         required=False,
         min_value=MINIMO_MINUTOS_PRESTAMO,
@@ -211,6 +212,9 @@ class RegistrarPrestamoSerializer(
             raise serializers.ValidationError({
                 "tiempo_prestamo_minutos": "Indica la duración del préstamo.",
             })
+
+        if attrs.get("reserva_id") is None and attrs.get("fecha_fin") is None:
+            raise serializers.ValidationError({"fecha_fin": "Indica la fecha y hora de fin del préstamo."})
 
         # Validar límite de 8 h para materiales de tier avanzado
         minutos = attrs.get("tiempo_prestamo_minutos")

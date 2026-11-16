@@ -143,6 +143,12 @@ class UsuarioRolView(RetrieveUpdateAPIView):
 
     def update(self, request, *args, **kwargs):
         usuario = self.get_object()
+        if request.user.pk == usuario.pk:
+            return Response(
+                {"detail": "No puedes cambiar tu propio rol."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:

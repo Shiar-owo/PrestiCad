@@ -8,6 +8,11 @@ import {
   esReservaActiva,
   formatearFechaReserva,
   obtenerMotivoVisibleReserva,
+  obtenerMaximoFinReserva,
+  obtenerMinimaHoraFinReserva,
+  obtenerMinimaHoraInicioReserva,
+  obtenerMinimoFinReserva,
+  obtenerMinimoInicioReserva,
   ordenarColaReservas,
   presentarEstadoReserva,
   requiereExcepcionAcademica,
@@ -108,7 +113,7 @@ describe('ordenarColaReservas', () => {
 })
 
 describe('construirFormularioReservaExcepcional y validarFormularioReserva', () => {
-  it('construye FormData con material_id, justificacion y ambos PDFs', () => {
+  it('construye FormData con fechas, material, justificación y ambos PDFs', () => {
     const dniPdf = new File(['%PDF-1.4'], 'dni.pdf', { type: 'application/pdf' })
     const compromisoPdf = new File(['%PDF-1.4'], 'compromiso.pdf', {
       type: 'application/pdf',
@@ -117,6 +122,8 @@ describe('construirFormularioReservaExcepcional y validarFormularioReserva', () 
     const form = construirFormularioReservaExcepcional({
       materialId: 'mat-uuid-1',
       justificacion: ' Práctica de laboratorio final ',
+      fechaInicio: '2026-06-17T10:00',
+      fechaFin: '2026-06-17T11:00',
       documentoIdentidad: dniPdf,
       compromisoResponsabilidad: compromisoPdf,
     })
@@ -124,6 +131,8 @@ describe('construirFormularioReservaExcepcional y validarFormularioReserva', () 
     expect(form).toBeInstanceOf(FormData)
     expect(form.get('material_id')).toBe('mat-uuid-1')
     expect(form.get('justificacion')).toBe('Práctica de laboratorio final')
+    expect(form.get('fecha_inicio')).toBe('2026-06-17T10:00')
+    expect(form.get('fecha_fin')).toBe('2026-06-17T11:00')
     expect(form.get('documento_identidad')).toBe(dniPdf)
     expect(form.get('compromiso_responsabilidad')).toBe(compromisoPdf)
   })
@@ -155,6 +164,15 @@ describe('construirFormularioReservaExcepcional y validarFormularioReserva', () 
 })
 
 describe('presentación de motivos y fechas', () => {
+  it('calcula límites de inicio y fin respetando la semana de reserva', () => {
+    const ahora = new Date(2026, 5, 17, 10, 20, 35)
+    expect(obtenerMinimoInicioReserva(ahora)).toBe('2026-06-17T10:21')
+    expect(obtenerMinimoFinReserva('2026-06-17T10:30')).toBe('2026-06-17T10:31')
+    expect(obtenerMaximoFinReserva('2026-06-17T10:30')).toBe('2026-06-19T17:00')
+    expect(obtenerMinimaHoraInicioReserva('2026-06-17', ahora)).toBe('10:21')
+    expect(obtenerMinimaHoraFinReserva('10:30')).toBe('10:31')
+  })
+
   it('devuelve el motivo correspondiente según el estado de la reserva', () => {
     expect(
       obtenerMotivoVisibleReserva({

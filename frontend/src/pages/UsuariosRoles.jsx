@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useContext, useEffect, useState } from 'react'
 
 import { api } from '../api/client'
+import SesionContext from '../contextos/SesionContext'
 import useTituloPagina from '../hooks/useTituloPagina'
 import Campo from '../components/ui/Campo'
 import Tarjeta from '../components/ui/Tarjeta'
@@ -8,6 +9,7 @@ import Skeleton from '../components/ui/Skeleton'
 import ErrorAlerta from '../components/ui/ErrorAlerta'
 import EstadoVacio from '../components/ui/EstadoVacio'
 import BadgeEstado from '../components/ui/BadgeEstado'
+import ResumenTier from '../components/ui/ResumenTier'
 import Boton from '../components/ui/Boton'
 
 const OPCIONES_ROL = [
@@ -25,14 +27,9 @@ const ETIQUETAS_ROL = {
   prestatario: 'Prestatario',
   ...Object.fromEntries(OPCIONES_ROL.map(({ valor, etiqueta }) => [valor, etiqueta])),
 }
-const ETIQUETAS_TIER = {
-  avanzado: 'Avanzado',
-  estandar: 'Estándar',
-  restringido: 'Restringido',
-}
-
 function UsuariosRoles() {
   useTituloPagina('Gestionar roles')
+  const { usuario: usuarioAutenticado } = useContext(SesionContext)
   const [usuarios, setUsuarios] = useState([])
   const [cargando, setCargando] = useState(true)
   const [guardandoId, setGuardandoId] = useState(null)
@@ -66,8 +63,11 @@ function UsuariosRoles() {
       setUsuarios((actuales) => actuales.map((usuario) =>
         usuario.id === usuarioId ? { ...usuario, rol: actualizado.rol } : usuario,
       ))
-    } catch {
-      setError('No se pudo cambiar el rol. Actualiza la lista e inténtalo otra vez.')
+    } catch (fallo) {
+      setError(
+        (typeof fallo.datos?.detail === 'string' && fallo.datos.detail)
+          || 'No se pudo cambiar el rol. Actualiza la lista e inténtalo otra vez.',
+      )
     } finally {
       setGuardandoId(null)
     }
@@ -119,8 +119,10 @@ function UsuariosRoles() {
                     <td className="px-4 py-3">{usuario.email}</td>
                     <td className="px-4 py-3">{usuario.tipo}</td>
                     <td className="px-4 py-3">
-                      {usuario.rol === 'prestatario' ? (
-                        <span className="text-sm font-medium">{ETIQUETAS_ROL.prestatario}</span>
+                      {usuario.id === usuarioAutenticado?.id || usuario.rol === 'prestatario' ? (
+                        <span className="text-sm font-medium">
+                          {ETIQUETAS_ROL[usuario.rol] || usuario.rol}
+                        </span>
                       ) : (
                         <Campo
                           opciones={OPCIONES_ROL}
@@ -191,7 +193,6 @@ function UsuariosRoles() {
                 ['Rol', ETIQUETAS_ROL[perfilSeleccionado.rol] || perfilSeleccionado.rol],
                 ['Estado', perfilSeleccionado.estado],
                 ['Puntaje de reputación', perfilSeleccionado.reputacion_puntaje],
-                ['Tier de reputación', ETIQUETAS_TIER[perfilSeleccionado.reputacion_tier] || perfilSeleccionado.reputacion_tier],
               ].map(([etiqueta, valor]) => (
                 <div key={etiqueta} className="rounded-lg border border-borde bg-superficie p-3">
                   <dt className="text-xs font-semibold uppercase tracking-wide text-texto-suave">{etiqueta}</dt>
@@ -199,6 +200,7 @@ function UsuariosRoles() {
                 </div>
               ))}
             </dl>
+            <ResumenTier tier={perfilSeleccionado.reputacion_tier} className="mt-3" />
           </section>
         </div>
       )}

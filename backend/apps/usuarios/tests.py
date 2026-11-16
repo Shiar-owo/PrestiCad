@@ -12,7 +12,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
-from apps.usuarios.models import Credencial, Usuario
+from apps.usuarios.models import Credencial, Rol, Usuario
 from apps.usuarios.middleware import (
     ExpiracionSesionInactividadMiddleware,
     SesionAutenticadaMiddleware,
@@ -22,10 +22,81 @@ from apps.usuarios.services import (
     UsuariosError,
     autenticar_usuario,
     actualizar_perfil,
+    actualizar_reputacion,
     obtener_perfil,
+    puntaje_reputacion_ajustado,
     registrar_usuario,
+    tier_por_puntaje,
 )
 from apps.usuarios.sesiones import CLAVE_SESION_USUARIO_ID, CLAVE_SESION_ULTIMA_ACTIVIDAD
+
+
+class ReputacionServiceTestCase(SimpleTestCase):
+    """Reglas puras de puntaje y asignación de Tier (HU12)."""
+
+    def test_tier_por_puntaje_respeta_limites_de_cada_tier(self):
+        casos = (
+            (-500, "restringido"),
+            (-51, "restringido"),
+            (-50, "estandar"),
+            (200, "estandar"),
+            (201, "avanzado"),
+            (500, "avanzado"),
+        )
+
+        for puntaje, tier_esperado in casos:
+            with self.subTest(puntaje=puntaje):
+                self.assertEqual(tier_por_puntaje(puntaje), tier_esperado)
+
+    def test_puntaje_reputacion_se_recorta_a_los_limites_inclusivos(self):
+        casos = (
+            (-501, -500),
+            (-500, -500),
+            (500, 500),
+            (501, 500),
+        )
+
+        for puntaje, esperado in casos:
+            with self.subTest(puntaje=puntaje):
+                self.assertEqual(puntaje_reputacion_ajustado(puntaje), esperado)
+
+
+class ActualizarReputacionTestCase(TestCase):
+    """El ajuste persiste el puntaje acotado y recalcula el Tier."""
+
+    def setUp(self):
+        self.usuario = Usuario.objects.create(
+            nombre="Ana",
+            apellido="García",
+            email="ana.reputacion@unsa.edu.pe",
+            dni="12345679",
+            tipo="alumno",
+            facultad="Ciencias de la Computación",
+        )
+
+    def test_aplicar_delta_persiste_puntaje_y_tier_recalculado(self):
+        self.usuario.reputacion_puntaje = 195
+        self.usuario.reputacion_tier = "estandar"
+        self.usuario.save(update_fields=["reputacion_puntaje", "reputacion_tier"])
+
+        puntaje = actualizar_reputacion(self.usuario, 10)
+        self.usuario.refresh_from_db()
+
+        self.assertEqual(puntaje, 205)
+        self.assertEqual(self.usuario.reputacion_puntaje, 205)
+        self.assertEqual(self.usuario.reputacion_tier, "avanzado")
+
+    def test_delta_no_permite_superar_quinientos_y_recalcula_tier(self):
+        self.usuario.reputacion_puntaje = 490
+        self.usuario.reputacion_tier = "avanzado"
+        self.usuario.save(update_fields=["reputacion_puntaje", "reputacion_tier"])
+
+        puntaje = actualizar_reputacion(self.usuario, 25)
+        self.usuario.refresh_from_db()
+
+        self.assertEqual(puntaje, 500)
+        self.assertEqual(self.usuario.reputacion_puntaje, 500)
+        self.assertEqual(self.usuario.reputacion_tier, "avanzado")
 
 
 class ModuloUsuariosTestCase(SimpleTestCase):
@@ -383,6 +454,67 @@ class AuthEndpointsAPITestCase(APITestCase):
         errores = respuesta.json()
         self.assertIn("email", errores)
         self.assertIn("password", errores)
+
+
+class CambioRolUsuarioAPITestCase(APITestCase):
+    """La API impide cambiar el rol propio y permite gestionar otros usuarios."""
+
+    URL = "/api/usuarios/{}/rol/"
+
+    def setUp(self):
+        self.administrador = registrar_usuario(
+            nombre="Ada",
+            apellido="Admin",
+            email="ada.admin@unsa.edu.pe",
+            dni="70000001",
+            tipo="administrativo",
+            facultad="Administración",
+            password="ClaveSegura123",
+        )
+        self.administrador.rol = Rol.objects.get_or_create(nombre="administrador")[0]
+        self.administrador.save(update_fields=["rol"])
+
+        self.otro_usuario = registrar_usuario(
+            nombre="Luis",
+            apellido="Usuario",
+            email="luis.usuario@unsa.edu.pe",
+            dni="70000002",
+            tipo="alumno",
+            facultad="Ingeniería",
+            password="ClaveSegura123",
+        )
+        Rol.objects.get_or_create(nombre="gestor")
+
+        respuesta = self.client.post(
+            "/api/auth/login/",
+            {"email": "ada.admin@unsa.edu.pe", "password": "ClaveSegura123"},
+            format="json",
+        )
+        self.assertEqual(respuesta.status_code, status.HTTP_200_OK)
+
+    def test_no_permite_cambiar_el_rol_propio(self):
+        respuesta = self.client.put(
+            self.URL.format(self.administrador.pk),
+            {"rol": "gestor"},
+            format="json",
+        )
+        self.administrador.refresh_from_db()
+
+        self.assertEqual(respuesta.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(respuesta.json()["detail"], "No puedes cambiar tu propio rol.")
+        self.assertEqual(self.administrador.rol.nombre, "administrador")
+
+    def test_permite_cambiar_el_rol_de_otro_usuario(self):
+        respuesta = self.client.put(
+            self.URL.format(self.otro_usuario.pk),
+            {"rol": "gestor"},
+            format="json",
+        )
+        self.otro_usuario.refresh_from_db()
+
+        self.assertEqual(respuesta.status_code, status.HTTP_200_OK)
+        self.assertEqual(respuesta.json()["rol"], "gestor")
+        self.assertEqual(self.otro_usuario.rol.nombre, "gestor")
 
 
 class AutenticacionServiceTestCase(TestCase):

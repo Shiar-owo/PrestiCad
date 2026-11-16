@@ -724,6 +724,14 @@ class PerfilUsuarioServiceTestCase(TestCase):
         self.assertFalse(serializer.is_valid())
         self.assertIn("telefono", serializer.errors)
 
+    def test_serializer_de_actualizacion_parcial_rechaza_telefono_duplicado_con_existente(self):
+        serializer = ActualizarPerfilSerializer(
+            data={"telefono_secundario": self.usuario.telefono},
+            context={"usuario": self.usuario},
+        )
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("telefono", serializer.errors)
+
     def test_serializer_rechaza_email_secundario_igual_al_principal(self):
         serializer = ActualizarPerfilSerializer(
             data={"email_secundario": self.usuario.email},
@@ -866,6 +874,18 @@ class PerfilUsuarioAPITestCase(APITestCase):
         self.assertIn("perfil", self.usuario.foto_perfil.name)
         self.assertTrue(respuesta.data["foto_perfil"].startswith("http"))
         self.assertIn("perfil", respuesta.data["foto_perfil"])
+
+        # Permite eliminar la foto de perfil mediante eliminar_foto_perfil=True
+        respuesta_eliminar = self.client.put(
+            self.URL,
+            {"eliminar_foto_perfil": True},
+            format="json",
+            HTTP_X_CSRFTOKEN=token_csrf,
+        )
+        self.usuario.refresh_from_db()
+        self.assertEqual(respuesta_eliminar.status_code, status.HTTP_200_OK)
+        self.assertFalse(bool(self.usuario.foto_perfil))
+        self.assertIsNone(respuesta_eliminar.data["foto_perfil"])
 
 
 class ExpiracionSesionInactividadMiddlewareTestCase(TestCase):

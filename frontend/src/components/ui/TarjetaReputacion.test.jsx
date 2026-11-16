@@ -10,6 +10,11 @@ describe('TarjetaReputacion - Funciones y Configuración de Tiers', () => {
     expect(CONFIG_TIER.avanzado.nombre).toBe('Avanzado')
     expect(CONFIG_TIER.estandar.nombre).toBe('Estándar')
     expect(CONFIG_TIER.restringido.nombre).toBe('Restringido')
+
+    expect(CONFIG_TIER.avanzado.rango).toBe('201 a 500 puntos')
+    expect(CONFIG_TIER.estandar.rango).toBe('-50 a 200 puntos')
+    expect(CONFIG_TIER.restringido.rango).toBe('-500 a -51 puntos')
+    expect(CONFIG_TIER.avanzado.descripcion).not.toContain('sin restricciones de garantía')
   })
 
   it('calcula correctamente el porcentaje de barra en los rangos límites y neutro', () => {

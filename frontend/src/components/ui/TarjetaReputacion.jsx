@@ -12,8 +12,8 @@ export const CONFIG_TIER = {
     colorBarra: 'bg-emerald-500 dark:bg-emerald-400',
     colorPuntaje: 'text-emerald-700 dark:text-emerald-300',
     colorIcono: 'text-emerald-600 dark:text-emerald-400',
-    descripcion: 'Acceso total y prioritario a préstamos sin restricciones de garantía.',
-    rango: '200 a 500 puntos',
+    descripcion: 'Acceso total al catálogo, incluidos equipos de alto valor (con garantía según RN05).',
+    rango: '201 a 500 puntos',
   },
   estandar: {
     nombre: 'Estándar',
@@ -26,7 +26,7 @@ export const CONFIG_TIER = {
     colorPuntaje: 'text-sky-700 dark:text-sky-300',
     colorIcono: 'text-sky-600 dark:text-sky-400',
     descripcion: 'Acceso regular al catálogo. Devuelve a tiempo para subir a nivel Avanzado.',
-    rango: '0 a 199 puntos',
+    rango: '-50 a 200 puntos',
   },
   restringido: {
     nombre: 'Restringido',
@@ -38,8 +38,8 @@ export const CONFIG_TIER = {
     colorBarra: 'bg-amber-500 dark:bg-amber-400',
     colorPuntaje: 'text-amber-700 dark:text-amber-300',
     colorIcono: 'text-amber-600 dark:text-amber-400',
-    descripcion: 'Préstamos sujetos a aprobación estricta y garantías por incidencias previas.',
-    rango: '-500 a -1 puntos',
+    descripcion: 'Acceso a materiales básicos; equipos superiores requieren solicitud excepcional con garantía.',
+    rango: '-500 a -51 puntos',
   },
 }
 

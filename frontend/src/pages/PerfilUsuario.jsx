@@ -53,7 +53,7 @@ function FilaDatoInstitucional({ icono: Icono, etiqueta, valor, badge }) {
   )
 }
 
-function FormularioPerfil({ perfil, onGuardar, onGuardarFoto, guardando = false, mensajeExito }) {
+function FormularioPerfil({ perfil, onGuardar, onGuardarFoto, onEliminarFoto, guardando = false, mensajeExito }) {
   // Teléfonos (hasta 3 en total)
   const [telefonoPrincipal, setTelefonoPrincipal] = useState(perfil.telefono || '')
   const [telefonoSecundario, setTelefonoSecundario] = useState(perfil.telefono_secundario || '')
@@ -180,6 +180,21 @@ function FormularioPerfil({ perfil, onGuardar, onGuardarFoto, guardando = false,
       setFotoPendiente(null)
     } catch (err) {
       setErrorFoto(mensajeErrorApi(err, 'No se pudo guardar la foto de perfil.'))
+    } finally {
+      setGuardandoFoto(false)
+    }
+  }
+
+  async function manejarEliminarFoto() {
+    if (!onEliminarFoto || guardandoFoto) return
+    setMenuFotoAbierto(false)
+    setModalFotoAbierto(false)
+    setGuardandoFoto(true)
+    setErrorFoto('')
+    try {
+      await onEliminarFoto()
+    } catch (err) {
+      setErrorFoto(mensajeErrorApi(err, 'No se pudo eliminar la foto de perfil.'))
     } finally {
       setGuardandoFoto(false)
     }
@@ -350,6 +365,16 @@ function FormularioPerfil({ perfil, onGuardar, onGuardarFoto, guardando = false,
                     >
                       <Camera className="size-4 text-marca-600 dark:text-marca-400 shrink-0" />
                       <span>Cambiar foto</span>
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      disabled={guardandoFoto}
+                      onClick={manejarEliminarFoto}
+                      className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors text-left"
+                    >
+                      <Trash2 className="size-4 shrink-0" />
+                      <span>Eliminar foto</span>
                     </button>
                   </>
                 ) : (
@@ -835,6 +860,22 @@ function PerfilUsuario({ onPerfilActualizado }) {
     }
   }
 
+  async function eliminarFotoPerfil() {
+    try {
+      const perfilActualizado = await api.put('/usuarios/perfil/', { eliminar_foto_perfil: true })
+      setPerfil(perfilActualizado)
+      onPerfilActualizado?.(perfilActualizado)
+      setMensajeExito('Foto de perfil eliminada correctamente.')
+      if (timerMensajeRef.current) clearTimeout(timerMensajeRef.current)
+      timerMensajeRef.current = setTimeout(() => {
+        setMensajeExito('')
+      }, 3000)
+    } catch (fallo) {
+      setError(mensajeErrorApi(fallo, 'No se pudo eliminar la foto de perfil.'))
+      throw fallo
+    }
+  }
+
   if (cargando) {
     return (
       <div className="space-y-6" role="status" aria-live="polite">
@@ -866,6 +907,7 @@ function PerfilUsuario({ onPerfilActualizado }) {
         perfil={perfil}
         onGuardar={guardarPerfil}
         onGuardarFoto={guardarFotoPerfil}
+        onEliminarFoto={eliminarFotoPerfil}
         guardando={guardando}
         mensajeExito={mensajeExito}
       />

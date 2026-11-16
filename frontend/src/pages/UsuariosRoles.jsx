@@ -63,8 +63,11 @@ function UsuariosRoles() {
       setUsuarios((actuales) => actuales.map((usuario) =>
         usuario.id === usuarioId ? { ...usuario, rol: actualizado.rol } : usuario,
       ))
-    } catch {
-      setError('No se pudo cambiar el rol. Actualiza la lista e inténtalo otra vez.')
+    } catch (fallo) {
+      setError(
+        (typeof fallo.datos?.detail === 'string' && fallo.datos.detail)
+          || 'No se pudo cambiar el rol. Actualiza la lista e inténtalo otra vez.',
+      )
     } finally {
       setGuardandoId(null)
     }

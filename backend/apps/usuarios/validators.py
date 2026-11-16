@@ -1,7 +1,28 @@
 """Validadores para el módulo de usuarios."""
 import phonenumbers
 from phonenumbers import NumberParseException
+from django.core.exceptions import ValidationError
 from rest_framework import serializers
+
+TAMANIO_MAXIMO_FOTO = 4 * 1024 * 1024
+FORMATOS_PERMITIDOS_FOTO = frozenset({"image/jpeg", "image/png", "image/webp"})
+MENSAJE_TAMANIO_FOTO = "La foto no debe pesar más de 4 MB."
+MENSAJE_FORMATO_FOTO = "La foto debe estar en formato JPG, PNG o WEBP."
+
+
+def validar_foto_usuario(foto):
+    """Verifica el tamaño y el formato de la foto de perfil subida.
+
+    Válido tanto para validación del modelo Django como para serializers.
+    """
+    if not foto:
+        return
+
+    if hasattr(foto, "size") and foto.size > TAMANIO_MAXIMO_FOTO:
+        raise ValidationError(MENSAJE_TAMANIO_FOTO, code="foto_muy_grande")
+
+    if hasattr(foto, "content_type") and foto.content_type not in FORMATOS_PERMITIDOS_FOTO:
+        raise ValidationError(MENSAJE_FORMATO_FOTO, code="formato_foto_invalido")
 
 
 def validar_y_normalizar_telefono(valor: str, default_region: str = "PE", obligatorio: bool = True) -> str:

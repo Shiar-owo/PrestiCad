@@ -16,6 +16,7 @@ import SesionContext from '../contextos/SesionContext'
 import useTituloPagina from '../hooks/useTituloPagina'
 import { ETIQUETAS_ROL, ETIQUETAS_TIER } from '../constantes/roles'
 import Tarjeta from '../components/ui/Tarjeta'
+import TarjetaReputacion from '../components/ui/TarjetaReputacion'
 
 const ACCESOS = {
   prestatario: [
@@ -138,13 +139,11 @@ function PanelInicio() {
             )}
           </Tarjeta>
           {usuario.reputacion_tier && (
-            <Tarjeta className="p-5">
-              <p className="flex items-center gap-1.5 text-sm font-semibold text-texto-suave">
-                <Gauge aria-hidden="true" className="size-4" />
-                Nivel de reputación
-              </p>
-              <p className="mt-1 text-lg font-bold text-texto">{tier}</p>
-            </Tarjeta>
+            <TarjetaReputacion
+              tier={usuario.reputacion_tier}
+              puntaje={usuario.reputacion_puntaje}
+              compacta
+            />
           )}
         </div>
       </section>

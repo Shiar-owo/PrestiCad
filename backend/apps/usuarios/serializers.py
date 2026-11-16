@@ -1,10 +1,11 @@
+from django.conf import settings
 from django.core.validators import RegexValidator
 from rest_framework import serializers
 
 from apps.compartido.serializers import RechazarCamposNoPermitidosMixin
 from apps.usuarios.constants import ESTADOS_USUARIO, ROLES, TIERS, TIPOS_USUARIO
 from apps.usuarios.models import Credencial, Rol, Usuario
-from apps.usuarios.validators import validar_y_normalizar_telefono
+from apps.usuarios.validators import validar_foto_usuario, validar_y_normalizar_telefono
 
 DNI_VALIDATOR = RegexValidator(
     r"^\d{8}$",
@@ -136,17 +137,43 @@ class UsuarioRegistroSerializer(RechazarCamposNoPermitidosMixin, serializers.Mod
         }
 
 
+class FotoPerfilUsuario(serializers.ImageField):
+    """Devuelve la foto del usuario como una URL accesible para el navegador.
+
+    Al igual que en inventario, en desarrollo antepone `MEDIA_URL_PUBLICA` para
+    evitar el host interno del contenedor (`backend:8000`) generado por DRF
+    cuando hay contexto de request, permitiendo que el navegador del usuario
+    pueda cargar y persistir la imagen tras recargar la página.
+    """
+
+    def to_representation(self, value):
+        if not value:
+            return None
+
+        url = value.url
+        if url.startswith(("http://", "https://")):
+            return url
+
+        return f"{settings.MEDIA_URL_PUBLICA.rstrip('/')}/{url.lstrip('/')}"
+
+
 class PerfilUsuarioSerializer(serializers.Serializer):
-    """Contrato de salida parcial del perfil con los datos disponibles."""
+    """Contrato de salida del perfil con los datos institucionales y de contacto."""
 
     nombre = serializers.CharField()
     apellido = serializers.CharField()
     email = serializers.EmailField()
+    email_secundario = serializers.EmailField(allow_blank=True, required=False, default="")
     dni = serializers.CharField()
     telefono = serializers.CharField(allow_blank=True)
+    telefono_secundario = serializers.CharField(allow_blank=True, required=False, default="")
+    telefono_terciario = serializers.CharField(allow_blank=True, required=False, default="")
     tipo = serializers.ChoiceField(choices=TIPOS_USUARIO)
+    facultad = serializers.CharField(allow_blank=True, required=False, default="")
+    departamento_carrera = serializers.CharField(allow_blank=True, required=False, default="")
     reputacion_puntaje = serializers.IntegerField()
     reputacion_tier = serializers.CharField()
+    foto_perfil = FotoPerfilUsuario(allow_null=True, required=False)
 
 
 class PerfilElegibilidadPrestamoSerializer(serializers.ModelSerializer):
@@ -160,18 +187,59 @@ class PerfilElegibilidadPrestamoSerializer(serializers.ModelSerializer):
 
 
 class ActualizarPerfilSerializer(RechazarCamposNoPermitidosMixin, serializers.Serializer):
-    """Valida únicamente los campos editables del perfil."""
+    """Valida únicamente los campos editables del perfil: contactos y foto.
 
-    nombre = serializers.CharField(
-        max_length=100,
-        error_messages=MENSAJES_CAMPO_NOMBRE,
-    )
+    El nombre, apellido, DNI, rol y email institucional no forman parte de este
+    contrato y son rechazados automáticamente si se intentan enviar.
+    """
+
     telefono = serializers.CharField(max_length=30, required=False, allow_blank=True)
+    telefono_secundario = serializers.CharField(max_length=30, required=False, allow_blank=True)
+    telefono_terciario = serializers.CharField(max_length=30, required=False, allow_blank=True)
+    email_secundario = serializers.EmailField(
+        required=False,
+        allow_blank=True,
+        error_messages={"invalid": "Ingresa un correo electrónico secundario válido."},
+    )
+    foto_perfil = serializers.ImageField(
+        required=False,
+        allow_null=True,
+        validators=[validar_foto_usuario],
+    )
 
     def validate_telefono(self, value):
         if not value or not str(value).strip():
             return ""
         return validar_y_normalizar_telefono(value, default_region="PE", obligatorio=False)
+
+    def validate_telefono_secundario(self, value):
+        if not value or not str(value).strip():
+            return ""
+        return validar_y_normalizar_telefono(value, default_region="PE", obligatorio=False)
+
+    def validate_telefono_terciario(self, value):
+        if not value or not str(value).strip():
+            return ""
+        return validar_y_normalizar_telefono(value, default_region="PE", obligatorio=False)
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        t1 = attrs.get("telefono")
+        t2 = attrs.get("telefono_secundario")
+        t3 = attrs.get("telefono_terciario")
+        telefonos_presentes = [t for t in [t1, t2, t3] if t and str(t).strip()]
+        if len(telefonos_presentes) != len(set(telefonos_presentes)):
+            raise serializers.ValidationError({"telefono": "No puedes registrar números de celular repetidos."})
+
+        usuario = self.context.get("usuario")
+        email_sec = attrs.get("email_secundario")
+        if usuario and email_sec and email_sec.strip().lower() == usuario.email.strip().lower():
+            raise serializers.ValidationError(
+                {"email_secundario": "El correo de recuperación no puede ser igual a tu correo institucional principal."}
+            )
+
+        return attrs
+
 
 class CredencialSerializer(serializers.ModelSerializer):
     """Contrato de entrada/salida JSON para las credenciales de acceso."""
@@ -212,3 +280,4 @@ class SesionUsuarioSerializer(serializers.Serializer):
     estado = serializers.ChoiceField(choices=ESTADOS_USUARIO)
     reputacion_tier = serializers.ChoiceField(choices=TIERS)
     reputacion_puntaje = serializers.IntegerField(required=False, default=0)
+    foto_perfil = FotoPerfilUsuario(read_only=True, required=False, allow_null=True)

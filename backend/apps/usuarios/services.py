@@ -170,17 +170,31 @@ def obtener_perfil(usuario):
         "nombre": usuario.nombre,
         "apellido": usuario.apellido,
         "email": usuario.email,
+        "email_secundario": usuario.email_secundario,
         "dni": usuario.dni,
         "telefono": usuario.telefono,
+        "telefono_secundario": usuario.telefono_secundario,
+        "telefono_terciario": usuario.telefono_terciario,
         "tipo": usuario.tipo,
+        "facultad": usuario.facultad,
+        "departamento_carrera": usuario.departamento_carrera,
         "reputacion_puntaje": usuario.reputacion_puntaje,
         "reputacion_tier": usuario.reputacion_tier,
+        "foto_perfil": usuario.foto_perfil,
     }
 
 
-def actualizar_perfil(usuario, *, nombre, telefono=None):
-    usuario.nombre = nombre.strip()
-    campos_actualizados = ["nombre", "updated_at"]
+def actualizar_perfil(
+    usuario,
+    *,
+    telefono=None,
+    telefono_secundario=None,
+    telefono_terciario=None,
+    email_secundario=None,
+    foto_perfil=None,
+):
+    campos_actualizados = ["updated_at"]
+
     if telefono is not None:
         telefono_limpio = telefono.strip()
         if telefono_limpio:
@@ -191,6 +205,37 @@ def actualizar_perfil(usuario, *, nombre, telefono=None):
                 raise UsuariosError("telefono", str(mensaje))
         usuario.telefono = telefono_limpio
         campos_actualizados.append("telefono")
+
+    if telefono_secundario is not None:
+        sec_limpio = telefono_secundario.strip()
+        if sec_limpio:
+            try:
+                sec_limpio = validar_y_normalizar_telefono(sec_limpio, default_region="PE", obligatorio=False)
+            except Exception as exc:
+                mensaje = exc.detail[0] if hasattr(exc, "detail") and isinstance(exc.detail, list) else str(exc)
+                raise UsuariosError("telefono_secundario", str(mensaje))
+        usuario.telefono_secundario = sec_limpio
+        campos_actualizados.append("telefono_secundario")
+
+    if telefono_terciario is not None:
+        ter_limpio = telefono_terciario.strip()
+        if ter_limpio:
+            try:
+                ter_limpio = validar_y_normalizar_telefono(ter_limpio, default_region="PE", obligatorio=False)
+            except Exception as exc:
+                mensaje = exc.detail[0] if hasattr(exc, "detail") and isinstance(exc.detail, list) else str(exc)
+                raise UsuariosError("telefono_terciario", str(mensaje))
+        usuario.telefono_terciario = ter_limpio
+        campos_actualizados.append("telefono_terciario")
+
+    if email_secundario is not None:
+        usuario.email_secundario = email_secundario.strip().lower()
+        campos_actualizados.append("email_secundario")
+
+    if foto_perfil is not None:
+        usuario.foto_perfil = foto_perfil
+        campos_actualizados.append("foto_perfil")
+
     usuario.save(update_fields=campos_actualizados)
     return usuario
 

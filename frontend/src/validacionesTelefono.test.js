@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { normalizarTelefonoE164, validarTelefono } from './validaciones'
+import { normalizarTelefonoE164, validarEmailSecundario, validarTelefono } from './validaciones'
 
 describe('validarTelefono', () => {
   it('rechaza teléfono vacío cuando es obligatorio', () => {
@@ -75,5 +75,31 @@ describe('normalizarTelefonoE164', () => {
   it('devuelve cadena vacía si el valor es vacío', () => {
     expect(normalizarTelefonoE164('')).toBe('')
     expect(normalizarTelefonoE164('   ')).toBe('')
+  })
+})
+
+describe('validarEmailSecundario', () => {
+  it('permite cadena vacía ya que es opcional', () => {
+    expect(validarEmailSecundario('', 'alumno@unsa.edu.pe')).toBe('')
+    expect(validarEmailSecundario('   ', 'alumno@unsa.edu.pe')).toBe('')
+  })
+
+  it('rechaza formato de correo inválido', () => {
+    expect(validarEmailSecundario('correo-sin-arroba', 'alumno@unsa.edu.pe')).toBe(
+      'Ingresa un correo electrónico válido.'
+    )
+  })
+
+  it('rechaza si es idéntico al correo institucional principal', () => {
+    expect(validarEmailSecundario('alumno@unsa.edu.pe', 'alumno@unsa.edu.pe')).toBe(
+      'El correo de recuperación no puede ser igual a tu correo institucional principal.'
+    )
+    expect(validarEmailSecundario('ALUMNO@UNSA.EDU.PE', 'alumno@unsa.edu.pe')).toBe(
+      'El correo de recuperación no puede ser igual a tu correo institucional principal.'
+    )
+  })
+
+  it('acepta correo secundario válido y diferente', () => {
+    expect(validarEmailSecundario('personal@gmail.com', 'alumno@unsa.edu.pe')).toBe('')
   })
 })

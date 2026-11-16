@@ -62,6 +62,18 @@ export function validarEmail(email) {
   return ''
 }
 
+export function validarEmailSecundario(emailSecundario, emailPrincipal) {
+  const texto = (emailSecundario ?? '').trim()
+  if (!texto) return ''
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(texto)) {
+    return 'Ingresa un correo electrónico válido.'
+  }
+  if (emailPrincipal && texto.toLowerCase() === emailPrincipal.trim().toLowerCase()) {
+    return 'El correo de recuperación no puede ser igual a tu correo institucional principal.'
+  }
+  return ''
+}
+
 export function validarPassword(password) {
   if (!password) {
     return 'La contraseña es obligatoria.'

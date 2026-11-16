@@ -233,6 +233,7 @@ class AlmacenamientoGarantiaTestCase(SimpleTestCase):
             "dni_prestatario": "12345678",
             "material_id": "00000000-0000-0000-0000-000000000001",
             "tiempo_prestamo_dias": "5",
+            "fecha_fin": (timezone.now() + timedelta(days=5)).isoformat(),
             "checklist_inicial": json.dumps(CHECKLIST),
             "foto_checklist_0": crear_foto_checklist(),
             "foto_checklist_1": crear_foto_checklist(),
@@ -250,6 +251,7 @@ class AlmacenamientoGarantiaTestCase(SimpleTestCase):
             "dni_prestatario": "12345678",
             "material_id": "00000000-0000-0000-0000-000000000001",
             "tiempo_prestamo_dias": "5",
+            "fecha_fin": (timezone.now() + timedelta(days=5)).isoformat(),
             "checklist_inicial": json.dumps(CHECKLIST),
             "foto_checklist_0": crear_foto_checklist(),
             "foto_checklist_1": crear_foto_checklist(),
@@ -1411,11 +1413,19 @@ class RegistrarPrestamoAPITestCase(APITestCase):
         sesion.save()
 
     def _payload(self, **cambios):
+        if "fecha_fin" in cambios:
+            fecha_fin = cambios["fecha_fin"]
+        elif "tiempo_prestamo_minutos" in cambios and isinstance(cambios["tiempo_prestamo_minutos"], (int, float)):
+            fecha_fin = (timezone.now() + timedelta(minutes=cambios["tiempo_prestamo_minutos"] + 1)).isoformat()
+        elif "tiempo_prestamo_dias" in cambios and isinstance(cambios["tiempo_prestamo_dias"], (int, float)) and cambios["tiempo_prestamo_dias"] > 0:
+            fecha_fin = (timezone.now() + timedelta(days=cambios["tiempo_prestamo_dias"])).isoformat()
+        else:
+            fecha_fin = (timezone.now() + timedelta(days=3)).isoformat()
         datos = {
             "dni_prestatario": self.prestatario.dni,
             "material_id": str(self.material.id),
             "tiempo_prestamo_dias": 3,
-            "fecha_fin": (timezone.now() + timedelta(days=3)).isoformat(),
+            "fecha_fin": fecha_fin,
             "checklist_inicial": CHECKLIST,
         }
         datos.update(cambios)

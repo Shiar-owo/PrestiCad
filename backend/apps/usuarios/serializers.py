@@ -225,6 +225,8 @@ class ActualizarPerfilSerializer(RechazarCamposNoPermitidosMixin, serializers.Se
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
+        if not attrs.get("eliminar_foto_perfil"):
+            attrs.pop("eliminar_foto_perfil", None)
         usuario = self.context.get("usuario")
 
         def _resolver_telefono(campo):

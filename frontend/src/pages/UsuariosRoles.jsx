@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useContext, useEffect, useState } from 'react'
 
 import { api } from '../api/client'
+import SesionContext from '../contextos/SesionContext'
 import useTituloPagina from '../hooks/useTituloPagina'
 import Campo from '../components/ui/Campo'
 import Tarjeta from '../components/ui/Tarjeta'
@@ -28,6 +29,7 @@ const ETIQUETAS_ROL = {
 }
 function UsuariosRoles() {
   useTituloPagina('Gestionar roles')
+  const { usuario: usuarioAutenticado } = useContext(SesionContext)
   const [usuarios, setUsuarios] = useState([])
   const [cargando, setCargando] = useState(true)
   const [guardandoId, setGuardandoId] = useState(null)
@@ -61,8 +63,11 @@ function UsuariosRoles() {
       setUsuarios((actuales) => actuales.map((usuario) =>
         usuario.id === usuarioId ? { ...usuario, rol: actualizado.rol } : usuario,
       ))
-    } catch {
-      setError('No se pudo cambiar el rol. Actualiza la lista e inténtalo otra vez.')
+    } catch (fallo) {
+      setError(
+        (typeof fallo.datos?.detail === 'string' && fallo.datos.detail)
+          || 'No se pudo cambiar el rol. Actualiza la lista e inténtalo otra vez.',
+      )
     } finally {
       setGuardandoId(null)
     }
@@ -114,8 +119,10 @@ function UsuariosRoles() {
                     <td className="px-4 py-3">{usuario.email}</td>
                     <td className="px-4 py-3">{usuario.tipo}</td>
                     <td className="px-4 py-3">
-                      {usuario.rol === 'prestatario' ? (
-                        <span className="text-sm font-medium">{ETIQUETAS_ROL.prestatario}</span>
+                      {usuario.id === usuarioAutenticado?.id || usuario.rol === 'prestatario' ? (
+                        <span className="text-sm font-medium">
+                          {ETIQUETAS_ROL[usuario.rol] || usuario.rol}
+                        </span>
                       ) : (
                         <Campo
                           opciones={OPCIONES_ROL}

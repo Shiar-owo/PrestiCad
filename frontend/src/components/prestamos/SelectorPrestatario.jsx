@@ -54,7 +54,8 @@ export default function SelectorPrestatario({
 
     if (seleccionado && seleccionado.dni !== dni) setSeleccionado(null)
 
-    if (!debeBuscarPrestatarios(dni, seleccionado)) {
+    // Si ya completó los 8 dígitos del DNI, no mostrar lista flotante; la vista ya consulta el perfil directamente
+    if (dni.length >= 8 || !debeBuscarPrestatarios(dni, seleccionado)) {
       setSugerencias([])
       setCargando(false)
       setErrorBusqueda('')
@@ -171,11 +172,6 @@ export default function SelectorPrestatario({
             </li>
           ))}
         </ul>
-      )}
-      {seleccionado?.dni === valor && (
-        <p className="rounded-lg border border-marca-200 bg-marca-50 px-3 py-2 text-xs text-marca-800 dark:border-marca-700/60 dark:bg-marca-500/10 dark:text-marca-300" role="status">
-          Seleccionado: <span className="font-semibold">{crearEtiquetaPrestatario(seleccionado)}</span>
-        </p>
       )}
     </div>
   )

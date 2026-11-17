@@ -183,7 +183,7 @@ class PerfilElegibilidadPrestamoSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Usuario
-        fields = ("nombre", "apellido", "rol", "estado", "reputacion_puntaje", "reputacion_tier")
+        fields = ("dni", "nombre", "apellido", "rol", "estado", "reputacion_puntaje", "reputacion_tier")
 
 
 class ActualizarPerfilSerializer(RechazarCamposNoPermitidosMixin, serializers.Serializer):

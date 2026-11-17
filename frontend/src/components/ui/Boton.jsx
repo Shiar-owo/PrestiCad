@@ -19,6 +19,8 @@ function Boton({
     secundario:
       'border border-borde bg-white text-texto hover:bg-superficie-alta dark:bg-superficie dark:text-texto dark:hover:bg-superficie-alta disabled:text-texto-suave',
     peligro: 'bg-error text-white hover:bg-red-700 disabled:bg-red-300',
+    'peligro-secundario':
+      'border border-red-300 bg-white text-red-700 hover:bg-red-50 hover:border-red-400 dark:bg-superficie dark:border-red-700/70 dark:text-red-300 dark:hover:bg-red-950/30 disabled:text-red-300',
     fantasma: 'bg-transparent text-acento-600 hover:bg-acento-50 disabled:text-texto-suave',
   }
 

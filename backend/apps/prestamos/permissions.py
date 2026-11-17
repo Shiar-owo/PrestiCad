@@ -5,16 +5,17 @@ from apps.prestamos.models import Prestamo
 
 
 class EsGestorDeAlmacen(BasePermission):
-    """Solo el gestor autenticado puede formalizar una entrega (HU09)."""
+    """Permite formalizar entregas y devoluciones a gestores y administradores (HU09, HU11)."""
 
-    message_sin_sesion = "Inicia sesión como gestor para registrar un préstamo."
-    message_rol = "Solo un gestor de almacén puede registrar préstamos."
+    message_sin_sesion = "Inicia sesión como gestor o administrador para registrar un préstamo."
+    message_rol = "Solo un gestor de almacén o administrador puede registrar préstamos."
+    roles_permitidos = {"gestor", "administrador"}
 
     def has_permission(self, request, view):
         usuario = getattr(request, "usuario_autenticado", None)
         if usuario is None:
             raise PermissionDenied(detail=self.message_sin_sesion)
-        if usuario.rol.nombre != "gestor":
+        if usuario.rol.nombre not in self.roles_permitidos:
             raise PermissionDenied(detail=self.message_rol)
         return True
 

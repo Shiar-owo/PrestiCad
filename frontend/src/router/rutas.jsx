@@ -129,7 +129,7 @@ function Rutas() {
           <Route
             path="prestamo"
             element={
-              <RequerirRol roles={['gestor']}>
+              <RequerirRol roles={['gestor', 'administrador']}>
                 <RegistrarPrestamo />
               </RequerirRol>
             }
@@ -137,7 +137,7 @@ function Rutas() {
           <Route
             path="devolucion"
             element={
-              <RequerirRol roles={['gestor']}>
+              <RequerirRol roles={['gestor', 'administrador']}>
                 <SeleccionarPrestamoDevolucion />
               </RequerirRol>
             }
@@ -145,7 +145,7 @@ function Rutas() {
           <Route
             path="devolucion/:prestamoId"
             element={
-              <RequerirRol roles={['gestor']}>
+              <RequerirRol roles={['gestor', 'administrador']}>
                 <DevolucionPrestamo />
               </RequerirRol>
             }

@@ -4,14 +4,14 @@ export const OPCIONES_GESTION_PRESTAMOS = [
     etiqueta: 'Registrar Préstamo',
     a: '/panel/prestamo',
     descripcion: 'Entrega física de ejemplares con checklist inicial y garantía.',
-    roles: ['gestor'],
+    roles: ['gestor', 'administrador'],
   },
   {
     id: 'registrar-devolucion',
     etiqueta: 'Registrar Devolución',
     a: '/panel/devolucion',
     descripcion: 'Inspección del ejemplar devuelto, cálculo de reputación y sanciones.',
-    roles: ['gestor'],
+    roles: ['gestor', 'administrador'],
   },
   {
     id: 'cola-reservas',

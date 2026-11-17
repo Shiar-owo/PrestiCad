@@ -75,13 +75,13 @@ const ACCESOS = {
     {
       etiqueta: 'Gestionar Préstamos',
       a: '/panel/gestion-prestamos',
-      descripcion: 'Historial de préstamos, reportes y opciones de préstamos',
+      descripcion: 'Registrar préstamo, registrar devolución, historial y reportes',
       icono: ClipboardList,
     },
     {
       etiqueta: 'Cola de reservas',
       a: '/panel/cola-reservas',
-      descripcion: 'Consulta de lista de espera y reservas confirmadas por material',
+      descripcion: 'Solicitudes en lista de espera, excepciones académicas y reservas confirmadas',
       icono: CalendarClock,
     },
     {

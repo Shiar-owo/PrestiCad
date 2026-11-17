@@ -18,10 +18,12 @@ describe('obtenerOpcionesGestionPrestamos', () => {
     ])
   })
 
-  it('conserva cola de reservas, historial y reportes para el administrador', () => {
+  it('incluye las cinco opciones para el administrador', () => {
     const opciones = obtenerOpcionesGestionPrestamos('administrador')
 
     expect(opciones.map((opcion) => opcion.etiqueta)).toEqual([
+      'Registrar Préstamo',
+      'Registrar Devolución',
       'Cola de Reservas',
       'Historial de Préstamos',
       'Reportes',

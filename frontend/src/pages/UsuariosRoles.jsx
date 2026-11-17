@@ -74,7 +74,7 @@ function UsuariosRoles() {
   }
 
   return (
-    <section>
+    <section className="mx-auto w-full max-w-6xl px-4 py-8">
       <header className="mb-5">
         <h2 className="text-xl font-bold text-texto">Gestionar roles y permisos</h2>
         <p className="mt-1 text-sm text-texto-suave">

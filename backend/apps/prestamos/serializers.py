@@ -473,8 +473,9 @@ class ConsultaReportesSerializer(
 
 
 class FiltroHistorialMaterialSerializer(serializers.Serializer):
-    """Valida el período opcional del historial de un material."""
+    """Valida instancia y período del historial de un material."""
 
+    instancia_id = serializers.UUIDField(required=True)
     desde = serializers.DateField(required=False)
     hasta = serializers.DateField(required=False)
 

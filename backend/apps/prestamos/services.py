@@ -160,8 +160,13 @@ def consultar_historial_prestamos(ahora=None, estado=None, dni=None):
     return prestamos
 
 
-def consultar_historial_por_material(material_id, fecha_desde=None, fecha_hasta=None):
-    """Devuelve préstamos de un material y sus estadísticas de puntualidad.
+def consultar_historial_por_material(
+    material_id,
+    instancia_id,
+    fecha_desde=None,
+    fecha_hasta=None,
+):
+    """Devuelve préstamos de una instancia y sus estadísticas de puntualidad.
 
     El período se aplica a la fecha de entrega. Las estadísticas consideran
     solo préstamos devueltos; la puntualidad se determina por fecha límite.
@@ -172,10 +177,19 @@ def consultar_historial_por_material(material_id, fecha_desde=None, fecha_hasta=
             "No existe el material solicitado.",
             status_code=404,
         )
+    if not InstanciaMaterial.objects.filter(
+        pk=instancia_id,
+        material_id=material_id,
+    ).exists():
+        raise PrestamoError(
+            "instancia_id",
+            "La instancia seleccionada no pertenece a este material.",
+            status_code=404,
+        )
 
     prestamos = (
         _consultar_prestamos_con_estado()
-        .filter(material_id=material_id)
+        .filter(material_id=material_id, instancia_id=instancia_id)
         .select_related("usuario", "devolucion")
     )
     if fecha_desde is not None:

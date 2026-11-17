@@ -42,6 +42,9 @@ export default function HistorialMaterial() {
   const { materialId } = useParams()
   const navigate = useNavigate()
   const [material, setMaterial] = useState(null)
+  const [cargandoMaterial, setCargandoMaterial] = useState(true)
+  const [errorMaterial, setErrorMaterial] = useState('')
+  const [instanciaSeleccionada, setInstanciaSeleccionada] = useState('')
   const [fechaDesde, setFechaDesde] = useState('')
   const [fechaHasta, setFechaHasta] = useState('')
   const [pagina, setPagina] = useState(1)
@@ -52,13 +55,23 @@ export default function HistorialMaterial() {
 
   useEffect(() => {
     let activa = true
+    setCargandoMaterial(true)
+    setErrorMaterial('')
+    setInstanciaSeleccionada('')
 
     api.get(`/materiales/${materialId}/`)
       .then((datos) => {
-        if (activa) setMaterial(datos)
+        if (activa) {
+          setMaterial(datos)
+          setCargandoMaterial(false)
+        }
       })
       .catch(() => {
-        if (activa) setMaterial(null)
+        if (activa) {
+          setMaterial(null)
+          setErrorMaterial('No se pudo cargar la lista de ejemplares del material.')
+          setCargandoMaterial(false)
+        }
       })
 
     return () => {
@@ -68,6 +81,11 @@ export default function HistorialMaterial() {
 
   useEffect(() => {
     let activa = true
+
+    if (!instanciaSeleccionada) {
+      setConsulta({ cargando: false, error: '', datos: null })
+      return undefined
+    }
 
     if (rangoInvalido) {
       setConsulta({
@@ -79,6 +97,7 @@ export default function HistorialMaterial() {
     }
 
     const parametros = new URLSearchParams({ page: String(pagina), page_size: String(TAMANO_PAGINA) })
+    parametros.set('instancia_id', instanciaSeleccionada)
     if (fechaDesde) parametros.set('desde', fechaDesde)
     if (fechaHasta) parametros.set('hasta', fechaHasta)
 
@@ -103,7 +122,7 @@ export default function HistorialMaterial() {
     return () => {
       activa = false
     }
-  }, [materialId, fechaDesde, fechaHasta, pagina, intento, rangoInvalido])
+  }, [materialId, instanciaSeleccionada, fechaDesde, fechaHasta, pagina, intento, rangoInvalido])
 
   function cambiarFecha(setFecha, valor) {
     setFecha(valor)
@@ -116,7 +135,7 @@ export default function HistorialMaterial() {
     setPagina(1)
   }
 
-  if (consulta.cargando) {
+  if (cargandoMaterial || consulta.cargando) {
     return (
       <section aria-label="Historial de préstamos del material" className="space-y-4" role="status" aria-live="polite">
         <p className="text-sm text-texto-suave">Cargando historial de préstamos…</p>
@@ -154,19 +173,48 @@ export default function HistorialMaterial() {
 
       <div className="grid gap-3 sm:grid-cols-2">
         <Campo
-          etiqueta="Entregado desde"
-          tipo="date"
-          valor={fechaDesde}
-          onCambio={(evento) => cambiarFecha(setFechaDesde, evento.target.value)}
+          etiqueta="Ejemplar"
+          opciones={[
+            {
+              valor: '',
+              etiqueta: material?.instancias?.length
+                ? 'Selecciona un ejemplar'
+                : 'No hay ejemplares registrados',
+            },
+            ...(material?.instancias || []).map((instancia) => ({
+              valor: instancia.id,
+              etiqueta: [instancia.codigo_ejemplar, instancia.numero_serie]
+                .filter(Boolean)
+                .join(' · '),
+            })),
+          ]}
+          valor={instanciaSeleccionada}
+          deshabilitado={!material?.instancias?.length}
+          onCambio={(evento) => {
+            const nuevaInstancia = evento.target.value
+            setInstanciaSeleccionada(nuevaInstancia)
+            setConsulta({ cargando: Boolean(nuevaInstancia), error: '', datos: null })
+            setPagina(1)
+          }}
         />
-        <Campo
-          etiqueta="Entregado hasta"
-          tipo="date"
-          valor={fechaHasta}
-          onCambio={(evento) => cambiarFecha(setFechaHasta, evento.target.value)}
-        />
+        {instanciaSeleccionada && (
+          <>
+            <Campo
+              etiqueta="Entregado desde"
+              tipo="date"
+              valor={fechaDesde}
+              onCambio={(evento) => cambiarFecha(setFechaDesde, evento.target.value)}
+            />
+            <Campo
+              etiqueta="Entregado hasta"
+              tipo="date"
+              valor={fechaHasta}
+              onCambio={(evento) => cambiarFecha(setFechaHasta, evento.target.value)}
+            />
+          </>
+        )}
       </div>
-      {tieneFiltros && (
+      {instanciaSeleccionada && tieneFiltros && (
         <Boton
           variante="fantasma"
           tamanio="pequeno"
@@ -178,7 +226,20 @@ export default function HistorialMaterial() {
         </Boton>
       )}
 
-      {consulta.error ? (
+      {errorMaterial ? (
+        <div className="mt-5">
+          <ErrorAlerta mensaje={errorMaterial} />
+        </div>
+      ) : !instanciaSeleccionada ? (
+        <div className="mt-5">
+          <EstadoVacio
+            titulo={material?.instancias?.length ? 'Selecciona un ejemplar' : 'Sin ejemplares individuales'}
+            mensaje={material?.instancias?.length
+              ? 'El historial y sus estadísticas se mostrarán después de elegir un ejemplar.'
+              : 'Este material no tiene ejemplares individuales registrados para consultar su historial.'}
+          />
+        </div>
+      ) : consulta.error ? (
         <div className="mt-5 grid gap-3">
           <ErrorAlerta mensaje={consulta.error} />
           {!rangoInvalido && (

@@ -22,7 +22,7 @@ from django.utils.dateparse import parse_datetime
 from PIL import Image
 from rest_framework.test import APIClient, APITestCase
 
-from apps.inventario.models import Material
+from apps.inventario.models import InstanciaMaterial, Material
 from apps.inventario.serializers import MaterialSerializer
 from apps.inventario.services import registrar_material
 from apps.prestamos.models import (
@@ -1326,10 +1326,11 @@ class HistorialMaterialAPITestCase(APITestCase):
         sesion[CLAVE_SESION_ULTIMA_ACTIVIDAD] = timezone.now().isoformat()
         sesion.save()
 
-    def _crear_prestamo(self, material, fecha_entrega):
+    def _crear_prestamo(self, material, fecha_entrega, instancia=None):
         return Prestamo.objects.create(
             usuario=self.prestatario,
             material=material,
+            instancia=instancia or material.instancias.first(),
             registrado_por=self.gestor,
             fecha_entrega=fecha_entrega,
             fecha_limite=fecha_entrega + timedelta(days=3),
@@ -1348,6 +1349,10 @@ class HistorialMaterialAPITestCase(APITestCase):
     def test_historial_filtra_material_y_periodo_y_calcula_resumen(self):
         material = crear_material(codigo_material="MATERIAL-HIST-001")
         otro_material = crear_material(codigo_material="MATERIAL-HIST-002")
+        otra_instancia = InstanciaMaterial.objects.create(
+            material=material,
+            codigo_ejemplar="MATERIAL-HIST-001-2",
+        )
         hoy = timezone.now().replace(hour=12, minute=0, second=0, microsecond=0)
         entrega_a_tiempo = hoy - timedelta(days=10)
         entrega_tardia_danada = hoy - timedelta(days=7)
@@ -1364,6 +1369,11 @@ class HistorialMaterialAPITestCase(APITestCase):
         )
 
         prestamo_pendiente = self._crear_prestamo(material, entrega_pendiente)
+        prestamo_otra_instancia = self._crear_prestamo(
+            material,
+            entrega_a_tiempo,
+            instancia=otra_instancia,
+        )
         self._crear_prestamo(material, hoy - timedelta(days=15))
         self._crear_prestamo(otro_material, entrega_a_tiempo)
         self._iniciar_sesion(self.gestor)
@@ -1371,6 +1381,7 @@ class HistorialMaterialAPITestCase(APITestCase):
         respuesta = self.client.get(
             self.URL.format(material_id=material.id),
             {
+                "instancia_id": material.instancias.first().id,
                 "desde": entrega_a_tiempo.date().isoformat(),
                 "hasta": entrega_pendiente.date().isoformat(),
             },
@@ -1382,6 +1393,10 @@ class HistorialMaterialAPITestCase(APITestCase):
         self.assertEqual(
             {prestamo["id"] for prestamo in datos["results"]},
             {prestamo_a_tiempo.id, prestamo_danado.id, prestamo_pendiente.id},
+        )
+        self.assertNotIn(
+            prestamo_otra_instancia.id,
+            {prestamo["id"] for prestamo in datos["results"]},
         )
         resultados = {prestamo["id"]: prestamo for prestamo in datos["results"]}
         self.assertEqual(resultados[prestamo_a_tiempo.id]["resultado"], "a_tiempo")
@@ -1402,7 +1417,10 @@ class HistorialMaterialAPITestCase(APITestCase):
         material = crear_material(codigo_material="MATERIAL-HIST-VACIO")
         self._iniciar_sesion(self.administrador)
 
-        respuesta = self.client.get(self.URL.format(material_id=material.id))
+        respuesta = self.client.get(
+            self.URL.format(material_id=material.id),
+            {"instancia_id": material.instancias.first().id},
+        )
 
         self.assertEqual(respuesta.status_code, 200)
         datos = respuesta.json()
@@ -1418,23 +1436,26 @@ class HistorialMaterialAPITestCase(APITestCase):
     def test_requiere_sesion_de_gestor_o_administrador(self):
         material = crear_material(codigo_material="MATERIAL-HIST-PERMISO")
         url = self.URL.format(material_id=material.id)
+        parametros = {"instancia_id": material.instancias.first().id}
 
-        self.assertEqual(self.client.get(url).status_code, 403)
+        self.assertEqual(self.client.get(url, parametros).status_code, 403)
 
         self._iniciar_sesion(self.prestatario)
-        self.assertEqual(self.client.get(url).status_code, 403)
+        self.assertEqual(self.client.get(url, parametros).status_code, 403)
 
         self._iniciar_sesion(self.administrador)
-        self.assertEqual(self.client.get(url).status_code, 200)
+        self.assertEqual(self.client.get(url, parametros).status_code, 200)
 
     def test_fechas_invalidas_y_material_inexistente_responden_error(self):
         material = crear_material(codigo_material="MATERIAL-HIST-VALIDACION")
         self._iniciar_sesion(self.gestor)
         url = self.URL.format(material_id=material.id)
+        parametros = {"instancia_id": material.instancias.first().id}
 
         fechas_invertidas = self.client.get(
             url,
             {
+                **parametros,
                 "desde": (timezone.localdate() + timedelta(days=1)).isoformat(),
                 "hasta": timezone.localdate().isoformat(),
             },
@@ -1442,13 +1463,29 @@ class HistorialMaterialAPITestCase(APITestCase):
         self.assertEqual(fechas_invertidas.status_code, 400)
         self.assertIn("desde", fechas_invertidas.json())
 
-        fecha_invalida = self.client.get(url, {"desde": "no-es-fecha"})
+        fecha_invalida = self.client.get(
+            url,
+            {**parametros, "desde": "no-es-fecha"},
+        )
         self.assertEqual(fecha_invalida.status_code, 400)
+
+        instancia_faltante = self.client.get(url)
+        self.assertEqual(instancia_faltante.status_code, 400)
+        self.assertIn("instancia_id", instancia_faltante.json())
 
         inexistente = self.client.get(
             self.URL.format(material_id=uuid4()),
+            {"instancia_id": uuid4()},
         )
         self.assertEqual(inexistente.status_code, 404)
+
+        otro_material = crear_material(codigo_material="MATERIAL-HIST-OTRO")
+        instancia_de_otro_material = otro_material.instancias.first()
+        ajena = self.client.get(
+            url,
+            {"instancia_id": instancia_de_otro_material.id},
+        )
+        self.assertEqual(ajena.status_code, 404)
 
 
 class BuscarPrestatariosAPITestCase(APITestCase):

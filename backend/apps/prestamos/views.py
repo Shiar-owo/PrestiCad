@@ -173,6 +173,7 @@ class HistorialMaterialView(GenericAPIView):
         try:
             prestamos, resumen = consultar_historial_por_material(
                 material_id,
+                instancia_id=filtro.validated_data["instancia_id"],
                 fecha_desde=filtro.validated_data.get("desde"),
                 fecha_hasta=filtro.validated_data.get("hasta"),
             )

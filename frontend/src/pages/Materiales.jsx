@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router'
 
 import { api } from '../api/client'
 import useTituloPagina from '../hooks/useTituloPagina'
@@ -38,6 +39,7 @@ function DatoResumen({ etiqueta, valor }) {
 
 function Materiales() {
   useTituloPagina('Inventario')
+  const navigate = useNavigate()
   const [materiales, setMateriales] = useState([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
@@ -302,6 +304,14 @@ function Materiales() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
+                        <Boton
+                          variante="fantasma"
+                          tamanio="pequeno"
+                          tipo="button"
+                          onClick={() => navigate(`/panel/inventario/${material.id}/historial`)}
+                        >
+                          Historial
+                        </Boton>
                         <Boton
                           variante="fantasma"
                           tamanio="pequeno"

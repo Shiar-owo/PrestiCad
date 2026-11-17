@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import {
+  AlertTriangle,
   Building,
   Camera,
   CheckCircle2,
@@ -76,6 +77,11 @@ function FormularioPerfil({ perfil, onGuardar, onGuardarFoto, onEliminarFoto, gu
   const inputFotoRef = useRef(null)
   const menuFotoRef = useRef(null)
 
+  // Doble verificación al eliminar o vaciar datos opcionales de contacto
+  const [modalEliminacionAbierto, setModalEliminacionAbierto] = useState(false)
+  const [camposAEliminar, setCamposAEliminar] = useState([])
+  const [datosContactoPendientes, setDatosContactoPendientes] = useState(null)
+
   const [errores, setErrores] = useState({})
   const [notificacion, setNotificacion] = useState(null)
   const timerNotifRef = useRef(null)
@@ -99,6 +105,7 @@ function FormularioPerfil({ perfil, onGuardar, onGuardarFoto, onEliminarFoto, gu
       if (evento.key === 'Escape') {
         setMenuFotoAbierto(false)
         setModalFotoAbierto(false)
+        setModalEliminacionAbierto(false)
       }
     }
 
@@ -282,7 +289,53 @@ function FormularioPerfil({ perfil, onGuardar, onGuardarFoto, onEliminarFoto, gu
       email_secundario: emailSecLimpio,
     }
 
+    // Doble verificación: comprobar si se está dejando en blanco o quitando un dato opcional previo
+    const camposBorrados = []
+    if (Boolean(perfil.email_secundario?.trim()) && !emailSecLimpio) {
+      camposBorrados.push({
+        id: 'email_secundario',
+        etiqueta: 'Correo de recuperación',
+        valorAnterior: perfil.email_secundario.trim(),
+      })
+    }
+    if (Boolean(perfil.telefono_secundario?.trim()) && !tel2Limpio) {
+      camposBorrados.push({
+        id: 'telefono_secundario',
+        etiqueta: 'Celular alternativo',
+        valorAnterior: perfil.telefono_secundario.trim(),
+      })
+    }
+    if (Boolean(perfil.telefono_terciario?.trim()) && !tel3Limpio) {
+      camposBorrados.push({
+        id: 'telefono_terciario',
+        etiqueta: 'Celular de respaldo',
+        valorAnterior: perfil.telefono_terciario.trim(),
+      })
+    }
+
+    if (camposBorrados.length > 0) {
+      setCamposAEliminar(camposBorrados)
+      setDatosContactoPendientes(datosContacto)
+      setModalEliminacionAbierto(true)
+      return
+    }
+
     onGuardar(datosContacto)
+  }
+
+  function confirmarEliminacionYGuardar() {
+    if (!datosContactoPendientes || !onGuardar) return
+    const datosParaEnviar = datosContactoPendientes
+    setModalEliminacionAbierto(false)
+    setCamposAEliminar([])
+    setDatosContactoPendientes(null)
+    onGuardar(datosParaEnviar)
+  }
+
+  function cancelarEliminacion() {
+    setModalEliminacionAbierto(false)
+    setCamposAEliminar([])
+    setDatosContactoPendientes(null)
   }
 
   const iniciales =
@@ -546,6 +599,74 @@ function FormularioPerfil({ perfil, onGuardar, onGuardarFoto, onEliminarFoto, gu
         </div>
       )}
 
+      {/* Modal de doble verificación para eliminación de datos opcionales */}
+      {modalEliminacionAbierto && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="titulo-modal-eliminacion"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-xs animate-in fade-in"
+          onClick={cancelarEliminacion}
+        >
+          <div
+            className="relative max-w-md w-full rounded-2xl bg-superficie p-5 sm:p-6 shadow-2xl border border-borde flex flex-col gap-4 animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3.5">
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-950/50 dark:text-red-400">
+                <AlertTriangle className="size-5" />
+              </div>
+              <div className="flex-1">
+                <h3 id="titulo-modal-eliminacion" className="text-base font-bold text-texto">
+                  Confirmar eliminación de información
+                </h3>
+                <p className="mt-1 text-xs text-texto-suave">
+                  Has dejado en blanco o quitado datos de contacto opcionales que tenías registrados. Si guardas estos cambios, se eliminarán de tu cuenta:
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-red-200/60 bg-red-50/50 p-3 dark:border-red-900/40 dark:bg-red-950/20">
+              <ul className="space-y-2 text-xs">
+                {camposAEliminar.map((item) => (
+                  <li key={item.id} className="flex flex-col gap-0.5">
+                    <span className="font-semibold text-texto">{item.etiqueta}:</span>
+                    <span className="text-red-700 dark:text-red-300 font-mono break-all line-through">
+                      {item.valorAnterior}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <p className="text-xs text-texto-suave">
+              ¿Deseas confirmar la eliminación de estos datos y guardar tu perfil?
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-borde/50">
+              <Boton
+                tipo="button"
+                variante="secundario"
+                tamanio="pequeno"
+                onClick={cancelarEliminacion}
+              >
+                Cancelar
+              </Boton>
+              <Boton
+                tipo="button"
+                variante="peligro"
+                tamanio="pequeno"
+                cargando={guardando}
+                deshabilitado={guardando}
+                onClick={confirmarEliminacionYGuardar}
+              >
+                Sí, eliminar y guardar
+              </Boton>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Bloque Destacado de Reputación */}
       <section aria-labelledby="titulo-reputacion">
         <h2 id="titulo-reputacion" className="sr-only">Nivel de Reputación</h2>
@@ -601,26 +722,32 @@ function FormularioPerfil({ perfil, onGuardar, onGuardarFoto, onEliminarFoto, gu
                   etiqueta="Correo institucional"
                   valor={perfil.email}
                 />
-                <FilaDatoInstitucional
-                  icono={Mail}
-                  etiqueta="Correo de recuperación"
-                  valor={perfil.email_secundario || 'No registrado'}
-                />
+                {Boolean(perfil.email_secundario?.trim()) && (
+                  <FilaDatoInstitucional
+                    icono={Mail}
+                    etiqueta="Correo de recuperación"
+                    valor={perfil.email_secundario}
+                  />
+                )}
                 <FilaDatoInstitucional
                   icono={Phone}
                   etiqueta="Celular principal"
                   valor={perfil.telefono || 'Sin celular registrado'}
                 />
-                <FilaDatoInstitucional
-                  icono={Phone}
-                  etiqueta="Celular alternativo"
-                  valor={perfil.telefono_secundario || 'No registrado'}
-                />
-                <FilaDatoInstitucional
-                  icono={Phone}
-                  etiqueta="Celular de respaldo"
-                  valor={perfil.telefono_terciario || 'No registrado'}
-                />
+                {Boolean(perfil.telefono_secundario?.trim()) && (
+                  <FilaDatoInstitucional
+                    icono={Phone}
+                    etiqueta="Celular alternativo"
+                    valor={perfil.telefono_secundario}
+                  />
+                )}
+                {Boolean(perfil.telefono_terciario?.trim()) && (
+                  <FilaDatoInstitucional
+                    icono={Phone}
+                    etiqueta="Celular de respaldo"
+                    valor={perfil.telefono_terciario}
+                  />
+                )}
               </div>
             </div>
 

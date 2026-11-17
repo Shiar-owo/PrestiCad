@@ -472,6 +472,22 @@ class ConsultaReportesSerializer(
         return attrs
 
 
+class FiltroHistorialMaterialSerializer(serializers.Serializer):
+    """Valida el período opcional del historial de un material."""
+
+    desde = serializers.DateField(required=False)
+    hasta = serializers.DateField(required=False)
+
+    def validate(self, attrs):
+        desde = attrs.get("desde")
+        hasta = attrs.get("hasta")
+        if desde and hasta and desde > hasta:
+            raise serializers.ValidationError(
+                {"desde": "La fecha inicial no puede ser posterior a la final."}
+            )
+        return attrs
+
+
 class ReporteDevolucionSerializer(serializers.ModelSerializer):
     """Fila del listado de reportes de daños (consulta y descarga, RN10)."""
 

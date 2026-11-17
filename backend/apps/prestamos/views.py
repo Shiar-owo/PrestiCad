@@ -12,6 +12,7 @@ from apps.prestamos.constants import ESTADOS_PRESTAMO
 from apps.prestamos.consultar_serializers import (
     PrestamoDevolucionDetalleSerializer,
     PrestamoHistorialDetalleSerializer,
+    PrestamoMaterialHistorialSerializer,
     PrestamoConsultaSerializer,
     PrestamoHistorialSerializer,
     SugerenciaPrestatarioSerializer,
@@ -30,6 +31,7 @@ from apps.prestamos.serializers import (
     DevolucionIngresoSerializer,
     DevolucionResultadoSerializer,
     FiltroHistorialPrestamosSerializer,
+    FiltroHistorialMaterialSerializer,
     PrestamoRegistroSerializer,
     RegistrarPrestamoSerializer,
     ReporteDevolucionSerializer,
@@ -41,6 +43,7 @@ from apps.prestamos.services import (
     buscar_prestatarios_por_dni,
     consultar_detalle_historial_prestamo,
     consultar_historial_prestamos,
+    consultar_historial_por_material,
     consultar_prestamo_para_devolucion,
     consultar_prestamos_usuario,
     consultar_reportes_devolucion,
@@ -154,6 +157,33 @@ class HistorialPrestamosView(GenericAPIView):
         pagina = self.paginate_queryset(prestamos)
         serializer = self.get_serializer(pagina, many=True)
         return self.get_paginated_response(serializer.data)
+
+
+class HistorialMaterialView(GenericAPIView):
+    """Consulta el historial y las estadísticas de un material concreto."""
+
+    permission_classes = [EsGestorOAdministrador]
+    serializer_class = PrestamoMaterialHistorialSerializer
+    pagination_class = HistorialPrestamosPagination
+
+    def get(self, request, material_id):
+        filtro = FiltroHistorialMaterialSerializer(data=request.query_params)
+        filtro.is_valid(raise_exception=True)
+
+        try:
+            prestamos, resumen = consultar_historial_por_material(
+                material_id,
+                fecha_desde=filtro.validated_data.get("desde"),
+                fecha_hasta=filtro.validated_data.get("hasta"),
+            )
+        except PrestamoError as error:
+            return _respuesta_error(error)
+
+        pagina = self.paginate_queryset(prestamos)
+        serializer = self.get_serializer(pagina, many=True)
+        respuesta = self.get_paginated_response(serializer.data)
+        respuesta.data["resumen"] = resumen
+        return respuesta
 
 
 def _respuesta_error(error):

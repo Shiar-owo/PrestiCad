@@ -337,6 +337,47 @@ class PrestamoHistorialDetalleSerializer(serializers.ModelSerializer):
         return ret
 
 
+class PrestamoMaterialHistorialSerializer(serializers.ModelSerializer):
+    """Fila resumida del historial de préstamos de un material."""
+
+    prestatario = serializers.SerializerMethodField()
+    fecha_devolucion = serializers.SerializerMethodField()
+    resultado = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Prestamo
+        fields = (
+            "id",
+            "prestatario",
+            "fecha_entrega",
+            "fecha_limite",
+            "fecha_devolucion",
+            "resultado",
+        )
+        read_only_fields = fields
+
+    def get_prestatario(self, obj):
+        return f"{obj.usuario.nombre} {obj.usuario.apellido}".strip()
+
+    def get_fecha_devolucion(self, obj):
+        try:
+            return obj.devolucion.fecha_devolucion
+        except Devolucion.DoesNotExist:
+            return None
+
+    def get_resultado(self, obj):
+        try:
+            devolucion = obj.devolucion
+        except Devolucion.DoesNotExist:
+            return "pendiente"
+
+        if (devolucion.resultado or {}).get("hay_dano"):
+            return "danado"
+        if devolucion.fecha_devolucion <= obj.fecha_limite:
+            return "a_tiempo"
+        return "tardio"
+
+
 class PrestamoDevolucionDetalleSerializer(serializers.ModelSerializer):
     """Datos para el formulario de devolución: estado visible, actores,
     checklist inicial y parámetros de sanción del material (RN06)."""

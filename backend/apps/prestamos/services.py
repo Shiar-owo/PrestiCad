@@ -160,6 +160,49 @@ def consultar_historial_prestamos(ahora=None, estado=None, dni=None):
     return prestamos
 
 
+def consultar_historial_por_material(material_id, fecha_desde=None, fecha_hasta=None):
+    """Devuelve préstamos de un material y sus estadísticas de puntualidad.
+
+    El período se aplica a la fecha de entrega. Las estadísticas consideran
+    solo préstamos devueltos; la puntualidad se determina por fecha límite.
+    """
+    if not Material.objects.filter(pk=material_id).exists():
+        raise PrestamoError(
+            "material_id",
+            "No existe el material solicitado.",
+            status_code=404,
+        )
+
+    prestamos = (
+        _consultar_prestamos_con_estado()
+        .filter(material_id=material_id)
+        .select_related("usuario", "devolucion")
+    )
+    if fecha_desde is not None:
+        prestamos = prestamos.filter(fecha_entrega__date__gte=fecha_desde)
+    if fecha_hasta is not None:
+        prestamos = prestamos.filter(fecha_entrega__date__lte=fecha_hasta)
+
+    devueltos = prestamos.filter(devolucion__isnull=False)
+    total_devoluciones = devueltos.count()
+    a_tiempo = devueltos.filter(
+        devolucion__fecha_devolucion__lte=F("fecha_limite"),
+    ).count()
+    tardios = total_devoluciones - a_tiempo
+
+    resumen = {
+        "total_prestamos": prestamos.count(),
+        "total_devoluciones": total_devoluciones,
+        "porcentaje_a_tiempo": round(a_tiempo * 100 / total_devoluciones, 2)
+        if total_devoluciones
+        else 0,
+        "porcentaje_tardias": round(tardios * 100 / total_devoluciones, 2)
+        if total_devoluciones
+        else 0,
+    }
+    return prestamos, resumen
+
+
 def consultar_prestamo_para_devolucion(prestamo_id):
     """Detalle para el formulario de devolución con el estado visible (vencido
     derivado en lectura) y los datos del prestatario."""

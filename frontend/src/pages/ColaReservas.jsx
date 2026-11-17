@@ -43,7 +43,7 @@ export default function ColaReservas() {
   const [searchParams, setSearchParams] = useSearchParams()
   const materialIdUrl = searchParams.get('materialId') || ''
 
-  const esGestor = usuario?.rol === 'gestor'
+  const esGestor = ['gestor', 'administrador'].includes(usuario?.rol)
 
   const [materiales, setMateriales] = useState([])
   const [busquedaMaterial, setBusquedaMaterial] = useState('')

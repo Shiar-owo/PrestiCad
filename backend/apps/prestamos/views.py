@@ -80,7 +80,7 @@ def _registrar_prestamo(request, *, es_excepcion=False):
 class RegistrarPrestamoView(APIView):
     """Registra la entrega de un material: POST /api/prestamos/."""
 
-    permission_classes = [EsGestorDeAlmacen]
+    permission_classes = [EsGestorOAdministrador]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def post(self, request):
@@ -90,7 +90,7 @@ class RegistrarPrestamoView(APIView):
 class RegistrarPrestamoExcepcionalView(APIView):
     """Registra una excepción académica directa: POST /api/prestamos/excepcion/."""
 
-    permission_classes = [EsGestorDeAlmacen]
+    permission_classes = [EsGestorOAdministrador]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def post(self, request):
@@ -195,13 +195,13 @@ def _respuesta_error(error):
 
 
 class DescargarDocumentoGarantiaView(APIView):
-    """Consulta privada del PDF y edición exclusiva del gestor de almacén."""
+    """Consulta privada del PDF y edición autorizada para gestor de almacén y administrador."""
 
     parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def get_permissions(self):
         permiso = (
-            EsGestorDeAlmacen
+            EsGestorOAdministrador
             if self.request.method == "PATCH"
             else EsGestorAdministradorOPrestatarioPropio
         )
@@ -321,7 +321,7 @@ def _respuesta_resultado(resultado, prestamo_id, devolucion=None, http_status=20
 class DetallePrestamoParaDevolucionView(APIView):
     """GET /api/prestamos/{id}/ — datos para el formulario de devolución (HU11)."""
 
-    permission_classes = [EsGestorDeAlmacen]
+    permission_classes = [EsGestorOAdministrador]
 
     def get(self, request, prestamo_id):
         try:
@@ -334,7 +334,7 @@ class DetallePrestamoParaDevolucionView(APIView):
 class EstimarDevolucionView(APIView):
     """POST /api/prestamos/{id}/devolucion/estimar/ — resumen sin persistir (HU11)."""
 
-    permission_classes = [EsGestorDeAlmacen]
+    permission_classes = [EsGestorOAdministrador]
 
     def post(self, request, prestamo_id):
         serializer = DevolucionIngresoSerializer(data=request.data)
@@ -354,7 +354,7 @@ class EstimarDevolucionView(APIView):
 class RegistrarDevolucionView(APIView):
     """POST /api/prestamos/{id}/devolucion/ — registra y calcula sanciones (HU11)."""
 
-    permission_classes = [EsGestorDeAlmacen]
+    permission_classes = [EsGestorOAdministrador]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def post(self, request, prestamo_id):

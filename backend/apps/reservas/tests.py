@@ -813,7 +813,7 @@ class ReservasAPITestCase(APITestCase):
             [r["id"] for r in cola.data["reservas_confirmadas"]],
         )
 
-    def test_endpoint_conversion_solo_permite_acceso_al_gestor(self):
+    def test_endpoint_conversion_solo_permite_acceso_al_gestor_y_administrador(self):
         self._autenticar(self.prestatario)
         respuesta = self.client.post(
             "/api/reservas/",
@@ -823,6 +823,11 @@ class ReservasAPITestCase(APITestCase):
 
         denegada = self.client.get(f"/api/reservas/confirmadas/{respuesta.data['id']}/")
         self.assertEqual(denegada.status_code, 403)
+
+        administrador = crear_usuario("admin.api.res@unsa.edu.pe", "30000009", rol="administrador")
+        self._autenticar(administrador)
+        permitida = self.client.get(f"/api/reservas/confirmadas/{respuesta.data['id']}/")
+        self.assertEqual(permitida.status_code, 200)
 
     def test_flujo_api_reserva_excepcional_aprobacion_y_descarga_garantia(self):
         with storage_garantias_temporal():

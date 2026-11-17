@@ -197,9 +197,9 @@ export default function HistorialPrestamos() {
           onSiguientePagina={() => cambiarPaginaDesdeDetalle('siguiente')}
           hayPaginaAnterior={Boolean(previous)}
           hayPaginaSiguiente={Boolean(next)}
-          puedeEditarGarantia={usuario?.rol === 'gestor'}
+          puedeEditarGarantia={['gestor', 'administrador'].includes(usuario?.rol)}
           onDevolucion={
-            usuario?.rol === 'gestor'
+            ['gestor', 'administrador'].includes(usuario?.rol)
               ? (prestamoId) => navigate(`/panel/devolucion/${prestamoId}`)
               : null
           }

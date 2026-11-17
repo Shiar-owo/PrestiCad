@@ -20,16 +20,17 @@ class EsPrestatarioAutenticado(BasePermission):
 
 
 class EsGestorDeAlmacen(BasePermission):
-    """Permite acciones operativas sobre la cola y las reservas exclusivamente al gestor de almacén."""
+    """Permite acciones operativas sobre la cola y las reservas al gestor de almacén o administrador."""
 
-    message_sin_sesion = "Inicia sesión como gestor de almacén para gestionar reservas."
-    message_rol = "Solo un gestor de almacén puede realizar esta acción."
+    message_sin_sesion = "Inicia sesión como gestor de almacén o administrador para gestionar reservas."
+    message_rol = "Solo un gestor de almacén o administrador puede realizar esta acción."
+    roles_permitidos = {"gestor", "administrador"}
 
     def has_permission(self, request, view):
         usuario = getattr(request, "usuario_autenticado", None)
         if usuario is None:
             raise PermissionDenied(detail=self.message_sin_sesion)
-        if usuario.rol.nombre != "gestor":
+        if usuario.rol.nombre not in self.roles_permitidos:
             raise PermissionDenied(detail=self.message_rol)
         return True
 

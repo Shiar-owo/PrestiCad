@@ -1830,17 +1830,25 @@ class RegistrarPrestamoAPITestCase(APITestCase):
         self.assertEqual(cables["unidades_disponibles"], 1)
         self.assertEqual(cables["estado"], "disponible")
 
-    def test_post_como_administrador_responde_403(self):
+    def test_post_como_administrador_devuelve_201(self):
         administrador = crear_usuario(
             "admin-api@unsa.edu.pe",
             "20000003",
             rol="administrador",
         )
         self._iniciar_sesion(administrador)
+        instancia = self.material.instancias.get()
 
-        respuesta = self.client.post(self.URL, self._payload(), format="json")
+        with storage_garantias_temporal():
+            respuesta = self.client.post(
+                self.URL,
+                self._payload_multipart(instancia_id=str(instancia.id)),
+                format="multipart",
+            )
 
-        self.assertEqual(respuesta.status_code, 403)
+        self.assertEqual(respuesta.status_code, 201, respuesta.content)
+        self.assertEqual(Prestamo.objects.count(), 1)
+        self.assertEqual(Prestamo.objects.get().registrado_por, administrador)
 
     def test_post_datos_invalidos_responde_400(self):
         self._iniciar_sesion(self.gestor)
@@ -2033,7 +2041,7 @@ class DescargarGarantiaAPITestCase(APITestCase):
             como_otro_prestatario = self.client.get(url)
             self.assertEqual(como_otro_prestatario.status_code, 403)
 
-    def test_solo_el_gestor_puede_reemplazar_documentos_de_garantia(self):
+    def test_gestor_y_administrador_pueden_reemplazar_documentos_de_garantia_pero_prestatario_no(self):
         with storage_garantias_temporal():
             prestamo = self._registrar_prestamo_con_garantia()
             url = self.URL.format(
@@ -2041,15 +2049,21 @@ class DescargarGarantiaAPITestCase(APITestCase):
                 tipo="documento-identidad",
             )
 
-            for usuario in (self.administrador, self.prestatario):
-                with self.subTest(rol=usuario.rol.nombre):
-                    self._iniciar_sesion(usuario)
-                    respuesta = self.client.patch(
-                        url,
-                        {"archivo": crear_pdf("reemplazo.pdf")},
-                        format="multipart",
-                    )
-                    self.assertEqual(respuesta.status_code, 403)
+            self._iniciar_sesion(self.prestatario)
+            respuesta_prestatario = self.client.patch(
+                url,
+                {"archivo": crear_pdf("reemplazo.pdf")},
+                format="multipart",
+            )
+            self.assertEqual(respuesta_prestatario.status_code, 403)
+
+            self._iniciar_sesion(self.administrador)
+            respuesta_admin = self.client.patch(
+                url,
+                {"archivo": crear_pdf("reemplazo-admin.pdf")},
+                format="multipart",
+            )
+            self.assertEqual(respuesta_admin.status_code, 200)
 
             prestamo.garantia.refresh_from_db()
             self.assertTrue(prestamo.garantia.documento_identidad.name)
@@ -2959,13 +2973,14 @@ class DevolucionAPITestCase(DevolucionBaseTestCase):
         self.assertEqual(respuesta.status_code, 403)
         self.assertEqual(Devolucion.objects.count(), 0)
 
-    def test_post_devolucion_como_administrador_responde_403(self):
+    def test_post_devolucion_como_administrador_devuelve_201(self):
         self._iniciar_sesion(self.administrador)
 
         respuesta = self._post_multipart()
 
-        self.assertEqual(respuesta.status_code, 403)
-        self.assertEqual(Devolucion.objects.count(), 0)
+        self.assertEqual(respuesta.status_code, 201, respuesta.content)
+        self.assertEqual(Devolucion.objects.count(), 1)
+        self.assertEqual(Devolucion.objects.get().realizado_por, self.administrador)
 
     def test_post_devolucion_con_dano_devuelve_201_con_reporte(self):
         self._iniciar_sesion(self.gestor)

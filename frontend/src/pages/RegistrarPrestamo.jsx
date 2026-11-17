@@ -85,10 +85,10 @@ const OPCIONES_MATERIAL = (materiales) => [
 
 function RegistrarPrestamo() {
   useTituloPagina('Registrar entrega')
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const dniInicial = searchParams.get('dni') || ''
   const reservaIdInicial = searchParams.get('reservaId') || ''
-  const esConversionFija = Boolean(reservaIdInicial)
+  const esConversionFija = Boolean(reservaIdInicial && searchParams.get('reservaId'))
 
   const [materiales, setMateriales] = useState([])
   const [instancias, setInstancias] = useState([])
@@ -204,15 +204,6 @@ function RegistrarPrestamo() {
               esExcepcion: Boolean(coincide.es_excepcion),
             }))
           }
-        } else if (listaConfirmadas.length > 0) {
-          const primera = listaConfirmadas[0]
-          setFormulario((actual) => ({
-            ...actual,
-            reservaId: String(primera.id),
-            materialId: String(primera.material?.id || ''),
-            instanciaId: String(primera.instancia?.id || ''),
-            esExcepcion: Boolean(primera.es_excepcion),
-          }))
         }
       })
       .catch((errorApi) => {
@@ -366,6 +357,12 @@ function RegistrarPrestamo() {
     }))
     setError('')
     setPrestamoCreado(null)
+  }
+
+  function desvincularReserva() {
+    setReservaFija(null)
+    setSearchParams(formulario.dni ? { dni: formulario.dni } : {})
+    seleccionarReserva('')
   }
 
   function actualizar(campo, valor) {
@@ -642,28 +639,46 @@ function RegistrarPrestamo() {
               requerido
             />
             {(reservasConfirmadas.length > 0 || reservaSeleccionada) && (
-              <div className="rounded-xl border border-marca-300 bg-marca-50/50 p-4 space-y-2 dark:border-marca-700 dark:bg-marca-950/30">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-                      <label
-                        htmlFor="select-reserva-confirmada"
-                        className="block text-sm font-bold text-marca-900 dark:text-marca-200"
-                      >
-                        {esConversionFija ? 'Reserva confirmada a convertir' : `Convertir reserva confirmada vigente (${reservasConfirmadas.length})`}
-                      </label>
-                      {reservaIdInicial && (
-                        <span className="rounded-full bg-marca-100 px-2.5 py-0.5 text-xs font-semibold text-marca-800 dark:bg-marca-950/80 dark:text-marca-300">
-                          Modo conversión de reserva
-                        </span>
-                      )}
-                    </div>
+              <div className="rounded-xl border border-marca-300 bg-marca-50/50 p-4 space-y-3 dark:border-marca-700 dark:bg-marca-950/30">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <label
+                      htmlFor="select-reserva-confirmada"
+                      className="block text-sm font-bold text-marca-900 dark:text-marca-200"
+                    >
+                      {esConversionFija ? 'Reserva confirmada vinculada' : `Convertir reserva confirmada vigente (${reservasConfirmadas.length})`}
+                    </label>
+                    {reservaIdInicial && (
+                      <span className="rounded-full bg-marca-100 px-2.5 py-0.5 text-xs font-semibold text-marca-800 dark:bg-marca-950/80 dark:text-marca-300">
+                        Modo conversión
+                      </span>
+                    )}
+                  </div>
+                  {reservaSeleccionada && (
+                    <Boton
+                      tipo="button"
+                      variante="secundario"
+                      tamanio="pequeno"
+                      onClick={desvincularReserva}
+                    >
+                      Hacer préstamo independiente (desvincular reserva)
+                    </Boton>
+                  )}
+                </div>
 
                 <select
                   id="select-reserva-confirmada"
                   value={formulario.reservaId}
-                  disabled={esConversionFija}
-                  onChange={(e) => seleccionarReserva(e.target.value)}
+                  onChange={(e) => {
+                    if (e.target.value === '') {
+                      desvincularReserva()
+                    } else {
+                      seleccionarReserva(e.target.value)
+                    }
+                  }}
                   className="w-full rounded-lg border border-borde bg-white px-3 py-2 text-sm text-texto disabled:bg-superficie-alta disabled:cursor-not-allowed dark:bg-superficie"
                 >
+                  <option value="">-- Préstamo independiente (no usar reserva) --</option>
                   {(esConversionFija && reservaSeleccionada
                     ? [reservaSeleccionada]
                     : reservasConfirmadas
@@ -680,12 +695,12 @@ function RegistrarPrestamo() {
                   <p className="text-xs text-texto-suave">
                     {esConversionFija ? (
                       <span className="font-semibold text-marca-800 dark:text-marca-300">
-                        Conversión de reserva fija: el material y el ejemplar {reservaSeleccionada.instancia?.codigo_ejemplar} están cargados y bloqueados para esta entrega.
+                        Conversión de reserva: ejemplar {reservaSeleccionada.instancia?.codigo_ejemplar} cargado. Si deseas registrar un préstamo diferente para este usuario, haz clic en "Hacer préstamo independiente".
                       </span>
                     ) : (
                       <>
-                        Se ha precargado automáticamente el material y el ejemplar{' '}
-                        <strong>{reservaSeleccionada.instancia?.codigo_ejemplar}</strong> asignado a la reserva.
+                        Se ha cargado el material y el ejemplar{' '}
+                        <strong>{reservaSeleccionada.instancia?.codigo_ejemplar}</strong> asignado a la reserva confirmada.
                       </>
                     )}
                   </p>

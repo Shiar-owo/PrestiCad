@@ -8,6 +8,7 @@ from apps.prestamos.views import (
     DescargarFotoChecklistView,
     EstimarDevolucionView,
     HistorialPrestamosView,
+    HistorialMaterialView,
     ListarReportesDevolucionView,
     MisPrestamosView,
     RegistrarDevolucionView,
@@ -29,6 +30,11 @@ urlpatterns = [
         name="buscar-prestatarios-prestamo",
     ),
     path("prestamos/historial/", HistorialPrestamosView.as_view(), name="historial-prestamos"),
+    path(
+        "materiales/<uuid:material_id>/historial/",
+        HistorialMaterialView.as_view(),
+        name="historial-material",
+    ),
     path(
         "prestamos/<int:prestamo_id>/historial/",
         DetalleHistorialPrestamoView.as_view(),

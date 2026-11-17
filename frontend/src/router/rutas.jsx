@@ -13,6 +13,7 @@ import MisReservas from '../pages/MisReservas'
 import ReservarMaterial from '../pages/ReservarMaterial'
 import ColaReservas from '../pages/ColaReservas'
 import HistorialPrestamos from '../prestamos/HistorialPrestamos'
+import HistorialMaterial from '../prestamos/HistorialMaterial'
 import Materiales from '../pages/Materiales'
 import RegistrarPrestamo from '../pages/RegistrarPrestamo'
 import DevolucionPrestamo from '../pages/DevolucionPrestamo'
@@ -98,6 +99,14 @@ function Rutas() {
           element={
             <RequerirRol roles={['gestor', 'administrador']}>
               <Materiales />
+            </RequerirRol>
+          }
+        />
+        <Route
+          path="inventario/:materialId/historial"
+          element={
+            <RequerirRol roles={['gestor', 'administrador']}>
+              <HistorialMaterial />
             </RequerirRol>
           }
         />

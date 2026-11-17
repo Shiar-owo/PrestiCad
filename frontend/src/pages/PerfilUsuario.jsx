@@ -601,26 +601,32 @@ function FormularioPerfil({ perfil, onGuardar, onGuardarFoto, onEliminarFoto, gu
                   etiqueta="Correo institucional"
                   valor={perfil.email}
                 />
-                <FilaDatoInstitucional
-                  icono={Mail}
-                  etiqueta="Correo de recuperación"
-                  valor={perfil.email_secundario || 'No registrado'}
-                />
+                {Boolean(perfil.email_secundario?.trim()) && (
+                  <FilaDatoInstitucional
+                    icono={Mail}
+                    etiqueta="Correo de recuperación"
+                    valor={perfil.email_secundario}
+                  />
+                )}
                 <FilaDatoInstitucional
                   icono={Phone}
                   etiqueta="Celular principal"
                   valor={perfil.telefono || 'Sin celular registrado'}
                 />
-                <FilaDatoInstitucional
-                  icono={Phone}
-                  etiqueta="Celular alternativo"
-                  valor={perfil.telefono_secundario || 'No registrado'}
-                />
-                <FilaDatoInstitucional
-                  icono={Phone}
-                  etiqueta="Celular de respaldo"
-                  valor={perfil.telefono_terciario || 'No registrado'}
-                />
+                {Boolean(perfil.telefono_secundario?.trim()) && (
+                  <FilaDatoInstitucional
+                    icono={Phone}
+                    etiqueta="Celular alternativo"
+                    valor={perfil.telefono_secundario}
+                  />
+                )}
+                {Boolean(perfil.telefono_terciario?.trim()) && (
+                  <FilaDatoInstitucional
+                    icono={Phone}
+                    etiqueta="Celular de respaldo"
+                    valor={perfil.telefono_terciario}
+                  />
+                )}
               </div>
             </div>
 

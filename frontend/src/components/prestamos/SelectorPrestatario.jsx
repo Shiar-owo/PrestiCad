@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 
 import { api } from '../../api/client'
 import {
@@ -23,10 +23,30 @@ export default function SelectorPrestatario({
   deshabilitado = false,
 }) {
   const id = useId()
+  const contenedorRef = useRef(null)
   const [seleccionado, setSeleccionado] = useState(null)
   const [sugerencias, setSugerencias] = useState([])
   const [cargando, setCargando] = useState(false)
   const [errorBusqueda, setErrorBusqueda] = useState('')
+
+  useEffect(() => {
+    function manejarClickFuera(e) {
+      if (contenedorRef.current && !contenedorRef.current.contains(e.target)) {
+        setSugerencias([])
+      }
+    }
+    function manejarTecla(e) {
+      if (e.key === 'Escape') {
+        setSugerencias([])
+      }
+    }
+    document.addEventListener('mousedown', manejarClickFuera)
+    document.addEventListener('keydown', manejarTecla)
+    return () => {
+      document.removeEventListener('mousedown', manejarClickFuera)
+      document.removeEventListener('keydown', manejarTecla)
+    }
+  }, [])
 
   useEffect(() => {
     let vigente = true
@@ -84,33 +104,38 @@ export default function SelectorPrestatario({
   )
 
   return (
-    <div className="grid gap-2">
-      <Campo
-        etiqueta={etiqueta}
-        valor={valor}
-        onCambio={cambiar}
-        error={error}
-        ayuda={ayudaCampo}
-        inputMode="numeric"
-        autoComplete="off"
-        maxLength={8}
-        requerido={requerido}
-        deshabilitado={deshabilitado}
-        role="combobox"
-        aria-autocomplete="list"
-        aria-expanded={sugerencias.length > 0}
-        aria-controls={`${id}-sugerencias`}
-        aria-busy={cargando}
-      />
-      {cargando && (
-        <p className="flex items-center gap-2 text-xs text-texto-suave" role="status" aria-live="polite">
+    <div className="relative grid gap-2" ref={contenedorRef}>
+      <div className="relative">
+        <Campo
+          etiqueta={etiqueta}
+          valor={valor}
+          onCambio={cambiar}
+          error={error}
+          ayuda={ayudaCampo}
+          inputMode="numeric"
+          autoComplete="off"
+          maxLength={8}
+          requerido={requerido}
+          deshabilitado={deshabilitado}
+          role="combobox"
+          aria-autocomplete="list"
+          aria-expanded={sugerencias.length > 0}
+          aria-controls={`${id}-sugerencias`}
+          aria-busy={cargando}
+        />
+        {cargando && (
           <span
-            aria-hidden="true"
-            className="size-3 animate-spin rounded-full border-2 border-acento-600 border-t-transparent"
-          />
-          Buscando prestatarios…
-        </p>
-      )}
+            className="absolute right-3 top-9 flex items-center gap-1.5 text-xs text-texto-suave pointer-events-none"
+            role="status"
+            aria-live="polite"
+          >
+            <span
+              aria-hidden="true"
+              className="size-4 animate-spin rounded-full border-2 border-acento-600 border-t-transparent"
+            />
+          </span>
+        )}
+      </div>
       {errorBusqueda && (
         <p className="rounded-lg border border-error/30 bg-error/5 px-3 py-2 text-xs text-error" role="status">
           {errorBusqueda}
@@ -121,21 +146,25 @@ export default function SelectorPrestatario({
           id={`${id}-sugerencias`}
           role="listbox"
           aria-label="Prestatarios coincidentes"
-          className="max-h-64 divide-y divide-borde overflow-y-auto rounded-xl border border-borde bg-white shadow-xl ring-1 ring-black/5 dark:bg-superficie"
+          className="absolute left-0 right-0 top-full z-40 mt-1 max-h-60 divide-y divide-borde overflow-y-auto rounded-xl border border-borde bg-white shadow-2xl ring-1 ring-black/5 dark:bg-superficie"
         >
           {sugerencias.map((prestatario) => (
             <li key={prestatario.dni} role="option" aria-selected="false">
               <button
                 type="button"
-                aria-label={crearEtiquetaPrestatario(prestatario)}
-                className="grid w-full grid-cols-[auto_auto_minmax(0,1fr)] items-start gap-x-2 px-3 py-3 text-left transition-colors hover:bg-acento-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-acento-600 focus-visible:outline-offset-[-2px] dark:hover:bg-acento-500/10"
+                onMouseDown={(e) => {
+                  // Prevenir desenfoque del input para evitar requerir doble clic
+                  e.preventDefault()
+                }}
                 onClick={() => seleccionar(prestatario)}
+                aria-label={crearEtiquetaPrestatario(prestatario)}
+                className="grid w-full grid-cols-[auto_auto_minmax(0,1fr)] items-center gap-x-2.5 px-3.5 py-2.5 text-left transition-colors hover:bg-acento-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-acento-600 focus-visible:outline-offset-[-2px] dark:hover:bg-acento-500/10 cursor-pointer"
               >
-                <span className="rounded-md bg-superficie-alta px-2 py-1 font-mono text-xs font-bold tabular-nums text-texto">
+                <span className="rounded-md bg-superficie-alta px-2 py-0.5 font-mono text-xs font-bold tabular-nums text-texto border border-borde/40">
                   {prestatario.dni}
                 </span>
-                <span aria-hidden="true" className="pt-1.5 text-sm text-texto-suave">-</span>
-                <span className="min-w-0 break-words pt-1 text-sm font-medium leading-5 text-texto">
+                <span aria-hidden="true" className="text-sm text-texto-suave">·</span>
+                <span className="min-w-0 truncate text-sm font-semibold text-texto">
                   {prestatario.nombre_completo}
                 </span>
               </button>

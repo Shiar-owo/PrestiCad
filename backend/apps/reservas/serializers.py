@@ -14,6 +14,7 @@ from apps.reservas.constants import (
     HORARIO_ATENCION_FIN,
     HORARIO_ATENCION_INICIO,
     MENSAJES_ERROR_RESERVA,
+    MINIMO_MINUTOS_RESERVA,
 )
 from apps.reservas.models import Reserva
 from apps.reservas.services import calcular_posicion_en_cola
@@ -69,6 +70,10 @@ class CrearReservaSerializer(serializers.Serializer):
             if fecha_fin <= fecha_inicio:
                 raise serializers.ValidationError({
                     "fecha_fin": "La fecha y hora de fin debe ser posterior a la de inicio.",
+                })
+            if (fecha_fin - fecha_inicio) < timedelta(minutes=MINIMO_MINUTOS_RESERVA):
+                raise serializers.ValidationError({
+                    "fecha_fin": "La reserva debe tener una duración mínima de 1 hora (60 minutos).",
                 })
             for etiqueta, valor in (("fecha_inicio", fecha_inicio), ("fecha_fin", fecha_fin)):
                 if valor.weekday() not in DIAS_LABORABLES:

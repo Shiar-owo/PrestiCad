@@ -17,7 +17,7 @@ from apps.reservas.constants import (
     MINIMO_MINUTOS_RESERVA,
 )
 from apps.reservas.models import Reserva
-from apps.reservas.services import calcular_posicion_en_cola
+from apps.reservas.services import calcular_minutos_habiles, calcular_posicion_en_cola
 
 
 class CrearReservaSerializer(serializers.Serializer):
@@ -71,10 +71,6 @@ class CrearReservaSerializer(serializers.Serializer):
                 raise serializers.ValidationError({
                     "fecha_fin": "La fecha y hora de fin debe ser posterior a la de inicio.",
                 })
-            if (fecha_fin - fecha_inicio) < timedelta(minutes=MINIMO_MINUTOS_RESERVA):
-                raise serializers.ValidationError({
-                    "fecha_fin": "La reserva debe tener una duración mínima de 1 hora (60 minutos).",
-                })
             for etiqueta, valor in (("fecha_inicio", fecha_inicio), ("fecha_fin", fecha_fin)):
                 if valor.weekday() not in DIAS_LABORABLES:
                     raise serializers.ValidationError({
@@ -88,12 +84,9 @@ class CrearReservaSerializer(serializers.Serializer):
                             f"({HORA_RESERVA_MINIMO_INICIO}:00 a {HORA_RESERVA_MAXIMO_FIN}:00)."
                         ),
                     })
-
-            lunes_inicio = fecha_inicio.date() - timedelta(days=fecha_inicio.weekday())
-            lunes_fin = fecha_fin.date() - timedelta(days=fecha_fin.weekday())
-            if lunes_inicio != lunes_fin:
+            if calcular_minutos_habiles(fecha_inicio, fecha_fin) < MINIMO_MINUTOS_RESERVA:
                 raise serializers.ValidationError({
-                    "fecha_fin": "La reserva debe realizarse dentro de la misma semana (lunes a viernes) y no puede extenderse cruzando el fin de semana.",
+                    "fecha_fin": "La reserva debe tener una duración mínima de 1 hora (60 minutos).",
                 })
         return attrs
 

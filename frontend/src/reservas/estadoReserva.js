@@ -143,6 +143,7 @@ export function validarFormularioReserva({
   justificacion,
   esExcepcion = false,
   esAvanzado = false,
+  material = null,
   documentoIdentidad = null,
   compromisoResponsabilidad = null,
 }) {
@@ -158,7 +159,8 @@ export function validarFormularioReserva({
     horaFin,
     esAvanzado,
     fechaInicio,
-    fechaFin
+    fechaFin,
+    material,
   )
   if (Object.keys(erroresHorario).length > 0) {
     Object.assign(errores, erroresHorario)
@@ -244,12 +246,69 @@ export function obtenerMinimoFinReserva(fechaInicio) {
   return formatearFechaHoraInput(minimo)
 }
 
-export function obtenerMaximoFinReserva(fechaInicio) {
+export function contarDiasFinDeSemanaIntermedios(fechaInicio, fechaFin) {
+  if (!fechaInicio || !fechaFin) return 0
+  const inicio = new Date(fechaInicio)
+  const fin = new Date(fechaFin)
+  if (Number.isNaN(inicio.getTime()) || Number.isNaN(fin.getTime()) || fin <= inicio) {
+    return 0
+  }
+  if (!DIAS_LABORABLES.includes(inicio.getDay()) || !DIAS_LABORABLES.includes(fin.getDay())) {
+    return 0
+  }
+  const cursor = new Date(inicio.getFullYear(), inicio.getMonth(), inicio.getDate() + 1)
+  const limite = new Date(fin.getFullYear(), fin.getMonth(), fin.getDate())
+  let diasFinDeSemana = 0
+  while (cursor < limite) {
+    const dia = cursor.getDay()
+    if (dia === 0 || dia === 6) {
+      diasFinDeSemana += 1
+    }
+    cursor.setDate(cursor.getDate() + 1)
+  }
+  return diasFinDeSemana
+}
+
+export function cruzaFinDeSemana(fechaInicio, fechaFin) {
+  return contarDiasFinDeSemanaIntermedios(fechaInicio, fechaFin) > 0
+}
+
+export function calcularMinutosHabilesReserva(fechaInicio, fechaFin) {
+  if (!fechaInicio || !fechaFin) return NaN
+  const inicio = new Date(fechaInicio)
+  const fin = new Date(fechaFin)
+  if (Number.isNaN(inicio.getTime()) || Number.isNaN(fin.getTime())) return NaN
+  const minutosTotales = (fin.getTime() - inicio.getTime()) / 60000
+  const diasFinDeSemana = contarDiasFinDeSemanaIntermedios(inicio, fin)
+  return minutosTotales - diasFinDeSemana * 1440
+}
+
+export function obtenerMaximoFinReserva(fechaInicio, material = null) {
   if (!fechaInicio) return ''
-  const maximo = new Date(fechaInicio)
-  if (Number.isNaN(maximo.getTime())) return ''
-  maximo.setDate(maximo.getDate() + (5 - (maximo.getDay() || 7)))
-  maximo.setHours(HORA_RESERVA_MAXIMO_FIN, 0, 0, 0)
+  const inicio = new Date(fechaInicio)
+  if (Number.isNaN(inicio.getTime())) return ''
+  const maximoMinutos = Number(material?.tiempo_maximo_prestamo) > 0
+    ? Number(material.tiempo_maximo_prestamo)
+    : 15 * 24 * 60
+
+  const maximo = new Date(inicio.getTime() + maximoMinutos * 60000)
+  const cursor = new Date(inicio.getFullYear(), inicio.getMonth(), inicio.getDate() + 1)
+  while (cursor <= new Date(maximo.getFullYear(), maximo.getMonth(), maximo.getDate())) {
+    const dia = cursor.getDay()
+    if (dia === 0 || dia === 6) {
+      maximo.setDate(maximo.getDate() + 1)
+    }
+    cursor.setDate(cursor.getDate() + 1)
+  }
+  while (maximo.getDay() === 0 || maximo.getDay() === 6) {
+    maximo.setDate(maximo.getDate() + 1)
+  }
+  const minutosDia = maximo.getHours() * 60 + maximo.getMinutes()
+  if (minutosDia > HORA_RESERVA_MAXIMO_FIN * 60) {
+    maximo.setHours(HORA_RESERVA_MAXIMO_FIN, 0, 0, 0)
+  } else if (minutosDia < HORA_RESERVA_MINIMO_INICIO * 60) {
+    maximo.setHours(HORA_RESERVA_MINIMO_INICIO, 0, 0, 0)
+  }
   return formatearFechaHoraInput(maximo)
 }
 
@@ -295,9 +354,13 @@ export function validarHorarioReserva(
   horaFin,
   esAvanzado = false,
   fechaInicio = null,
-  fechaFin = null
+  fechaFin = null,
+  material = null,
 ) {
   const errores = {}
+  const maximoMinutosMaterial = Number(material?.tiempo_maximo_prestamo) > 0
+    ? Number(material.tiempo_maximo_prestamo)
+    : null
   if (esAvanzado) {
     // Validar fecha de forma independiente
     if (!fechaSeleccionada) {
@@ -342,10 +405,13 @@ export function validarHorarioReserva(
     if (fechaSeleccionada && horaInicio && horaFin && !errores.fecha && !errores.horaInicio && !errores.horaFin) {
       const inicio = new Date(`${fechaSeleccionada}T${horaInicio}:00`)
       const fin = new Date(`${fechaSeleccionada}T${horaFin}:00`)
+      const minutosReserva = (fin.getTime() - inicio.getTime()) / 60000
       if (fin <= inicio) {
         errores.horaFin = 'La hora de fin debe ser posterior a la de inicio.'
-      } else if ((fin.getTime() - inicio.getTime()) / 60000 < MINIMO_MINUTOS_RESERVA) {
+      } else if (minutosReserva < MINIMO_MINUTOS_RESERVA) {
         errores.horaFin = 'La reserva debe tener una duración mínima de 1 hora (60 minutos).'
+      } else if (maximoMinutosMaterial && minutosReserva > maximoMinutosMaterial) {
+        errores.horaFin = 'La duración de la reserva supera el tiempo máximo permitido para este material.'
       }
     }
   } else {
@@ -396,18 +462,19 @@ export function validarHorarioReserva(
       const inicio = new Date(fechaInicio)
       const fin = new Date(fechaFin)
       if (!Number.isNaN(inicio.getTime()) && !Number.isNaN(fin.getTime())) {
+        const minutosHabiles = calcularMinutosHabilesReserva(inicio, fin)
         if (fin <= inicio) {
           errores.fechaFin =
             (errores.fechaFin ? errores.fechaFin + ' ' : '') +
             'La fecha y hora de fin debe ser posterior a la de inicio.'
-        } else if ((fin.getTime() - inicio.getTime()) / 60000 < MINIMO_MINUTOS_RESERVA) {
+        } else if (minutosHabiles < MINIMO_MINUTOS_RESERVA) {
           errores.fechaFin =
             (errores.fechaFin ? errores.fechaFin + ' ' : '') +
             'La reserva debe tener una duración mínima de 1 hora (60 minutos).'
-        } else if (obtenerLunesSemana(inicio) !== obtenerLunesSemana(fin)) {
+        } else if (maximoMinutosMaterial && minutosHabiles > maximoMinutosMaterial) {
           errores.fechaFin =
             (errores.fechaFin ? errores.fechaFin + ' ' : '') +
-            'La reserva debe realizarse dentro de la misma semana (lunes a viernes) sin cruzar el fin de semana.'
+            'La duración de la reserva supera el tiempo máximo permitido para este material (sin contar sábado ni domingo).'
         }
       }
     }

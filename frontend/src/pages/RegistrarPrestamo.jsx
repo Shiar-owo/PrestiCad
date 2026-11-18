@@ -40,6 +40,10 @@ import {
   crearOpcionesInstancia,
   obtenerInstanciaSeleccionada,
 } from '../prestamos/instanciasPrestamo'
+import {
+  calcularMinutosHabilesReserva,
+  cruzaFinDeSemana,
+} from '../reservas/estadoReserva'
 
 const FORMULARIO_INICIAL = {
   dni: '',
@@ -90,7 +94,7 @@ function fechaParaCalendario(valor = new Date()) {
 
 function calcularMinutosEntreFechas(inicio, fin) {
   if (!inicio || !fin) return NaN
-  return (new Date(fin).getTime() - new Date(inicio).getTime()) / 60000
+  return calcularMinutosHabilesReserva(inicio, fin)
 }
 
 const OPCIONES_MATERIAL = (materiales) => [
@@ -967,9 +971,18 @@ function RegistrarPrestamo() {
                     {Number.isFinite(duracionPrestamoMinutos) && duracionPrestamoMinutos > 0 && (
                       <span className="text-xs font-bold text-texto">
                         Duración: {formatearDuracionMinutos(duracionPrestamoMinutos)}
+                        {cruzaFinDeSemana(fechaInicioPrestamo, fechaFinPrestamo) ? ' (hábiles, sin fin de semana)' : ''}
                       </span>
                     )}
                   </div>
+                  {cruzaFinDeSemana(fechaInicioPrestamo, fechaFinPrestamo) && (
+                    <div
+                      role="note"
+                      className="rounded-lg border border-acento-300 bg-acento-50/70 p-2.5 text-xs text-acento-900 dark:border-acento-800 dark:bg-acento-950/40 dark:text-acento-200"
+                    >
+                      <strong>Aclaración para el trámite (cruce de fin de semana):</strong> Este préstamo cruza sábado y/o domingo. Como el almacén permanece cerrado los fines de semana, esos días no consumen el tiempo máximo permitido del material y la devolución queda programada para el día hábil límite indicado ({fechaLegible(fechaFinPrestamo)}).
+                    </div>
+                  )}
                   {errores.dias && <p className="text-xs font-medium text-error">{errores.dias}</p>}
                 </div>
               </div>

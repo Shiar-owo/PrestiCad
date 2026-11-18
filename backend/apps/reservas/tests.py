@@ -750,6 +750,19 @@ class ReservasAPITestCase(APITestCase):
         self.assertEqual(pasado.status_code, 400)
         self.assertIn("fecha_inicio", pasado.data)
 
+        menor_1h = self.client.post(
+            "/api/reservas/",
+            {
+                **base,
+                "fecha_inicio": inicio.isoformat(),
+                "fecha_fin": (inicio + timedelta(minutes=59)).isoformat(),
+            },
+            format="json",
+        )
+        self.assertEqual(menor_1h.status_code, 400)
+        self.assertIn("fecha_fin", menor_1h.data)
+        self.assertIn("1 hora (60 minutos)", str(menor_1h.data["fecha_fin"]))
+
     def test_endpoint_conversion_rechaza_reserva_vencida_o_sin_instancia(self):
         self._autenticar(self.prestatario)
         respuesta = self.client.post(

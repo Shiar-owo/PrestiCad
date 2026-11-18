@@ -942,7 +942,11 @@ function RegistrarPrestamo() {
                         id="fecha-fin-prestamo"
                         type="datetime-local"
                         value={fechaFinPrestamo}
-                        min={fechaInicioPrestamo || undefined}
+                        min={
+                          fechaInicioPrestamo
+                            ? fechaParaCalendario(new Date(fechaInicioPrestamo).getTime() + 60 * 60000) || undefined
+                            : undefined
+                        }
                         disabled={duracionBloqueadaPorReserva}
                         onChange={(evento) => {
                           setFechaFinPrestamo(evento.target.value)

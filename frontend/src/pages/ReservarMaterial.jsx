@@ -202,11 +202,14 @@ export default function ReservarMaterial() {
     }
     setFechaInicio(valor)
     const finActual = fechaFin && new Date(fechaFin)
+    const minimoFin = valor ? new Date(obtenerMinimoFinReserva(valor)) : null
     const maximoFin = valor ? new Date(obtenerMaximoFinReserva(valor)) : null
     const finDebeLimpiarse = Boolean(
       finActual
       && (!Number.isNaN(finActual.getTime())
-        && (finActual <= new Date(valor)
+        && (!minimoFin
+          || Number.isNaN(minimoFin.getTime())
+          || finActual < minimoFin
           || !maximoFin
           || Number.isNaN(maximoFin.getTime())
           || finActual > maximoFin)),
@@ -216,7 +219,7 @@ export default function ReservarMaterial() {
       ...actuales,
       fechaInicio: validacion.fechaInicio || '',
       fechaFin: finDebeLimpiarse
-        ? 'El inicio cambió. Selecciona un fin posterior dentro de esta semana.'
+        ? 'El inicio cambió. Selecciona un fin de al menos 1 hora después dentro de esta semana.'
         : validacion.fechaFin || '',
     }))
   }

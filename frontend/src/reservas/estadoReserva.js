@@ -12,6 +12,7 @@ export const HORA_RESERVA_MAXIMO_FIN = 17
 // weekday() en Python: 0=Lunes ... 4=Viernes. No copiar ese valor directamente aqui.
 export const DIAS_LABORABLES = [1, 2, 3, 4, 5]
 export const TOLERANCIA_RECOJO_MINUTOS = 30
+export const MINIMO_MINUTOS_RESERVA = 60
 
 export const ETIQUETAS_ESTADO_RESERVA = {
   en_espera: 'En espera',
@@ -239,7 +240,7 @@ export function obtenerMinimoFinReserva(fechaInicio) {
   if (!fechaInicio) return ''
   const minimo = new Date(fechaInicio)
   if (Number.isNaN(minimo.getTime())) return ''
-  minimo.setMinutes(minimo.getMinutes() + 1)
+  minimo.setMinutes(minimo.getMinutes() + MINIMO_MINUTOS_RESERVA)
   return formatearFechaHoraInput(minimo)
 }
 
@@ -269,9 +270,12 @@ export function obtenerMinimaHoraInicioReserva(fecha, ahora = new Date()) {
 }
 
 export function obtenerMinimaHoraFinReserva(horaInicio) {
-  if (!horaInicio) return `${String(HORA_RESERVA_MINIMO_INICIO).padStart(2, '0')}:00`
+  if (!horaInicio) return `${String(HORA_RESERVA_MINIMO_INICIO + 1).padStart(2, '0')}:00`
   const [hora, minuto] = horaInicio.split(':').map(Number)
-  const minutos = Math.max(HORA_RESERVA_MINIMO_INICIO * 60, hora * 60 + minuto + 1)
+  const minutos = Math.max(
+    (HORA_RESERVA_MINIMO_INICIO + 1) * 60,
+    hora * 60 + minuto + MINIMO_MINUTOS_RESERVA,
+  )
   return `${String(Math.floor(minutos / 60)).padStart(2, '0')}:${String(minutos % 60).padStart(2, '0')}`
 }
 
@@ -340,6 +344,8 @@ export function validarHorarioReserva(
       const fin = new Date(`${fechaSeleccionada}T${horaFin}:00`)
       if (fin <= inicio) {
         errores.horaFin = 'La hora de fin debe ser posterior a la de inicio.'
+      } else if ((fin.getTime() - inicio.getTime()) / 60000 < MINIMO_MINUTOS_RESERVA) {
+        errores.horaFin = 'La reserva debe tener una duración mínima de 1 hora (60 minutos).'
       }
     }
   } else {
@@ -394,6 +400,10 @@ export function validarHorarioReserva(
           errores.fechaFin =
             (errores.fechaFin ? errores.fechaFin + ' ' : '') +
             'La fecha y hora de fin debe ser posterior a la de inicio.'
+        } else if ((fin.getTime() - inicio.getTime()) / 60000 < MINIMO_MINUTOS_RESERVA) {
+          errores.fechaFin =
+            (errores.fechaFin ? errores.fechaFin + ' ' : '') +
+            'La reserva debe tener una duración mínima de 1 hora (60 minutos).'
         } else if (obtenerLunesSemana(inicio) !== obtenerLunesSemana(fin)) {
           errores.fechaFin =
             (errores.fechaFin ? errores.fechaFin + ' ' : '') +

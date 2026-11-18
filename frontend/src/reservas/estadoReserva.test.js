@@ -164,13 +164,34 @@ describe('construirFormularioReservaExcepcional y validarFormularioReserva', () 
 })
 
 describe('presentación de motivos y fechas', () => {
-  it('calcula límites de inicio y fin respetando la semana de reserva', () => {
+  it('calcula límites de inicio y fin respetando la semana de reserva y el mínimo de 1 hora', () => {
     const ahora = new Date(2026, 5, 17, 10, 20, 35)
     expect(obtenerMinimoInicioReserva(ahora)).toBe('2026-06-17T10:21')
-    expect(obtenerMinimoFinReserva('2026-06-17T10:30')).toBe('2026-06-17T10:31')
+    expect(obtenerMinimoFinReserva('2026-06-17T10:30')).toBe('2026-06-17T11:30')
     expect(obtenerMaximoFinReserva('2026-06-17T10:30')).toBe('2026-06-19T17:00')
     expect(obtenerMinimaHoraInicioReserva('2026-06-17', ahora)).toBe('10:21')
-    expect(obtenerMinimaHoraFinReserva('10:30')).toBe('10:31')
+    expect(obtenerMinimaHoraFinReserva('10:30')).toBe('11:30')
+  })
+
+  it('rechaza reservas con duración menor a 1 hora (60 minutos)', () => {
+    const erroresNormal = validarFormularioReserva({
+      materialId: 'mat-1',
+      justificacion: 'Uso académico',
+      esAvanzado: false,
+      fechaInicio: '2026-12-16T10:00',
+      fechaFin: '2026-12-16T10:59',
+    })
+    expect(erroresNormal.fechaFin).toMatch(/1 hora \(60 minutos\)/)
+
+    const erroresAvanzado = validarFormularioReserva({
+      materialId: 'mat-1',
+      justificacion: 'Uso académico',
+      esAvanzado: true,
+      fechaSeleccionada: '2026-12-16',
+      horaInicio: '10:00',
+      horaFin: '10:45',
+    })
+    expect(erroresAvanzado.horaFin).toMatch(/1 hora \(60 minutos\)/)
   })
 
   it('devuelve el motivo correspondiente según el estado de la reserva', () => {

@@ -27,6 +27,7 @@ from apps.reservas.constants import (
     HORAS_ESPERA,
     HORAS_RECOJO,
     MENSAJES_ERROR_RESERVA,
+    MINIMO_MINUTOS_RESERVA,
     TOLERANCIA_RECOJO_MINUTOS,
 )
 from apps.reservas.models import Reserva
@@ -217,6 +218,12 @@ def _validar_horario_reserva(fecha_inicio, fecha_fin, *, es_avanzado=False, ahor
         raise ReservaError(
             "fecha_fin",
             "La fecha y hora de fin debe ser posterior a la de inicio.",
+        )
+
+    if (fecha_fin - fecha_inicio) < timedelta(minutes=MINIMO_MINUTOS_RESERVA):
+        raise ReservaError(
+            "fecha_fin",
+            "La reserva debe tener una duración mínima de 1 hora (60 minutos).",
         )
 
     # La reserva debe estar dentro de la misma semana (lunes a viernes, sin cruzar fin de semana)

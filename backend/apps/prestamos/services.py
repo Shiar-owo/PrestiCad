@@ -759,7 +759,11 @@ def registrar_prestamo(
     if fecha_fin is not None and reserva_id is None:
         if fecha_fin <= fecha_entrega:
             raise PrestamoError("fecha_fin", "La fecha de fin debe ser posterior al momento de entrega.")
-        minutos_prestamo = int((fecha_fin - fecha_entrega).total_seconds() // 60)
+        if fecha_fin.second == 0 and fecha_fin.microsecond == 0:
+            inicio_referencia = fecha_entrega.replace(second=0, microsecond=0)
+            minutos_prestamo = int((fecha_fin - inicio_referencia).total_seconds() // 60)
+        else:
+            minutos_prestamo = int(round((fecha_fin - fecha_entrega).total_seconds() / 60))
         if minutos_prestamo < MINIMO_MINUTOS_PRESTAMO:
             raise PrestamoError("fecha_fin", "El préstamo debe durar al menos 1 h (60 min).")
         dias_prestamo = max(1, math.ceil(minutos_prestamo / 1440))

@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest'
 
 import { TAMANO_MAXIMO_SOLICITUD_BYTES } from '../prestamos/tamanoSolicitud'
 import {
+  calcularMinutosHabilesReserva,
   construirFormularioReservaExcepcional,
   contarReservasActivas,
+  cruzaFinDeSemana,
   esElegiblePorTier,
   esReservaActiva,
   formatearFechaReserva,
@@ -164,13 +166,40 @@ describe('construirFormularioReservaExcepcional y validarFormularioReserva', () 
 })
 
 describe('presentación de motivos y fechas', () => {
-  it('calcula límites de inicio y fin respetando la semana de reserva y el mínimo de 1 hora', () => {
+  it('calcula límites de inicio y fin permitiendo cruzar fin de semana y respetando el mínimo de 1 hora', () => {
     const ahora = new Date(2026, 5, 17, 10, 20, 35)
     expect(obtenerMinimoInicioReserva(ahora)).toBe('2026-06-17T10:21')
     expect(obtenerMinimoFinReserva('2026-06-17T10:30')).toBe('2026-06-17T11:30')
-    expect(obtenerMaximoFinReserva('2026-06-17T10:30')).toBe('2026-06-19T17:00')
+    expect(
+      obtenerMaximoFinReserva('2026-12-18T14:00', { tiempo_maximo_prestamo: 1440 }),
+    ).toBe('2026-12-21T14:00')
     expect(obtenerMinimaHoraInicioReserva('2026-06-17', ahora)).toBe('10:21')
     expect(obtenerMinimaHoraFinReserva('10:30')).toBe('11:30')
+  })
+
+  it('permite cruzar sábado y domingo sin descontar el fin de semana del tiempo máximo del material', () => {
+    expect(cruzaFinDeSemana('2026-12-18T14:00', '2026-12-21T14:00')).toBe(true)
+    expect(calcularMinutosHabilesReserva('2026-12-18T14:00', '2026-12-21T14:00')).toBe(1440)
+
+    const erroresValidos = validarFormularioReserva({
+      materialId: 'mat-1',
+      justificacion: 'Préstamo de viernes a lunes',
+      esAvanzado: false,
+      material: { tiempo_maximo_prestamo: 1440 },
+      fechaInicio: '2026-12-18T14:00',
+      fechaFin: '2026-12-21T14:00',
+    })
+    expect(erroresValidos).toEqual({})
+
+    const erroresExcedeMaximo = validarFormularioReserva({
+      materialId: 'mat-1',
+      justificacion: 'Excede 24h hábiles',
+      esAvanzado: false,
+      material: { tiempo_maximo_prestamo: 1440 },
+      fechaInicio: '2026-12-18T10:00',
+      fechaFin: '2026-12-21T15:00',
+    })
+    expect(erroresExcedeMaximo.fechaFin).toMatch(/tiempo máximo permitido/)
   })
 
   it('rechaza reservas con duración menor a 1 hora (60 minutos)', () => {

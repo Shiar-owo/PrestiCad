@@ -756,14 +756,28 @@ def registrar_prestamo(
     # de inicio controlada por el cliente.
     ahora_entrega = timezone.now()
     fecha_entrega = ahora_entrega
+    minutos_solicitados_explicitamente = tiempo_prestamo_minutos
+    minutos_calendario_directo = None
     if fecha_fin is not None and reserva_id is None:
         if fecha_fin <= fecha_entrega:
             raise PrestamoError("fecha_fin", "La fecha de fin debe ser posterior al momento de entrega.")
         if fecha_fin.second == 0 and fecha_fin.microsecond == 0:
             inicio_referencia = fecha_entrega.replace(second=0, microsecond=0)
-            minutos_prestamo = int((fecha_fin - inicio_referencia).total_seconds() // 60)
+            minutos_calendario_directo = int((fecha_fin - inicio_referencia).total_seconds() // 60)
         else:
-            minutos_prestamo = int(round((fecha_fin - fecha_entrega).total_seconds() / 60))
+            minutos_calendario_directo = int(round((fecha_fin - fecha_entrega).total_seconds() / 60))
+        from apps.reservas.services import contar_dias_fin_de_semana
+
+        dias_fin_semana = contar_dias_fin_de_semana(fecha_entrega, fecha_fin)
+        minutos_habiles_directo = max(0, minutos_calendario_directo - dias_fin_semana * 1440)
+        if (
+            minutos_solicitados_explicitamente is not None
+            and dias_fin_semana > 0
+            and abs(minutos_solicitados_explicitamente - minutos_habiles_directo) <= 5
+        ):
+            minutos_prestamo = minutos_habiles_directo
+        else:
+            minutos_prestamo = minutos_calendario_directo
         if minutos_prestamo < MINIMO_MINUTOS_PRESTAMO:
             raise PrestamoError("fecha_fin", "El préstamo debe durar al menos 1 h (60 min).")
         dias_prestamo = max(1, math.ceil(minutos_prestamo / 1440))
@@ -771,6 +785,7 @@ def registrar_prestamo(
     garantia_reserva_reutilizable = None
     if reserva_id is not None:
         from apps.reservas.models import Reserva
+        from apps.reservas.services import calcular_minutos_habiles
 
         try:
             reserva = (
@@ -832,7 +847,7 @@ def registrar_prestamo(
                 "No se puede entregar el ejemplar antes de la fecha de inicio reservada.",
                 status_code=409,
             )
-        minutos_prestamo = int((reserva.fecha_fin - reserva.fecha_inicio).total_seconds() // 60)
+        minutos_prestamo = calcular_minutos_habiles(reserva.fecha_inicio, reserva.fecha_fin)
         if minutos_prestamo < MINIMO_MINUTOS_PRESTAMO:
             raise PrestamoError(
                 "reserva_id",
@@ -948,7 +963,17 @@ def registrar_prestamo(
         material=material,
         registrado_por=registrado_por,
         fecha_entrega=reserva.fecha_inicio if reserva is not None else fecha_entrega,
-        fecha_limite=reserva.fecha_fin if reserva is not None else fecha_entrega + timedelta(minutes=minutos_prestamo),
+        fecha_limite=(
+            reserva.fecha_fin
+            if reserva is not None
+            else fecha_entrega + timedelta(
+                minutes=(
+                    minutos_calendario_directo
+                    if minutos_calendario_directo is not None
+                    else minutos_prestamo
+                )
+            )
+        ),
         tiempo_prestamo_minutos=minutos_prestamo,
         tiempo_prestamo_dias=dias_prestamo,
         estado="activo",

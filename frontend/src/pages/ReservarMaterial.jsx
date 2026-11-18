@@ -13,8 +13,10 @@ import SesionContext from '../contextos/SesionContext'
 import useTituloPagina from '../hooks/useTituloPagina'
 import {
   MAXIMO_RESERVAS_ACTIVAS,
+  calcularMinutosHabilesReserva,
   construirFormularioReservaExcepcional,
   contarReservasActivas,
+  cruzaFinDeSemana,
   esElegiblePorTier,
   esReservaActiva,
   formatearFechaReserva,
@@ -32,6 +34,7 @@ import {
   validarFormularioReserva,
   validarHorarioReserva,
 } from '../reservas/estadoReserva'
+import { formatearDuracionMinutos } from '../constantes/checklistPrestamo'
 
 function extraerMensajeError(error) {
   if (error instanceof ErrorApi && error.datos) {
@@ -176,8 +179,8 @@ export default function ReservarMaterial() {
     0
 
   const erroresInicioActuales = esAvanzado
-    ? validarHorarioReserva(fechaSeleccionada, horaInicio, '', true)
-    : validarHorarioReserva(undefined, undefined, undefined, false, fechaInicio, '')
+    ? validarHorarioReserva(fechaSeleccionada, horaInicio, '', true, null, null, materialSeleccionado)
+    : validarHorarioReserva(undefined, undefined, undefined, false, fechaInicio, '', materialSeleccionado)
   const inicioValidoParaFin = esAvanzado
     ? Boolean(fechaSeleccionada && horaInicio && !erroresInicioActuales.fecha && !erroresInicioActuales.horaInicio)
     : Boolean(fechaInicio && !erroresInicioActuales.fechaInicio)
@@ -189,7 +192,15 @@ export default function ReservarMaterial() {
       setErrores((actuales) => ({ ...actuales, fechaInicio: '', fechaFin: '' }))
       return
     }
-    const validacion = validarHorarioReserva(undefined, undefined, undefined, false, valor, fechaFin)
+    const validacion = validarHorarioReserva(
+      undefined,
+      undefined,
+      undefined,
+      false,
+      valor,
+      fechaFin,
+      materialSeleccionado,
+    )
     if (validacion.fechaInicio) {
       setFechaInicio('')
       setFechaFin('')
@@ -203,7 +214,7 @@ export default function ReservarMaterial() {
     setFechaInicio(valor)
     const finActual = fechaFin && new Date(fechaFin)
     const minimoFin = valor ? new Date(obtenerMinimoFinReserva(valor)) : null
-    const maximoFin = valor ? new Date(obtenerMaximoFinReserva(valor)) : null
+    const maximoFin = valor ? new Date(obtenerMaximoFinReserva(valor, materialSeleccionado)) : null
     const finDebeLimpiarse = Boolean(
       finActual
       && (!Number.isNaN(finActual.getTime())
@@ -219,7 +230,7 @@ export default function ReservarMaterial() {
       ...actuales,
       fechaInicio: validacion.fechaInicio || '',
       fechaFin: finDebeLimpiarse
-        ? 'El inicio cambió. Selecciona un fin de al menos 1 hora después dentro de esta semana.'
+        ? 'El inicio cambió. Selecciona un fin válido (mínimo 1 hora después, dentro del tiempo máximo del material).'
         : validacion.fechaFin || '',
     }))
   }
@@ -230,7 +241,15 @@ export default function ReservarMaterial() {
       setErrores((actuales) => ({ ...actuales, fechaFin: '' }))
       return
     }
-    const validacion = validarHorarioReserva(undefined, undefined, undefined, false, fechaInicio, valor)
+    const validacion = validarHorarioReserva(
+      undefined,
+      undefined,
+      undefined,
+      false,
+      fechaInicio,
+      valor,
+      materialSeleccionado,
+    )
     if (validacion.fechaFin) {
       setFechaFin('')
       setErrores((actuales) => ({ ...actuales, fechaFin: validacion.fechaFin }))
@@ -326,6 +345,7 @@ export default function ReservarMaterial() {
       justificacion,
       esExcepcion: aplicaExcepcion,
       esAvanzado,
+      material: materialSeleccionado,
       documentoIdentidad,
       compromisoResponsabilidad,
     })
@@ -498,6 +518,15 @@ export default function ReservarMaterial() {
             </>
           )}
         </dl>
+
+        {cruzaFinDeSemana(reservaCreada.fecha_inicio, reservaCreada.fecha_fin) && (
+          <div
+            role="note"
+            className="rounded-lg border border-acento-300 bg-acento-50/70 p-3.5 text-xs text-acento-900 dark:border-acento-800 dark:bg-acento-950/40 dark:text-acento-200"
+          >
+            <strong>Aclaración para el trámite (cruce de fin de semana):</strong> Tu reserva cruza sábado y domingo. Como el almacén no atiende los fines de semana, esos días no se descuentan del tiempo máximo de préstamo del material; podrás conservar el ejemplar durante el fin de semana y devolverlo el día hábil indicado ({formatearFechaReserva(reservaCreada.fecha_fin)}) dentro del horario de atención (09:00 a 17:00).
+          </div>
+        )}
 
         <div className="flex flex-wrap gap-3 pt-2">
           <Boton onClick={() => navigate('/panel/reservas')}>Ver mis reservas</Boton>
@@ -780,7 +809,6 @@ export default function ReservarMaterial() {
                   type="datetime-local"
                   value={fechaInicio}
                   min={obtenerMinimoInicioReserva()}
-                  max={obtenerMaximoFinReserva(fechaInicio) || undefined}
                   step="60"
                   aria-invalid={Boolean(errores.fechaInicio)}
                   onChange={(e) => actualizarFechaInicioReserva(e.target.value)}
@@ -802,7 +830,7 @@ export default function ReservarMaterial() {
                   type="datetime-local"
                   value={fechaFin}
                   min={obtenerMinimoFinReserva(fechaInicio) || undefined}
-                  max={obtenerMaximoFinReserva(fechaInicio) || undefined}
+                  max={obtenerMaximoFinReserva(fechaInicio, materialSeleccionado) || undefined}
                   step="60"
                   disabled={!inicioValidoParaFin}
                   aria-invalid={Boolean(errores.fechaFin)}
@@ -814,8 +842,23 @@ export default function ReservarMaterial() {
                 )}
               </div>
               <p className="text-xs text-texto-suave col-span-2">
-                Selecciona primero el inicio. El fin solo permite una fecha posterior, hasta el viernes de esa misma semana. Ambos deben ser de lunes a viernes, entre {HORA_RESERVA_MINIMO_INICIO}:00 y {HORA_RESERVA_MAXIMO_FIN}:00. Si cambias el inicio y el fin deja de cumplir estas reglas, tendrás que elegirlo otra vez.
+                Selecciona primero el inicio. El recojo y la devolución deben ser de lunes a viernes entre {HORA_RESERVA_MINIMO_INICIO}:00 y {HORA_RESERVA_MAXIMO_FIN}:00 (mínimo 1 hora{materialSeleccionado?.tiempo_maximo_prestamo ? `, máximo ${formatearDuracionMinutos(materialSeleccionado.tiempo_maximo_prestamo)} hábiles` : ''}). Puedes cruzar sábado y domingo: los fines de semana no se descuentan del tiempo máximo de préstamo del material.
               </p>
+              {cruzaFinDeSemana(fechaInicio, fechaFin) && (
+                <div
+                  role="note"
+                  className="col-span-2 rounded-lg border border-acento-300 bg-acento-50/70 p-3 text-xs text-acento-900 dark:border-acento-800 dark:bg-acento-950/40 dark:text-acento-200 space-y-1"
+                >
+                  <p className="font-bold">
+                    Aclaración sobre cruce de fin de semana (sábado y domingo):
+                  </p>
+                  <p>
+                    El rango seleccionado cruza el fin de semana (duración hábil contabilizada:{' '}
+                    <strong>{formatearDuracionMinutos(calcularMinutosHabilesReserva(fechaInicio, fechaFin))}</strong>).
+                    Dado que el almacén no atiende sábados ni domingos, esos días no consumen tu tiempo máximo de préstamo y deberás devolver el ejemplar el día hábil elegido dentro del horario de atención ({HORA_RESERVA_MINIMO_INICIO}:00 a {HORA_RESERVA_MAXIMO_FIN}:00).
+                  </p>
+                </div>
+              )}
             </div>
           )}
 

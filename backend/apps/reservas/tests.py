@@ -763,6 +763,44 @@ class ReservasAPITestCase(APITestCase):
         self.assertIn("fecha_fin", menor_1h.data)
         self.assertIn("1 hora (60 minutos)", str(menor_1h.data["fecha_fin"]))
 
+    def test_api_reserva_permite_cruzar_fin_de_semana_sin_consumir_tiempo_maximo_y_convertirse(self):
+        self._autenticar(self.prestatario)
+        viernes = timezone.localtime(timezone.now()).replace(
+            hour=14, minute=0, second=0, microsecond=0
+        ) + timedelta(days=1)
+        while viernes.weekday() != 4:
+            viernes += timedelta(days=1)
+        lunes = viernes + timedelta(days=3)
+
+        respuesta = self.client.post(
+            "/api/reservas/",
+            {
+                "material_id": str(self.material.id),
+                "justificacion": "Reserva de viernes a lunes cruzando fin de semana",
+                "fecha_inicio": viernes.isoformat(),
+                "fecha_fin": lunes.isoformat(),
+            },
+            format="json",
+        )
+        self.assertEqual(respuesta.status_code, 201, respuesta.data)
+        reserva_id = respuesta.data["id"]
+
+        with patch(
+            "apps.prestamos.services.timezone.now",
+            return_value=viernes + timedelta(minutes=10),
+        ):
+            prestamo = registrar_prestamo(
+                dni_prestatario=self.prestatario.dni,
+                material_id=self.material.id,
+                reserva_id=reserva_id,
+                tiempo_prestamo_minutos=1440,
+                checklist_inicial=CHECKLIST,
+                registrado_por=self.gestor,
+            )
+        self.assertEqual(prestamo.tiempo_prestamo_minutos, 1440)
+        self.assertEqual(prestamo.fecha_entrega, viernes)
+        self.assertEqual(prestamo.fecha_limite, lunes)
+
     def test_endpoint_conversion_rechaza_reserva_vencida_o_sin_instancia(self):
         self._autenticar(self.prestatario)
         respuesta = self.client.post(

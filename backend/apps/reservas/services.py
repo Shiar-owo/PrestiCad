@@ -189,10 +189,44 @@ def autopromover_material(material_id, *, ahora=None):
     return promovidas
 
 
-def _validar_horario_reserva(fecha_inicio, fecha_fin, *, es_avanzado=False, ahora=None):
+def contar_dias_fin_de_semana(fecha_inicio, fecha_fin):
+    """Cuenta cuántos sábados y domingos completos existen entre dos fechas laborables."""
+    if not fecha_inicio or not fecha_fin or fecha_fin <= fecha_inicio:
+        return 0
+    inicio_local = timezone.localtime(fecha_inicio) if timezone.is_aware(fecha_inicio) else fecha_inicio
+    fin_local = timezone.localtime(fecha_fin) if timezone.is_aware(fecha_fin) else fecha_fin
+    if inicio_local.weekday() >= 5 or fin_local.weekday() >= 5:
+        return 0
+    cursor = inicio_local.date() + timedelta(days=1)
+    limite = fin_local.date()
+    dias_fin_semana = 0
+    while cursor < limite:
+        if cursor.weekday() in (5, 6):
+            dias_fin_semana += 1
+        cursor += timedelta(days=1)
+    return dias_fin_semana
+
+
+def calcular_minutos_habiles(fecha_inicio, fecha_fin):
+    """Calcula la duración en minutos descontando sábados y domingos intermedios."""
+    if not fecha_inicio or not fecha_fin:
+        return 0
+    minutos_totales = int((fecha_fin - fecha_inicio).total_seconds() // 60)
+    dias_fin_semana = contar_dias_fin_de_semana(fecha_inicio, fecha_fin)
+    return max(0, minutos_totales - dias_fin_semana * 1440)
+
+
+def _validar_horario_reserva(
+    fecha_inicio,
+    fecha_fin,
+    *,
+    es_avanzado=False,
+    maximo_minutos=None,
+    ahora=None,
+):
     """Valida que la reserva esté dentro del horario de atención y días laborables.
-    Las reservas no pueden extenderse fuera de la misma semana (no pueden cruzar fin de semana).
-    Para materiales de Tier avanzado, inicio y fin deben ser el mismo día."""
+    Para materiales de Tier avanzado, inicio y fin deben ser el mismo día.
+    Para materiales Estándar y Restringido, se permite cruzar fines de semana sin que sábado y domingo consuman el tiempo máximo."""
     ahora = ahora or timezone.now()
     if fecha_inicio is None or fecha_fin is None:
         campo = "fecha_inicio" if fecha_inicio is None else "fecha_fin"
@@ -220,19 +254,11 @@ def _validar_horario_reserva(fecha_inicio, fecha_fin, *, es_avanzado=False, ahor
             "La fecha y hora de fin debe ser posterior a la de inicio.",
         )
 
-    if (fecha_fin - fecha_inicio) < timedelta(minutes=MINIMO_MINUTOS_RESERVA):
+    minutos_habiles = calcular_minutos_habiles(fecha_inicio, fecha_fin)
+    if minutos_habiles < MINIMO_MINUTOS_RESERVA:
         raise ReservaError(
             "fecha_fin",
             "La reserva debe tener una duración mínima de 1 hora (60 minutos).",
-        )
-
-    # La reserva debe estar dentro de la misma semana (lunes a viernes, sin cruzar fin de semana)
-    lunes_inicio = fecha_inicio.date() - timedelta(days=fecha_inicio.weekday())
-    lunes_fin = fecha_fin.date() - timedelta(days=fecha_fin.weekday())
-    if lunes_inicio != lunes_fin:
-        raise ReservaError(
-            "fecha_fin",
-            "La reserva debe realizarse dentro de la misma semana (lunes a viernes) y no puede extenderse cruzando el fin de semana.",
         )
 
     if es_avanzado:
@@ -241,6 +267,15 @@ def _validar_horario_reserva(fecha_inicio, fecha_fin, *, es_avanzado=False, ahor
                 "fecha_inicio",
                 "Para materiales de Tier avanzado, el inicio y el fin deben ser el mismo día.",
             )
+
+    if maximo_minutos is not None and minutos_habiles > maximo_minutos:
+        from apps.prestamos.constants import formatear_duracion_minutos
+
+        limite_legible = formatear_duracion_minutos(maximo_minutos)
+        raise ReservaError(
+            "fecha_fin",
+            f"La duración de la reserva supera el tiempo máximo permitido para este material ({limite_legible}, sin contar fines de semana).",
+        )
 
 
 @transaction.atomic
@@ -278,7 +313,13 @@ def crear_reserva(
                     "Para materiales de Tier avanzado, el inicio y el fin deben ser el mismo día.",
                 )
 
-    _validar_horario_reserva(fecha_inicio, fecha_fin, es_avanzado=es_avanzado, ahora=ahora)
+    _validar_horario_reserva(
+        fecha_inicio,
+        fecha_fin,
+        es_avanzado=es_avanzado,
+        maximo_minutos=material.tiempo_maximo_prestamo,
+        ahora=ahora,
+    )
 
     usuario_bloqueado = (
         Usuario.objects.select_for_update().select_related("rol").get(pk=usuario.pk)
@@ -432,6 +473,7 @@ def crear_reserva_excepcional(
         fecha_inicio,
         fecha_fin,
         es_avanzado=material.tier_minimo_requerido == "avanzado",
+        maximo_minutos=material.tiempo_maximo_prestamo,
         ahora=ahora,
     )
 

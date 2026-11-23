@@ -11,6 +11,8 @@ import {
   XCircle,
 } from 'lucide-react'
 
+import { Calendar } from 'lucide-react'
+
 import { api, ErrorApi } from '../api/client'
 import BadgeEstado from '../components/ui/BadgeEstado'
 import Boton from '../components/ui/Boton'
@@ -26,6 +28,7 @@ import {
   ordenarColaReservas,
   textoEstadoReserva,
 } from '../reservas/estadoReserva'
+import CalendarioDisponibilidad from '../components/reservas/CalendarioDisponibilidad'
 
 function extraerMensajeError(error, porDefecto) {
   if (error instanceof ErrorApi && error.datos) {
@@ -37,7 +40,7 @@ function extraerMensajeError(error, porDefecto) {
 }
 
 export default function ColaReservas() {
-  useTituloPagina('Cola de reservas')
+  useTituloPagina('Gestión de reservas')
   const { usuario } = useContext(SesionContext)
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -244,10 +247,10 @@ export default function ColaReservas() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 id="titulo-cola-reservas" className="text-xl font-bold text-texto">
-            Cola de reservas y excepciones por material
+            Gestión de reservas y agenda por material
           </h2>
           <p className="mt-1 text-sm text-texto-suave">
-            Consulta las solicitudes en lista de espera, evalúa excepciones académicas y administra las reservas confirmadas.
+            Consulta el calendario de disponibilidad, evalúa excepciones académicas y administra las reservas confirmadas. Las reservas se gestionan por fechas: un mismo ejemplar puede tener múltiples reservas en distintas temporadas.
           </p>
         </div>
         <Boton
@@ -257,7 +260,7 @@ export default function ColaReservas() {
           onClick={() => setRecarga((v) => v + 1)}
           deshabilitado={cargandoCola}
         >
-          Actualizar cola
+          Actualizar
         </Boton>
       </div>
 
@@ -428,11 +431,11 @@ export default function ColaReservas() {
             {cola.material && (
               <div>
                 <p className="text-xs font-semibold text-texto-suave">
-                  Ejemplares físicos disponibles actualmente:
+                  Ejemplares físicos disponibles (sin préstamo activo):
                 </p>
                 {instanciasDisponibles.length === 0 ? (
                   <p className="mt-1 text-xs text-texto-suave">
-                    No hay ejemplares en estado Disponible en este momento.
+                    No hay ejemplares en estado Disponible en este momento (pueden tener reservas futuras programadas).
                   </p>
                 ) : (
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -450,6 +453,21 @@ export default function ColaReservas() {
               </div>
             )}
           </Tarjeta>
+
+          {/* Calendario de disponibilidad del material seleccionado */}
+          {materialIdSeleccionado && (
+            <Tarjeta className="p-5 space-y-3">
+              <h3 className="flex items-center gap-2 text-base font-bold text-texto">
+                <Calendar aria-hidden="true" className="size-5 text-acento-600 dark:text-acento-400" />
+                Disponibilidad por fechas
+              </h3>
+              <p className="text-xs text-texto-suave">
+                Vista del calendario de ocupación del material. Los días en verde tienen al menos un
+                ejemplar libre; los días en rojo están completamente reservados o prestados.
+              </p>
+              <CalendarioDisponibilidad materialId={materialIdSeleccionado} />
+            </Tarjeta>
+          )}
 
           {/* 1. Excepciones académicas en espera */}
           <section aria-labelledby="subtitulo-excepciones" className="space-y-3">

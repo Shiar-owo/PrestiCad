@@ -8,6 +8,7 @@ import Boton from '../components/ui/Boton'
 import ErrorAlerta from '../components/ui/ErrorAlerta'
 import Skeleton from '../components/ui/Skeleton'
 import Tarjeta from '../components/ui/Tarjeta'
+import CalendarioDisponibilidad from '../components/reservas/CalendarioDisponibilidad'
 import { ETIQUETAS_TIER, ETIQUETAS_TIPO } from '../constantes/catalogo'
 import SesionContext from '../contextos/SesionContext'
 import useTituloPagina from '../hooks/useTituloPagina'
@@ -724,6 +725,28 @@ export default function ReservarMaterial() {
             </div>
           )}
 
+          {materialSeleccionado && (
+            <div className="space-y-1.5">
+              <label className="block text-sm font-semibold text-texto">
+                Disponibilidad y agenda en calendario
+              </label>
+              <CalendarioDisponibilidad
+                materialId={materialSeleccionado.id}
+                fechaSeleccionada={esAvanzado ? fechaSeleccionada : fechaInicio ? fechaInicio.slice(0, 10) : ''}
+                onSeleccionarFecha={(fechaIso) => {
+                  if (esAvanzado) {
+                    actualizarFechaAvanzada(fechaIso)
+                  } else {
+                    const inicio = `${fechaIso}T09:00`
+                    const fin = `${fechaIso}T13:00`
+                    actualizarFechaInicioReserva(inicio)
+                    actualizarFechaFinReserva(fin)
+                  }
+                }}
+              />
+            </div>
+          )}
+
           {materialSeleccionado && esAvanzado ? (
             <div className="grid gap-4 sm:grid-cols-3">
               <div>
@@ -980,9 +1003,7 @@ export default function ReservarMaterial() {
             >
               {aplicaExcepcion
                 ? 'Enviar solicitud de excepción académica'
-                : unidadesDisponibles > 0
-                  ? 'Confirmar reserva (24 h)'
-                  : 'Unirse a lista de espera (72 h)'}
+                : 'Confirmar reserva'}
             </Boton>
             <Boton
               tipo="button"

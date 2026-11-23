@@ -279,9 +279,14 @@ function RegistrarPrestamo() {
     }
 
     setCargandoInstancias(true)
-    api.get(`/materiales/${formulario.materialId}/instancias/?estado=disponible`)
+    api.get(`/materiales/${formulario.materialId}/instancias/`)
       .then((resultado) => {
-        if (!cancelado) setInstancias(resultado)
+        if (!cancelado) {
+          const lista = Array.isArray(resultado)
+            ? resultado.filter((inst) => ['disponible', 'reservado'].includes(inst.estado))
+            : []
+          setInstancias(lista)
+        }
       })
       .catch(() => {
         if (!cancelado) setErrorInstancias('No se pudieron cargar las instancias disponibles.')
@@ -1058,6 +1063,21 @@ function RegistrarPrestamo() {
                     </div>
                   </dl>
                 </div>
+              </div>
+            )}
+
+            {/* Advertencia: ejemplar con reservas programadas */}
+            {formulario.instanciaId && instanciaSeleccionada?.estado === 'reservado' && (
+              <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-950/30">
+                <p className="flex items-start gap-2 text-xs font-medium text-amber-800 dark:text-amber-300">
+                  <AlertTriangle aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+                  <span>
+                    Este ejemplar tiene{' '}
+                    <strong>reservas programadas a futuro</strong>. La duración del préstamo no
+                    debe solaparse con la próxima reserva confirmada. Si hay conflicto de fechas,
+                    el sistema rechazará el registro automáticamente.
+                  </span>
+                </p>
               </div>
             )}
 

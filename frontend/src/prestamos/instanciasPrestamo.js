@@ -19,6 +19,7 @@ export function crearOpcionesInstancia(instancias, cargando = false) {
     },
     ...instancias.map((instancia) => {
       const detalles = [
+        instancia.estado === 'reservado' && '(Con reservas programadas)',
         instancia.numero_serie && `Serie: ${instancia.numero_serie}`,
         instancia.observaciones && `Observación: ${instancia.observaciones}`,
       ].filter(Boolean)

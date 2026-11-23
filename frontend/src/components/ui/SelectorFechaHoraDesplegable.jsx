@@ -3,18 +3,8 @@ import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Clock, X } from 'l
 
 const DIAS_CABECERA = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
 
-// Horarios de atención: de 09:00 a 17:00 en intervalos de 30 minutos
-const HORAS_PERMITIDAS = [
-  '09:00', '09:30',
-  '10:00', '10:30',
-  '11:00', '11:30',
-  '12:00', '12:30',
-  '13:00', '13:30',
-  '14:00', '14:30',
-  '15:00', '15:30',
-  '16:00', '16:30',
-  '17:00',
-]
+// Accesos rápidos de horario frecuentes dentro de la ventana de atención
+const ATAJOS_HORA = ['09:00', '11:00', '13:00', '15:00', '17:00']
 
 function formatearFechaIso(anio, mes, dia) {
   const m = String(mes + 1).padStart(2, '0')
@@ -37,6 +27,8 @@ export default function SelectorFechaHoraDesplegable({
   onCambio,
   minFecha,
   maxFecha,
+  minHora = '09:00',
+  maxHora = '17:00',
   deshabilitado = false,
   soloFecha = false,
   etiqueta,
@@ -54,6 +46,7 @@ export default function SelectorFechaHoraDesplegable({
 
   const [fechaInterna, setFechaInterna] = useState(fechaVal)
   const [horaInterna, setHoraInterna] = useState(horaVal)
+  const [errorHora, setErrorHora] = useState('')
 
   // Mes a mostrar en el calendario
   const [mesActual, setMesActual] = useState(() => {
@@ -70,6 +63,7 @@ export default function SelectorFechaHoraDesplegable({
     const { fecha: f, hora: h } = parsearValor(valor)
     setFechaInterna(f)
     setHoraInterna(h)
+    setErrorHora('')
     if (f) {
       const d = new Date(`${f}T00:00:00`)
       if (!Number.isNaN(d.getTime())) {
@@ -170,11 +164,28 @@ export default function SelectorFechaHoraDesplegable({
     }
   }
 
-  function seleccionarHora(nuevaHora) {
+  function manejarCambioHora(nuevaHora) {
     setHoraInterna(nuevaHora)
-    if (fechaInterna) {
-      const nuevoValor = `${fechaInterna}T${nuevaHora}`
-      if (onCambio) onCambio(nuevoValor)
+    if (!nuevaHora) {
+      setErrorHora('La hora es obligatoria.')
+      return
+    }
+
+    // Validar rango horario
+    const [h, m] = nuevaHora.split(':').map(Number)
+    const minutos = h * 60 + (m || 0)
+    const [minH, minM] = minHora.split(':').map(Number)
+    const [maxH, maxM] = maxHora.split(':').map(Number)
+    const minMinutos = minH * 60 + minM
+    const maxMinutos = maxH * 60 + maxM
+
+    if (minutos < minMinutos || minutos > maxMinutos) {
+      setErrorHora(`El horario de atención es de ${minHora} a ${maxHora}.`)
+    } else {
+      setErrorHora('')
+      if (fechaInterna && onCambio) {
+        onCambio(`${fechaInterna}T${nuevaHora}`)
+      }
     }
   }
 
@@ -242,7 +253,7 @@ export default function SelectorFechaHoraDesplegable({
         <div
           role="dialog"
           aria-label="Selector de fecha y hora"
-          className="absolute left-0 z-50 mt-1.5 w-76 sm:w-80 rounded-xl border border-borde bg-white p-3.5 shadow-xl dark:border-borde dark:bg-superficie"
+          className="absolute left-0 z-50 mt-1.5 w-76 sm:w-84 rounded-xl border border-borde bg-white p-3.5 shadow-xl dark:border-borde dark:bg-superficie"
         >
           {/* Navegación de mes */}
           <div className="flex items-center justify-between border-b border-borde pb-2.5">
@@ -339,40 +350,61 @@ export default function SelectorFechaHoraDesplegable({
             </span>
           </div>
 
-          {/* Selector de horario (si no es solo fecha) */}
+          {/* Selector de horario libre con input time y atajos frecuentes */}
           {!soloFecha && (
-            <div className="mt-2.5 border-t border-borde pt-2.5">
+            <div className="mt-2.5 border-t border-borde pt-2.5 space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <label
                   htmlFor={`${idInput}-hora`}
                   className="flex items-center gap-1.5 text-xs font-semibold text-texto"
                 >
                   <Clock className="size-3.5 text-texto-suave" />
-                  Horario de atención:
+                  Hora libre ({minHora} a {maxHora}):
                 </label>
-                <select
+                <input
                   id={`${idInput}-hora`}
+                  type="time"
+                  min={minHora}
+                  max={maxHora}
+                  step="60"
                   value={horaInterna}
-                  onChange={(e) => seleccionarHora(e.target.value)}
-                  className="rounded-md border border-borde bg-white px-2 py-1 text-xs font-semibold text-texto dark:bg-superficie"
-                >
-                  {HORAS_PERMITIDAS.map((h) => (
-                    <option key={h} value={h}>
-                      {h} h
-                    </option>
-                  ))}
-                </select>
+                  onChange={(e) => manejarCambioHora(e.target.value)}
+                  className="w-28 rounded-md border border-borde bg-white px-2 py-1 text-xs font-semibold text-texto focus:border-marca-600 focus:ring-1 focus:ring-marca-600 dark:bg-superficie"
+                />
               </div>
+
+              {/* Atajos de hora comunes */}
+              <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                <span className="text-[10px] text-texto-suave mr-0.5">Atajos:</span>
+                {ATAJOS_HORA.map((h) => (
+                  <button
+                    key={h}
+                    type="button"
+                    onClick={() => manejarCambioHora(h)}
+                    className={`rounded px-1.5 py-0.5 text-[11px] font-medium transition-colors ${
+                      horaInterna === h
+                        ? 'bg-marca-100 text-marca-800 font-bold dark:bg-marca-950/60 dark:text-marca-300'
+                        : 'bg-superficie-alta text-texto-suave hover:bg-superficie-alta/80 hover:text-texto'
+                    }`}
+                  >
+                    {h}
+                  </button>
+                ))}
+              </div>
+
+              {errorHora && (
+                <p className="text-[11px] font-medium text-error">{errorHora}</p>
+              )}
             </div>
           )}
 
           {/* Botón de confirmar selección */}
-          <div className="mt-2.5 flex justify-end">
+          <div className="mt-3 flex justify-end">
             <button
               type="button"
               onClick={() => setAbierto(false)}
-              disabled={!fechaInterna}
-              className="rounded-md bg-marca-700 px-3 py-1 text-xs font-semibold text-white hover:bg-marca-800 disabled:opacity-50"
+              disabled={!fechaInterna || Boolean(errorHora)}
+              className="rounded-md bg-marca-700 px-3.5 py-1 text-xs font-semibold text-white hover:bg-marca-800 disabled:opacity-50"
             >
               Listo
             </button>

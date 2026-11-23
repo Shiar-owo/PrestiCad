@@ -947,3 +947,143 @@ class ReservasConcurrenciaTestCase(TransactionTestCase):
         self.assertEqual(estados, ["en_espera", "reservada"])
         instancia = InstanciaMaterial.objects.get(material=self.material)
         self.assertEqual(instancia.estado, "reservado")
+
+
+
+class ReservasCalendarioTestCase(APITestCase):
+    """Pruebas de disponibilidad temporal, solapamiento y reservas múltiples por calendario."""
+
+    def setUp(self):
+        self.prestatario_1 = crear_usuario("cal1@unsa.edu.pe", "45000001", reputacion_tier="estandar")
+        self.prestatario_2 = crear_usuario("cal2@unsa.edu.pe", "45000002", reputacion_tier="estandar")
+        self.prestatario_3 = crear_usuario("cal3@unsa.edu.pe", "45000003", reputacion_tier="estandar")
+        self.gestor = crear_usuario("gestor_cal@unsa.edu.pe", "45000004", rol_nombre="gestor")
+        self.material = crear_material(
+            codigo_material="CAL-01",
+            stock=1,
+            tier_minimo_requerido="estandar",
+            tiempo_maximo_prestamo=1440 * 7,
+        )
+
+    def test_multiples_reservas_en_distintas_fechas_confirman_sin_bloquearse(self):
+        """Un mismo ejemplar puede reservarse en distintas fechas no solapadas."""
+        hoy = timezone.localtime(timezone.now()).replace(second=0, microsecond=0)
+        proximo_lunes = hoy + timedelta(days=1)
+        while proximo_lunes.weekday() != 0:  # Buscar próximo lunes
+            proximo_lunes += timedelta(days=1)
+        proximo_lunes = proximo_lunes.replace(hour=10, minute=0)
+        lunes_fin = proximo_lunes.replace(hour=14, minute=0)
+
+        proximo_miercoles = proximo_lunes + timedelta(days=2)
+        miercoles_fin = proximo_miercoles.replace(hour=14, minute=0)
+
+        # Reserva 1 para el lunes (10:00 a 14:00)
+        reserva_1 = crear_reserva(
+            usuario=self.prestatario_1,
+            material_id=self.material.id,
+            justificacion="Proyecto lunes",
+            fecha_inicio=proximo_lunes,
+            fecha_fin=lunes_fin,
+        )
+        self.assertEqual(reserva_1.estado, "reservada")
+        self.assertIsNotNone(reserva_1.instancia)
+
+        # Reserva 2 para el miércoles (10:00 a 14:00) con otro prestatario sobre el MISMO material de stock 1
+        reserva_2 = crear_reserva(
+            usuario=self.prestatario_2,
+            material_id=self.material.id,
+            justificacion="Proyecto miércoles",
+            fecha_inicio=proximo_miercoles,
+            fecha_fin=miercoles_fin,
+        )
+        # Ambas deben quedar confirmadas sin enviarse a lista de espera
+        self.assertEqual(reserva_2.estado, "reservada")
+        self.assertEqual(reserva_1.instancia_id, reserva_2.instancia_id)
+
+        # Reserva 3 para el lunes compitiendo por la misma franja (11:00 a 15:00)
+        lunes_solapado_inicio = proximo_lunes.replace(hour=11, minute=0)
+        lunes_solapado_fin = proximo_lunes.replace(hour=15, minute=0)
+        reserva_3 = crear_reserva(
+            usuario=self.prestatario_3,
+            material_id=self.material.id,
+            justificacion="Intento solapado",
+            fecha_inicio=lunes_solapado_inicio,
+            fecha_fin=lunes_solapado_fin,
+        )
+        self.assertEqual(reserva_3.estado, "en_espera")
+
+    def test_prestamo_directo_exitoso_si_no_choca_con_reserva_futura(self):
+        """Se puede prestar hoy un ejemplar si se devuelve antes de su próxima reserva."""
+        # Reserva confirmada para el próximo jueves laborable
+        hoy = timezone.localtime(timezone.now()).replace(second=0, microsecond=0)
+        fecha_reserva_inicio = hoy + timedelta(days=2)
+        while fecha_reserva_inicio.weekday() not in (1, 2, 3):  # Martes a Jueves
+            fecha_reserva_inicio += timedelta(days=1)
+        fecha_reserva_inicio = fecha_reserva_inicio.replace(hour=10, minute=0)
+        fecha_reserva_fin = fecha_reserva_inicio.replace(hour=14, minute=0)
+
+        reserva = crear_reserva(
+            usuario=self.prestatario_1,
+            material_id=self.material.id,
+            justificacion="Reserva la próxima semana",
+            fecha_inicio=fecha_reserva_inicio,
+            fecha_fin=fecha_reserva_fin,
+        )
+        self.assertEqual(reserva.estado, "reservada")
+
+        # Préstamo directo hoy por solo 2 horas (devuelve hoy mismo, mucho antes de la reserva)
+        checklist = [{"elemento": "Pantalla", "observacion": "OK"}]
+        prestamo = registrar_prestamo(
+            dni_prestatario=self.prestatario_2.dni,
+            material_id=self.material.id,
+            tiempo_prestamo_minutos=120,
+            checklist_inicial=checklist,
+            registrado_por=self.gestor,
+        )
+        self.assertEqual(prestamo.estado, "activo")
+        self.assertEqual(prestamo.instancia_id, reserva.instancia_id)
+
+    def test_prestamo_directo_rechazado_si_choca_con_reserva_futura(self):
+        """Se rechaza el préstamo si su duración sobrepasa el inicio de una reserva futura."""
+        from apps.prestamos.services import PrestamoError
+
+        # Reserva confirmada para dentro de un día laborable
+        hoy = timezone.localtime(timezone.now()).replace(second=0, microsecond=0)
+        reserva_inicio = hoy + timedelta(days=1)
+        while reserva_inicio.weekday() > 4:
+            reserva_inicio += timedelta(days=1)
+        reserva_inicio = reserva_inicio.replace(hour=10, minute=0)
+        reserva_fin = reserva_inicio.replace(hour=14, minute=0)
+
+        crear_reserva(
+            usuario=self.prestatario_1,
+            material_id=self.material.id,
+            justificacion="Reserva inminente",
+            fecha_inicio=reserva_inicio,
+            fecha_fin=reserva_fin,
+        )
+
+        # Intento de préstamo por 5 días (sobrepasaría el inicio de la reserva)
+        checklist = [{"elemento": "Pantalla", "observacion": "OK"}]
+        with self.assertRaises(PrestamoError) as ctx:
+            registrar_prestamo(
+                dni_prestatario=self.prestatario_2.dni,
+                material_id=self.material.id,
+                tiempo_prestamo_minutos=1440 * 5,
+                checklist_inicial=checklist,
+                registrado_por=self.gestor,
+            )
+        self.assertIn("reserva", ctx.exception.mensaje.lower())
+
+    def test_api_disponibilidad_calendario(self):
+        """El endpoint de disponibilidad devuelve los días y franjas ocupadas correctamente."""
+        url = f"/api/materiales/{self.material.id}/disponibilidad/"
+        respuesta = self.client.get(url)
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertIn("total_ejemplares", respuesta.data)
+        self.assertIn("dias", respuesta.data)
+        self.assertGreaterEqual(len(respuesta.data["dias"]), 1)
+        primer_dia = respuesta.data["dias"][0]
+        self.assertIn("fecha", primer_dia)
+        self.assertIn("disponible", primer_dia)
+        self.assertIn("ejemplares_libres", primer_dia)

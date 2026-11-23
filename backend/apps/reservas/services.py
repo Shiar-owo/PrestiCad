@@ -30,6 +30,11 @@ from apps.reservas.constants import (
     MINIMO_MINUTOS_RESERVA,
     TOLERANCIA_RECOJO_MINUTOS,
 )
+from apps.reservas.disponibilidad import (
+    hay_solapamiento,
+    obtener_instancias_disponibles_en_rango,
+    verificar_instancia_disponible_en_rango,
+)
 from apps.reservas.models import Reserva
 from apps.usuarios.models import Usuario
 from apps.usuarios.services import actualizar_reputacion
@@ -154,37 +159,56 @@ def autopromover_material(material_id, *, ahora=None):
     if not candidatas_vigentes:
         return []
 
-    instancias_disponibles = list(
-        InstanciaMaterial.objects.select_for_update()
-        .filter(material_id=material.id, estado="disponible")
-        .order_by("codigo_ejemplar")
-    )
-    if not instancias_disponibles:
-        return []
-
     promovidas = []
-    for reserva, instancia in zip(candidatas_vigentes, instancias_disponibles):
-        servicios_inventario.marcar_instancia_reservada(
-            material.id,
-            instancia_id=instancia.id,
-        )
-        instancia.estado = "reservado"
-        reserva.instancia = instancia
-        reserva.estado = "reservada"
-        reserva.fecha_confirmacion = ahora
-        # Mismo criterio que `crear_reserva`: el plazo de recojo es el fin del
-        # rango reservado; las 24 h solo aplican a datos antiguos sin rango.
-        reserva.fecha_limite_recojo = reserva.fecha_fin or (ahora + timedelta(hours=HORAS_RECOJO))
-        reserva.save(
-            update_fields=[
-                "instancia",
-                "estado",
-                "fecha_confirmacion",
-                "fecha_limite_recojo",
-                "updated_at",
-            ]
-        )
-        promovidas.append(reserva)
+    instancias_asignadas_ids = set()
+    for reserva in candidatas_vigentes:
+        instancia = None
+        if reserva.fecha_inicio and reserva.fecha_fin:
+            libres = list(
+                obtener_instancias_disponibles_en_rango(
+                    material.id,
+                    reserva.fecha_inicio,
+                    reserva.fecha_fin,
+                    bloquear_filas=True,
+                ).exclude(id__in=instancias_asignadas_ids)
+            )
+            if libres:
+                instancia = libres[0]
+        else:
+            instancia = (
+                InstanciaMaterial.objects.select_for_update()
+                .filter(material_id=material.id, estado="disponible")
+                .exclude(id__in=instancias_asignadas_ids)
+                .order_by("codigo_ejemplar")
+                .first()
+            )
+
+        if instancia is not None:
+            instancias_asignadas_ids.add(instancia.id)
+            try:
+                servicios_inventario.marcar_instancia_reservada(
+                    material.id,
+                    instancia_id=instancia.id,
+                )
+                instancia.estado = "reservado"
+            except servicios_inventario.InventarioError:
+                pass
+            reserva.instancia = instancia
+            reserva.estado = "reservada"
+            reserva.fecha_confirmacion = ahora
+            # Mismo criterio que `crear_reserva`: el plazo de recojo es el fin del
+            # rango reservado; las 24 h solo aplican a datos antiguos sin rango.
+            reserva.fecha_limite_recojo = reserva.fecha_fin or (ahora + timedelta(hours=HORAS_RECOJO))
+            reserva.save(
+                update_fields=[
+                    "instancia",
+                    "estado",
+                    "fecha_confirmacion",
+                    "fecha_limite_recojo",
+                    "updated_at",
+                ]
+            )
+            promovidas.append(reserva)
 
     return promovidas
 
@@ -346,16 +370,30 @@ def crear_reserva(
     # autopromover la cola existente para que no se salte a quienes ya esperan.
     autopromover_material(material.id, ahora=ahora)
 
-    cola_pendiente = (
-        Reserva.objects.filter(material_id=material.id, estado="en_espera")
-        .filter(Q(es_excepcion=False) | Q(excepcion_aprobada=True))
-        .exists()
-    )
+    if fecha_inicio and fecha_fin:
+        cola_pendiente = (
+            Reserva.objects.filter(
+                material_id=material.id,
+                estado="en_espera",
+                fecha_inicio__isnull=False,
+                fecha_fin__isnull=False,
+                fecha_inicio__lt=fecha_fin,
+                fecha_fin__gt=fecha_inicio,
+            )
+            .filter(Q(es_excepcion=False) | Q(excepcion_aprobada=True))
+            .exists()
+        )
+    else:
+        cola_pendiente = (
+            Reserva.objects.filter(material_id=material.id, estado="en_espera")
+            .filter(Q(es_excepcion=False) | Q(excepcion_aprobada=True))
+            .exists()
+        )
 
     instancia_elegida = None
     if instancia_id is not None:
         try:
-            instancia_elegida = (
+            instancia_candidata = (
                 InstanciaMaterial.objects.select_for_update()
                 .get(pk=instancia_id, material_id=material.id)
             )
@@ -365,28 +403,47 @@ def crear_reserva(
                 "No existe la instancia indicada para este material.",
                 status_code=404,
             )
-        if instancia_elegida.estado != "disponible":
+        if fecha_inicio and fecha_fin:
+            disponible_rango = verificar_instancia_disponible_en_rango(
+                instancia_candidata.id, fecha_inicio, fecha_fin
+            )
+            if not disponible_rango:
+                raise ReservaError(
+                    "instancia_id",
+                    "La instancia seleccionada no está disponible en el horario solicitado.",
+                    status_code=409,
+                )
+        elif instancia_candidata.estado != "disponible":
             raise ReservaError(
                 "instancia_id",
                 "La instancia seleccionada no está disponible para reservar.",
                 status_code=409,
             )
+        instancia_elegida = instancia_candidata
     elif not cola_pendiente and material.estado != "en_mantenimiento":
-        instancia_elegida = (
-            InstanciaMaterial.objects.select_for_update()
-            .filter(material_id=material.id, estado="disponible")
-            .order_by("codigo_ejemplar")
-            .first()
-        )
+        if fecha_inicio and fecha_fin:
+            instancia_elegida = obtener_instancias_disponibles_en_rango(
+                material.id, fecha_inicio, fecha_fin, bloquear_filas=True
+            ).first()
+        else:
+            instancia_elegida = (
+                InstanciaMaterial.objects.select_for_update()
+                .filter(material_id=material.id, estado="disponible")
+                .order_by("codigo_ejemplar")
+                .first()
+            )
 
     fecha_limite_recojo = fecha_fin or (ahora + timedelta(hours=HORAS_RECOJO))
 
     if instancia_elegida is not None:
-        servicios_inventario.marcar_instancia_reservada(
-            material.id,
-            instancia_id=instancia_elegida.id,
-        )
-        instancia_elegida.estado = "reservado"
+        try:
+            servicios_inventario.marcar_instancia_reservada(
+                material.id,
+                instancia_id=instancia_elegida.id,
+            )
+            instancia_elegida.estado = "reservado"
+        except servicios_inventario.InventarioError:
+            pass
         reserva = Reserva.objects.create(
             usuario=usuario_bloqueado,
             material=material,
@@ -686,11 +743,16 @@ def cancelar_reserva(*, reserva_id, motivo="Cancelada por el usuario.", realizad
         )
 
     if reserva.instancia_id:
-        servicios_inventario.liberar_instancia_reservada(
-            reserva.instancia_id,
-            estado_final="disponible",
-            disparar_autopromocion=False,
-        )
+        try:
+            instancia_obj = InstanciaMaterial.objects.get(pk=reserva.instancia_id)
+            if instancia_obj.estado == "reservado":
+                servicios_inventario.liberar_instancia_reservada(
+                    reserva.instancia_id,
+                    estado_final="disponible",
+                    disparar_autopromocion=False,
+                )
+        except (InstanciaMaterial.DoesNotExist, servicios_inventario.InventarioError):
+            pass
 
     reserva.estado = "cancelada"
     reserva.motivo_cancelacion = motivo_limpio

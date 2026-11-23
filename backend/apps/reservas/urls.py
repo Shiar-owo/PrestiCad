@@ -11,9 +11,12 @@ from apps.reservas.views import (
     ReservaConfirmadaConversionView,
     RechazarReservaView,
     ReservasConfirmadasView,
+    DisponibilidadMaterialView,
 )
 
 urlpatterns = [
+    path("materiales/<uuid:material_id>/disponibilidad/", DisponibilidadMaterialView.as_view(), name="material-disponibilidad"),
+    path("reservas/disponibilidad/<uuid:material_id>/", DisponibilidadMaterialView.as_view(), name="reserva-disponibilidad"),
     path("reservas/", CrearReservaView.as_view(), name="crear-reserva"),
     path(
         "reservas/excepcion/",

@@ -28,6 +28,7 @@ import EstadoVacio from '../components/ui/EstadoVacio'
 import SubidaDocumentoPDF from '../components/prestamos/SubidaDocumentoPDF'
 import SelectorPrestatario from '../components/prestamos/SelectorPrestatario'
 import AdvertenciaModal from '../components/ui/AdvertenciaModal'
+import SelectorFechaHoraDesplegable from '../components/ui/SelectorFechaHoraDesplegable'
 import { TAMANO_MAXIMO_GARANTIA_MB } from '../constantes/garantia'
 import { esMaterialAltoValor } from '../constantes/catalogo'
 import {
@@ -120,7 +121,15 @@ function RegistrarPrestamo() {
   const [cargandoReservaConversion, setCargandoReservaConversion] = useState(esConversionFija)
   const [errorReservaConversion, setErrorReservaConversion] = useState('')
   const [fechaInicioPrestamo, setFechaInicioPrestamo] = useState(() => fechaParaCalendario())
-  const [fechaFinPrestamo, setFechaFinPrestamo] = useState(() => fechaParaCalendario(Date.now() + 120 * 60000))
+  const [fechaFinPrestamo, setFechaFinPrestamo] = useState(() => {
+    const fin = new Date()
+    fin.setDate(fin.getDate() + 1)
+    while (fin.getDay() === 0 || fin.getDay() === 6) {
+      fin.setDate(fin.getDate() + 1)
+    }
+    fin.setHours(17, 0, 0, 0)
+    return fechaParaCalendario(fin)
+  })
   const [formulario, setFormulario] = useState(() => ({
     ...FORMULARIO_INICIAL,
     dni: dniInicial,
@@ -529,6 +538,7 @@ function RegistrarPrestamo() {
       compromisoResponsabilidad: formulario.compromisoResponsabilidad,
       esExcepcion: excepcionActiva,
       garantiaReutilizada,
+      fechaFin: duracionBloqueadaPorReserva ? null : fechaFinPrestamo,
     }
     const validacion = validarFormularioPrestamo(datosValidacion)
     setErrores(validacion)
@@ -926,8 +936,8 @@ function RegistrarPrestamo() {
 
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div>
-                      <label htmlFor="fecha-inicio-prestamo" className="block text-xs font-semibold text-texto mb-1">
-                        Fecha y hora de inicio *
+                      <label htmlFor="fecha-inicio-prestamo" className="block text-xs font-semibold uppercase tracking-wide text-texto-suave mb-1">
+                        Fecha y hora de inicio (recojo) *
                       </label>
                       <input
                         id="fecha-inicio-prestamo"
@@ -939,30 +949,22 @@ function RegistrarPrestamo() {
                           setFechaInicioPrestamo(evento.target.value)
                           setErrores((actual) => ({ ...actual, dias: undefined }))
                         }}
-                        className="w-full rounded-lg border border-borde bg-white px-2.5 py-1.5 text-sm text-texto disabled:bg-superficie-alta dark:bg-superficie"
+                        className="w-full rounded-lg border border-borde bg-white px-3 py-2 text-sm text-texto disabled:bg-superficie-alta/60 dark:bg-superficie"
                         required
                       />
                     </div>
                     <div>
-                      <label htmlFor="fecha-fin-prestamo" className="block text-xs font-semibold text-texto mb-1">
-                        Fecha y hora de fin *
-                      </label>
-                      <input
+                      <SelectorFechaHoraDesplegable
                         id="fecha-fin-prestamo"
-                        type="datetime-local"
-                        value={fechaFinPrestamo}
-                        min={
-                          fechaInicioPrestamo
-                            ? fechaParaCalendario(new Date(fechaInicioPrestamo).getTime() + 60 * 60000) || undefined
-                            : undefined
-                        }
-                        disabled={duracionBloqueadaPorReserva}
-                        onChange={(evento) => {
-                          setFechaFinPrestamo(evento.target.value)
+                        etiqueta="Fecha y hora de fin (devolución) *"
+                        valor={fechaFinPrestamo}
+                        minFecha={fechaInicioPrestamo ? fechaInicioPrestamo.slice(0, 10) : undefined}
+                        deshabilitado={duracionBloqueadaPorReserva}
+                        onCambio={(nuevoValor) => {
+                          setFechaFinPrestamo(nuevoValor)
                           setErrores((actual) => ({ ...actual, dias: undefined }))
                         }}
-                        className="w-full rounded-lg border border-borde bg-white px-2.5 py-1.5 text-sm text-texto disabled:bg-superficie-alta dark:bg-superficie"
-                        required
+                        error={errores.dias}
                       />
                     </div>
                   </div>
@@ -976,7 +978,7 @@ function RegistrarPrestamo() {
                     {Number.isFinite(duracionPrestamoMinutos) && duracionPrestamoMinutos > 0 && (
                       <span className="text-xs font-bold text-texto">
                         Duración: {formatearDuracionMinutos(duracionPrestamoMinutos)}
-                        {cruzaFinDeSemana(fechaInicioPrestamo, fechaFinPrestamo) ? ' (hábiles, sin fin de semana)' : ''}
+                        {cruzaFinDeSemana(fechaInicioPrestamo, fechaFinPrestamo) ? ' (todos los días intermedios computan)' : ''}
                       </span>
                     )}
                   </div>
@@ -985,7 +987,7 @@ function RegistrarPrestamo() {
                       role="note"
                       className="rounded-lg border border-acento-300 bg-acento-50/70 p-2.5 text-xs text-acento-900 dark:border-acento-800 dark:bg-acento-950/40 dark:text-acento-200"
                     >
-                      <strong>Aclaración para el trámite (cruce de fin de semana):</strong> Este préstamo cruza sábado y/o domingo. Como el almacén permanece cerrado los fines de semana, esos días no consumen el tiempo máximo permitido del material y la devolución queda programada para el día hábil límite indicado ({fechaLegible(fechaFinPrestamo)}).
+                      <strong>Aclaración para el trámite:</strong> Este préstamo incluye días de fin de semana intermedios. Recuerda que la entrega y la devolución se efectúan exclusivamente de lunes a viernes en horario de atención (09:00 a 17:00), y todos los días en medio computan dentro de la duración del préstamo.
                     </div>
                   )}
                   {errores.dias && <p className="text-xs font-medium text-error">{errores.dias}</p>}

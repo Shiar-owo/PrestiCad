@@ -9,6 +9,7 @@ import ErrorAlerta from '../components/ui/ErrorAlerta'
 import Skeleton from '../components/ui/Skeleton'
 import Tarjeta from '../components/ui/Tarjeta'
 import CalendarioDisponibilidad from '../components/reservas/CalendarioDisponibilidad'
+import SelectorFechaHoraDesplegable from '../components/ui/SelectorFechaHoraDesplegable'
 import { ETIQUETAS_TIER, ETIQUETAS_TIPO } from '../constantes/catalogo'
 import SesionContext from '../contextos/SesionContext'
 import useTituloPagina from '../hooks/useTituloPagina'
@@ -525,7 +526,7 @@ export default function ReservarMaterial() {
             role="note"
             className="rounded-lg border border-acento-300 bg-acento-50/70 p-3.5 text-xs text-acento-900 dark:border-acento-800 dark:bg-acento-950/40 dark:text-acento-200"
           >
-            <strong>Aclaración para el trámite (cruce de fin de semana):</strong> Tu reserva cruza sábado y domingo. Como el almacén no atiende los fines de semana, esos días no se descuentan del tiempo máximo de préstamo del material; podrás conservar el ejemplar durante el fin de semana y devolverlo el día hábil indicado ({formatearFechaReserva(reservaCreada.fecha_fin)}) dentro del horario de atención (09:00 a 17:00).
+            <strong>Aclaración para el trámite:</strong> Tu reserva incluye días de fin de semana intermedios. Recuerda que el recojo y la devolución son únicamente de lunes a viernes dentro del horario de atención (09:00 a 17:00), y todos los días en medio computan dentro de la duración de tu reserva.
           </div>
         )}
 
@@ -750,29 +751,20 @@ export default function ReservarMaterial() {
           {materialSeleccionado && esAvanzado ? (
             <div className="grid gap-4 sm:grid-cols-3">
               <div>
-                <label
-                  htmlFor="input-fecha-reserva"
-                  className="block text-sm font-semibold text-texto"
-                >
-                  Fecha *
-                </label>
-                <input
+                <SelectorFechaHoraDesplegable
                   id="input-fecha-reserva"
-                  type="date"
-                  value={fechaSeleccionada}
-                  min={obtenerFechaLocal()}
-                  aria-invalid={Boolean(errores.fecha)}
-                  onChange={(e) => actualizarFechaAvanzada(e.target.value)}
-                  className="mt-1.5 w-full rounded-lg border border-borde bg-white px-3 py-2 text-sm text-texto dark:bg-superficie"
+                  etiqueta="Fecha *"
+                  soloFecha
+                  valor={fechaSeleccionada}
+                  minFecha={obtenerFechaLocal()}
+                  error={errores.fecha}
+                  onCambio={(fechaIso) => actualizarFechaAvanzada(fechaIso)}
                 />
-                {errores.fecha && (
-                  <p className="mt-1 text-xs font-medium text-error" role="alert">{errores.fecha}</p>
-                )}
               </div>
               <div>
                 <label
                   htmlFor="input-hora-inicio-reserva"
-                  className="block text-sm font-semibold text-texto"
+                  className="block text-xs font-semibold uppercase tracking-wide text-texto-suave mb-1"
                 >
                   Hora de inicio *
                 </label>
@@ -785,7 +777,7 @@ export default function ReservarMaterial() {
                   step="60"
                   aria-invalid={Boolean(errores.horaInicio)}
                   onChange={(e) => actualizarHoraInicioAvanzada(e.target.value)}
-                  className="mt-1.5 w-full rounded-lg border border-borde bg-white px-3 py-2 text-sm text-texto dark:bg-superficie"
+                  className="w-full rounded-lg border border-borde bg-white px-3 py-2 text-sm text-texto dark:bg-superficie"
                 />
                 {errores.horaInicio && (
                   <p className="mt-1 text-xs font-medium text-error" role="alert">{errores.horaInicio}</p>
@@ -794,7 +786,7 @@ export default function ReservarMaterial() {
               <div>
                 <label
                   htmlFor="input-hora-fin-reserva"
-                  className="block text-sm font-semibold text-texto"
+                  className="block text-xs font-semibold uppercase tracking-wide text-texto-suave mb-1"
                 >
                   Hora de fin *
                 </label>
@@ -808,64 +800,42 @@ export default function ReservarMaterial() {
                   disabled={!inicioValidoParaFin}
                   aria-invalid={Boolean(errores.horaFin)}
                   onChange={(e) => actualizarHoraFinAvanzada(e.target.value)}
-                  className="mt-1.5 w-full rounded-lg border border-borde bg-white px-3 py-2 text-sm text-texto dark:bg-superficie"
+                  className="w-full rounded-lg border border-borde bg-white px-3 py-2 text-sm text-texto dark:bg-superficie"
                 />
                 {errores.horaFin && (
                   <p className="mt-1 text-xs font-medium text-error" role="alert">{errores.horaFin}</p>
                 )}
               </div>
               <p className="text-xs text-texto-suave col-span-3">
-                Elige un día laborable futuro. Para materiales avanzados, inicio y fin deben ser el mismo día, entre {HORA_RESERVA_MINIMO_INICIO}:00 y {HORA_RESERVA_MAXIMO_FIN}:00. El fin se habilita cuando el inicio sea válido.
+                Elige un día laborable futuro (lunes a viernes). Para materiales avanzados, inicio y fin deben ser el mismo día, entre {HORA_RESERVA_MINIMO_INICIO}:00 y {HORA_RESERVA_MAXIMO_FIN}:00.
               </p>
             </div>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label
-                  htmlFor="input-fecha-inicio-reserva"
-                  className="block text-sm font-semibold text-texto"
-                >
-                  Fecha y hora de inicio *
-                </label>
-                <input
+                <SelectorFechaHoraDesplegable
                   id="input-fecha-inicio-reserva"
-                  type="datetime-local"
-                  value={fechaInicio}
-                  min={obtenerMinimoInicioReserva()}
-                  step="60"
-                  aria-invalid={Boolean(errores.fechaInicio)}
-                  onChange={(e) => actualizarFechaInicioReserva(e.target.value)}
-                  className="mt-1.5 w-full rounded-lg border border-borde bg-white px-3 py-2 text-sm text-texto dark:bg-superficie"
+                  etiqueta="Fecha y hora de inicio *"
+                  valor={fechaInicio}
+                  minFecha={obtenerMinimoInicioReserva()?.slice(0, 10)}
+                  error={errores.fechaInicio}
+                  onCambio={(nuevoValor) => actualizarFechaInicioReserva(nuevoValor)}
                 />
-                {errores.fechaInicio && (
-                  <p className="mt-1 text-xs font-medium text-error" role="alert">{errores.fechaInicio}</p>
-                )}
               </div>
               <div>
-                <label
-                  htmlFor="input-fecha-fin-reserva"
-                  className="block text-sm font-semibold text-texto"
-                >
-                  Fecha y hora de fin *
-                </label>
-                <input
+                <SelectorFechaHoraDesplegable
                   id="input-fecha-fin-reserva"
-                  type="datetime-local"
-                  value={fechaFin}
-                  min={obtenerMinimoFinReserva(fechaInicio) || undefined}
-                  max={obtenerMaximoFinReserva(fechaInicio, materialSeleccionado) || undefined}
-                  step="60"
-                  disabled={!inicioValidoParaFin}
-                  aria-invalid={Boolean(errores.fechaFin)}
-                  onChange={(e) => actualizarFechaFinReserva(e.target.value)}
-                  className="mt-1.5 w-full rounded-lg border border-borde bg-white px-3 py-2 text-sm text-texto dark:bg-superficie"
+                  etiqueta="Fecha y hora de fin *"
+                  valor={fechaFin}
+                  minFecha={fechaInicio ? fechaInicio.slice(0, 10) : obtenerMinimoInicioReserva()?.slice(0, 10)}
+                  maxFecha={obtenerMaximoFinReserva(fechaInicio, materialSeleccionado)}
+                  deshabilitado={!inicioValidoParaFin}
+                  error={errores.fechaFin}
+                  onCambio={(nuevoValor) => actualizarFechaFinReserva(nuevoValor)}
                 />
-                {errores.fechaFin && (
-                  <p className="mt-1 text-xs font-medium text-error" role="alert">{errores.fechaFin}</p>
-                )}
               </div>
               <p className="text-xs text-texto-suave col-span-2">
-                Selecciona primero el inicio. El recojo y la devolución deben ser de lunes a viernes entre {HORA_RESERVA_MINIMO_INICIO}:00 y {HORA_RESERVA_MAXIMO_FIN}:00 (mínimo 1 hora{materialSeleccionado?.tiempo_maximo_prestamo ? `, máximo ${formatearDuracionMinutos(materialSeleccionado.tiempo_maximo_prestamo)} hábiles` : ''}). Puedes cruzar sábado y domingo: los fines de semana no se descuentan del tiempo máximo de préstamo del material.
+                Selecciona primero el inicio. El recojo y la devolución deben ser de lunes a viernes entre {HORA_RESERVA_MINIMO_INICIO}:00 y {HORA_RESERVA_MAXIMO_FIN}:00 (mínimo 1 hora{materialSeleccionado?.tiempo_maximo_prestamo ? `, máximo ${formatearDuracionMinutos(materialSeleccionado.tiempo_maximo_prestamo)}` : ''}). Cuentan todos los días en medio (incluyendo fines de semana).
               </p>
               {cruzaFinDeSemana(fechaInicio, fechaFin) && (
                 <div
@@ -873,12 +843,12 @@ export default function ReservarMaterial() {
                   className="col-span-2 rounded-lg border border-acento-300 bg-acento-50/70 p-3 text-xs text-acento-900 dark:border-acento-800 dark:bg-acento-950/40 dark:text-acento-200 space-y-1"
                 >
                   <p className="font-bold">
-                    Aclaración sobre cruce de fin de semana (sábado y domingo):
+                    Aclaración sobre días de fin de semana intermedios:
                   </p>
                   <p>
-                    El rango seleccionado cruza el fin de semana (duración hábil contabilizada:{' '}
+                    Tu reserva incluye días de fin de semana intermedios (duración total contabilizada:{' '}
                     <strong>{formatearDuracionMinutos(calcularMinutosHabilesReserva(fechaInicio, fechaFin))}</strong>).
-                    Dado que el almacén no atiende sábados ni domingos, esos días no consumen tu tiempo máximo de préstamo y deberás devolver el ejemplar el día hábil elegido dentro del horario de atención ({HORA_RESERVA_MINIMO_INICIO}:00 a {HORA_RESERVA_MAXIMO_FIN}:00).
+                    Recuerda que el recojo y la devolución son únicamente de lunes a viernes de {HORA_RESERVA_MINIMO_INICIO}:00 a {HORA_RESERVA_MAXIMO_FIN}:00, y todos los días intermedios se computan dentro de la duración de tu reserva.
                   </p>
                 </div>
               )}

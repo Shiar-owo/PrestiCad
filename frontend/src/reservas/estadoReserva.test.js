@@ -166,38 +166,46 @@ describe('construirFormularioReservaExcepcional y validarFormularioReserva', () 
 })
 
 describe('presentación de motivos y fechas', () => {
-  it('calcula límites de inicio y fin permitiendo cruzar fin de semana y respetando el mínimo de 1 hora', () => {
+  it('calcula límites de inicio y fin y ajusta si el máximo cae en fin de semana', () => {
     const ahora = new Date(2026, 5, 17, 10, 20, 35)
     expect(obtenerMinimoInicioReserva(ahora)).toBe('2026-06-17T10:21')
     expect(obtenerMinimoFinReserva('2026-06-17T10:30')).toBe('2026-06-17T11:30')
+    // Viernes 14:00 con 3 días (4320 min) llega a Lunes 14:00
+    expect(
+      obtenerMaximoFinReserva('2026-12-18T14:00', { tiempo_maximo_prestamo: 4320 }),
+    ).toBe('2026-12-21T14:00')
+    // Viernes 14:00 con 1 día (1440 min) caería en sábado -> se ajusta a viernes 17:00
     expect(
       obtenerMaximoFinReserva('2026-12-18T14:00', { tiempo_maximo_prestamo: 1440 }),
-    ).toBe('2026-12-21T14:00')
+    ).toBe('2026-12-18T17:00')
     expect(obtenerMinimaHoraInicioReserva('2026-06-17', ahora)).toBe('10:21')
     expect(obtenerMinimaHoraFinReserva('10:30')).toBe('11:30')
   })
 
-  it('permite cruzar sábado y domingo sin descontar el fin de semana del tiempo máximo del material', () => {
+  it('cuenta todos los días en medio (sábado y domingo) en el cómputo de duración', () => {
     expect(cruzaFinDeSemana('2026-12-18T14:00', '2026-12-21T14:00')).toBe(true)
-    expect(calcularMinutosHabilesReserva('2026-12-18T14:00', '2026-12-21T14:00')).toBe(1440)
+    // Viernes a lunes = 72 horas corridas = 4320 minutos
+    expect(calcularMinutosHabilesReserva('2026-12-18T14:00', '2026-12-21T14:00')).toBe(4320)
 
+    // Si el material permite 72 horas (4320 min), la reserva es válida
     const erroresValidos = validarFormularioReserva({
       materialId: 'mat-1',
-      justificacion: 'Préstamo de viernes a lunes',
+      justificacion: 'Préstamo de viernes a lunes con material de 3 días',
       esAvanzado: false,
-      material: { tiempo_maximo_prestamo: 1440 },
+      material: { tiempo_maximo_prestamo: 4320 },
       fechaInicio: '2026-12-18T14:00',
       fechaFin: '2026-12-21T14:00',
     })
     expect(erroresValidos).toEqual({})
 
+    // Si el material solo permite 24 horas (1440 min), supera el máximo
     const erroresExcedeMaximo = validarFormularioReserva({
       materialId: 'mat-1',
-      justificacion: 'Excede 24h hábiles',
+      justificacion: 'Excede límite porque cuentan los días intermedios',
       esAvanzado: false,
       material: { tiempo_maximo_prestamo: 1440 },
-      fechaInicio: '2026-12-18T10:00',
-      fechaFin: '2026-12-21T15:00',
+      fechaInicio: '2026-12-18T14:00',
+      fechaFin: '2026-12-21T14:00',
     })
     expect(erroresExcedeMaximo.fechaFin).toMatch(/tiempo máximo permitido/)
   })

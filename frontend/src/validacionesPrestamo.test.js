@@ -100,6 +100,36 @@ describe('validarFormularioPrestamo', () => {
     expect(errores.compromiso_responsabilidad).toMatch(/application\/pdf/)
   })
 
+  it('valida que fechaFin sea día laborable (lunes a viernes) entre 09:00 y 17:00', () => {
+    // Sábado 2026-12-19
+    const errSabado = validarFormularioPrestamo({
+      ...formularioValido,
+      fechaFin: '2026-12-19T14:00',
+    })
+    expect(errSabado.dias).toMatch(/día laborable/)
+
+    // Domingo 2026-12-20
+    const errDomingo = validarFormularioPrestamo({
+      ...formularioValido,
+      fechaFin: '2026-12-20T10:00',
+    })
+    expect(errDomingo.dias).toMatch(/día laborable/)
+
+    // Lunes 2026-12-21 a las 18:30 (fuera de horario)
+    const errHora = validarFormularioPrestamo({
+      ...formularioValido,
+      fechaFin: '2026-12-21T18:30',
+    })
+    expect(errHora.dias).toMatch(/09:00 a 17:00/)
+
+    // Lunes 2026-12-21 a las 14:00 (válido)
+    const valido = validarFormularioPrestamo({
+      ...formularioValido,
+      fechaFin: '2026-12-21T14:00',
+    })
+    expect(valido.dias).toBeUndefined()
+  })
+
   it('rechaza un PDF que supera el tamaño máximo configurado', () => {
     const errores = validarFormularioPrestamo({
       ...formularioValido,

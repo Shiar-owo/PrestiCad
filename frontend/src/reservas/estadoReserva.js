@@ -278,9 +278,7 @@ export function calcularMinutosHabilesReserva(fechaInicio, fechaFin) {
   const inicio = new Date(fechaInicio)
   const fin = new Date(fechaFin)
   if (Number.isNaN(inicio.getTime()) || Number.isNaN(fin.getTime())) return NaN
-  const minutosTotales = (fin.getTime() - inicio.getTime()) / 60000
-  const diasFinDeSemana = contarDiasFinDeSemanaIntermedios(inicio, fin)
-  return minutosTotales - diasFinDeSemana * 1440
+  return Math.max(0, (fin.getTime() - inicio.getTime()) / 60000)
 }
 
 export function obtenerMaximoFinReserva(fechaInicio, material = null) {
@@ -292,16 +290,13 @@ export function obtenerMaximoFinReserva(fechaInicio, material = null) {
     : 15 * 24 * 60
 
   const maximo = new Date(inicio.getTime() + maximoMinutos * 60000)
-  const cursor = new Date(inicio.getFullYear(), inicio.getMonth(), inicio.getDate() + 1)
-  while (cursor <= new Date(maximo.getFullYear(), maximo.getMonth(), maximo.getDate())) {
-    const dia = cursor.getDay()
-    if (dia === 0 || dia === 6) {
-      maximo.setDate(maximo.getDate() + 1)
-    }
-    cursor.setDate(cursor.getDate() + 1)
-  }
-  while (maximo.getDay() === 0 || maximo.getDay() === 6) {
-    maximo.setDate(maximo.getDate() + 1)
+  // Si maximo cae en fin de semana, ajustar al viernes anterior a las 17:00
+  if (maximo.getDay() === 6) {
+    maximo.setDate(maximo.getDate() - 1)
+    maximo.setHours(HORA_RESERVA_MAXIMO_FIN, 0, 0, 0)
+  } else if (maximo.getDay() === 0) {
+    maximo.setDate(maximo.getDate() - 2)
+    maximo.setHours(HORA_RESERVA_MAXIMO_FIN, 0, 0, 0)
   }
   const minutosDia = maximo.getHours() * 60 + maximo.getMinutes()
   if (minutosDia > HORA_RESERVA_MAXIMO_FIN * 60) {
@@ -474,7 +469,7 @@ export function validarHorarioReserva(
         } else if (maximoMinutosMaterial && minutosHabiles > maximoMinutosMaterial) {
           errores.fechaFin =
             (errores.fechaFin ? errores.fechaFin + ' ' : '') +
-            'La duración de la reserva supera el tiempo máximo permitido para este material (sin contar sábado ni domingo).'
+            'La duración de la reserva supera el tiempo máximo permitido para este material.'
         }
       }
     }

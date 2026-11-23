@@ -50,6 +50,7 @@ export function validarFormularioPrestamo({
   compromisoResponsabilidad,
   esExcepcion = false,
   garantiaReutilizada = false,
+  fechaFin = null,
 }) {
   const errores = {}
   const erroresFotos = {}
@@ -82,6 +83,20 @@ export function validarFormularioPrestamo({
     errores.dias = 'El tiempo mínimo de préstamo es de 1 hora (60 minutos).'
   } else if (minutos > maximoMinutos) {
     errores.dias = `El tiempo solicitado supera el máximo permitido para este material (${formatearDuracionMinutos(maximoMinutos)}).`
+  }
+
+  if (fechaFin) {
+    const fin = new Date(fechaFin)
+    if (!Number.isNaN(fin.getTime())) {
+      if (fin.getDay() === 0 || fin.getDay() === 6) {
+        errores.dias = 'La fecha de devolución debe ser un día laborable (lunes a viernes).'
+      } else {
+        const minutosFin = fin.getHours() * 60 + fin.getMinutes()
+        if (minutosFin < 9 * 60 || minutosFin > 17 * 60) {
+          errores.dias = 'El horario de devolución es de 09:00 a 17:00.'
+        }
+      }
+    }
   }
   if (!Array.isArray(checklist) || checklist.length === 0) {
     errores.checklist = 'Registra al menos un elemento del material.'

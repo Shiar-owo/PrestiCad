@@ -862,6 +862,16 @@ def registrar_prestamo(
                 "No se puede entregar el ejemplar antes de la fecha de inicio reservada.",
                 status_code=409,
             )
+        # Solo se puede convertir la reserva el mismo día calendario de fecha_inicio
+        entrega_local = timezone.localtime(ahora_entrega) if timezone.is_aware(ahora_entrega) else ahora_entrega
+        inicio_local = timezone.localtime(reserva.fecha_inicio) if timezone.is_aware(reserva.fecha_inicio) else reserva.fecha_inicio
+        if entrega_local.date() != inicio_local.date():
+            raise PrestamoError(
+                "reserva_id",
+                f"La reserva solo puede convertirse a préstamo el día de inicio reservado "
+                f"({inicio_local.strftime('%d/%m/%Y')}). Hoy es {entrega_local.strftime('%d/%m/%Y')}.",
+                status_code=409,
+            )
         minutos_prestamo = calcular_minutos_habiles(reserva.fecha_inicio, reserva.fecha_fin)
         if minutos_prestamo < MINIMO_MINUTOS_PRESTAMO:
             raise PrestamoError(

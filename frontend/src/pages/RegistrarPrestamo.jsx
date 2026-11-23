@@ -957,24 +957,12 @@ function RegistrarPrestamo() {
                   </div>
 
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <div>
-                      <label htmlFor="fecha-inicio-prestamo" className="block text-xs font-semibold uppercase tracking-wide text-texto-suave mb-1">
-                        Fecha y hora de inicio (recojo) *
-                      </label>
-                      <input
-                        id="fecha-inicio-prestamo"
-                        type="datetime-local"
-                        value={fechaInicioPrestamo}
-                        max={fechaFinPrestamo || undefined}
-                        disabled
-                        onChange={(evento) => {
-                          setFechaInicioPrestamo(evento.target.value)
-                          setErrores((actual) => ({ ...actual, dias: undefined }))
-                        }}
-                        className="w-full rounded-lg border border-borde bg-white px-3 py-2 text-sm text-texto disabled:bg-superficie-alta/60 dark:bg-superficie"
-                        required
-                      />
-                    </div>
+                    <SelectorFechaHoraDesplegable
+                      id="fecha-inicio-prestamo"
+                      etiqueta="Fecha y hora de inicio (recojo) *"
+                      valor={fechaInicioPrestamo}
+                      deshabilitado
+                    />
                     <div>
                       <SelectorFechaHoraDesplegable
                         id="fecha-fin-prestamo"

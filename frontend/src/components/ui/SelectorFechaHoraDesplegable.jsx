@@ -5,6 +5,7 @@ const DIAS_CABECERA = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
 
 // Accesos rápidos de horario frecuentes dentro de la ventana de atención
 const ATAJOS_HORA = ['09:00', '11:00', '13:00', '15:00', '17:00']
+const FORMATO_HORA_24H = /^(?:[01]\d|2[0-3]):[0-5]\d$/
 
 function formatearFechaIso(anio, mes, dia) {
   const m = String(mes + 1).padStart(2, '0')
@@ -168,6 +169,10 @@ export default function SelectorFechaHoraDesplegable({
     setHoraInterna(nuevaHora)
     if (!nuevaHora) {
       setErrorHora('La hora es obligatoria.')
+      return
+    }
+    if (!FORMATO_HORA_24H.test(nuevaHora)) {
+      setErrorHora('Ingresa la hora en formato de 24 horas (HH:MM), por ejemplo 14:30.')
       return
     }
 
@@ -363,13 +368,15 @@ export default function SelectorFechaHoraDesplegable({
                 </label>
                 <input
                   id={`${idInput}-hora`}
-                  type="time"
-                  min={minHora}
-                  max={maxHora}
-                  step="60"
+                  type="text"
+                  inputMode="text"
+                  placeholder="HH:MM"
+                  aria-label="Hora en formato de 24 horas"
+                  maxLength={5}
+                  pattern="(?:[01][0-9]|2[0-3]):[0-5][0-9]"
                   value={horaInterna}
                   onChange={(e) => manejarCambioHora(e.target.value)}
-                  className="w-28 rounded-md border border-borde bg-white px-2 py-1 text-xs font-semibold text-texto focus:border-marca-600 focus:ring-1 focus:ring-marca-600 dark:bg-superficie"
+                  className="w-28 rounded-md border border-borde bg-white px-2 py-1 text-xs font-semibold tabular-nums text-texto focus:border-marca-600 focus:ring-1 focus:ring-marca-600 dark:bg-superficie"
                 />
               </div>
 

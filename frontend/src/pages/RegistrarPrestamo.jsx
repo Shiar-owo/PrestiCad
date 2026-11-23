@@ -24,6 +24,7 @@ import Boton from '../components/ui/Boton'
 import Tarjeta from '../components/ui/Tarjeta'
 import Skeleton from '../components/ui/Skeleton'
 import ErrorAlerta from '../components/ui/ErrorAlerta'
+import ErrorModal from '../components/ui/ErrorModal'
 import EstadoVacio from '../components/ui/EstadoVacio'
 import SubidaDocumentoPDF from '../components/prestamos/SubidaDocumentoPDF'
 import SelectorPrestatario from '../components/prestamos/SelectorPrestatario'
@@ -56,6 +57,13 @@ const FORMULARIO_INICIAL = {
   documentoIdentidad: null,
   compromisoResponsabilidad: null,
   esExcepcion: false,
+}
+
+function listarMensajesError(valor) {
+  if (typeof valor === 'string') return valor.trim() ? [valor.trim()] : []
+  if (Array.isArray(valor)) return valor.flatMap(listarMensajesError)
+  if (valor && typeof valor === 'object') return Object.values(valor).flatMap(listarMensajesError)
+  return []
 }
 
 const NIVEL_TIER = { restringido: 0, estandar: 1, avanzado: 2 }
@@ -103,7 +111,7 @@ const OPCIONES_MATERIAL = (materiales) => [
   { valor: '', etiqueta: 'Selecciona un material' },
   ...materiales.map((material) => ({
     valor: String(material.id),
-    etiqueta: `${material.nombre} — Código de Material: ${material.codigo_material || material.codigo_inventario} (${material.unidades_disponibles} disponibles)`,
+    etiqueta: `${material.nombre} — Código de Material: ${material.codigo_material || material.codigo_inventario} (${material.unidades_disponibles} libres ahora${Number(material.resumen_instancias?.reservado) > 0 ? `, ${material.resumen_instancias.reservado} con reservas futuras` : ''})`,
   })),
 ]
 
@@ -140,6 +148,7 @@ function RegistrarPrestamo() {
   const [cargandoInstancias, setCargandoInstancias] = useState(false)
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
+  const [errorConfirmacion, setErrorConfirmacion] = useState('')
   const [errorInstancias, setErrorInstancias] = useState('')
   const [errores, setErrores] = useState({})
   const [prestamoCreado, setPrestamoCreado] = useState(null)
@@ -317,7 +326,8 @@ function RegistrarPrestamo() {
     try {
       const resultado = await api.get('/materiales/')
       setMateriales(resultado.filter((material) => (
-        material.estado === 'disponible' && Number(material.unidades_disponibles) > 0
+        (material.estado === 'disponible' && Number(material.unidades_disponibles) > 0) ||
+        (material.estado === 'reservado' && Number(material.resumen_instancias?.reservado) > 0)
       )))
     } catch {
       setError('No se pudo cargar el inventario disponible.')
@@ -521,6 +531,7 @@ function RegistrarPrestamo() {
 
   async function registrar(evento) {
     evento.preventDefault()
+    setErrorConfirmacion('')
     if (bloqueadoPorElegibilidad || bloqueadoPorReservaConversion) return
     if (
       reservaSeleccionada
@@ -550,6 +561,10 @@ function RegistrarPrestamo() {
     const fotosFaltantes = obtenerElementosSinFoto(formulario.checklist)
     setElementosSinFoto(fotosFaltantes.length > 0 ? fotosFaltantes : null)
     if (Object.keys(validacion).length > 0) {
+      const mensajes = listarMensajesError(validacion)
+      if (mensajes.length) {
+        setErrorConfirmacion([...new Set(mensajes)].join('\n'))
+      }
       if (fotosFaltantes.length === 0) enfocarPrimerError()
       return
     }
@@ -571,7 +586,7 @@ function RegistrarPrestamo() {
       })
       const errorTamano = validarTamanoSolicitud(solicitud)
       if (errorTamano) {
-        setError(errorTamano)
+        setErrorConfirmacion(errorTamano)
         return
       }
       const respuesta = await api.post(
@@ -615,10 +630,14 @@ function RegistrarPrestamo() {
           ...erroresDeCampo,
           fotosChecklist: { ...actual.fotosChecklist, ...erroresFotosApi },
         }))
-        setError('')
+        const mensajes = [
+          ...Object.values(erroresDeCampo),
+          ...Object.values(erroresFotosApi),
+        ]
+        setErrorConfirmacion([...new Set(mensajes)].join('\n') || mensajeApi(errorApi))
         enfocarPrimerError()
       } else {
-        setError(mensajeApi(errorApi))
+        setErrorConfirmacion(mensajeApi(errorApi))
       }
     } finally {
       setGuardando(false)
@@ -1287,6 +1306,13 @@ function RegistrarPrestamo() {
             'Espera hasta ese momento y vuelve a confirmar la entrega.',
           ]}
           onCerrar={() => setAdvertenciaFechaHoraReserva(false)}
+        />
+      )}
+      {errorConfirmacion && (
+        <ErrorModal
+          titulo="No se pudo confirmar la entrega"
+          mensaje={errorConfirmacion}
+          onCerrar={() => setErrorConfirmacion('')}
         />
       )}
     </section>

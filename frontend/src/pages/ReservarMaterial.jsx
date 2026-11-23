@@ -6,6 +6,7 @@ import { api, ErrorApi } from '../api/client'
 import BadgeEstado from '../components/ui/BadgeEstado'
 import Boton from '../components/ui/Boton'
 import ErrorAlerta from '../components/ui/ErrorAlerta'
+import ErrorModal from '../components/ui/ErrorModal'
 import Skeleton from '../components/ui/Skeleton'
 import Tarjeta from '../components/ui/Tarjeta'
 import CalendarioDisponibilidad from '../components/reservas/CalendarioDisponibilidad'
@@ -354,6 +355,7 @@ export default function ReservarMaterial() {
 
     if (Object.keys(nuevosErrores).length > 0) {
       setErrores(nuevosErrores)
+      setErrorEnvio(Object.values(nuevosErrores).flat().filter(Boolean).join('\n'))
       return
     }
 
@@ -440,9 +442,7 @@ export default function ReservarMaterial() {
             <h2 id="titulo-reserva-exitosa" className="text-xl font-bold text-texto">
               {confirmada
                 ? 'Reserva confirmada por 24 horas'
-                : reservaCreada.es_excepcion
-                  ? 'Solicitud de excepción académica registrada'
-                  : 'Solicitud registrada en lista de espera'}
+                : 'Solicitud de excepción académica registrada'}
             </h2>
           </div>
           <BadgeEstado
@@ -454,9 +454,7 @@ export default function ReservarMaterial() {
         <p className="text-sm text-texto-suave">
           {confirmada
             ? 'Se ha bloqueado un ejemplar disponible para ti. Acércate al almacén antes de la fecha límite para concretar el préstamo.'
-            : reservaCreada.es_excepcion
-              ? 'Tu solicitud excepcional con documentos de garantía ha quedado en espera de evaluación manual por el Gestor de Almacén.'
-              : 'Actualmente no hay ejemplares libres o existen solicitudes previas. Tu solicitud entró a la cola de espera por 72 horas sin consumir inventario.'}
+            : 'Tu solicitud excepcional con documentos de garantía quedó pendiente de evaluación por el Gestor de Almacén.'}
         </p>
 
         <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm">
@@ -499,22 +497,10 @@ export default function ReservarMaterial() {
             <>
               <div className="rounded-lg border border-borde bg-superficie-alta/40 p-3">
                 <dt className="text-xs font-semibold uppercase tracking-wide text-texto-suave">
-                  Orden en cola
+                  Estado de revisión
                 </dt>
                 <dd className="mt-1 font-bold text-texto">
-                  {reservaCreada.es_excepcion
-                    ? 'Evaluación por gestor'
-                    : reservaCreada.posicion_cola
-                      ? `Posición #${reservaCreada.posicion_cola}`
-                      : 'En espera'}
-                </dd>
-              </div>
-              <div className="rounded-lg border border-borde bg-superficie-alta/40 p-3">
-                <dt className="text-xs font-semibold uppercase tracking-wide text-texto-suave">
-                  Vigencia en espera (72 h)
-                </dt>
-                <dd className="mt-1 font-bold text-texto">
-                  {formatearFechaReserva(reservaCreada.fecha_limite_espera)}
+                  Pendiente de evaluación por el gestor
                 </dd>
               </div>
             </>
@@ -573,7 +559,13 @@ export default function ReservarMaterial() {
         />
       )}
 
-      {errorEnvio && <ErrorAlerta mensaje={errorEnvio} />}
+      {errorEnvio && (
+        <ErrorModal
+          titulo="No se pudo confirmar la reserva"
+          mensaje={errorEnvio}
+          onCerrar={() => setErrorEnvio('')}
+        />
+      )}
 
       <Tarjeta className="p-6">
         <form onSubmit={manejarSubmit} noValidate className="space-y-5">

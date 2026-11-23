@@ -17,6 +17,7 @@ import { api, ErrorApi } from '../api/client'
 import BadgeEstado from '../components/ui/BadgeEstado'
 import Boton from '../components/ui/Boton'
 import ErrorAlerta from '../components/ui/ErrorAlerta'
+import ErrorModal from '../components/ui/ErrorModal'
 import EstadoVacio from '../components/ui/EstadoVacio'
 import Skeleton from '../components/ui/Skeleton'
 import Tarjeta from '../components/ui/Tarjeta'
@@ -159,7 +160,7 @@ export default function ColaReservas() {
         )
       } else {
         setMensajeExito(
-          `Excepción académica aprobada para ${reserva.usuario?.nombre_completo || reserva.usuario?.dni}. Ha ingresado a la lista de espera con turno por orden de llegada.`,
+          `La solicitud de excepción de ${reserva.usuario?.nombre_completo || reserva.usuario?.dni} fue aprobada.`,
         )
       }
       setRecarga((v) => v + 1)
@@ -181,11 +182,11 @@ export default function ColaReservas() {
 
     const motivoLimpio = motivoTexto.trim()
     if (!motivoLimpio) {
-      setErrorMotivo(
-        accionConMotivo.tipo === 'rechazar'
-          ? 'El motivo de rechazo es obligatorio.'
-          : 'El motivo de cancelación es obligatorio.',
-      )
+      const mensaje = accionConMotivo.tipo === 'rechazar'
+        ? 'El motivo de rechazo es obligatorio.'
+        : 'El motivo de cancelación es obligatorio.'
+      setErrorMotivo(mensaje)
+      setErrorAccion(mensaje)
       return
     }
 
@@ -326,7 +327,13 @@ export default function ColaReservas() {
         </div>
       )}
 
-      {errorAccion && <ErrorAlerta mensaje={errorAccion} />}
+      {errorAccion && (
+        <ErrorModal
+          titulo="No se pudo completar la acción"
+          mensaje={errorAccion}
+          onCerrar={() => setErrorAccion('')}
+        />
+      )}
 
       {/* Modal/Panel para ingresar motivo de rechazo o cancelación */}
       {accionConMotivo && (

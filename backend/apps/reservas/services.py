@@ -311,13 +311,12 @@ def crear_reserva(
     fecha_fin=None,
     ahora=None,
 ):
-    """Crea una solicitud de reserva normal o la registra en lista de espera (HU06).
+    """Confirma una reserva normal solo si hay un ejemplar libre en ese rango.
 
     Orden de bloqueo consistente:
     1. Usuario (`select_for_update`)
     2. Material (`select_for_update`)
-    3. Autopromoción previa de la cola existente
-    4. Instancia disponible (si no queda cola pendiente)
+    3. Ejemplar libre durante todo el rango solicitado
     """
     ahora = ahora or timezone.now()
     _validar_usuario_prestatario(usuario)
@@ -364,30 +363,6 @@ def crear_reserva(
 
     _validar_maximo_reservas_activas(usuario_bloqueado.id)
 
-    # RN11 / HU06 criterio 5: antes de confirmar una nueva solicitud normal,
-    # autopromover la cola existente para que no se salte a quienes ya esperan.
-    autopromover_material(material.id, ahora=ahora)
-
-    if fecha_inicio and fecha_fin:
-        cola_pendiente = (
-            Reserva.objects.filter(
-                material_id=material.id,
-                estado="en_espera",
-                fecha_inicio__isnull=False,
-                fecha_fin__isnull=False,
-                fecha_inicio__lt=fecha_fin,
-                fecha_fin__gt=fecha_inicio,
-            )
-            .filter(Q(es_excepcion=False) | Q(excepcion_aprobada=True))
-            .exists()
-        )
-    else:
-        cola_pendiente = (
-            Reserva.objects.filter(material_id=material.id, estado="en_espera")
-            .filter(Q(es_excepcion=False) | Q(excepcion_aprobada=True))
-            .exists()
-        )
-
     instancia_elegida = None
     if instancia_id is not None:
         try:
@@ -418,7 +393,7 @@ def crear_reserva(
                 status_code=409,
             )
         instancia_elegida = instancia_candidata
-    elif not cola_pendiente and material.estado != "en_mantenimiento":
+    elif material.estado != "en_mantenimiento":
         if fecha_inicio and fecha_fin:
             instancia_elegida = obtener_instancias_disponibles_en_rango(
                 material.id, fecha_inicio, fecha_fin, bloquear_filas=True
@@ -430,6 +405,13 @@ def crear_reserva(
                 .order_by("codigo_ejemplar")
                 .first()
             )
+
+    if instancia_elegida is None:
+        raise ReservaError(
+            "fecha_inicio",
+            "No hay ejemplares disponibles durante el rango seleccionado. Elige otro horario.",
+            status_code=409,
+        )
 
     fecha_limite_recojo = fecha_fin or (ahora + timedelta(hours=HORAS_RECOJO))
 
@@ -453,23 +435,8 @@ def crear_reserva(
             fecha_inicio=fecha_inicio,
             fecha_fin=fecha_fin,
             fecha_confirmacion=ahora,
-            fecha_limite_espera=ahora + timedelta(hours=HORAS_ESPERA),
             fecha_limite_recojo=fecha_limite_recojo,
         )
-    else:
-        reserva = Reserva.objects.create(
-            usuario=usuario_bloqueado,
-            material=material,
-            instancia=None,
-            justificacion=justificacion_limpia,
-            estado="en_espera",
-            es_excepcion=False,
-            fecha_solicitud=ahora,
-            fecha_inicio=fecha_inicio,
-            fecha_fin=fecha_fin,
-            fecha_limite_espera=ahora + timedelta(hours=HORAS_ESPERA),
-        )
-
     return reserva
 
 
@@ -546,6 +513,15 @@ def crear_reserva_excepcional(
 
     _validar_maximo_reservas_activas(usuario_bloqueado.id)
 
+    if not obtener_instancias_disponibles_en_rango(
+        material.id, fecha_inicio, fecha_fin, bloquear_filas=True
+    ).exists():
+        raise ReservaError(
+            "fecha_inicio",
+            "No hay ejemplares disponibles durante el rango seleccionado. Elige otro horario.",
+            status_code=409,
+        )
+
     reserva = Reserva.objects.create(
         usuario=usuario_bloqueado,
         material=material,
@@ -569,7 +545,7 @@ def crear_reserva_excepcional(
 
 @transaction.atomic
 def aprobar_excepcion(*, reserva_id, realizado_por=None, ahora=None):
-    """Aprueba una solicitud de excepción académica: la valida e ingresa a la cola de espera, asignándole ejemplar si hay disponibilidad (HU08, HU13)."""
+    """Aprueba una excepción y asigna un ejemplar libre para su rango."""
     ahora = ahora or timezone.now()
     try:
         reserva = (
@@ -617,13 +593,41 @@ def aprobar_excepcion(*, reserva_id, realizado_por=None, ahora=None):
             status_code=409,
         )
 
+    if reserva.fecha_inicio and reserva.fecha_fin:
+        instancia = obtener_instancias_disponibles_en_rango(
+            reserva.material_id,
+            reserva.fecha_inicio,
+            reserva.fecha_fin,
+            bloquear_filas=True,
+        ).first()
+    else:
+        instancia = InstanciaMaterial.objects.select_for_update().filter(
+            material_id=reserva.material_id, estado="disponible"
+        ).order_by("codigo_ejemplar").first()
+    if instancia is None:
+        raise ReservaError(
+            "fecha_inicio",
+            "No hay ejemplares disponibles durante el rango solicitado. La solicitud no puede aprobarse.",
+            status_code=409,
+        )
+    try:
+        servicios_inventario.marcar_instancia_reservada(
+            reserva.material_id, instancia_id=instancia.id
+        )
+    except servicios_inventario.InventarioError as error:
+        raise ReservaError(error.campo, error.mensaje, status_code=error.status_code) from error
+
+    reserva.instancia = instancia
+    reserva.estado = "reservada"
     reserva.excepcion_aprobada = True
-    reserva.save(update_fields=["excepcion_aprobada", "updated_at"])
-
-    # Promover la cola (incluyendo a esta excepción aprobada según FIFO si hay ejemplares libres)
-    autopromover_material(reserva.material_id, ahora=ahora)
-
-    reserva.refresh_from_db()
+    reserva.fecha_confirmacion = ahora
+    reserva.fecha_limite_recojo = reserva.fecha_fin or (ahora + timedelta(hours=HORAS_RECOJO))
+    reserva.save(
+        update_fields=(
+            "instancia", "estado", "excepcion_aprobada", "fecha_confirmacion",
+            "fecha_limite_recojo", "updated_at",
+        )
+    )
     return reserva
 
 

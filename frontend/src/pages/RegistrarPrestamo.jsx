@@ -343,7 +343,7 @@ function RegistrarPrestamo() {
   )
   const perfilHabilitado = perfilVerificadoActual?.rol === 'prestatario' && perfilVerificadoActual?.estado === 'activo'
   const puedeSolicitarExcepcion = Boolean(
-    perfilHabilitado && materialSeleccionado && !tierCumple
+    !reservaSeleccionada && perfilHabilitado && materialSeleccionado && !tierCumple
     && ['restringido', 'estandar'].includes(perfilVerificadoActual?.reputacion_tier),
   )
   const excepcionActiva = Boolean(
@@ -404,14 +404,8 @@ function RegistrarPrestamo() {
     setPrestamoCreado(null)
   }
 
-  function desvincularReserva() {
-    setReservaFija(null)
-    setSearchParams(formulario.dni ? { dni: formulario.dni } : {})
-    seleccionarReserva('')
-  }
-
   function actualizar(campo, valor) {
-    if (campo === 'dni' && reservaSeleccionada) return
+    if (['dni', 'materialId', 'instanciaId', 'esExcepcion'].includes(campo) && reservaSeleccionada) return
     const camposError = {
       dni: 'dni',
       materialId: 'material',
@@ -703,47 +697,55 @@ function RegistrarPrestamo() {
                   requerido
                 />
 
-                {(opcionesReservas.length > 0 || reservaSeleccionada) && (
+                {esConversionFija && reservaSeleccionada ? (
+                  <div className="rounded-xl border border-marca-300 bg-marca-50/50 p-4 space-y-2.5 shadow-xs dark:border-marca-800 dark:bg-marca-950/30">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-marca-200/60 pb-2 dark:border-marca-800/60">
+                      <span className="block text-xs font-bold uppercase tracking-wider text-marca-900 dark:text-marca-200">
+                        Reserva confirmada vinculada
+                      </span>
+                      <span className="rounded-full bg-marca-200 px-2.5 py-0.5 text-xs font-bold text-marca-900 dark:bg-marca-900 dark:text-marca-200">
+                        Modo conversión fijado
+                      </span>
+                    </div>
+
+                    <div className="space-y-1 text-xs">
+                      <p className="font-semibold text-texto">
+                        {reservaSeleccionada.material?.nombre} ({reservaSeleccionada.material?.codigo_material})
+                        {reservaSeleccionada.es_excepcion ? ' [Excepción académica aprobada]' : ''}
+                      </p>
+                      <p className="text-texto-suave">
+                        Ejemplar reservado:{' '}
+                        <strong className="font-mono text-marca-800 dark:text-marca-300">
+                          {reservaSeleccionada.instancia?.codigo_ejemplar}
+                        </strong>{' '}
+                        · Límite de recojo: {fechaLegible(reservaSeleccionada.fecha_limite_recojo)}
+                      </p>
+                    </div>
+
+                    <p className="text-[11px] text-texto-suave italic">
+                      Todos los datos del prestatario, material, ejemplar y fechas provienen de la reserva confirmada y no pueden modificarse durante la entrega.
+                    </p>
+                  </div>
+                ) : (opcionesReservas.length > 0 || reservaSeleccionada) && (
                   <div className="rounded-xl border border-borde bg-white p-3.5 space-y-2.5 shadow-xs dark:bg-superficie">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <label
-                          htmlFor="select-reserva-confirmada"
-                          className="block text-xs font-bold uppercase tracking-wider text-texto"
-                        >
-                          {esConversionFija ? 'Reserva confirmada vinculada' : `Reservas confirmadas vigentes (${opcionesReservas.length})`}
-                        </label>
-                        {reservaIdInicial && (
-                          <span className="rounded-full bg-acento-100 px-2.5 py-0.5 text-xs font-bold text-acento-800 dark:bg-acento-950/60 dark:text-acento-300">
-                            Modo conversión
-                          </span>
-                        )}
-                      </div>
-                      {reservaSeleccionada && (
-                        <Boton
-                          tipo="button"
-                          variante="secundario"
-                          tamanio="pequeno"
-                          onClick={desvincularReserva}
-                        >
-                          Préstamo independiente
-                        </Boton>
-                      )}
+                      <label
+                        htmlFor="select-reserva-confirmada"
+                        className="block text-xs font-bold uppercase tracking-wider text-texto"
+                      >
+                        Reservas confirmadas vigentes ({opcionesReservas.length})
+                      </label>
                     </div>
 
                     <select
                       id="select-reserva-confirmada"
                       value={formulario.reservaId}
                       onChange={(e) => {
-                        if (e.target.value === '') {
-                          desvincularReserva()
-                        } else {
-                          seleccionarReserva(e.target.value)
-                        }
+                        seleccionarReserva(e.target.value)
                       }}
                       className="w-full rounded-lg border border-borde bg-white px-3 py-2 text-sm text-texto dark:bg-superficie"
                     >
-                      <option value="">-- Préstamo independiente (no usar reserva) --</option>
+                      <option value="">-- Préstamo directo (sin reserva previa) --</option>
                       {opcionesReservas.map((res) => (
                         <option key={res.id} value={res.id}>
                           {res.material?.nombre} ({res.material?.codigo_material}) — Ejemplar{' '}
@@ -756,16 +758,8 @@ function RegistrarPrestamo() {
 
                     {reservaSeleccionada && (
                       <p className="text-xs text-texto-suave">
-                        {esConversionFija ? (
-                          <span className="font-semibold text-texto">
-                            Conversión fija: ejemplar {reservaSeleccionada.instancia?.codigo_ejemplar} vinculado.
-                          </span>
-                        ) : (
-                          <>
-                            Se cargó el ejemplar{' '}
-                            <strong>{reservaSeleccionada.instancia?.codigo_ejemplar}</strong> de la reserva confirmada.
-                          </>
-                        )}
+                        Se cargó el ejemplar{' '}
+                        <strong>{reservaSeleccionada.instancia?.codigo_ejemplar}</strong> de la reserva confirmada (datos bloqueados para la entrega).
                       </p>
                     )}
                   </div>

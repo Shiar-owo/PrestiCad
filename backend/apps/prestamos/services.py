@@ -872,12 +872,63 @@ def registrar_prestamo(
     _validar_duracion_material(material, minutos_prestamo, campo_duracion)
 
     if reserva is None:
-        if material.estado in ("en_mantenimiento", "reservado"):
+        if material.estado == "en_mantenimiento":
             raise PrestamoError(
                 "material_id",
                 "El material no está disponible para entrega.",
                 status_code=409,
             )
+        from apps.reservas.models import Reserva
+
+        if material.estado == "reservado":
+            tiene_reservas_sistema = Reserva.objects.filter(
+                material_id=material.id, estado="reservada"
+            ).exists()
+            if not tiene_reservas_sistema:
+                raise PrestamoError(
+                    "material_id",
+                    "El material no está disponible para entrega.",
+                    status_code=409,
+                )
+        fecha_fin_estimada = fecha_entrega + timedelta(minutes=minutos_prestamo)
+
+        if instancia_id is not None:
+            reserva_solapada = Reserva.objects.filter(
+                instancia_id=instancia_id,
+                estado="reservada",
+                fecha_inicio__isnull=False,
+                fecha_fin__isnull=False,
+                fecha_inicio__lt=fecha_fin_estimada,
+                fecha_fin__gt=fecha_entrega,
+            ).first()
+            if reserva_solapada:
+                raise PrestamoError(
+                    "tiempo_prestamo",
+                    f"El ejemplar seleccionado tiene una reserva confirmada a partir de {reserva_solapada.fecha_inicio.strftime('%d/%m/%Y %H:%M')}. La entrega debe devolverse antes de ese horario.",
+                    status_code=409,
+                )
+        else:
+            from apps.reservas.disponibilidad import obtener_instancias_disponibles_en_rango
+
+            libres = obtener_instancias_disponibles_en_rango(
+                material.id, fecha_entrega, fecha_fin_estimada, bloquear_filas=True
+            )
+            candidata = libres.first()
+            if candidata:
+                instancia_id = candidata.id
+            else:
+                proxima_reserva = Reserva.objects.filter(
+                    material_id=material.id,
+                    estado="reservada",
+                    fecha_inicio__gt=fecha_entrega,
+                    fecha_inicio__lt=fecha_fin_estimada,
+                ).order_by("fecha_inicio").first()
+                if proxima_reserva:
+                    raise PrestamoError(
+                        "tiempo_prestamo",
+                        f"Los ejemplares tienen una reserva programada a partir de {proxima_reserva.fecha_inicio.strftime('%d/%m/%Y %H:%M')}. La entrega debe finalizar antes de ese horario.",
+                        status_code=409,
+                    )
     elif material.estado == "en_mantenimiento":
         raise PrestamoError(
             "material_id",
@@ -900,7 +951,7 @@ def registrar_prestamo(
         instancia_elegida = servicios_inventario.marcar_instancia_prestada(
             material.id,
             instancia_id=instancia_id,
-            permitir_reservada=reserva is not None,
+            permitir_reservada=bool(instancia_id is not None or reserva is not None),
         )
     except servicios_inventario.InventarioError as error:
         raise PrestamoError(

@@ -1604,7 +1604,7 @@ class RegistrarPrestamoAPITestCase(APITestCase):
         elif "tiempo_prestamo_dias" in cambios and isinstance(cambios["tiempo_prestamo_dias"], (int, float)) and cambios["tiempo_prestamo_dias"] > 0:
             fecha_fin = self._calcular_fecha_fin_valida(dias=int(cambios["tiempo_prestamo_dias"]))
         else:
-            fecha_fin = self._calcular_fecha_fin_valida(dias=2)
+            fecha_fin = self._calcular_fecha_fin_valida(dias=3)
         datos = {
             "dni_prestatario": self.prestatario.dni,
             "material_id": str(self.material.id),

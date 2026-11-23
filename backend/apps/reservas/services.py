@@ -616,6 +616,7 @@ def aprobar_excepcion(*, reserva_id, realizado_por=None, ahora=None):
         )
     except servicios_inventario.InventarioError as error:
         raise ReservaError(error.campo, error.mensaje, status_code=error.status_code) from error
+    instancia.estado = "reservado"
 
     reserva.instancia = instancia
     reserva.estado = "reservada"

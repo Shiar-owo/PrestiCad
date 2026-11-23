@@ -333,6 +333,16 @@ export function obtenerMinimaHoraFinReserva(horaInicio) {
   return `${String(Math.floor(minutos / 60)).padStart(2, '0')}:${String(minutos % 60).padStart(2, '0')}`
 }
 
+export function puedeEntregarseReservaAhora(fechaInicio, ahora = new Date()) {
+  if (!fechaInicio) return false
+  const inicio = new Date(fechaInicio)
+  if (Number.isNaN(inicio.getTime())) return false
+  const mismoDia = inicio.getFullYear() === ahora.getFullYear()
+    && inicio.getMonth() === ahora.getMonth()
+    && inicio.getDate() === ahora.getDate()
+  return mismoDia && ahora >= inicio
+}
+
 export function obtenerLunesSemana(fecha) {
   const d = new Date(fecha)
   if (Number.isNaN(d.getTime())) return null

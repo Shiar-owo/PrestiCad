@@ -16,6 +16,7 @@ import {
   obtenerMinimoFinReserva,
   obtenerMinimoInicioReserva,
   ordenarColaReservas,
+  puedeEntregarseReservaAhora,
   presentarEstadoReserva,
   requiereExcepcionAcademica,
   textoEstadoReserva,
@@ -166,6 +167,14 @@ describe('construirFormularioReservaExcepcional y validarFormularioReserva', () 
 })
 
 describe('presentación de motivos y fechas', () => {
+  it('solo permite convertir una reserva cuando coinciden la fecha y ya llegó la hora', () => {
+    const inicio = new Date(2026, 5, 17, 14, 30)
+    expect(puedeEntregarseReservaAhora(inicio, new Date(2026, 5, 17, 14, 29))).toBe(false)
+    expect(puedeEntregarseReservaAhora(inicio, new Date(2026, 5, 17, 14, 30))).toBe(true)
+    expect(puedeEntregarseReservaAhora(inicio, new Date(2026, 5, 18, 14, 30))).toBe(false)
+    expect(puedeEntregarseReservaAhora(null, new Date(2026, 5, 17, 14, 30))).toBe(false)
+  })
+
   it('calcula límites de inicio y fin y ajusta si el máximo cae en fin de semana', () => {
     const ahora = new Date(2026, 5, 17, 10, 20, 35)
     expect(obtenerMinimoInicioReserva(ahora)).toBe('2026-06-17T10:21')

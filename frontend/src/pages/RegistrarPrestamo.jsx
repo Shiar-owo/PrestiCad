@@ -44,6 +44,7 @@ import {
 import {
   calcularMinutosHabilesReserva,
   cruzaFinDeSemana,
+  puedeEntregarseReservaAhora,
 } from '../reservas/estadoReserva'
 
 const FORMULARIO_INICIAL = {
@@ -147,6 +148,7 @@ function RegistrarPrestamo() {
   const [consultandoPerfil, setConsultandoPerfil] = useState(false)
   const [errorPerfil, setErrorPerfil] = useState('')
   const [elementosSinFoto, setElementosSinFoto] = useState(null)
+  const [advertenciaFechaHoraReserva, setAdvertenciaFechaHoraReserva] = useState(false)
   const referenciaFormulario = useRef(null)
   const referenciasFotos = useRef([])
   const urlsTemporales = useRef(new Set())
@@ -520,6 +522,13 @@ function RegistrarPrestamo() {
   async function registrar(evento) {
     evento.preventDefault()
     if (bloqueadoPorElegibilidad || bloqueadoPorReservaConversion) return
+    if (
+      reservaSeleccionada
+      && !puedeEntregarseReservaAhora(reservaSeleccionada.fecha_inicio, new Date())
+    ) {
+      setAdvertenciaFechaHoraReserva(true)
+      return
+    }
     const duracionMinutos = calcularMinutosEntreFechas(fechaInicioPrestamo, fechaFinPrestamo)
     const datosValidacion = {
       dni: formulario.dni,
@@ -1267,6 +1276,17 @@ function RegistrarPrestamo() {
           descripcion="Adjunta una foto para cada uno de estos elementos antes de continuar:"
           mensajes={elementosSinFoto.map(({ elemento }) => elemento)}
           onCerrar={cerrarAdvertenciaFotos}
+        />
+      )}
+      {advertenciaFechaHoraReserva && reservaSeleccionada && (
+        <AdvertenciaModal
+          titulo="La reserva todavía no está lista para entregar"
+          descripcion="La entrega solo se puede confirmar cuando hayan llegado tanto la fecha como la hora de inicio reservadas."
+          mensajes={[
+            `Inicio reservado: ${fechaLegible(reservaSeleccionada.fecha_inicio)}.`,
+            'Espera hasta ese momento y vuelve a confirmar la entrega.',
+          ]}
+          onCerrar={() => setAdvertenciaFechaHoraReserva(false)}
         />
       )}
     </section>

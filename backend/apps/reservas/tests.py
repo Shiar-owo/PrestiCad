@@ -763,8 +763,12 @@ class ReservasAPITestCase(APITestCase):
         self.assertIn("fecha_fin", menor_1h.data)
         self.assertIn("1 hora (60 minutos)", str(menor_1h.data["fecha_fin"]))
 
-    def test_api_reserva_permite_cruzar_fin_de_semana_sin_consumir_tiempo_maximo_y_convertirse(self):
+    def test_api_reserva_permite_cruzar_fin_de_semana_y_cuenta_todos_los_dias_intermedios(self):
         self._autenticar(self.prestatario)
+        # Configurar tiempo máximo de al menos 4 días (5760 min) para permitir 72h
+        self.material.tiempo_maximo_prestamo = 5760
+        self.material.save(update_fields=["tiempo_maximo_prestamo", "updated_at"])
+
         viernes = timezone.localtime(timezone.now()).replace(
             hour=14, minute=0, second=0, microsecond=0
         ) + timedelta(days=1)
@@ -793,13 +797,113 @@ class ReservasAPITestCase(APITestCase):
                 dni_prestatario=self.prestatario.dni,
                 material_id=self.material.id,
                 reserva_id=reserva_id,
-                tiempo_prestamo_minutos=1440,
+                tiempo_prestamo_minutos=4320,
                 checklist_inicial=CHECKLIST,
                 registrado_por=self.gestor,
             )
-        self.assertEqual(prestamo.tiempo_prestamo_minutos, 1440)
+        # Los días intermedios (sábado y domingo) sí cuentan en la duración total (72 h = 4320 min)
+        self.assertEqual(prestamo.tiempo_prestamo_minutos, 4320)
         self.assertEqual(prestamo.fecha_entrega, viernes)
         self.assertEqual(prestamo.fecha_limite, lunes)
+
+    def test_reserva_rechaza_inicio_o_fin_en_sabado_o_domingo(self):
+        self._autenticar(self.prestatario)
+        sabado = timezone.localtime(timezone.now()).replace(hour=10, minute=0, second=0, microsecond=0) + timedelta(days=1)
+        while sabado.weekday() != 5:
+            sabado += timedelta(days=1)
+        lunes = sabado + timedelta(days=2)
+        viernes = sabado - timedelta(days=1)
+
+        # Inicio en sábado
+        resp_sab_inicio = self.client.post(
+            "/api/reservas/",
+            {
+                "material_id": str(self.material.id),
+                "justificacion": "Intento de reserva sábado",
+                "fecha_inicio": sabado.isoformat(),
+                "fecha_fin": lunes.isoformat(),
+            },
+            format="json",
+        )
+        self.assertEqual(resp_sab_inicio.status_code, 400)
+        self.assertIn("fecha_inicio", resp_sab_inicio.data)
+
+        # Fin en domingo
+        domingo = sabado + timedelta(days=1)
+        resp_dom_fin = self.client.post(
+            "/api/reservas/",
+            {
+                "material_id": str(self.material.id),
+                "justificacion": "Intento fin domingo",
+                "fecha_inicio": viernes.isoformat(),
+                "fecha_fin": domingo.isoformat(),
+            },
+            format="json",
+        )
+        self.assertEqual(resp_dom_fin.status_code, 400)
+        self.assertIn("fecha_fin", resp_dom_fin.data)
+
+    def test_reserva_rechaza_horario_fuera_de_atencion(self):
+        self._autenticar(self.prestatario)
+        lunes = timezone.localtime(timezone.now()).replace(hour=8, minute=30, second=0, microsecond=0) + timedelta(days=1)
+        while lunes.weekday() != 0:
+            lunes += timedelta(days=1)
+
+        # Inicio antes de las 09:00
+        resp = self.client.post(
+            "/api/reservas/",
+            {
+                "material_id": str(self.material.id),
+                "justificacion": "Muy temprano",
+                "fecha_inicio": lunes.isoformat(),
+                "fecha_fin": lunes.replace(hour=12).isoformat(),
+            },
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("fecha_inicio", resp.data)
+
+        # Fin después de las 17:00
+        resp_tarde = self.client.post(
+            "/api/reservas/",
+            {
+                "material_id": str(self.material.id),
+                "justificacion": "Muy tarde",
+                "fecha_inicio": lunes.replace(hour=10).isoformat(),
+                "fecha_fin": lunes.replace(hour=17, minute=30).isoformat(),
+            },
+            format="json",
+        )
+        self.assertEqual(resp_tarde.status_code, 400)
+        self.assertIn("fecha_fin", resp_tarde.data)
+
+    def test_reserva_fines_de_semana_intermedios_cuentan_hacia_limite_maximo(self):
+        self._autenticar(self.prestatario)
+        # Material con tiempo máximo de 48 horas (2880 min)
+        material_corto = crear_material(
+            codigo_material="EQ-CORTO-01",
+            stock=1,
+            tiempo_maximo_prestamo=2880,
+        )
+        viernes = timezone.localtime(timezone.now()).replace(hour=10, minute=0, second=0, microsecond=0) + timedelta(days=1)
+        while viernes.weekday() != 4:
+            viernes += timedelta(days=1)
+        # Viernes 10:00 a Lunes 10:00 = 72 horas corridas (4320 min) > 2880 min
+        lunes = viernes + timedelta(days=3)
+
+        resp = self.client.post(
+            "/api/reservas/",
+            {
+                "material_id": str(material_corto.id),
+                "justificacion": "Prueba duración corrida fin de semana",
+                "fecha_inicio": viernes.isoformat(),
+                "fecha_fin": lunes.isoformat(),
+            },
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("fecha_fin", resp.data)
+        self.assertIn("supera el tiempo máximo permitido", str(resp.data["fecha_fin"]))
 
     def test_endpoint_conversion_rechaza_reserva_vencida_o_sin_instancia(self):
         self._autenticar(self.prestatario)

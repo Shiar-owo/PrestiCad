@@ -1590,15 +1590,21 @@ class RegistrarPrestamoAPITestCase(APITestCase):
         sesion[CLAVE_SESION_ULTIMA_ACTIVIDAD] = timezone.now().isoformat()
         sesion.save()
 
+    def _calcular_fecha_fin_valida(self, dias=2):
+        fecha = timezone.localtime(timezone.now()).replace(hour=14, minute=0, second=0, microsecond=0) + timedelta(days=dias)
+        while fecha.weekday() not in (0, 1, 2, 3, 4):
+            fecha += timedelta(days=1)
+        return fecha.isoformat()
+
     def _payload(self, **cambios):
         if "fecha_fin" in cambios:
             fecha_fin = cambios["fecha_fin"]
         elif "tiempo_prestamo_minutos" in cambios and isinstance(cambios["tiempo_prestamo_minutos"], (int, float)):
-            fecha_fin = (timezone.now() + timedelta(minutes=cambios["tiempo_prestamo_minutos"] + 1)).isoformat()
+            fecha_fin = self._calcular_fecha_fin_valida(dias=1)
         elif "tiempo_prestamo_dias" in cambios and isinstance(cambios["tiempo_prestamo_dias"], (int, float)) and cambios["tiempo_prestamo_dias"] > 0:
-            fecha_fin = (timezone.now() + timedelta(days=cambios["tiempo_prestamo_dias"])).isoformat()
+            fecha_fin = self._calcular_fecha_fin_valida(dias=int(cambios["tiempo_prestamo_dias"]))
         else:
-            fecha_fin = (timezone.now() + timedelta(days=3)).isoformat()
+            fecha_fin = self._calcular_fecha_fin_valida(dias=2)
         datos = {
             "dni_prestatario": self.prestatario.dni,
             "material_id": str(self.material.id),
@@ -1742,6 +1748,36 @@ class RegistrarPrestamoAPITestCase(APITestCase):
         self.assertEqual(respuesta.status_code, 400)
         self.assertIn("8 h (480 min)", str(respuesta.json()["tiempo_prestamo_minutos"]))
         self.assertEqual(Prestamo.objects.count(), 0)
+
+    def test_post_rechaza_fecha_fin_en_sabado_o_domingo(self):
+        self._iniciar_sesion(self.gestor)
+        sabado = timezone.localtime(timezone.now()).replace(hour=14, minute=0, second=0, microsecond=0) + timedelta(days=1)
+        while sabado.weekday() != 5:
+            sabado += timedelta(days=1)
+
+        respuesta = self.client.post(
+            self.URL,
+            self._payload_multipart(fecha_fin=sabado.isoformat()),
+            format="multipart",
+        )
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn("fecha_fin", respuesta.json())
+        self.assertIn("laborable", str(respuesta.json()["fecha_fin"]))
+
+    def test_post_rechaza_fecha_fin_fuera_de_horario_atencion(self):
+        self._iniciar_sesion(self.gestor)
+        lunes = timezone.localtime(timezone.now()).replace(hour=18, minute=30, second=0, microsecond=0) + timedelta(days=1)
+        while lunes.weekday() != 0:
+            lunes += timedelta(days=1)
+
+        respuesta = self.client.post(
+            self.URL,
+            self._payload_multipart(fecha_fin=lunes.isoformat()),
+            format="multipart",
+        )
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn("fecha_fin", respuesta.json())
+        self.assertIn("horario de devolución", str(respuesta.json()["fecha_fin"]))
 
     def test_post_multipart_registra_garantia_y_parsea_checklist_json(self):
         self._iniciar_sesion(self.gestor)

@@ -232,12 +232,10 @@ def contar_dias_fin_de_semana(fecha_inicio, fecha_fin):
 
 
 def calcular_minutos_habiles(fecha_inicio, fecha_fin):
-    """Calcula la duración en minutos descontando sábados y domingos intermedios."""
+    """Calcula la duración en minutos entre dos fechas (todos los días intermedios cuentan)."""
     if not fecha_inicio or not fecha_fin:
         return 0
-    minutos_totales = int((fecha_fin - fecha_inicio).total_seconds() // 60)
-    dias_fin_semana = contar_dias_fin_de_semana(fecha_inicio, fecha_fin)
-    return max(0, minutos_totales - dias_fin_semana * 1440)
+    return max(0, int((fecha_fin - fecha_inicio).total_seconds() // 60))
 
 
 def _validar_horario_reserva(
@@ -249,8 +247,8 @@ def _validar_horario_reserva(
     ahora=None,
 ):
     """Valida que la reserva esté dentro del horario de atención y días laborables.
-    Para materiales de Tier avanzado, inicio y fin deben ser el mismo día.
-    Para materiales Estándar y Restringido, se permite cruzar fines de semana sin que sábado y domingo consuman el tiempo máximo."""
+    Tanto el inicio como el fin deben ser de lunes a viernes entre 09:00 y 17:00.
+    Todos los días intermedios (incluyendo fines de semana) cuentan en el cálculo de duración."""
     ahora = ahora or timezone.now()
     if fecha_inicio is None or fecha_fin is None:
         campo = "fecha_inicio" if fecha_inicio is None else "fecha_fin"
@@ -298,7 +296,7 @@ def _validar_horario_reserva(
         limite_legible = formatear_duracion_minutos(maximo_minutos)
         raise ReservaError(
             "fecha_fin",
-            f"La duración de la reserva supera el tiempo máximo permitido para este material ({limite_legible}, sin contar fines de semana).",
+            f"La duración de la reserva supera el tiempo máximo permitido para este material ({limite_legible}).",
         )
 
 

@@ -766,18 +766,33 @@ def registrar_prestamo(
             minutos_calendario_directo = int((fecha_fin - inicio_referencia).total_seconds() // 60)
         else:
             minutos_calendario_directo = int(round((fecha_fin - fecha_entrega).total_seconds() / 60))
-        from apps.reservas.services import contar_dias_fin_de_semana
 
-        dias_fin_semana = contar_dias_fin_de_semana(fecha_entrega, fecha_fin)
-        minutos_habiles_directo = max(0, minutos_calendario_directo - dias_fin_semana * 1440)
-        if (
-            minutos_solicitados_explicitamente is not None
-            and dias_fin_semana > 0
-            and abs(minutos_solicitados_explicitamente - minutos_habiles_directo) <= 5
-        ):
-            minutos_prestamo = minutos_habiles_directo
+        # Validación de día laborable (Lunes a Viernes) y horario de atención (09:00 a 17:00)
+        from apps.reservas.constants import (
+            DIAS_LABORABLES,
+            HORA_RESERVA_MAXIMO_FIN,
+            HORA_RESERVA_MINIMO_INICIO,
+        )
+
+        fin_local = timezone.localtime(fecha_fin) if timezone.is_aware(fecha_fin) else fecha_fin
+        if fin_local.weekday() not in DIAS_LABORABLES:
+            raise PrestamoError(
+                "fecha_fin",
+                "La fecha de devolución debe ser un día laborable (lunes a viernes).",
+            )
+        minutos_fin = fin_local.hour * 60 + fin_local.minute
+        if not (HORA_RESERVA_MINIMO_INICIO * 60 <= minutos_fin <= HORA_RESERVA_MAXIMO_FIN * 60):
+            raise PrestamoError(
+                "fecha_fin",
+                f"El horario de devolución es de {HORA_RESERVA_MINIMO_INICIO}:00 a {HORA_RESERVA_MAXIMO_FIN}:00.",
+            )
+
+        # Cuentan todos los días en medio (sin descontar fines de semana)
+        if minutos_solicitados_explicitamente is not None:
+            minutos_prestamo = minutos_solicitados_explicitamente
         else:
             minutos_prestamo = minutos_calendario_directo
+
         if minutos_prestamo < MINIMO_MINUTOS_PRESTAMO:
             raise PrestamoError("fecha_fin", "El préstamo debe durar al menos 1 h (60 min).")
         dias_prestamo = max(1, math.ceil(minutos_prestamo / 1440))

@@ -490,20 +490,58 @@ package "  Bienes y Conservación  " <<Subdomain Bienes>> as SD4 {
       id : UUID
       nombre : String
       descripcion : String
-      codigoInventario : String
+      codigo_inventario : String
       __ Clasificacion __
       -tipo : TipoMaterial
       -estado : EstadoMaterial
-      esAltoValor : Boolean
+      es_alto_valor : Boolean
       __ Configuracion __
       -atributosRep : AtributosReputacion
+      __ Inventario __
+      stock : Integer
+      __ Propiedades Derivadas __
+      +total_instancias : Integer
+      +resumen_estados : Dict
       __ Metadata __
-      fechaRegistro : DateTime
+      created_at : DateTime
+      updated_at : DateTime
       --
       +cambiarEstado(nuevo) : void
       +estaDisponible() : Boolean
       +requiereGarantia() : Boolean
       +obtenerTierMinimo() : Tier
+    }
+
+    class InstanciaMaterial <<Entity>> {
+      --
+      __ Identidad __
+      id : UUID
+      material_id : UUID
+      codigo_ejemplar : String
+      numero_serie : String
+      __ Estado y Condición __
+      -estado : EstadoInstancia
+      estado_fisico : String
+      observaciones : String
+      ubicacion : String
+      __ Metadata __
+      created_at : DateTime
+      updated_at : DateTime
+      --
+      +cambiarEstado(nuevo) : void
+      +estaDisponible() : Boolean
+      +darDeBaja(motivo) : void
+    }
+
+    class EstadoInstancia <<Value Object>> {
+      DISPONIBLE
+      RESERVADO
+      PRESTADO
+      EN_MANTENIMIENTO
+      DE_BAJA
+      --
+      +esDisponible() : Boolean
+      +puedePrestarse() : Boolean
     }
 
     class EstadoMaterial <<Value Object>> {
@@ -525,22 +563,22 @@ package "  Bienes y Conservación  " <<Subdomain Bienes>> as SD4 {
     class FichaTecnica <<Value Object>> {
       marca : String
       modelo : String
-      numeroSerie : String
+      numero_serie : String
       color : String
-      estadoFisico : String
-      fotoUrl : String
+      estado_fisico : String
+      foto : Image
     }
 
     class AtributosReputacion <<Value Object>> {
       __ Penalizaciones __
-      tierMinimoRequerido : Tier
-      bonificacionTiempo : Integer
-      deduccionTardanza : Integer
-      deduccionDanoParcial : Integer
-      deduccionDanoTotal : Integer
+      tier_minimo_requerido : Tier
+      bonificacion_tiempo : Integer
+      deduccion_tardanza : Integer
+      deduccion_dano_parcial : Integer
+      deduccion_dano_total : Integer
       __ Costos __
-      costoReparacion : Decimal
-      costoReposicion : Decimal
+      costo_reparacion : Decimal
+      costo_reposicion : Decimal
       --
       +calcularBonificacion() : Integer
       +calcularDeduccionTardanza(dias) : Integer
@@ -551,6 +589,19 @@ package "  Bienes y Conservación  " <<Subdomain Bienes>> as SD4 {
     Material *-- TipoMaterial
     Material "0..1" *-- FichaTecnica
     Material *-- AtributosReputacion
+    Material "1" *-- "1..*" InstanciaMaterial : posee ejemplares >
+    InstanciaMaterial *-- EstadoInstancia
+
+    note bottom of Material
+      <b>Implementado en HU04 / HU05</b>
+      ═══════════════════════════════
+      • <b>Material</b>: catálogo general y configuración de reputación.
+      • <b>InstanciaMaterial</b>: ejemplares físicos individuales con
+        `codigo_ejemplar`, `numero_serie`, `estado_fisico`, `ubicacion`.
+      • <b>stock</b>: sincronizado automáticamente con total de instancias.
+      • <b>resumen_estados</b>: disponibilidad en tiempo real para catálogo.
+      • Endpoints: `/api/materiales/<id>/instancias/` y `/api/instancias/<id>/`
+    end note
   }
 }
 
@@ -565,6 +616,7 @@ Usuario "1" --> "0..*" Prestamo
 ' --- Inventario ↔ Préstamos/Reservas ---
 Material "1" --> "0..*" Reserva
 Material "1" --> "0..*" Prestamo
+InstanciaMaterial "0..1" <-- "0..*" Prestamo : asigna ejemplar <
 
 ' --- Reservas → Préstamos ---
 Reserva "1" --> "1..*" Prestamo
@@ -599,7 +651,9 @@ end note
 
 note bottom of SD4
   <b>RN01 - Disponibilidad</b>
-  Solo se presta si estado = "Disponible"
+  Disponible si tiene al menos 1
+  instancia física disponible.
+  El préstamo asigna un ejemplar.
   ─────────────────────────────
   <b>RN05 - Garantía</b>
   Equipos alto valor requieren

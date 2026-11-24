@@ -1,10 +1,25 @@
+from django.conf import settings
+from django.core.validators import RegexValidator
 from rest_framework import serializers
 
-from apps.usuarios.models import Credencial, Usuario
+from apps.compartido.serializers import RechazarCamposNoPermitidosMixin
+from apps.usuarios.constants import ESTADOS_USUARIO, ROLES, TIERS, TIPOS_USUARIO
+from apps.usuarios.models import Credencial, Rol, Usuario
+from apps.usuarios.validators import validar_foto_usuario, validar_y_normalizar_telefono
+
+DNI_VALIDATOR = RegexValidator(
+    r"^\d{8}$",
+    message="El DNI debe tener exactamente 8 dígitos numéricos.",
+)
+
+MENSAJES_CAMPO_NOMBRE = {
+    "required": "El nombre es obligatorio.",
+    "blank": "El nombre es obligatorio.",
+}
 
 
 class UsuarioSerializer(serializers.ModelSerializer):
-    """Contrato de entrada/salida JSON para el módulo usuarios.
+    """Contrato de salida JSON para el módulo usuarios.
 
     Las validaciones de datos se declaran aquí; la lógica de negocio
     (duplicados, transacciones) se delega a `services.py`.
@@ -15,6 +30,232 @@ class UsuarioSerializer(serializers.ModelSerializer):
         fields = "__all__"
         read_only_fields = ("id", "created_at", "updated_at")
 
+class UsuarioListaSerializer(serializers.ModelSerializer):
+    """Datos de perfil para la lista administrativa de usuarios."""
+
+    rol = serializers.SlugRelatedField(slug_field="nombre", read_only=True)
+
+    class Meta:
+        model = Usuario
+        fields = (
+            "id",
+            "nombre",
+            "apellido",
+            "email",
+            "dni",
+            "telefono",
+            "tipo",
+            "facultad",
+            "departamento_carrera",
+            "reputacion_puntaje",
+            "reputacion_tier",
+            "rol",
+            "estado",
+        )
+
+
+class CambioRolSerializer(serializers.ModelSerializer):
+    """Contrato de entrada/salida para el endpoint de cambio de rol.
+ 
+    Solo `rol` es escribible: el resto de campos (tipo, email, dni, etc.)
+    se muestran como contexto pero no pueden modificarse desde aquí, para
+    mantener la independencia entre tipo y rol (HU02, criterio 3).
+    `rol` se expone como el código de texto (ej. "gestor"), no como el id
+    interno de la tabla Rol, para no romper a los consumidores del API.
+    """
+ 
+    rol = serializers.SlugRelatedField(slug_field="nombre", queryset=Rol.objects.all())
+ 
+    class Meta:
+        model = Usuario
+        fields = ("id", "nombre", "apellido", "tipo", "rol", "estado", "updated_at")
+        read_only_fields = ("id", "nombre", "apellido", "tipo", "estado", "updated_at")
+
+
+class UsuarioRegistroSerializer(RechazarCamposNoPermitidosMixin, serializers.ModelSerializer):
+    """Contrato de entrada del endpoint POST /api/usuarios.
+
+    Valida el formato de los datos (T01.05). La unicidad de email/DNI NO se
+    valida aquí: se delega al servicio para devolver un 409 Conflict en lugar
+    de un 400. La reputación no forma parte del contrato: no es sobrescribible
+    al registrar (RN03 / T01.04).
+    """
+
+    email = serializers.EmailField(
+        error_messages={
+            "required": "El email es obligatorio.",
+            "invalid": "Ingresa un correo electrónico válido.",
+        },
+    )
+    dni = serializers.CharField(
+        max_length=8,
+        validators=[DNI_VALIDATOR],
+        error_messages={"required": "El DNI es obligatorio."},
+    )
+    tipo = serializers.ChoiceField(
+        choices=TIPOS_USUARIO,
+        error_messages={"invalid_choice": "Tipo de usuario inválido."},
+    )
+    password = serializers.CharField(
+        write_only=True,
+        min_length=8,
+        error_messages={
+            "min_length": "La contraseña debe tener al menos 8 caracteres.",
+            "required": "La contraseña es obligatoria.",
+        },
+    )
+
+    def validate_telefono(self, value):
+        return validar_y_normalizar_telefono(value, default_region="PE", obligatorio=True)
+
+    class Meta:
+        model = Usuario
+        fields = (
+            "nombre",
+            "apellido",
+            "email",
+            "dni",
+            "telefono",
+            "tipo",
+            "facultad",
+            "departamento_carrera",
+            "password",
+        )
+        extra_kwargs = {
+            "nombre": {"error_messages": MENSAJES_CAMPO_NOMBRE},
+            "apellido": {"error_messages": {"required": "El apellido es obligatorio.", "blank": "El apellido es obligatorio."}},
+            "telefono": {
+                "required": True,
+                "allow_blank": False,
+                "error_messages": {
+                    "required": "El teléfono o celular es obligatorio.",
+                    "blank": "El teléfono o celular es obligatorio.",
+                },
+            },
+            "facultad": {"error_messages": {"required": "La facultad es obligatoria.", "blank": "La facultad es obligatoria."}},
+            "departamento_carrera": {"required": False, "allow_blank": True, "default": ""},
+        }
+
+
+class FotoPerfilUsuario(serializers.ImageField):
+    """Devuelve la foto del usuario como una URL accesible para el navegador.
+
+    Al igual que en inventario, en desarrollo antepone `MEDIA_URL_PUBLICA` para
+    evitar el host interno del contenedor (`backend:8000`) generado por DRF
+    cuando hay contexto de request, permitiendo que el navegador del usuario
+    pueda cargar y persistir la imagen tras recargar la página.
+    """
+
+    def to_representation(self, value):
+        if not value:
+            return None
+
+        url = value.url
+        if url.startswith(("http://", "https://")):
+            return url
+
+        return f"{settings.MEDIA_URL_PUBLICA.rstrip('/')}/{url.lstrip('/')}"
+
+
+class PerfilUsuarioSerializer(serializers.Serializer):
+    """Contrato de salida del perfil con los datos institucionales y de contacto."""
+
+    nombre = serializers.CharField()
+    apellido = serializers.CharField()
+    email = serializers.EmailField()
+    email_secundario = serializers.EmailField(allow_blank=True, required=False, default="")
+    dni = serializers.CharField()
+    telefono = serializers.CharField(allow_blank=True)
+    telefono_secundario = serializers.CharField(allow_blank=True, required=False, default="")
+    telefono_terciario = serializers.CharField(allow_blank=True, required=False, default="")
+    tipo = serializers.ChoiceField(choices=TIPOS_USUARIO)
+    facultad = serializers.CharField(allow_blank=True, required=False, default="")
+    departamento_carrera = serializers.CharField(allow_blank=True, required=False, default="")
+    reputacion_puntaje = serializers.IntegerField()
+    reputacion_tier = serializers.CharField()
+    foto_perfil = FotoPerfilUsuario(allow_null=True, required=False)
+
+
+class PerfilElegibilidadPrestamoSerializer(serializers.ModelSerializer):
+    """Datos mínimos del prestatario para verificar un préstamo."""
+
+    rol = serializers.SlugRelatedField(slug_field="nombre", read_only=True)
+
+    class Meta:
+        model = Usuario
+        fields = ("dni", "nombre", "apellido", "rol", "estado", "reputacion_puntaje", "reputacion_tier")
+
+
+class ActualizarPerfilSerializer(RechazarCamposNoPermitidosMixin, serializers.Serializer):
+    """Valida únicamente los campos editables del perfil: contactos y foto.
+
+    El nombre, apellido, DNI, rol y email institucional no forman parte de este
+    contrato y son rechazados automáticamente si se intentan enviar.
+    """
+
+    telefono = serializers.CharField(max_length=30, required=False, allow_blank=True)
+    telefono_secundario = serializers.CharField(max_length=30, required=False, allow_blank=True)
+    telefono_terciario = serializers.CharField(max_length=30, required=False, allow_blank=True)
+    email_secundario = serializers.EmailField(
+        required=False,
+        allow_blank=True,
+        error_messages={"invalid": "Ingresa un correo electrónico secundario válido."},
+    )
+    foto_perfil = serializers.ImageField(
+        required=False,
+        allow_null=True,
+        validators=[validar_foto_usuario],
+    )
+    eliminar_foto_perfil = serializers.BooleanField(required=False)
+
+    def validate_telefono(self, value):
+        if not value or not str(value).strip():
+            return ""
+        return validar_y_normalizar_telefono(value, default_region="PE", obligatorio=False)
+
+    def validate_telefono_secundario(self, value):
+        if not value or not str(value).strip():
+            return ""
+        return validar_y_normalizar_telefono(value, default_region="PE", obligatorio=False)
+
+    def validate_telefono_terciario(self, value):
+        if not value or not str(value).strip():
+            return ""
+        return validar_y_normalizar_telefono(value, default_region="PE", obligatorio=False)
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        if not attrs.get("eliminar_foto_perfil"):
+            attrs.pop("eliminar_foto_perfil", None)
+        usuario = self.context.get("usuario")
+
+        def _resolver_telefono(campo):
+            if campo in attrs:
+                return attrs.get(campo) or ""
+            if usuario is not None:
+                actual = (getattr(usuario, campo, "") or "").strip()
+                if actual:
+                    try:
+                        return validar_y_normalizar_telefono(actual, default_region="PE", obligatorio=False)
+                    except Exception:  # noqa: BLE001
+                        return actual
+            return ""
+
+        t1 = _resolver_telefono("telefono")
+        t2 = _resolver_telefono("telefono_secundario")
+        t3 = _resolver_telefono("telefono_terciario")
+        telefonos_presentes = [t for t in [t1, t2, t3] if t and str(t).strip()]
+        if len(telefonos_presentes) != len(set(telefonos_presentes)):
+            raise serializers.ValidationError({"telefono": "No puedes registrar números de celular repetidos."})
+
+        email_sec = attrs.get("email_secundario")
+        if usuario and email_sec and email_sec.strip().lower() == usuario.email.strip().lower():
+            raise serializers.ValidationError(
+                {"email_secundario": "El correo de recuperación no puede ser igual a tu correo institucional principal."}
+            )
+
+        return attrs
+
 
 class CredencialSerializer(serializers.ModelSerializer):
     """Contrato de entrada/salida JSON para las credenciales de acceso."""
@@ -23,3 +264,36 @@ class CredencialSerializer(serializers.ModelSerializer):
         model = Credencial
         fields = "__all__"
         read_only_fields = ("id", "failed_attempts", "locked_until")
+
+
+class LoginSerializer(serializers.Serializer):
+    """Valida las credenciales de inicio de sesión."""
+
+    email = serializers.EmailField(
+        error_messages={
+            "required": "El email es obligatorio.",
+            "invalid": "Ingresa un correo electrónico válido.",
+        },
+    )
+    password = serializers.CharField(
+        write_only=True,
+        min_length=8,
+        error_messages={
+            "min_length": "La contraseña debe tener al menos 8 caracteres.",
+            "required": "La contraseña es obligatoria.",
+        },
+    )
+
+
+class SesionUsuarioSerializer(serializers.Serializer):
+    """Datos del usuario devueltos al iniciar sesión."""
+
+    id = serializers.IntegerField()
+    nombre = serializers.CharField()
+    apellido = serializers.CharField()
+    email = serializers.EmailField()
+    rol = serializers.ChoiceField(choices=ROLES)
+    estado = serializers.ChoiceField(choices=ESTADOS_USUARIO)
+    reputacion_tier = serializers.ChoiceField(choices=TIERS)
+    reputacion_puntaje = serializers.IntegerField(required=False, default=0)
+    foto_perfil = FotoPerfilUsuario(read_only=True, required=False, allow_null=True)

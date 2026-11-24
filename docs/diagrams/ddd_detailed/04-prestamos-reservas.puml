@@ -63,7 +63,7 @@ class Prestamo <<Aggregate Root>> {
   __ Observaciones __
   observaciones : String
   --
-  +crear(usuario, material, dias) : Prestamo
+  +crear(usuario, material, dias, instancia) : Prestamo
   +activar(garantia) : void
   +devolver() : void
   +vencer() : void

@@ -1,0 +1,72 @@
+from rest_framework.exceptions import PermissionDenied
+from rest_framework.permissions import BasePermission
+
+from apps.prestamos.models import Prestamo
+
+
+class EsGestorDeAlmacen(BasePermission):
+    """Permite formalizar entregas y devoluciones a gestores y administradores (HU09, HU11)."""
+
+    message_sin_sesion = "Inicia sesión como gestor o administrador para registrar un préstamo."
+    message_rol = "Solo un gestor de almacén o administrador puede registrar préstamos."
+    roles_permitidos = {"gestor", "administrador"}
+
+    def has_permission(self, request, view):
+        usuario = getattr(request, "usuario_autenticado", None)
+        if usuario is None:
+            raise PermissionDenied(detail=self.message_sin_sesion)
+        if usuario.rol.nombre not in self.roles_permitidos:
+            raise PermissionDenied(detail=self.message_rol)
+        return True
+
+
+class EsPrestatarioAutenticado(BasePermission):
+    """Permite consultar préstamos propios solo al prestatario de la sesión."""
+
+    message_sin_sesion = "Inicia sesión como prestatario para consultar tus préstamos."
+    message_rol = "Solo un prestatario puede consultar sus préstamos."
+
+    def has_permission(self, request, view):
+        usuario = getattr(request, "usuario_autenticado", None)
+        if usuario is None:
+            raise PermissionDenied(detail=self.message_sin_sesion)
+        if usuario.rol.nombre != "prestatario":
+            raise PermissionDenied(detail=self.message_rol)
+        return True
+
+
+class EsGestorOAdministrador(BasePermission):
+    """Permite consultar el historial global a gestión autenticada."""
+
+    message_sin_sesion = "Inicia sesión para consultar el historial de préstamos."
+    message_rol = "Solo administración o almacén puede consultar el historial."
+    roles_permitidos = {"gestor", "administrador"}
+
+    def has_permission(self, request, view):
+        usuario = getattr(request, "usuario_autenticado", None)
+        if usuario is None:
+            raise PermissionDenied(detail=self.message_sin_sesion)
+        if usuario.rol.nombre not in self.roles_permitidos:
+            raise PermissionDenied(detail=self.message_rol)
+        return True
+
+
+class EsGestorAdministradorOPrestatarioPropio(BasePermission):
+    """Permite consultar el préstamo a gestión o a su prestatario titular."""
+
+    def has_permission(self, request, view):
+        usuario = getattr(request, "usuario_autenticado", None)
+        if usuario is None:
+            raise PermissionDenied(detail="Inicia sesión para consultar este préstamo.")
+
+        if usuario.rol.nombre in {"gestor", "administrador"}:
+            return True
+        if usuario.rol.nombre == "prestatario" and Prestamo.objects.filter(
+            pk=view.kwargs.get("prestamo_id"),
+            usuario_id=usuario.id,
+        ).exists():
+            return True
+
+        raise PermissionDenied(
+            detail="Solo gestión o el prestatario titular puede consultar este préstamo."
+        )

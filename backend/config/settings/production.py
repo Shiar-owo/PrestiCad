@@ -1,0 +1,128 @@
+"""Configuración de producción.
+
+La seleccionan `wsgi.py` y `asgi.py` por defecto. Ningún dato crítico tiene
+aquí un valor por defecto: si falta, Django no arranca en lugar de arrancar
+abierto. Las imágenes públicas y los documentos privados de garantía viven en
+Cloudinary.
+"""
+import os
+from pathlib import Path
+
+from django.core.exceptions import ImproperlyConfigured
+
+from .base import *  # noqa: F401,F403
+
+# El valor por defecto de DEBUG es True, así que en producción se fija
+# explícitamente en lugar de leerse del entorno.
+DEBUG = False
+
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise ImproperlyConfigured(
+        "Define SECRET_KEY en el entorno de producción: no se puede arrancar "
+        "con una clave de ejemplo."
+    )
+
+ALLOWED_HOSTS = [
+    h.strip().removeprefix("https://").removeprefix("http://").rstrip("/")
+    for h in os.getenv("DJANGO_ALLOWED_HOSTS", "").split(",")
+    if h.strip()
+]
+
+# Render inyecta automáticamente RENDER_EXTERNAL_HOSTNAME con el subdominio del servicio (ej. presticad.onrender.com).
+render_host = os.getenv("RENDER_EXTERNAL_HOSTNAME")
+if render_host:
+    render_host_limpio = render_host.strip().removeprefix("https://").removeprefix("http://").rstrip("/")
+    if render_host_limpio and render_host_limpio not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(render_host_limpio)
+
+if not ALLOWED_HOSTS:
+    raise ImproperlyConfigured(
+        "Define DJANGO_ALLOWED_HOSTS en el entorno de producción con los "
+        "dominios que sirven la API."
+    )
+
+# Neon y la mayoría de PostgreSQL gestionados exigen TLS.
+DATABASES["default"]["OPTIONS"] = {
+    "sslmode": os.getenv("POSTGRES_SSLMODE", "require"),
+}
+
+ruta_garantias = os.getenv("GARANTIAS_STORAGE_ROOT")
+if ruta_garantias:
+    if not Path(ruta_garantias).is_absolute():
+        raise ImproperlyConfigured(
+            "Define GARANTIAS_STORAGE_ROOT como ruta absoluta de un volumen "
+            "privado y persistente para los documentos de garantía."
+        )
+    GARANTIAS_STORAGE_ROOT = Path(ruta_garantias)
+else:
+    GARANTIAS_STORAGE_ROOT = None
+
+# El proyecto es un frontend más una API, así que el origen del SPA hay que
+# declararlo: dejarlo vacío rompe el navegador en silencio.
+CORS_ALLOWED_ORIGINS = [
+    o.strip().rstrip("/")
+    for o in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",")
+    if o.strip()
+]
+if not CORS_ALLOWED_ORIGINS:
+    raise ImproperlyConfigured(
+        "Define CORS_ALLOWED_ORIGINS en el entorno de producción con el origen "
+        "del frontend."
+    )
+
+csrf_env = os.getenv("CSRF_TRUSTED_ORIGINS")
+if csrf_env:
+    CSRF_TRUSTED_ORIGINS = [
+        o.strip().rstrip("/")
+        for o in csrf_env.split(",")
+        if o.strip()
+    ]
+else:
+    CSRF_TRUSTED_ORIGINS = list(CORS_ALLOWED_ORIGINS)
+
+# El proxy de la plataforma termina TLS y Django corre detrás, así que hay que
+# declararlo para que `request.is_secure()` refleje la conexión real.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+# Las cookies de sesión y CSRF solo viajan por HTTPS. No se activa
+# SECURE_SSL_REDIRECT porque obligaría a redirigir a https y rompería un
+# despliegue sin TLS; conviene habilitarlo junto con SECURE_HSTS_SECONDS
+# cuando exista un certificado.
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True
+
+# En producción las imágenes no tocan el disco del contenedor: van a
+# Cloudinary, que a su vez las sirve por CDN.
+CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME")
+CLOUDINARY_API_KEY = os.getenv("CLOUDINARY_API_KEY")
+CLOUDINARY_API_SECRET = os.getenv("CLOUDINARY_API_SECRET")
+if not all([CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET]):
+    raise ImproperlyConfigured(
+        "Define CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY y "
+        "CLOUDINARY_API_SECRET en el entorno de producción."
+    )
+
+CLOUDINARY_STORAGE = {
+    "CLOUD_NAME": CLOUDINARY_CLOUD_NAME,
+    "API_KEY": CLOUDINARY_API_KEY,
+    "API_SECRET": CLOUDINARY_API_SECRET,
+    "SECURE": True,
+    # Todos los assets del proyecto viven dentro de esta carpeta en Cloudinary.
+    # Se puede sobreescribir con CLOUDINARY_PREFIX en el entorno de producción.
+    "PREFIX": os.getenv("CLOUDINARY_PREFIX", "Presticad"),
+}
+
+STORAGES = {
+    "default": {
+        # Storage con detección automática de resource_type (image/raw) para que
+        # PDFs de reportes se suban como 'raw' y las fotos como 'image'.
+        "BACKEND": "apps.prestamos.storage.AlmacenamientoPresticadCloudinary",
+    },
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+    },
+    "garantias": {
+        "BACKEND": "apps.prestamos.storage.AlmacenamientoPrivadoGarantiasCloudinary",
+    },
+}

@@ -1,6 +1,6 @@
 # Sprint Backlog — Sistema de Préstamos Académicos
 
-> Estructura: **MVP (4 sprints)** + **Full Product (5 sprints)** = 9 sprints, 90 SP, 18 historias, 133 tareas.
+> Estructura: **MVP (4 sprints)** + **Full Product (5 sprints)** = 9 sprints, 90 SP, 18 historias, 143 tareas.
 
 ---
 
@@ -13,33 +13,59 @@ Credencial                      Usuario
 ├── email (para login)          ├── email (para contacto)
 ├── password_hash               ├── nombre, apellido
 ├── failed_attempts             ├── dni, telefono
+                                ├── facultad, departamento_carrera
 └── locked_until                ├── tipo, rol, estado
                                 ├── reputacion_puntaje (-500 a 500)
                                 ├── reputacion_tier (Avanzado/Estándar/Restringido)
                                 └── created_at, updated_at
 
 Material                        Prestamo
-├── id                          ├── id
+├── id (UUID)                   ├── id
 ├── nombre, descripcion         ├── usuario_id (FK)
-├── categoria                   ├── material_id (FK)
-├── estado                      ├── fecha_entrega, fecha_limite
-├── codigo_unico                ├── tiempo_prestamo_dias
-├── tier_minimo_requerido       ├── estado (Activo/Devuelto/Vencido)
-├── bonificacion_tiempo         ├── garantia (nullable)
-├── deduccion_tardanza          ├── checklist_inicial (JSON)
-├── deduccion_dano_parcial      ├── checklist_devolucion (JSON)
-└── deduccion_dano_total        └── tipo (Normal/Excepción)
+├── codigo_inventario (único)   ├── material_id (FK)
+├── tipo (Equipo/Libro/Objeto)  ├── fecha_entrega, fecha_limite
+├── estado                      ├── tiempo_prestamo_dias
+├── es_alto_valor               ├── estado (Activo/Devuelto/Vencido)
+├── ficha técnica (marca,       ├── garantia (nullable)
+│   modelo, numero_serie,       ├── checklist_inicial (JSON)
+│   color, estado_fisico,       ├── checklist_devolucion (JSON)
+│   foto (imagen))              └── tipo (Normal/Excepción)
+├── tier_minimo_requerido
+├── bonificacion_tiempo
+├── deduccion_tardanza
+├── deduccion_dano_parcial
+├── deduccion_dano_total
+├── costo_reparacion,
+│   costo_reposicion
+├── stock (unidades)
+└── created_at, updated_at
 
-Reserva
-├── id
-├── usuario_id (FK)
-├── material_id (FK)
-├── prioridad (Alta/Media/Baja)
-├── justificacion
-├── estado (Reservada/Cancelada/Completada)
-├── fecha_solicitud
-└── fecha_limite_recojo
+InstanciaMaterial               Reserva
+├── id (UUID)                   ├── id
+├── material_id (FK)            ├── usuario_id (FK)
+├── codigo_ejemplar (único)     ├── material_id (FK)
+├── numero_serie                ├── prioridad (Alta/Media/Baja)
+├── estado (disponible,         ├── justificacion
+│   reservado, prestado,        ├── estado (Reservada/Cancelada/Completada)
+│   en_mantenimiento, de_baja)  ├── fecha_solicitud
+├── estado_fisico               └── fecha_limite_recojo
+├── observaciones
+├── ubicacion
+└── created_at, updated_at
 ```
+
+> El agregado `Material` sigue el modelo de dominio DDD
+> (`docs/diagrams/ddd_detailed/03-inventario.puml`): `tipo`, `estado`, la ficha
+> técnica y los parámetros de reputación son value objects que en Django se
+> materializan como columnas de la tabla `inventario_material` (HU04).
+> La entidad `InstanciaMaterial` gestiona los ejemplares físicos individuales en
+> `inventario_instancia_material`, permitiendo controlar números de serie, códigos de ejemplar,
+> estados físicos y ciclos de vida independientes, manteniendo sincronizado el `stock`
+> y la disponibilidad total para el catálogo (HU04/HU05).
+>
+> La ficha técnica incluye `foto`, un `ImageField` opcional (no una URL escrita
+> a mano). En desarrollo se guarda en `MEDIA_ROOT` y en producción en
+> Cloudinary; los formatos admitidos son JPEG, PNG y WEBP de hasta 4 MB.
 
 ---
 
@@ -149,7 +175,7 @@ Reserva
 | # | Tarea | Tipo |
 |---|-------|------|
 | T05.01 | Implementar servicio de búsqueda con filtros | Backend |
-| T05.02 | Implementar filtrado por Tier del usuario | Backend |
+| T05.02 | Verificar que el catálogo muestre materiales de todos los Tiers | Backend |
 | T05.03 | Crear endpoint GET /api/materiales/buscar | Backend |
 | T05.04 | Crear componente de barra de búsqueda con filtros | Frontend |
 | T05.05 | Crear vista de resultados con tarjetas de material | Frontend |
@@ -165,18 +191,18 @@ Reserva
 
 | ID | Historia | SP | Tareas |
 |----|----------|-----|--------|
-| HU09 | Registrar préstamo (entrega de material) | 8 | 10 |
+| HU09 | Registrar préstamo y convertir reserva | 8 | 10 |
 | | **Total** | **8 SP** | **10 tareas** |
 
 ### Tareas detalladas
 
-**HU09 — Registrar préstamo (10 tareas)**
+**HU09 — Registrar préstamo y convertir reserva (10 tareas)**
 
 | # | Tarea | Tipo |
 |---|-------|------|
 | T09.01 | Definir modelo de entidad Prestamo (usuario, material, fechas, estado, garantía, checklist) | Backend |
 | T09.02 | Crear migración/DDL de la tabla prestamos | Backend |
-| T09.03 | Implementar servicio de préstamo con verificación de elegibilidad (Tier, impedimentos) | Backend |
+| T09.03 | Implementar servicio de préstamo con verificación de elegibilidad, uso de instancia reservada y conversión de reserva | Backend |
 | T09.04 | Implementar checklist digital de estado inicial | Backend |
 | T09.05 | Implementar registro de garantía para equipos de alto valor | Backend |
 | T09.06 | Implementar cálculo automático de fecha límite de devolución | Backend |
@@ -195,13 +221,13 @@ Reserva
 
 | ID | Historia | SP | Tareas |
 |----|----------|-----|--------|
-| HU11 | Registrar devolución con cálculo de sanciones | 8 | 10 |
+| HU11 | Registrar devolución con cálculo de sanciones | 8 | 15 |
 | HU10 | Consultar estado de mis préstamos | 3 | 6 |
-| | **Total** | **11 SP** | **16 tareas** |
+| | **Total** | **11 SP** | **21 tareas** |
 
 ### Tareas detalladas
 
-**HU11 — Registrar devolución con cálculo de sanciones (10 tareas)**
+**HU11 — Registrar devolución con cálculo de sanciones (15 tareas)**
 
 | # | Tarea | Tipo |
 |---|-------|------|
@@ -215,6 +241,11 @@ Reserva
 | T11.08 | Crear formulario de devolución con checklist de comparación | Frontend |
 | T11.09 | Mostrar resumen de sanciones/bonificaciones antes de confirmar | Frontend |
 | T11.10 | Integrar formulario con endpoint | Integración |
+| T11.11 | Generar y persistir el reporte PDF de daños (RN10) | Backend |
+| T11.12 | Crear endpoint de descarga del reporte | Backend |
+| T11.13 | Mostrar descarga del reporte en la confirmación de devolución | Frontend |
+| T11.14 | Crear endpoint GET /api/prestamos/devoluciones/reportes/ con filtros | Backend |
+| T11.15 | Crear vista de listado de reportes de daños con filtros y descarga | Frontend |
 
 **HU10 — Consultar estado de mis préstamos (6 tareas)**
 
@@ -259,76 +290,79 @@ Reserva
 | T12.01 | Implementar servicio de reputación con rango [-500, 500] sobre campos de Usuario | Backend |
 | T12.02 | Implementar cálculo automático de Tier según puntaje | Backend |
 | T12.03 | Implementar clamping de puntos (no salir del rango) | Backend |
-| T12.04 | Crear endpoint GET /api/usuarios/{id}/reputacion | Backend |
+| T12.04 | Absorbida por `GET /api/usuarios/perfil/`, que ya expone puntaje y Tier; no crear endpoint redundante | Backend |
 | T12.05 | Mostrar puntaje y Tier en perfil de usuario | Frontend |
 
 ---
 
-## S6 — Reservas + Cancelación
+## S6 — Reservas + Expiración
 
-**Objetivo:** Los usuarios pueden reservar materiales y el sistema cancela automáticamente las vencidas.
+**Objetivo:** Los usuarios pueden reservar materiales, quedar en lista de espera y el sistema expira reservas confirmadas y solicitudes vencidas.
 
 **Historias:** HU06, HU07
 
 | ID | Historia | SP | Tareas |
 |----|----------|-----|--------|
-| HU06 | Reservar material | 5 | 8 |
-| HU07 | Cancelación automática de reservas vencidas | 5 | 6 |
-| | **Total** | **10 SP** | **14 tareas** |
+| HU06 | Reservar material o solicitar espera | 5 | 10 |
+| HU07 | Expiración de reservas y solicitudes en espera | 5 | 6 |
+| | **Total** | **10 SP** | **16 tareas** |
 
 ### Tareas detalladas
 
-**HU06 — Reservar material (8 tareas)**
+**HU06 — Reservar material o solicitar espera (10 tareas)**
 
 | # | Tarea | Tipo |
 |---|-------|------|
-| T06.01 | Definir modelo de entidad Reserva (usuario, material, prioridad, justificación, estado, timestamps) | Backend |
+| T06.01 | Definir modelo de entidad Reserva (usuario, material, prioridad, justificación, estado, timestamps, fecha límite de recojo y de espera, es_excepcion, motivo de rechazo, instancia asignada) | Backend |
 | T06.02 | Crear migración/DDL de la tabla reservas | Backend |
-| T06.03 | Implementar servicio de reserva con validación de Tier y disponibilidad | Backend |
-| T06.04 | Implementar cambio de estado del material a Reservado | Backend |
-| T06.05 | Crear endpoint POST /api/reservas | Backend |
-| T06.06 | Crear formulario de reserva (prioridad, justificación) | Frontend |
-| T06.07 | Crear vista Mis reservas | Frontend |
-| T06.08 | Integrar formulario con endpoint | Integración |
+| T06.03 | Implementar servicio de reserva con validación de Tier, disponibilidad real y auto-confirmación atómica | Backend |
+| T06.04 | Implementar registro en lista de espera cuando no hay instancia disponible, sin consumir stock | Backend |
+| T06.05 | Implementar solicitud de reserva excepcional con garantía y estado pendiente de aprobación del Gestor | Backend |
+| T06.06 | Crear endpoints POST /api/reservas y GET /api/reservas/mis-reservas | Backend |
+| T06.07 | Crear formulario de reserva (prioridad, justificación) | Frontend |
+| T06.08 | Crear flujo UI de excepción académica y carga de documentos | Frontend |
+| T06.09 | Crear vista Mis reservas con estados Reservada, En Espera, Expirada, Rechazada y Cancelada | Frontend |
+| T06.10 | Integrar formulario y flujos con endpoints | Integración |
 
-**HU07 — Cancelación automática de reservas vencidas (6 tareas)**
+**HU07 — Expiración de reservas y solicitudes en espera (6 tareas)**
 
 | # | Tarea | Tipo |
 |---|-------|------|
-| T07.01 | Implementar proceso periódico (cron/scheduler) de verificación de reservas | Backend |
-| T07.02 | Implementar lógica de cancelación por vencimiento (24h) | Backend |
-| T07.03 | Implementar penalización de reputación por inasistencia | Backend |
+| T07.01 | Implementar proceso periódico (cron/scheduler) de verificación de reservas confirmadas y solicitudes en espera | Backend |
+| T07.02 | Implementar expiración de reservas confirmadas a las 24h con penalización y liberación de instancia | Backend |
+| T07.03 | Implementar expiración de solicitudes en espera a las 72h sin penalización | Backend |
 | T07.04 | Implementar cancelación manual por Gestor | Backend |
 | T07.05 | Crear endpoint POST /api/reservas/{id}/cancelar | Backend |
-| T07.06 | Agregar notificación de cancelación al usuario | Integración |
+| T07.06 | Implementar disparo de autopromoción al liberar una instancia por vencimiento o cancelación | Backend |
 
 ---
 
 ## S7 — Cola de Reservas + Suspensiones
 
-**Objetivo:** El gestor gestiona la cola de prioridades de reservas y las suspensiones por bajo puntaje.
+**Objetivo:** El sistema autopromueve la cola de reservas, el gestor gestiona excepciones y se administran las suspensiones por bajo puntaje.
 
 **Historias:** HU08, HU14
 
 | ID | Historia | SP | Tareas |
 |----|----------|-----|--------|
-| HU08 | Evaluar y priorizar reservas simultáneas | 5 | 7 |
+| HU08 | Gestionar cola de reservas y excepciones | 5 | 8 |
 | HU14 | Gestionar suspensiones por bajo puntaje | 5 | 7 |
-| | **Total** | **10 SP** | **14 tareas** |
+| | **Total** | **10 SP** | **15 tareas** |
 
 ### Tareas detalladas
 
-**HU08 — Evaluar y priorizar reservas simultáneas (7 tareas)**
+**HU08 — Gestionar cola de reservas y excepciones (8 tareas)**
 
 | # | Tarea | Tipo |
 |---|-------|------|
 | T08.01 | Implementar servicio de cola de reservas por material | Backend |
-| T08.02 | Implementar ordenamiento por prioridad, Tier y fecha | Backend |
-| T08.03 | Implementar transacciones atómicas para evitar race conditions | Backend |
-| T08.04 | Crear endpoints GET /api/reservas/cola/{id} y POST /api/reservas/{id}/aprobar | Backend |
-| T08.05 | Crear vista de cola de reservas para Gestor | Frontend |
-| T08.06 | Implementar botones de aprobar/rechazar individual | Frontend |
-| T08.07 | Integrar vista con endpoints | Integración |
+| T08.02 | Implementar ordenamiento por prioridad, fecha de solicitud y Tier | Backend |
+| T08.03 | Implementar autopromoción atómica y selección de una instancia real disponible | Backend |
+| T08.04 | Implementar disparadores de autopromoción y revisión periódica de respaldo | Backend |
+| T08.05 | Crear endpoints GET /api/reservas/cola/{materialId}, POST /api/reservas/{id}/aprobar-excepcion y POST /api/reservas/{id}/rechazar | Backend |
+| T08.06 | Crear vista de cola de reservas para Gestor | Frontend |
+| T08.07 | Implementar acciones de aprobar/rechazar excepción, rechazar espera y cancelar reserva | Frontend |
+| T08.08 | Integrar vista con endpoints | Integración |
 
 **HU14 — Gestionar suspensiones por bajo puntaje (7 tareas)**
 
@@ -353,8 +387,8 @@ Reserva
 | ID | Historia | SP | Tareas |
 |----|----------|-----|--------|
 | HU15 | Solicitar prórroga de préstamo | 5 | 8 |
-| HU13 | Préstamo excepcional por necesidad académica | 5 | 7 |
-| | **Total** | **10 SP** | **15 tareas** |
+| HU13 | Reserva y préstamo excepcional por necesidad académica | 5 | 9 |
+| | **Total** | **10 SP** | **17 tareas** |
 
 ### Tareas detalladas
 
@@ -371,17 +405,19 @@ Reserva
 | T15.07 | Crear vista de solicitudes de prórroga pendientes para Gestor | Frontend |
 | T15.08 | Integrar flujo con endpoints | Integración |
 
-**HU13 — Préstamo excepcional por necesidad académica (7 tareas)**
+**HU13 — Reserva y préstamo excepcional por necesidad académica (9 tareas)**
 
 | # | Tarea | Tipo |
 |---|-------|------|
-| T13.01 | Implementar flujo de excepción académica en servicio de préstamo | Backend |
-| T13.02 | Implementar registro de garantía especial (doc. identidad + compromiso) | Backend |
-| T13.03 | Implementar penalización doble en devolución para excepciones | Backend |
-| T13.04 | Crear endpoint POST /api/prestamos/excepcion | Backend |
-| T13.05 | Crear flujo UI de Solicitar Excepción Académica | Frontend |
-| T13.06 | Implementar upload de documentos de garantía | Frontend |
-| T13.07 | Integrar flujo de excepción con endpoints | Integración |
+| T13.01 | Implementar flujo de excepción académica en servicios de reserva y préstamo | Backend |
+| T13.02 | Implementar registro de garantía especial (doc. identidad + compromiso) con validación de 4 MB | Backend |
+| T13.03 | Implementar aprobación/rechazo de excepciones por Gestor y bloqueo de autopromoción | Backend |
+| T13.04 | Implementar conversión de reserva excepcional a préstamo reutilizando la garantía | Backend |
+| T13.05 | Implementar penalización doble solo en puntos de daño para excepciones | Backend |
+| T13.06 | Crear endpoints POST /api/reservas/excepcion, POST /api/prestamos/excepcion y PUT /api/reservas/{id}/aprobar-excepcion | Backend |
+| T13.07 | Crear flujo UI de solicitud excepcional y carga de documentos | Frontend |
+| T13.08 | Crear vista y acciones de revisión de excepciones para Gestor | Frontend |
+| T13.09 | Integrar flujos de excepción con endpoints | Integración |
 
 ---
 
@@ -433,21 +469,21 @@ FASE 1: MVP
 M1  ██████████████░░░░  14 SP   30 tareas  (Usuarios + Auth + Roles + Perfil)
 M2  ████████░░░░░░░░░░   8 SP   14 tareas  (Inventario + Búsqueda)
 M3  ████████░░░░░░░░░░   8 SP   10 tareas  (Préstamos)
-M4  ███████████░░░░░░░  11 SP   16 tareas  (Devoluciones + Ver préstamos)
+M4  ███████████░░░░░░░  11 SP   21 tareas  (Devoluciones + Ver préstamos)
     ─────────────────────────────────────────
-    MVP TOTAL:          41 SP   70 tareas
+    MVP TOTAL:          41 SP   75 tareas
 
 FASE 2: FULL PRODUCT
 S5  ████████░░░░░░░░░░   8 SP    5 tareas  (Reputación + Tiers)
-S6  ██████████░░░░░░░░  10 SP   14 tareas  (Reservas + Cancelación)
-S7  ██████████░░░░░░░░  10 SP   14 tareas  (Cola + Suspensiones)
-S8  ██████████░░░░░░░░  10 SP   15 tareas  (Prórrogas + Excepciones)
+S6  ██████████░░░░░░░░  10 SP   16 tareas  (Reservas + Expiración)
+S7  ██████████░░░░░░░░  10 SP   15 tareas  (Cola + Suspensiones)
+S8  ██████████░░░░░░░░  10 SP   17 tareas  (Prórrogas + Excepciones)
 S9  ███████████░░░░░░░  11 SP   15 tareas  (Historial + Reportes)
     ─────────────────────────────────────────
-    FULL TOTAL:         49 SP   63 tareas
+    FULL TOTAL:         49 SP   68 tareas
 
     ═══════════════════════════════════════════
-    GRAND TOTAL:        90 SP  133 tareas  |  9 sprints  |  18 HU
+    GRAND TOTAL:        90 SP  143 tareas  |  9 sprints  |  18 HU
 ```
 
 ## Resumen por tipo de tarea
@@ -457,13 +493,13 @@ S9  ███████████░░░░░░░  11 SP   15 tareas  (
 | M1 | 17 | 9 | 4 | 30 |
 | M2 | 8 | 4 | 2 | 14 |
 | M3 | 7 | 2 | 1 | 10 |
-| M4 | 9 | 5 | 2 | 16 |
+| M4 | 12 | 7 | 2 | 21 |
 | S5 | 4 | 1 | 0 | 5 |
-| S6 | 10 | 2 | 2 | 14 |
-| S7 | 9 | 4 | 1 | 14 |
-| S8 | 9 | 4 | 2 | 15 |
+| S6 | 12 | 3 | 1 | 16 |
+| S7 | 10 | 4 | 1 | 15 |
+| S8 | 11 | 4 | 2 | 17 |
 | S9 | 8 | 5 | 2 | 15 |
-| **Total** | **81** | **36** | **16** | **133** |
+| **Total** | **89** | **39** | **15** | **143** |
 
 ## Flujo de desarrollo
 

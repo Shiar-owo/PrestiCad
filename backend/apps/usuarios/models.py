@@ -1,7 +1,55 @@
+import uuid
+from pathlib import Path
+
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.utils import timezone
 
 from apps.usuarios.constants import ESTADOS_USUARIO, ROLES, TIERS, TIPOS_USUARIO
+from apps.usuarios.validators import validar_foto_usuario
+
+
+def ruta_foto_perfil(instance, filename):
+    """Destino de la foto de perfil: `usuarios/perfiles/<año>/<token>.<ext>`.
+
+    El token aleatorio evita colisiones de nombres de archivo y mantiene
+    consistencia con el almacenamiento de imágenes en inventario.
+    """
+    extension = Path(filename).suffix.lower() or ".jpg"
+    return f"usuarios/perfiles/{timezone.now():%Y}/{uuid.uuid4().hex[:12]}{extension}"
+
+
+def rol_prestatario_por_defecto():
+    """Devuelve el pk del rol 'prestatario', creándolo si aún no existe.
+
+    Se usa como `default` de Usuario.rol para no romper la creación de
+    usuarios (HU01) ahora que el rol es una relación y no un choice-field.
+    """
+    rol, _ = Rol.objects.get_or_create(
+        nombre="prestatario",
+        defaults={"descripcion": "Rol por defecto: puede solicitar préstamos."},
+    )
+    return rol.pk
+
+
+class Rol(models.Model):
+    """Entidad del dominio: rol de sistema que determina permisos (HU02, PRTCAD-35).
+
+    Antes `rol` era un simple choice-field embebido en `Usuario`. Ahora es
+    una entidad propia para poder relacionarla con `Usuario` vía FK y, a
+    futuro, adjuntarle permisos granulares.
+    """
+
+    nombre = models.CharField(max_length=20, choices=ROLES, unique=True)
+    descripcion = models.CharField(max_length=200, blank=True, default="")
+
+    class Meta:
+        verbose_name = "Rol"
+        verbose_name_plural = "Roles"
+        ordering = ["nombre"]
+
+    def __str__(self):
+        return self.get_nombre_display()
 
 
 class Usuario(models.Model):
@@ -13,12 +61,49 @@ class Usuario(models.Model):
     """
 
     email = models.EmailField(unique=True, verbose_name="Email (contacto)")
+    email_secundario = models.EmailField(
+        blank=True,
+        default="",
+        verbose_name="Email secundario o de recuperación",
+    )
     nombre = models.CharField(max_length=100)
     apellido = models.CharField(max_length=100)
     dni = models.CharField(max_length=8, unique=True)
-    telefono = models.CharField(max_length=20, blank=True, default="")
+    telefono = models.CharField(max_length=20, blank=True, default="", verbose_name="Teléfono principal")
+    telefono_secundario = models.CharField(
+        max_length=20,
+        blank=True,
+        default="",
+        verbose_name="Teléfono secundario",
+    )
+    telefono_terciario = models.CharField(
+        max_length=20,
+        blank=True,
+        default="",
+        verbose_name="Teléfono adicional",
+    )
+    foto_perfil = models.ImageField(
+        upload_to=ruta_foto_perfil,
+        blank=True,
+        null=True,
+        validators=[validar_foto_usuario],
+        verbose_name="Foto de perfil",
+        help_text="Imagen de perfil: JPG, PNG o WEBP, hasta 4 MB.",
+    )
     tipo = models.CharField(max_length=20, choices=TIPOS_USUARIO)
-    rol = models.CharField(max_length=20, choices=ROLES, default="prestatario")
+    facultad = models.CharField(max_length=100, verbose_name="Facultad")
+    departamento_carrera = models.CharField(
+        max_length=100,
+        blank=True,
+        default="",
+        verbose_name="Departamento / Carrera",
+    )
+    rol = models.ForeignKey(
+        Rol,
+        on_delete=models.PROTECT,
+        related_name="usuarios",
+        default=rol_prestatario_por_defecto,
+    )
     estado = models.CharField(max_length=20, choices=ESTADOS_USUARIO, default="activo")
 
     reputacion_puntaje = models.IntegerField(
@@ -37,6 +122,10 @@ class Usuario(models.Model):
         verbose_name = "Usuario"
         verbose_name_plural = "Usuarios"
         ordering = ["apellido", "nombre"]
+
+    @property
+    def is_authenticated(self):
+        return True
 
     def __str__(self):
         return f"{self.nombre} {self.apellido}"

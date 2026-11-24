@@ -1,6 +1,6 @@
 # Importar Historias de Usuario a Jira
 
-Script Python para importar las 18 historias de usuario, 133 tareas y 9 sprints del Sistema de Préstamos Académicos a Jira vía REST API.
+Script Python para importar las 18 historias de usuario, 143 tareas y 9 sprints del Sistema de Préstamos Académicos a Jira vía REST API.
 
 ## Requisitos
 
@@ -52,7 +52,7 @@ python importar_jira.py --project OTRO_PROYECTO
 
 - **8 Épicos**: Una por cada épica del sistema
 - **18 Historias de usuario**: Una por cada HU, con narrativa, criterios de aceptación, story points y prioridad
-- **133 Tareas (subtasks)**: Desglose de cada historia en tareas Backend/Frontend/Integración
+- **143 Tareas (subtasks)**: Desglose de cada historia en tareas Backend/Frontend/Integración
 - **9 Sprints**: Distribución de historias en sprints (MVP + Full Product)
 
 ### Opción `--clear`
@@ -74,7 +74,7 @@ Esto eliminará **todos** los issues del proyecto (subtasks, stories, epics) ant
 | M3 | MVP | Préstamos | HU09 | 8 |
 | M4 | MVP | Devoluciones + Ver mis préstamos | HU11, HU10 | 11 |
 | S5 | Full | Reputación + Tiers | HU12 | 8 |
-| S6 | Full | Reservas + Cancelación | HU06, HU07 | 10 |
+| S6 | Full | Reservas + Expiración | HU06, HU07 | 10 |
 | S7 | Full | Cola + Suspensiones | HU08, HU14 | 10 |
 | S8 | Full | Prórrogas + Excepciones | HU15, HU13 | 10 |
 | S9 | Full | Historial + Reportes | HU17, HU18 | 11 |

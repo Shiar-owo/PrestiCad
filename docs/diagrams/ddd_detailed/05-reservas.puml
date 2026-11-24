@@ -48,28 +48,48 @@ class Reserva <<Aggregate Root>> {
   __ Identidad __
   id : UUID
   __ Datos __
+  fechaSolicitud : DateTime
   fechaHoraRecojo : DateTime
+  fechaLimiteRecojo : DateTime
+  fechaLimiteEspera : DateTime
   justificacion : String
+  esExcepcion : Boolean
+  motivoRechazo : String
+  instanciaAsignadaId : UUID
   __ Clasificacion __
   -prioridad : PrioridadReserva
   -estado : EstadoReserva
   __ Metadata __
   fechaCreacion : DateTime
+  fechaActualizacion : DateTime
   activa : Boolean
   --
-  +crear(usuario, material, prio, just) : Reserva
+  +crear(usuario, material, prioridad, justificacion) : Reserva
+  +confirmar(instanciaId) : void
+  +entrarEnEspera() : void
+  +promover(instanciaId) : void
+  +aprobarExcepcion(instanciaId) : void
+  +rechazar(motivo) : void
+  +expirarEspera() : void
   +cancelarPorVencimiento() : void
   +convertirAPrestamo() : Prestamo
   +estaVigente() : Boolean
   +expiro() : Boolean
+  +puedeAutopromoverse() : Boolean
 }
 
 class EstadoReserva <<Value Object>> {
+  EN_ESPERA
   RESERVADA
+  EXPIRADA
+  RECHAZADA
+  CANCELADA
   CANCELADA_POR_VENCIMIENTO
   CONVERTIDA_EN_PRESTAMO
   --
   +estaActiva() : Boolean
+  +consumeInventario() : Boolean
+  +puedeAutopromoverse() : Boolean
 }
 
 class PrioridadReserva <<Value Object>> {
@@ -92,40 +112,70 @@ Reserva *-- PrioridadReserva
 ' ============================================================
 
 note top of Reserva
-  <b>RN04 - Vigencia de Reservas</b>
+  <b>RN01 - Disponibilidad</b>
   ═══════════════════════════════════════
-  Máximo 24 horas desde hora pactada
-  de recojo
+  Sin instancia disponible no se rechaza:
+  la solicitud queda en "En Espera"
   ──────────────────────────────────────
-  Sin recoger → "Cancelada por Vencimiento"
-  Material vuelve a "Disponible"
-  Penalización por inasistencia al
-  puntaje de reputación del usuario
+  Una reserva confirmada o un préstamo
+  requiere una instancia física real.
+  La espera no consume inventario ni
+  garantiza disponibilidad inmediata.
+end note
+
+note right of Reserva
+  <b>RN11 - Cola y Autopromoción</b>
+  ═══════════════════════════════════════
+  Orden de promoción:
+  1. Prioridad (Alta/Media/Baja)
+  2. Fecha de solicitud más antigua
+  3. Tier (Avanzado/Estándar/Restringido)
+  ──────────────────────────────────────
+  Disparadores: devolución, cancelación,
+  vencimiento, mantenimiento→disponible,
+  alta de ejemplar y revisión periódica.
+  ──────────────────────────────────────
+  Las excepciones NO se autopromueven:
+  solo las aprueba el Gestor de Almacén.
 end note
 
 note right of PrioridadReserva
   <b>RN08 - Control de Concurrencia</b>
   ═══════════════════════════════════════
-  Reservas simultáneas para el mismo
-  objeto se procesan con transacciones
-  atómicas (prevenir race conditions)
-  sobre la última unidad disponible
+  Auto-confirmación y autopromoción
+  atómicas para evitar race conditions
+  sobre la última instancia disponible.
   ──────────────────────────────────────
-  La prioridad y justificación sirven
-  para que el Gestor evalúe y priorice
-  la asignación en alta demanda
+  No se asigna una misma instancia a dos
+  reservas ni se salta el orden de cola.
 end note
 
 note left of EstadoReserva
-  <b>RF04 - Reserva</b>
+  <b>RN04 - Vigencia</b>
   ═══════════════════════════════════════
-  El usuario ingresa:
-  • Material deseado
-  • Prioridad (Alta/Media/Baja)
-  • Justificación del uso
+  Reserva confirmada: 24 h desde
+  confirmación o aprobación.
+  Sin recojo → "Cancelada por Vencimiento",
+  libera instancia y aplica penalización.
   ──────────────────────────────────────
-  <b>CU02 - Reservar material</b>
-  <b>CU05 - Cancelar vencidas</b>
+  Solicitud en espera: 72 h desde creación.
+  Al vencer → "Expirada" sin penalización.
+end note
+
+note bottom of Reserva
+  <b>RN03 / RN05 - Excepción Académica</b>
+  ═══════════════════════════════════════
+  Usuario Restringido + material de Tier
+  superior: puede solicitar reserva o
+  préstamo excepcional con documento de
+  identidad y compromiso firmado.
+  ──────────────────────────────────────
+  La garantía se registra al solicitar la
+  reserva y se reutiliza al convertirla
+  en préstamo. El Gestor valida y aprueba.
+  ──────────────────────────────────────
+  <b>RF04 / CU02 / CU05 / CU06</b>
+  Reservar, expirar y gestionar la cola.
 end note
 
 @enduml

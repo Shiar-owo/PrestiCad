@@ -1,0 +1,2246 @@
+"""Tests del módulo inventario."""
+import json
+import os
+import tempfile
+from io import BytesIO
+from pathlib import Path
+
+from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import connection
+from django.db.migrations.executor import MigrationExecutor
+from django.test import SimpleTestCase, TestCase, TransactionTestCase, override_settings
+from django.utils import timezone
+from PIL import Image
+from rest_framework.test import APITestCase
+
+from apps.inventario.models import InstanciaMaterial, Material
+from apps.inventario.serializers import (
+    FotoMaterial,
+    InstanciaMaterialModificacionSerializer,
+    MaterialActualizacionSerializer,
+    MaterialRegistroSerializer,
+    MaterialSerializer,
+)
+from apps.inventario.validators import TAMANIO_MAXIMO, validar_foto
+from apps.usuarios.models import Rol
+from apps.usuarios.services import registrar_usuario
+from apps.usuarios.sesiones import CLAVE_SESION_ULTIMA_ACTIVIDAD, CLAVE_SESION_USUARIO_ID
+from apps.inventario.services import (
+    InventarioError,
+    MaterialNoEncontradoError,
+    actualizar_material,
+    buscar_materiales,
+    cambiar_estado_material,
+    listar_materiales,
+    normalizar_codigo,
+    obtener_material,
+    parametros_reputacion_por_defecto,
+    registrar_material,
+)
+
+# Formatos que acepta la foto, con su `content_type` y su extensión.
+FORMATOS_FOTO = {
+    "JPEG": ("image/jpeg", ".jpg"),
+    "PNG": ("image/png", ".png"),
+    "WEBP": ("image/webp", ".webp"),
+    "GIF": ("image/gif", ".gif"),
+}
+
+
+def imagen_en_memoria(formato="JPEG", nombre=None):
+    """Crea un archivo de imagen real, como el que enviaría un formulario.
+
+    No sirve un archivo con bytes inventados: `ImageField` lo abre con Pillow
+    para confirmar que de verdad es una imagen.
+    """
+    content_type, extension = FORMATOS_FOTO[formato]
+    buffer = BytesIO()
+    Image.new("RGB", (20, 20), (200, 30, 30)).save(buffer, format=formato)
+    return SimpleUploadedFile(
+        nombre or f"foto{extension}", buffer.getvalue(), content_type=content_type
+    )
+
+
+def imagen_sobre_el_limite():
+    """Imagen que supera los 4 MB.
+
+    Se rellena de bytes aleatorios porque no comprimen: un PNG de 1400x1400
+    ocupa más de 4 MB y se genera en un instante.
+    """
+    lado = 1400
+    imagen = Image.frombytes("RGB", (lado, lado), os.urandom(lado * lado * 3))
+    buffer = BytesIO()
+    imagen.save(buffer, format="PNG")
+    return SimpleUploadedFile("enorme.png", buffer.getvalue(), content_type="image/png")
+
+
+class ConMediaTemporal(TestCase):
+    """Apunta `MEDIA_ROOT` a un directorio temporal.
+
+    Sin esto la suite escribiría en `backend/media/` y los archivos de una
+    prueba quedarían ahí para la siguiente.
+    """
+
+    def setUp(self):
+        super().setUp()
+        temporal = tempfile.TemporaryDirectory()
+        self.addCleanup(temporal.cleanup)
+        override = override_settings(MEDIA_ROOT=Path(temporal.name))
+        override.enable()
+        self.addCleanup(override.disable)
+
+
+class ModuloInventarioTestCase(SimpleTestCase):
+    def test_config_del_modulo(self):
+        """La app `inventario` existe y su config es la esperada."""
+        from django.apps import apps
+
+        from apps.inventario.apps import InventarioConfig
+
+        conf = apps.get_app_config("inventario")
+        self.assertIsInstance(conf, InventarioConfig)
+
+
+class RegistrarMaterialServiceTestCase(TestCase):
+    """Tests del servicio de alta de materiales (T04.03)."""
+
+    def _datos_validos(self, **extra):
+        datos = dict(nombre="Proyector Epson", codigo_material="INV-001", tipo="equipo")
+        datos.update(extra)
+        return datos
+
+    def test_registra_material_con_valores_minimos(self):
+        material = registrar_material(**self._datos_validos())
+
+        self.assertIsNotNone(material.pk)
+        self.assertEqual(material.nombre, "Proyector Epson")
+        self.assertEqual(material.codigo_material, "INV-001")
+        self.assertEqual(material.tipo, "equipo")
+        self.assertEqual(Material.objects.count(), 1)
+
+    def test_estado_inicial_es_disponible(self):
+        """HU04 criterio 1: el estado inicial del material es Disponible por defecto."""
+        material = registrar_material(**self._datos_validos())
+
+        self.assertEqual(material.estado, "disponible")
+        self.assertTrue(material.esta_disponible())
+
+    def test_stock_por_defecto_es_una_unidad(self):
+        material = registrar_material(**self._datos_validos())
+
+        self.assertEqual(material.stock, 1)
+
+    def test_registra_multiples_unidades_del_mismo_material(self):
+        """HU04 criterio 5: se pueden registrar varias unidades."""
+        material = registrar_material(**self._datos_validos(stock=12))
+
+        self.assertEqual(material.stock, 12)
+
+    def test_normaliza_el_codigo_a_mayusculas_sin_espacios(self):
+        material = registrar_material(**self._datos_validos(codigo_material="  inv-001 "))
+
+        self.assertEqual(material.codigo_material, "INV-001")
+
+    def test_codigo_duplicado_devuelve_error_de_negocio(self):
+        """HU04 criterio 4: el código de inventario es único."""
+        registrar_material(**self._datos_validos())
+
+        with self.assertRaises(InventarioError) as contexto:
+            registrar_material(**self._datos_validos(nombre="Otro proyector"))
+
+        self.assertEqual(contexto.exception.campo, "codigo_material")
+        self.assertEqual(
+            contexto.exception.mensaje,
+        "El Código de Material ya está registrado.",
+        )
+        self.assertEqual(Material.objects.count(), 1)
+
+    def test_codigo_duplicado_ignora_diferencias_de_mayusculas(self):
+        registrar_material(**self._datos_validos())
+
+        with self.assertRaises(InventarioError):
+            registrar_material(**self._datos_validos(nombre="Otro", codigo_material="inv-001"))
+
+        self.assertEqual(Material.objects.count(), 1)
+
+    def test_recorta_espacios_del_nombre_y_descripcion(self):
+        material = registrar_material(
+            **self._datos_validos(nombre="  Proyector Epson  ", descripcion="  HD  ")
+        )
+
+        self.assertEqual(material.nombre, "Proyector Epson")
+        self.assertEqual(material.descripcion, "HD")
+
+    def test_nombre_vacio_devuelve_error_de_negocio(self):
+        with self.assertRaises(InventarioError) as contexto:
+            registrar_material(**self._datos_validos(nombre="   "))
+
+        self.assertEqual(contexto.exception.campo, "nombre")
+
+    def test_stock_inferior_a_uno_devuelve_error_de_negocio(self):
+        with self.assertRaises(InventarioError) as contexto:
+            registrar_material(**self._datos_validos(stock=0))
+
+        self.assertEqual(contexto.exception.campo, "stock")
+
+    def test_guarda_los_parametros_de_reputacion_informados(self):
+        """HU04 criterio 2: los parámetros de reputación se parametrizan por objeto."""
+        material = registrar_material(
+            **self._datos_validos(
+                tier_minimo_requerido="avanzado",
+                bonificacion_tiempo=20,
+                deduccion_tardanza=15,
+                deduccion_dano_parcial=40,
+                deduccion_dano_total=80,
+            )
+        )
+
+        self.assertEqual(material.tier_minimo_requerido, "avanzado")
+        self.assertEqual(material.tiempo_maximo_prestamo, 360)
+        self.assertEqual(material.bonificacion_tiempo, 20)
+        self.assertEqual(material.deduccion_tardanza, 15)
+        self.assertEqual(material.deduccion_dano_parcial, 40)
+        self.assertEqual(material.deduccion_dano_total, 80)
+
+    def test_tiempo_maximo_prestamo_por_defecto_segun_tier_y_validador_de_limites(self):
+        material_restringido = registrar_material(
+            **self._datos_validos(
+                codigo_material="INV-TIER-R",
+                tier_minimo_requerido="restringido",
+            )
+        )
+        material_estandar = registrar_material(
+            **self._datos_validos(
+                codigo_material="INV-TIER-E",
+                tier_minimo_requerido="estandar",
+            )
+        )
+        material_avanzado = registrar_material(
+            **self._datos_validos(
+                codigo_material="INV-TIER-A",
+                tier_minimo_requerido="avanzado",
+            )
+        )
+        self.assertEqual(material_restringido.tiempo_maximo_prestamo, 4320)
+        self.assertEqual(material_estandar.tiempo_maximo_prestamo, 1440)
+        self.assertEqual(material_avanzado.tiempo_maximo_prestamo, 360)
+
+        material_personalizado = registrar_material(
+            **self._datos_validos(
+                codigo_material="INV-VR-3H",
+                tier_minimo_requerido="avanzado",
+                tiempo_maximo_prestamo=180,
+            )
+        )
+        self.assertEqual(material_personalizado.tiempo_maximo_prestamo, 180)
+
+        with self.assertRaises(InventarioError) as error_minimo:
+            registrar_material(
+                **self._datos_validos(
+                    codigo_material="INV-MIN-ERR",
+                    tiempo_maximo_prestamo=29,
+                )
+            )
+        self.assertEqual(error_minimo.exception.campo, "tiempo_maximo_prestamo")
+
+        with self.assertRaises(InventarioError) as error_maximo:
+            registrar_material(
+                **self._datos_validos(
+                    codigo_material="INV-MAX-ERR",
+                    tiempo_maximo_prestamo=21601,
+                )
+            )
+        self.assertEqual(error_maximo.exception.campo, "tiempo_maximo_prestamo")
+
+    def test_guarda_la_ficha_tecnica(self):
+        material = registrar_material(
+            **self._datos_validos(
+                marca="Epson", modelo="EB-X05", numero_serie="XPS123", es_alto_valor=True
+            )
+        )
+
+        self.assertEqual(material.marca, "Epson")
+        self.assertEqual(material.modelo, "EB-X05")
+        self.assertEqual(material.numero_serie, "XPS123")
+        self.assertTrue(material.requiere_garantia())
+
+
+class ActualizarMaterialServiceTestCase(TestCase):
+    """Tests de edición y cambio de estado de materiales (T04.03, HU04 criterio 7 y 8)."""
+
+    def setUp(self):
+        self.material = registrar_material(
+            nombre="Proyector Epson",
+            codigo_material="INV-001",
+            tipo="equipo",
+        )
+
+    def test_actualiza_datos_basicos(self):
+        actualizado = actualizar_material(
+            self.material.id, nombre="Proyector Epson 4K", descripcion="Proyector de sala", stock=4
+        )
+
+        self.assertEqual(actualizado.nombre, "Proyector Epson 4K")
+        self.assertEqual(actualizado.descripcion, "Proyector de sala")
+        self.assertEqual(actualizado.stock, 4)
+
+    def test_rechaza_cambio_de_codigo_material_por_inmutabilidad(self):
+        with self.assertRaises(InventarioError) as contexto:
+            actualizar_material(self.material.id, codigo_material="INV-999")
+
+        self.assertEqual(contexto.exception.campo, "codigo_material")
+        self.assertIn("inmutable", contexto.exception.mensaje.lower())
+
+    def test_rechaza_ceder_codigo_de_otro_material(self):
+        otro = registrar_material(
+            nombre="Libro de álgebra",
+            codigo_material="LIB-001",
+            tipo="libro",
+        )
+
+        with self.assertRaises(InventarioError) as contexto:
+            actualizar_material(self.material.id, codigo_material=otro.codigo_material)
+
+        self.assertEqual(contexto.exception.campo, "codigo_material")
+        otro.refresh_from_db()
+        self.assertEqual(otro.codigo_material, "LIB-001")
+
+    def test_permite_mantener_el_mismo_codigo_al_editar_el_material(self):
+        actualizado = actualizar_material(
+            self.material.id, codigo_material=self.material.codigo_material, nombre="Proyector X"
+        )
+
+        self.assertEqual(actualizado.codigo_material, "INV-001")
+        self.assertEqual(actualizado.nombre, "Proyector X")
+
+    def test_rechaza_estado_invalido(self):
+        with self.assertRaises(InventarioError) as contexto:
+            cambiar_estado_material(self.material.id, "perdido")
+
+        self.assertEqual(contexto.exception.campo, "estado")
+        self.material.refresh_from_db()
+        self.assertEqual(self.material.estado, "disponible")
+
+    def test_cambia_el_estado_a_en_mantenimiento(self):
+        """HU04 criterio 8: el Gestor puede poner el material en mantenimiento."""
+        actualizado = cambiar_estado_material(self.material.id, "en_mantenimiento")
+
+        self.assertEqual(actualizado.estado, "en_mantenimiento")
+        self.assertFalse(actualizado.esta_disponible())
+
+    def test_actualiza_estado_desde_mantenimiento_y_sincroniza_el_material(self):
+        instancia = self.material.instancias.get()
+        instancia.estado = "en_mantenimiento"
+        instancia.save(update_fields=["estado"])
+        self.material.estado = "en_mantenimiento"
+        self.material.save(update_fields=["estado"])
+
+        actualizado = actualizar_material(self.material.id, estado="disponible")
+
+        instancia.refresh_from_db()
+        self.assertEqual(instancia.estado, "disponible")
+        self.assertEqual(actualizado.estado, "disponible")
+
+    def test_rechaza_estado_general_sin_instancias_elegibles(self):
+        instancia = self.material.instancias.get()
+
+        for estado_bloqueado in ("prestado", "reservado"):
+            with self.subTest(estado=estado_bloqueado):
+                instancia.estado = estado_bloqueado
+                instancia.save(update_fields=["estado"])
+                self.material.estado = estado_bloqueado
+                self.material.save(update_fields=["estado"])
+
+                with self.assertRaises(InventarioError) as contexto:
+                    actualizar_material(self.material.id, estado="disponible")
+
+                self.assertEqual(contexto.exception.campo, "estado")
+                instancia.refresh_from_db()
+                self.material.refresh_from_db()
+                self.assertEqual(instancia.estado, estado_bloqueado)
+                self.assertEqual(self.material.estado, estado_bloqueado)
+
+    def test_rechaza_campos_no_editables(self):
+        with self.assertRaises(InventarioError) as contexto:
+            actualizar_material(self.material.id, created_at="2020-01-01T00:00:00Z")
+
+        self.assertIn("created_at", contexto.exception.mensaje)
+
+    def test_material_inexistente_devuelve_error(self):
+        with self.assertRaises(MaterialNoEncontradoError):
+            actualizar_material(
+                "00000000-0000-0000-0000-000000000000", nombre="Material fantasma"
+            )
+
+    def test_obtener_material_por_id(self):
+        material = obtener_material(self.material.id)
+
+        self.assertEqual(material, self.material)
+
+    def test_listar_materiales_devuelve_todos_ordenados_por_nombre(self):
+        registrar_material(nombre="Cable HDMI", codigo_material="OBJ-001", tipo="objeto")
+        registrar_material(nombre="Libro de álgebra", codigo_material="LIB-001", tipo="libro")
+
+        nombres = [material.nombre for material in listar_materiales()]
+
+        self.assertEqual(nombres, sorted(nombres))
+        self.assertEqual(len(nombres), 3)
+
+    def test_normalizar_codigo(self):
+        self.assertEqual(normalizar_codigo("  inv-001  "), "INV-001")
+
+
+class ParametrosReputacionPorDefectoTestCase(TestCase):
+    """Tests de los valores por defecto configurables (T04.04, HU04 criterio 3)."""
+
+    def test_aplica_los_defaults_configurados(self):
+        material = registrar_material(
+            nombre="Cable HDMI", codigo_material="OBJ-001", tipo="objeto"
+        )
+
+        defaults = settings.MATERIALES_REPUTACION_DEFAULTS["estandar"]
+        self.assertEqual(material.tier_minimo_requerido, "estandar")
+        self.assertEqual(material.bonificacion_tiempo, defaults["bonificacion_tiempo"])
+        self.assertEqual(material.deduccion_tardanza, defaults["deduccion_tardanza"])
+        self.assertEqual(material.deduccion_dano_parcial, defaults["deduccion_dano_parcial"])
+        self.assertEqual(material.deduccion_dano_total, defaults["deduccion_dano_total"])
+
+    @override_settings(
+        MATERIALES_REPUTACION_DEFAULTS={
+            "tier_minimo_requerido": "restringido",
+            "bonificacion_tiempo": 1,
+            "deduccion_tardanza": 2,
+            "deduccion_dano_parcial": 3,
+            "deduccion_dano_total": 4,
+        }
+    )
+    def test_los_defaults_son_configurables(self):
+        material = registrar_material(
+            nombre="Cable HDMI", codigo_material="OBJ-001", tipo="objeto"
+        )
+
+        self.assertEqual(material.tier_minimo_requerido, "restringido")
+        self.assertEqual(material.bonificacion_tiempo, 1)
+        self.assertEqual(material.deduccion_tardanza, 2)
+        self.assertEqual(material.deduccion_dano_parcial, 3)
+        self.assertEqual(material.deduccion_dano_total, 4)
+
+    def test_lo_parametrizado_gana_sobre_el_default(self):
+        material = registrar_material(
+            nombre="Microscopio",
+            codigo_material="EQ-002",
+            tipo="equipo",
+            bonificacion_tiempo=25,
+            deduccion_dano_total=90,
+        )
+
+        self.assertEqual(material.bonificacion_tiempo, 25)
+        self.assertEqual(material.deduccion_dano_total, 90)
+        # lo no parametrizado sigue con el default configurado
+        self.assertEqual(
+            material.deduccion_tardanza,
+            settings.MATERIALES_REPUTACION_DEFAULTS["estandar"]["deduccion_tardanza"],
+        )
+
+    def test_los_costos_no_tienen_default(self):
+        material = registrar_material(
+            nombre="Cable HDMI", codigo_material="OBJ-001", tipo="objeto"
+        )
+
+        self.assertIsNone(material.costo_reparacion)
+        self.assertIsNone(material.costo_reposicion)
+
+    def test_parametros_por_defecto_devuelve_una_copia(self):
+        defaults = parametros_reputacion_por_defecto()
+        defaults["estandar"]["bonificacion_tiempo"] = 999
+
+        self.assertNotEqual(
+            settings.MATERIALES_REPUTACION_DEFAULTS["estandar"]["bonificacion_tiempo"],
+            999,
+        )
+
+    def test_los_defaults_del_modelo_coinciden_con_la_configuracion(self):
+        """Evita que la configuración y los `default` del modelo se desincronicen."""
+        defaults = settings.MATERIALES_REPUTACION_DEFAULTS["estandar"]
+
+        for campo, valor in defaults.items():
+            default_del_modelo = Material._meta.get_field(campo).get_default()
+            self.assertEqual(
+                default_del_modelo,
+                valor,
+                f"El default del modelo '{campo}' no coincide con la configuración.",
+            )
+
+
+class BuscarMaterialesServiceTestCase(TestCase):
+    """Tests del servicio de búsqueda con filtros de catálogo (T05.01, HU05 criterios 1, 2, 3)."""
+
+    def setUp(self):
+        self.mat_laptop = Material.objects.create(
+            nombre="Laptop Dell Inspiron",
+            codigo_material="EQ-001",
+            tipo="equipo",
+            estado="disponible",
+            tier_minimo_requerido="avanzado",
+            stock=5,
+        )
+        self.mat_libro = Material.objects.create(
+            nombre="Libro Cálculo Thomas",
+            codigo_material="LIB-001",
+            tipo="libro",
+            estado="disponible",
+            tier_minimo_requerido="restringido",
+            stock=3,
+        )
+        self.mat_cable = Material.objects.create(
+            nombre="Cable HDMI 2.0",
+            codigo_material="OBJ-001",
+            tipo="objeto",
+            estado="en_mantenimiento",
+            tier_minimo_requerido="restringido",
+            stock=2,
+        )
+        self.mat_proyector = Material.objects.create(
+            nombre="Proyector Epson",
+            codigo_material="EQ-002",
+            tipo="equipo",
+            estado="prestado",
+            tier_minimo_requerido="estandar",
+            stock=1,
+        )
+
+    def test_buscar_sin_filtros_devuelve_todos_ordenados_por_nombre(self):
+        resultados = list(buscar_materiales())
+        nombres = [m.nombre for m in resultados]
+        self.assertEqual(
+            nombres,
+            [
+                "Cable HDMI 2.0",
+                "Laptop Dell Inspiron",
+                "Libro Cálculo Thomas",
+                "Proyector Epson",
+            ],
+        )
+
+    def test_buscar_por_nombre_parcial_e_insensible_a_mayusculas(self):
+        # Criterio 1: Se puede buscar por nombre (búsqueda parcial, case-insensitive)
+        resultados_mayusc = list(buscar_materiales(q="DELL"))
+        self.assertEqual(len(resultados_mayusc), 1)
+        self.assertEqual(resultados_mayusc[0].nombre, "Laptop Dell Inspiron")
+
+        resultados_parcial = list(buscar_materiales(q="cálculo"))
+        self.assertEqual(len(resultados_parcial), 1)
+        self.assertEqual(resultados_parcial[0].nombre, "Libro Cálculo Thomas")
+
+        resultados_comun = list(buscar_materiales(q="e"))  # coincide con Dell, Cable, Proyector
+        self.assertEqual(len(resultados_comun), 3)
+
+    def test_buscar_por_categoria(self):
+        # Criterio 2: Se puede filtrar por categoría (Equipo/Libro/Objeto)
+        equipos = list(buscar_materiales(categoria="equipo"))
+        self.assertEqual(len(equipos), 2)
+        self.assertTrue(all(m.tipo == "equipo" for m in equipos))
+
+        libros = list(buscar_materiales(categoria="libro"))
+        self.assertEqual(len(libros), 1)
+        self.assertEqual(libros[0].nombre, "Libro Cálculo Thomas")
+
+        # También acepta alias 'tipo'
+        objetos = list(buscar_materiales(tipo="objeto"))
+        self.assertEqual(len(objetos), 1)
+        self.assertEqual(objetos[0].nombre, "Cable HDMI 2.0")
+
+    def test_buscar_por_estado(self):
+        # Criterio 3: Se puede filtrar por estado (Disponible/Prestado/Reservado/En Mantenimiento)
+        disponibles = list(buscar_materiales(estado="disponible"))
+        self.assertEqual(len(disponibles), 2)
+        self.assertTrue(all(m.estado == "disponible" for m in disponibles))
+
+        mantenimiento = list(buscar_materiales(estado="en_mantenimiento"))
+        self.assertEqual(len(mantenimiento), 1)
+        self.assertEqual(mantenimiento[0].nombre, "Cable HDMI 2.0")
+
+        prestados = list(buscar_materiales(estado="prestado"))
+        self.assertEqual(len(prestados), 1)
+        self.assertEqual(prestados[0].nombre, "Proyector Epson")
+
+    def test_buscar_combinando_filtros(self):
+        resultados = list(buscar_materiales(q="proyector", categoria="equipo", estado="prestado"))
+        self.assertEqual(len(resultados), 1)
+        self.assertEqual(resultados[0].nombre, "Proyector Epson")
+
+        vacio = list(buscar_materiales(q="proyector", categoria="equipo", estado="disponible"))
+        self.assertEqual(len(vacio), 0)
+
+    def test_buscar_con_espacios_en_blanco_limpia_parametros(self):
+        resultados = list(buscar_materiales(q="  dell  ", categoria=" equipo ", estado=" disponible "))
+        self.assertEqual(len(resultados), 1)
+        self.assertEqual(resultados[0].nombre, "Laptop Dell Inspiron")
+
+    def test_buscar_con_q_vacio_o_espacios_no_filtra(self):
+        self.assertEqual(buscar_materiales(q="   ").count(), 4)
+
+class MaterialSerializerContratoTestCase(SimpleTestCase):
+    """Tests de los contratos JSON del módulo inventario (T04.05)."""
+
+    def test_salida_incluye_unidades_disponibles(self):
+        data = MaterialSerializer(Material(stock=4)).data
+
+        self.assertEqual(data["unidades_disponibles"], 4)
+        for campo in ("id", "nombre", "codigo_material", "estado", "created_at"):
+            self.assertIn(campo, data)
+        self.assertNotIn("estado_fisico", data)
+
+    def test_alta_rechaza_estado_inicial_no_permitido(self):
+        serializer = MaterialRegistroSerializer(
+            data={"nombre": "Cable", "codigo_material": "OBJ-1", "tipo": "objeto", "estado": "prestado"}
+        )
+
+        self.assertFalse(serializer.is_valid())
+        self.assertEqual(
+            serializer.errors["estado"],
+            ["El estado inicial del material no es válido."],
+        )
+
+    def test_alta_exige_nombre_codigo_y_tipo(self):
+        serializer = MaterialRegistroSerializer(data={})
+
+        self.assertFalse(serializer.is_valid())
+        self.assertEqual(
+            sorted(serializer.errors), ["codigo_material", "nombre", "tipo"]
+        )
+
+    def test_alta_rechaza_stock_cero(self):
+        serializer = MaterialRegistroSerializer(
+            data={"nombre": "Cable", "codigo_material": "OBJ-1", "tipo": "objeto", "stock": 0}
+        )
+
+        self.assertFalse(serializer.is_valid())
+        self.assertEqual(serializer.errors["stock"], ["El stock debe ser al menos 1 unidad."])
+
+    def test_alta_rechaza_tipo_invalido(self):
+        serializer = MaterialRegistroSerializer(
+            data={"nombre": "Cable", "codigo_material": "OBJ-1", "tipo": "edificio"}
+        )
+
+        self.assertFalse(serializer.is_valid())
+        self.assertEqual(serializer.errors["tipo"], ["Tipo de material inválido."])
+
+    def test_alta_rechaza_tier_invalido(self):
+        serializer = MaterialRegistroSerializer(
+            data={
+                "nombre": "Cable",
+                "codigo_material": "OBJ-1",
+                "tipo": "objeto",
+                "tier_minimo_requerido": "basico",
+            }
+        )
+
+        self.assertFalse(serializer.is_valid())
+        self.assertEqual(serializer.errors["tier_minimo_requerido"], ["Tier mínimo inválido."])
+
+    def test_alta_rechaza_limite_de_puntos(self):
+        serializer = MaterialRegistroSerializer(
+            data={
+                "nombre": "Cable",
+                "codigo_material": "OBJ-1",
+                "tipo": "objeto",
+                "bonificacion_tiempo": 600,
+            }
+        )
+
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("bonificacion_tiempo", serializer.errors)
+
+    def test_alta_rechaza_mas_de_8_horas_para_tier_avanzado(self):
+        serializer = MaterialRegistroSerializer(
+            data={
+                "nombre": "Cable",
+                "codigo_material": "OBJ-1",
+                "tipo": "objeto",
+                "tier_minimo_requerido": "avanzado",
+                "tiempo_maximo_prestamo": 481,
+            }
+        )
+
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("tiempo_maximo_prestamo", serializer.errors)
+
+    def test_edicion_rechaza_mas_de_8_horas_para_tier_avanzado(self):
+        material = Material(
+            tier_minimo_requerido="avanzado",
+            tiempo_maximo_prestamo=480,
+        )
+        serializer = MaterialActualizacionSerializer(
+            instance=material,
+            data={"tiempo_maximo_prestamo": 481},
+            partial=True,
+        )
+
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("tiempo_maximo_prestamo", serializer.errors)
+
+    def test_alta_rechaza_campos_no_permitidos(self):
+        serializer = MaterialRegistroSerializer(
+            data={"nombre": "Cable", "codigo_material": "OBJ-1", "tipo": "objeto", "id": "1"}
+        )
+
+        self.assertFalse(serializer.is_valid())
+        self.assertEqual(serializer.errors["id"], ["Este campo no está permitido."])
+
+    def test_alta_admite_campos_opcionales(self):
+        serializer = MaterialRegistroSerializer(
+            data={
+                "nombre": "Cable",
+                "codigo_material": "OBJ-1",
+                "tipo": "objeto",
+                "stock": 3,
+                "bonificacion_tiempo": 20,
+                "costo_reparacion": None,
+            }
+        )
+
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        # Si no se especifica, el estado del material inicia como Disponible.
+        self.assertEqual(serializer.validated_data["estado"], "disponible")
+        self.assertNotIn("unidades_disponibles", serializer.validated_data)
+
+    def test_alta_acepta_observaciones_como_entrada(self):
+        serializer = MaterialRegistroSerializer(
+            data={
+                "nombre": "Cable",
+                "codigo_material": "OBJ-1",
+                "tipo": "objeto",
+                "observaciones": "Bueno",
+            }
+        )
+
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertEqual(serializer.validated_data["observaciones"], "Bueno")
+
+    def test_alta_rechaza_estado_fisico_como_campo_de_material(self):
+        serializer = MaterialRegistroSerializer(
+            data={
+                "nombre": "Cable",
+                "codigo_material": "OBJ-1",
+                "tipo": "objeto",
+                "estado_fisico": "Operativo",
+            }
+        )
+
+        self.assertFalse(serializer.is_valid())
+        self.assertEqual(serializer.errors["estado_fisico"], ["Este campo no está permitido."])
+
+    def test_instancia_acepta_observaciones_como_campo_valido(self):
+        serializer = InstanciaMaterialModificacionSerializer(data={"observaciones": "Bueno"})
+
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertEqual(serializer.validated_data["observaciones"], "Bueno")
+
+    def test_edicion_acepta_estado(self):
+        serializer = MaterialActualizacionSerializer(data={"estado": "en_mantenimiento"})
+
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertEqual(serializer.validated_data["estado"], "en_mantenimiento")
+
+    def test_edicion_acepta_payload_parcial(self):
+        """Un PATCH puede cambiar solo el estado (HU04 criterio 8)."""
+        self.assertTrue(MaterialActualizacionSerializer(data={}).is_valid())
+        self.assertTrue(MaterialActualizacionSerializer(data={"stock": 5}).is_valid())
+
+    def test_edicion_rechaza_estado_invalido(self):
+        serializer = MaterialActualizacionSerializer(data={"estado": "perdido"})
+
+        self.assertFalse(serializer.is_valid())
+        self.assertEqual(serializer.errors["estado"], ["Estado de material inválido."])
+
+    def test_edicion_rechaza_campos_no_permitidos(self):
+        serializer = MaterialActualizacionSerializer(data={"created_at": "2026-01-01T00:00:00Z"})
+
+        self.assertFalse(serializer.is_valid())
+        self.assertEqual(serializer.errors["created_at"], ["Este campo no está permitido."])
+
+    def test_edicion_rechaza_estado_fisico_de_material(self):
+        serializer = MaterialActualizacionSerializer(data={"estado_fisico": "Operativo"})
+
+        self.assertFalse(serializer.is_valid())
+        self.assertEqual(serializer.errors["estado_fisico"], ["Este campo no está permitido."])
+
+    def test_edicion_admite_limpiar_costos(self):
+        serializer = MaterialActualizacionSerializer(
+            data={"costo_reparacion": None, "costo_reposicion": None}
+        )
+
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertIsNone(serializer.validated_data["costo_reparacion"])
+
+
+class ModuloInventarioTestCase(SimpleTestCase):
+    def test_urls_montadas_en_api(self):
+        """Las urls del módulo están incluidas bajo /api/materiales/."""
+        from config.urls import urlpatterns
+
+        rutas = {str(p.pattern) for p in urlpatterns}
+        self.assertIn("api/", rutas)
+
+
+class EscenariosDeMaterialApi(ConMediaTemporal, APITestCase):
+    """Sesión de gestor y utilidades compartidas por los tests de la API.
+
+    Además de la sesión, mueve `MEDIA_ROOT` a un directorio temporal: los tests
+    que suben archivos no deben dejar rastro en `backend/media/`.
+    """
+
+    LIST_URL = "/api/materiales/"
+
+    def _crear_usuario(self, email, rol):
+        usuario = registrar_usuario(
+            nombre="Ana",
+            apellido="Torres",
+            email=email,
+            dni=email.split("@")[0][-8:],
+            tipo="docente",
+            facultad="Ingeniería de Producción y Servicios",
+            password="ClaveSegura123",
+        )
+        usuario.rol = Rol.objects.get(nombre=rol)
+        usuario.save()
+        return usuario
+
+    def _autenticar(self, email, rol):
+        """Deja una sesión activa con el usuario indicado."""
+        usuario = self._crear_usuario(email, rol)
+        sesion = self.client.session
+        sesion[CLAVE_SESION_USUARIO_ID] = usuario.id
+        sesion[CLAVE_SESION_ULTIMA_ACTIVIDAD] = timezone.now().isoformat()
+        sesion.save()
+        return usuario
+
+    def _url_detalle(self, material):
+        return f"{self.LIST_URL}{material.id}/"
+
+    def _payload_valido(self, **extra):
+        datos = {"nombre": "Cable HDMI", "codigo_material": "OBJ-001", "tipo": "objeto"}
+        datos.update(extra)
+        return datos
+
+
+class MaterialesAPITestCase(EscenariosDeMaterialApi):
+    """Tests de los endpoints de materiales (T04.05, HU04)."""
+
+    # --- Listado y consulta: públicos ---
+
+    def test_listar_materiales_es_publico(self):
+        registrar_material(nombre="Cable HDMI", codigo_material="OBJ-001", tipo="objeto")
+
+        respuesta = self.client.get(self.LIST_URL)
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(len(respuesta.json()), 1)
+        self.assertEqual(respuesta.json()[0]["codigo_material"], "OBJ-001")
+
+    def test_consultar_material_es_publico(self):
+        material = registrar_material(
+            nombre="Cable HDMI", codigo_material="OBJ-001", tipo="objeto", stock=3
+        )
+
+        respuesta = self.client.get(self._url_detalle(material))
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.json()["unidades_disponibles"], 3)
+
+    # --- Registro: requiere gestor o administrador ---
+
+    def test_registrar_sin_sesion_responde_403(self):
+        respuesta = self.client.post(self.LIST_URL, self._payload_valido(), format="json")
+
+        self.assertEqual(respuesta.status_code, 403)
+        self.assertEqual(
+            respuesta.json()["detail"], "Inicia sesión para gestionar el inventario."
+        )
+        self.assertEqual(Material.objects.count(), 0)
+
+    def test_registrar_como_prestatario_responde_403(self):
+        """El rol `prestatario` no gestiona el inventario (criterio 5)."""
+        self._autenticar("prestatario@unsa.edu.pe", "prestatario")
+
+        respuesta = self.client.post(self.LIST_URL, self._payload_valido(), format="json")
+
+        self.assertEqual(respuesta.status_code, 403)
+        self.assertEqual(
+            respuesta.json()["detail"],
+            "Solo un gestor o un administrador puede gestionar el inventario.",
+        )
+        self.assertEqual(Material.objects.count(), 0)
+
+    def test_registrar_como_gestor_responde_201(self):
+        self._autenticar("gestor@unsa.edu.pe", "gestor")
+
+        respuesta = self.client.post(self.LIST_URL, self._payload_valido(), format="json")
+
+        self.assertEqual(respuesta.status_code, 201, respuesta.content)
+        cuerpo = respuesta.json()
+        self.assertEqual(cuerpo["estado"], "disponible")
+        self.assertEqual(cuerpo["unidades_disponibles"], 1)
+        self.assertEqual(cuerpo["bonificacion_tiempo"], 15)
+        self.assertEqual(Material.objects.count(), 1)
+
+    def test_registrar_como_administrador_responde_201(self):
+        self._autenticar("admin@unsa.edu.pe", "administrador")
+
+        respuesta = self.client.post(self.LIST_URL, self._payload_valido(), format="json")
+
+        self.assertEqual(respuesta.status_code, 201, respuesta.content)
+
+    def test_registrar_con_codigo_duplicado_responde_409(self):
+        self._autenticar("gestor@unsa.edu.pe", "gestor")
+        registrar_material(nombre="Otro", codigo_material="OBJ-001", tipo="objeto")
+
+        respuesta = self.client.post(self.LIST_URL, self._payload_valido(), format="json")
+
+        self.assertEqual(respuesta.status_code, 409)
+        self.assertEqual(Material.objects.count(), 1)
+
+    def test_registrar_con_datos_invalidos_responde_400(self):
+        self._autenticar("gestor@unsa.edu.pe", "gestor")
+
+        respuesta = self.client.post(
+            self.LIST_URL, {"nombre": "", "codigo_material": "", "tipo": "x"}, format="json"
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn("tipo", respuesta.json())
+        self.assertEqual(Material.objects.count(), 0)
+
+    def test_registrar_con_estado_inicial_no_permitido_responde_400(self):
+        """El estado Prestado no es válido como estado inicial de un material."""
+        self._autenticar("gestor@unsa.edu.pe", "gestor")
+
+        respuesta = self.client.post(
+            self.LIST_URL, self._payload_valido(estado="prestado"), format="json"
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(Material.objects.count(), 0)
+
+    # --- Edición: requiere gestor o administrador ---
+
+    def test_editar_sin_sesion_responde_403(self):
+        material = registrar_material(
+            nombre="Cable HDMI", codigo_material="OBJ-001", tipo="objeto"
+        )
+
+        respuesta = self.client.patch(
+            self._url_detalle(material), {"nombre": "Otro"}, format="json"
+        )
+
+        self.assertEqual(respuesta.status_code, 403)
+        material.refresh_from_db()
+        self.assertEqual(material.nombre, "Cable HDMI")
+
+    def test_patch_cambia_estado_a_en_mantenimiento(self):
+        material = registrar_material(
+            nombre="Cable HDMI", codigo_material="OBJ-001", tipo="objeto"
+        )
+        self._autenticar("gestor@unsa.edu.pe", "gestor")
+
+        respuesta = self.client.patch(
+            self._url_detalle(material), {"estado": "en_mantenimiento"}, format="json"
+        )
+
+        self.assertEqual(respuesta.status_code, 200, respuesta.content)
+        material.refresh_from_db()
+        self.assertEqual(material.estado, "en_mantenimiento")
+
+    def test_put_actualiza_los_campos_enviados(self):
+        material = registrar_material(
+            nombre="Cable HDMI", codigo_material="OBJ-001", tipo="objeto", stock=1
+        )
+        self._autenticar("gestor@unsa.edu.pe", "gestor")
+
+        respuesta = self.client.put(
+            self._url_detalle(material),
+            {
+                "nombre": "Cable HDMI 2m",
+                "codigo_material": "OBJ-001",
+                "tipo": "objeto",
+                "stock": 5,
+            },
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, 200, respuesta.content)
+        material.refresh_from_db()
+        self.assertEqual(material.nombre, "Cable HDMI 2m")
+        self.assertEqual(material.codigo_material, "OBJ-001")
+        self.assertEqual(material.stock, 5)
+        self.assertEqual(respuesta.json()["unidades_disponibles"], 5)
+
+    def test_put_rechaza_cambio_de_codigo_material(self):
+        material = registrar_material(
+            nombre="Cable HDMI", codigo_material="OBJ-001", tipo="objeto", stock=1
+        )
+        self._autenticar("gestor@unsa.edu.pe", "gestor")
+
+        respuesta = self.client.put(
+            self._url_detalle(material),
+            {
+                "nombre": "Cable HDMI 2m",
+                "codigo_material": "OBJ-002",
+                "tipo": "objeto",
+            },
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, 409)
+        self.assertIn("codigo_material", respuesta.json())
+
+    def test_editar_con_codigo_duplicado_responde_409(self):
+        registrar_material(nombre="Libro", codigo_material="LIB-001", tipo="libro")
+        material = registrar_material(
+            nombre="Cable", codigo_material="OBJ-001", tipo="objeto"
+        )
+        self._autenticar("gestor@unsa.edu.pe", "gestor")
+
+        respuesta = self.client.patch(
+            self._url_detalle(material), {"codigo_material": "LIB-001"}, format="json"
+        )
+
+        self.assertEqual(respuesta.status_code, 409)
+        material.refresh_from_db()
+        self.assertEqual(material.codigo_material, "OBJ-001")
+
+    def test_editar_con_stock_cero_responde_400(self):
+        material = registrar_material(
+            nombre="Cable", codigo_material="OBJ-001", tipo="objeto"
+        )
+        self._autenticar("gestor@unsa.edu.pe", "gestor")
+
+        respuesta = self.client.patch(
+            self._url_detalle(material), {"stock": 0}, format="json"
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn("stock", respuesta.json())
+
+    def test_editar_material_inexistente_responde_404(self):
+        self._autenticar("gestor@unsa.edu.pe", "gestor")
+        url_inexistente = f"{self.LIST_URL}11111111-1111-1111-1111-111111111111/"
+
+        respuesta = self.client.patch(url_inexistente, {"stock": 2}, format="json")
+
+        self.assertEqual(respuesta.status_code, 404)
+
+
+class MaterialBuscarAPITestCase(EscenariosDeMaterialApi):
+    """Tests del endpoint GET /api/materiales/buscar (T05.03, HU05)."""
+
+    BUSCAR_URL = "/api/materiales/buscar/"
+
+    def setUp(self):
+        super().setUp()
+        self.mat_laptop = Material.objects.create(
+            nombre="Laptop Dell XPS",
+            codigo_material="EQ-001",
+            tipo="equipo",
+            estado="disponible",
+            tier_minimo_requerido="avanzado",
+            stock=4,
+        )
+        self.mat_libro = Material.objects.create(
+            nombre="Libro Redes de Computadoras Tanenbaum",
+            codigo_material="LIB-001",
+            tipo="libro",
+            estado="disponible",
+            tier_minimo_requerido="restringido",
+            stock=2,
+        )
+        self.mat_cable = Material.objects.create(
+            nombre="Cable Red UTP Cat6",
+            codigo_material="OBJ-001",
+            tipo="objeto",
+            estado="en_mantenimiento",
+            tier_minimo_requerido="restringido",
+            stock=10,
+        )
+        self.mat_osciloscopio = Material.objects.create(
+            nombre="Osciloscopio Digital",
+            codigo_material="EQ-002",
+            tipo="equipo",
+            estado="prestado",
+            tier_minimo_requerido="estandar",
+            stock=1,
+        )
+
+    def test_buscar_es_publico_y_responde_200(self):
+        respuesta = self.client.get(self.BUSCAR_URL)
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(len(respuesta.json()), 4)
+
+    def test_buscar_sin_barra_final_responde_200(self):
+        respuesta = self.client.get("/api/materiales/buscar")
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(len(respuesta.json()), 4)
+
+    def test_buscar_filtro_q_coincidencia_parcial(self):
+        # Criterio 1: Búsqueda por nombre parcial case-insensitive
+        respuesta = self.client.get(self.BUSCAR_URL, {"q": "dell"})
+        self.assertEqual(respuesta.status_code, 200)
+        datos = respuesta.json()
+        self.assertEqual(len(datos), 1)
+        self.assertEqual(datos[0]["nombre"], "Laptop Dell XPS")
+
+    def test_buscar_filtro_categoria(self):
+        # Criterio 2: Filtrar por categoría
+        respuesta = self.client.get(self.BUSCAR_URL, {"categoria": "equipo"})
+        self.assertEqual(respuesta.status_code, 200)
+        datos = respuesta.json()
+        self.assertEqual(len(datos), 2)
+        nombres = [item["nombre"] for item in datos]
+        self.assertIn("Laptop Dell XPS", nombres)
+        self.assertIn("Osciloscopio Digital", nombres)
+
+    def test_buscar_filtro_estado(self):
+        # Criterio 3: Filtrar por estado
+        respuesta = self.client.get(self.BUSCAR_URL, {"estado": "disponible"})
+        self.assertEqual(respuesta.status_code, 200)
+        datos = respuesta.json()
+        self.assertEqual(len(datos), 2)
+        estados = [item["estado"] for item in datos]
+        self.assertTrue(all(e == "disponible" for e in estados))
+
+    def test_buscar_estructura_de_resultados_incluye_campos_esperados(self):
+        # Criterio 4: nombre, categoría (tipo), estado, disponibilidad (unidades_disponibles)
+        respuesta = self.client.get(self.BUSCAR_URL, {"q": "Tanenbaum"})
+        self.assertEqual(respuesta.status_code, 200)
+        item = respuesta.json()[0]
+        self.assertEqual(item["nombre"], "Libro Redes de Computadoras Tanenbaum")
+        self.assertEqual(item["tipo"], "libro")
+        self.assertEqual(item["estado"], "disponible")
+        self.assertEqual(item["unidades_disponibles"], 2)
+        self.assertIn("codigo_material", item)
+
+    def test_buscar_con_usuario_restringido_devuelve_catalogo_completo(self):
+        usuario = self._autenticar("alumno@unsa.edu.pe", "prestatario")
+        usuario.reputacion_tier = "restringido"
+        usuario.save()
+
+        respuesta = self.client.get(self.BUSCAR_URL)
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertCountEqual(
+            [item["nombre"] for item in respuesta.json()],
+            [
+                "Cable Red UTP Cat6",
+                "Laptop Dell XPS",
+                "Libro Redes de Computadoras Tanenbaum",
+                "Osciloscopio Digital",
+            ],
+        )
+
+    def test_buscar_con_usuario_estandar_devuelve_catalogo_completo(self):
+        usuario = self._autenticar("alumno2@unsa.edu.pe", "prestatario")
+        usuario.reputacion_tier = "estandar"
+        usuario.save()
+
+        respuesta = self.client.get(self.BUSCAR_URL)
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertCountEqual(
+            [item["nombre"] for item in respuesta.json()],
+            [
+                "Cable Red UTP Cat6",
+                "Laptop Dell XPS",
+                "Libro Redes de Computadoras Tanenbaum",
+                "Osciloscopio Digital",
+            ],
+        )
+
+    def test_buscar_con_usuario_avanzado_devuelve_catalogo_completo(self):
+        usuario = self._autenticar("alumno3@unsa.edu.pe", "prestatario")
+        usuario.reputacion_tier = "avanzado"
+        usuario.save()
+
+        respuesta = self.client.get(self.BUSCAR_URL)
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertCountEqual(
+            [item["nombre"] for item in respuesta.json()],
+            [
+                "Cable Red UTP Cat6",
+                "Laptop Dell XPS",
+                "Libro Redes de Computadoras Tanenbaum",
+                "Osciloscopio Digital",
+            ],
+        )
+
+    def test_buscar_con_gestor_ve_todo(self):
+        self._autenticar("gestor@unsa.edu.pe", "gestor")
+
+        respuesta = self.client.get(self.BUSCAR_URL)
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(len(respuesta.json()), 4)
+
+    def test_buscar_con_parametro_tier_explicito(self):
+        respuesta = self.client.get(self.BUSCAR_URL, {"tier": "restringido"})
+        self.assertEqual(respuesta.status_code, 200)
+        datos = respuesta.json()
+        self.assertEqual(len(datos), 4)
+
+
+class FotoMaterialServiceTestCase(ConMediaTemporal):
+    """Tests de la foto en la capa de servicios (HU04, criterio 1)."""
+
+    def _ruta(self, nombre):
+        return Path(settings.MEDIA_ROOT) / nombre
+
+    def test_registra_material_con_foto(self):
+        material = registrar_material(
+            nombre="Proyector Epson",
+            codigo_material="INV-001",
+            tipo="equipo",
+            foto=imagen_en_memoria(),
+        )
+
+        self.assertTrue(material.foto)
+        self.assertTrue(self._ruta(material.foto.name).exists())
+
+    def test_la_foto_es_opcional(self):
+        material = registrar_material(
+            nombre="Cable HDMI", codigo_material="OBJ-001", tipo="objeto"
+        )
+
+        self.assertFalse(material.foto)
+
+    def test_la_foto_se_guarda_bajo_inventario_con_fecha_y_token(self):
+        material = registrar_material(
+            nombre="Cable HDMI",
+            codigo_material="OBJ-001",
+            tipo="objeto",
+            foto=imagen_en_memoria("JPEG", "proyector.jpg"),
+        )
+
+        partes = material.foto.name.split("/")
+        self.assertEqual(partes[0], "inventario")
+        self.assertRegex(partes[1], r"^\d{4}$")
+        self.assertRegex(partes[2], r"^\d{2}$")
+        self.assertTrue(partes[3].endswith(".jpg"), material.foto.name)
+        # El token reemplaza al nombre original del archivo.
+        self.assertNotIn("proyector", partes[3])
+
+    def test_el_nombre_del_archivo_no_depende_del_original(self):
+        """Dos materiales con el mismo archivo no pueden pisarse (criterio 9)."""
+        primero = registrar_material(
+            nombre="Cable",
+            codigo_material="OBJ-001",
+            tipo="objeto",
+            foto=imagen_en_memoria("JPEG", "foto.jpg"),
+        )
+        segundo = registrar_material(
+            nombre="Cable de repuesto",
+            codigo_material="OBJ-002",
+            tipo="objeto",
+            foto=imagen_en_memoria("JPEG", "foto.jpg"),
+        )
+
+        self.assertNotEqual(primero.foto.name, segundo.foto.name)
+        self.assertTrue(self._ruta(primero.foto.name).exists())
+        self.assertTrue(self._ruta(segundo.foto.name).exists())
+
+    def test_acepta_jpg_png_y_webp(self):
+        for indice, formato in enumerate(["JPEG", "PNG", "WEBP"], start=1):
+            with self.subTest(formato=formato):
+                material = registrar_material(
+                    nombre=f"Material {formato}",
+                    codigo_material=f"OBJ-{indice:03d}",
+                    tipo="objeto",
+                    foto=imagen_en_memoria(formato),
+                )
+                self.assertTrue(material.foto)
+
+    def test_rechaza_foto_sobre_el_limite(self):
+        with self.assertRaises(ValidationError) as contexto:
+            registrar_material(
+                nombre="Foto pesada",
+                codigo_material="OBJ-001",
+                tipo="objeto",
+                foto=imagen_sobre_el_limite(),
+            )
+
+        self.assertIn("4 MB", str(contexto.exception))
+        self.assertEqual(Material.objects.count(), 0)
+
+    def test_rechaza_formato_no_permitido(self):
+        with self.assertRaises(ValidationError) as contexto:
+            registrar_material(
+                nombre="Foto gif",
+                codigo_material="OBJ-001",
+                tipo="objeto",
+                foto=imagen_en_memoria("GIF"),
+            )
+
+        self.assertIn("JPG, PNG o WEBP", str(contexto.exception))
+        self.assertEqual(Material.objects.count(), 0)
+
+    def test_reemplazar_la_foto_borra_la_anterior(self):
+        material = registrar_material(
+            nombre="Proyector",
+            codigo_material="INV-001",
+            tipo="equipo",
+            foto=imagen_en_memoria(),
+        )
+        nombre_anterior = material.foto.name
+        ruta_anterior = self._ruta(nombre_anterior)
+        self.assertTrue(ruta_anterior.exists())
+
+        with self.captureOnCommitCallbacks(execute=True):
+            actualizado = actualizar_material(
+                material.id, foto=imagen_en_memoria("PNG", "nueva.png")
+            )
+
+        self.assertNotEqual(actualizado.foto.name, nombre_anterior)
+        self.assertFalse(ruta_anterior.exists(), "La foto reemplazada debe borrarse.")
+        self.assertTrue(self._ruta(actualizado.foto.name).exists())
+
+    def test_editar_sin_tocar_la_foto_no_la_borra(self):
+        material = registrar_material(
+            nombre="Proyector",
+            codigo_material="INV-001",
+            tipo="equipo",
+            foto=imagen_en_memoria(),
+        )
+        ruta = self._ruta(material.foto.name)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            actualizado = actualizar_material(material.id, nombre="Proyector 4K")
+
+        self.assertEqual(actualizado.foto.name, material.foto.name)
+        self.assertTrue(ruta.exists())
+
+    def test_quitar_la_foto_deja_el_material_sin_imagen(self):
+        material = registrar_material(
+            nombre="Proyector",
+            codigo_material="INV-001",
+            tipo="equipo",
+            foto=imagen_en_memoria(),
+        )
+        ruta = self._ruta(material.foto.name)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            actualizado = actualizar_material(material.id, foto=None)
+
+        self.assertFalse(actualizado.foto)
+        self.assertFalse(ruta.exists())
+
+
+class ValidarFotoTestCase(SimpleTestCase):
+    """Tests del validador de la foto, aislado del modelo."""
+
+    def test_acepta_un_archivo_dentro_de_los_limites(self):
+        validar_foto(imagen_en_memoria())
+
+    def test_el_limite_es_de_4_mb(self):
+        self.assertEqual(TAMANIO_MAXIMO, 4 * 1024 * 1024)
+
+    def test_rechaza_lo_que_pesa_mas(self):
+        with self.assertRaises(ValidationError):
+            validar_foto(imagen_sobre_el_limite())
+
+
+class FotoSerializadorTestCase(ConMediaTemporal):
+    """Tests de la URL de la foto que viaja en el JSON (HU04, criterio 2)."""
+
+    class FotoConUrlFija:
+        """Imita un `FieldFile` que ya devuelve una URL absoluta."""
+
+        def __init__(self, url):
+            self.url = url
+
+        def __bool__(self):
+            return True
+
+    def test_antepone_el_origen_publico_a_la_ruta_local(self):
+        material = registrar_material(
+            nombre="Proyector",
+            codigo_material="INV-001",
+            tipo="equipo",
+            foto=imagen_en_memoria(),
+        )
+
+        url = MaterialSerializer(material).data["foto"]
+
+        self.assertTrue(
+            url.startswith(f"{settings.MEDIA_URL_PUBLICA}/{settings.MEDIA_URL.lstrip('/')}"),
+            url,
+        )
+
+    def test_sin_foto_devuelve_cadena_vacia(self):
+        """El frontend distingue 'no hay foto' con una cadena, no con null."""
+        material = registrar_material(
+            nombre="Cable", codigo_material="OBJ-001", tipo="objeto"
+        )
+
+        self.assertEqual(MaterialSerializer(material).data["foto"], "")
+
+    def test_una_url_absoluta_se_devuelve_sin_anteponer_nada(self):
+        """En producción Cloudinary ya entrega una URL completa."""
+        url_cloudinary = (
+            "https://res.cloudinary.com/demo/image/upload/v1/materiales/2026/09/abc123.jpg"
+        )
+
+        self.assertEqual(
+            FotoMaterial().to_representation(self.FotoConUrlFija(url_cloudinary)),
+            url_cloudinary,
+        )
+
+
+class FotoContratoEntradaTestCase(SimpleTestCase):
+    """Tests de la validación de la foto en los contratos de entrada."""
+
+    def test_alta_admite_cada_formato_permitido(self):
+        for formato in ["JPEG", "PNG", "WEBP"]:
+            with self.subTest(formato=formato):
+                serializer = MaterialRegistroSerializer(
+                    data={
+                        "nombre": "Cable",
+                        "codigo_material": "OBJ-1",
+                        "tipo": "objeto",
+                        "foto": imagen_en_memoria(formato),
+                    }
+                )
+                self.assertTrue(serializer.is_valid(), serializer.errors)
+
+    def test_alta_rechaza_foto_sobre_el_limite(self):
+        serializer = MaterialRegistroSerializer(
+            data={
+                "nombre": "Cable",
+                "codigo_material": "OBJ-1",
+                "tipo": "objeto",
+                "foto": imagen_sobre_el_limite(),
+            }
+        )
+
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("4 MB", str(serializer.errors["foto"]))
+
+    def test_alta_rechaza_formato_no_permitido(self):
+        serializer = MaterialRegistroSerializer(
+            data={
+                "nombre": "Cable",
+                "codigo_material": "OBJ-1",
+                "tipo": "objeto",
+                "foto": imagen_en_memoria("GIF"),
+            }
+        )
+
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("JPG, PNG o WEBP", str(serializer.errors["foto"]))
+
+    def test_alta_rechaza_un_archivo_vacio(self):
+        serializer = MaterialRegistroSerializer(
+            data={
+                "nombre": "Cable",
+                "codigo_material": "OBJ-1",
+                "tipo": "objeto",
+                "foto": SimpleUploadedFile("vacio.jpg", b"", content_type="image/jpeg"),
+            }
+        )
+
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("foto", serializer.errors)
+
+    def test_alta_rechaza_un_archivo_que_no_es_imagen(self):
+        serializer = MaterialRegistroSerializer(
+            data={
+                "nombre": "Cable",
+                "codigo_material": "OBJ-1",
+                "tipo": "objeto",
+                "foto": SimpleUploadedFile(
+                    "falso.jpg", b"esto no es una imagen", content_type="image/jpeg"
+                ),
+            }
+        )
+
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("foto", serializer.errors)
+
+    def test_la_foto_no_es_obligatoria_en_el_alta(self):
+        serializer = MaterialRegistroSerializer(
+            data={"nombre": "Cable", "codigo_material": "OBJ-1", "tipo": "objeto"}
+        )
+
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertNotIn("foto", serializer.validated_data)
+
+    def test_la_edicion_tambien_valida_la_foto(self):
+        serializer = MaterialActualizacionSerializer(
+            data={"foto": imagen_en_memoria("GIF")}
+        )
+
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("JPG, PNG o WEBP", str(serializer.errors["foto"]))
+
+
+class MaterialesFotoApiTestCase(EscenariosDeMaterialApi):
+    """Tests de la subida de fotos por la API (HU04, criterios 1 y 2)."""
+
+    def test_registrar_con_foto_responde_201(self):
+        self._autenticar("gestor@unsa.edu.pe", "gestor")
+
+        respuesta = self.client.post(
+            self.LIST_URL,
+            self._payload_valido(foto=imagen_en_memoria()),
+            format="multipart",
+        )
+
+        self.assertEqual(respuesta.status_code, 201, respuesta.content)
+        self.assertTrue(respuesta.json()["foto"])
+        self.assertEqual(Material.objects.count(), 1)
+
+    def test_la_url_de_la_foto_apunta_al_archivo_guardado(self):
+        """La URL del JSON tiene que corresponder al archivo del disco.
+
+        No se pide la URL por HTTP: `django.views.static.serve` captura el
+        `MEDIA_ROOT` del momento en que se importa `config.urls`, así que
+        con el directorio temporal apuntaría al lugar equivocado. Lo que se
+        comprueba es el contrato: la URL pública y el archivo coinciden.
+        """
+        self._autenticar("gestor@unsa.edu.pe", "gestor")
+        self.client.post(
+            self.LIST_URL, self._payload_valido(foto=imagen_en_memoria()), format="multipart"
+        )
+
+        url_publica = self.client.get(self.LIST_URL).json()[0]["foto"]
+        # Se quita solo el origen: `MEDIA_URL` ya empieza por `/`.
+        ruta_relativa = url_publica.replace(settings.MEDIA_URL_PUBLICA, "", 1)
+
+        self.assertEqual(ruta_relativa, f"/media/{Material.objects.get().foto.name}")
+        self.assertTrue((Path(settings.MEDIA_ROOT) / Material.objects.get().foto.name).exists())
+
+    def test_registrar_sin_foto_sigue_funcionando(self):
+        self._autenticar("gestor@unsa.edu.pe", "gestor")
+
+        respuesta = self.client.post(self.LIST_URL, self._payload_valido(), format="multipart")
+
+        self.assertEqual(respuesta.status_code, 201, respuesta.content)
+        self.assertEqual(respuesta.json()["foto"], "")
+
+    def test_registrar_foto_sobre_el_limite_responde_400(self):
+        self._autenticar("gestor@unsa.edu.pe", "gestor")
+
+        respuesta = self.client.post(
+            self.LIST_URL,
+            self._payload_valido(foto=imagen_sobre_el_limite()),
+            format="multipart",
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn("foto", respuesta.json())
+        self.assertEqual(Material.objects.count(), 0)
+
+    def test_registrar_formato_no_permitido_responde_400(self):
+        self._autenticar("gestor@unsa.edu.pe", "gestor")
+
+        respuesta = self.client.post(
+            self.LIST_URL,
+            self._payload_valido(foto=imagen_en_memoria("GIF")),
+            format="multipart",
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn("foto", respuesta.json())
+        self.assertEqual(Material.objects.count(), 0)
+
+    def test_patch_reemplaza_la_foto(self):
+        material = registrar_material(
+            nombre="Proyector",
+            codigo_material="INV-001",
+            tipo="equipo",
+            foto=imagen_en_memoria(),
+        )
+        nombre_anterior = material.foto.name
+        self._autenticar("gestor@unsa.edu.pe", "gestor")
+
+        with self.captureOnCommitCallbacks(execute=True):
+            respuesta = self.client.patch(
+                self._url_detalle(material),
+                {"foto": imagen_en_memoria("PNG", "nueva.png")},
+                format="multipart",
+            )
+
+        self.assertEqual(respuesta.status_code, 200, respuesta.content)
+        material.refresh_from_db()
+        self.assertNotEqual(material.foto.name, nombre_anterior)
+        self.assertFalse((Path(settings.MEDIA_ROOT) / nombre_anterior).exists())
+
+    def test_el_json_ya_no_expone_foto_url(self):
+        self._autenticar("gestor@unsa.edu.pe", "gestor")
+        self.client.post(
+            self.LIST_URL, self._payload_valido(foto=imagen_en_memoria()), format="multipart"
+        )
+
+        cuerpo = self.client.get(self.LIST_URL).json()[0]
+
+        self.assertNotIn("foto_url", cuerpo)
+        self.assertIn("foto", cuerpo)
+
+
+class RegistroMaterialMultipleAPITestCase(EscenariosDeMaterialApi):
+    """Pruebas del alta de materiales en sus tres modos (HU04)."""
+
+    def setUp(self):
+        super().setUp()
+        self._autenticar("gestor@unsa.edu.pe", "gestor")
+
+    def test_modo_unico_guarda_datos_fisicos_en_su_instancia(self):
+        respuesta = self.client.post(
+            self.LIST_URL,
+            self._payload_valido(
+                modo="unico", numero_serie="SER-01", observaciones="Bueno", ubicacion="Estante A"
+            ),
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, 201, respuesta.content)
+        instancia = InstanciaMaterial.objects.get()
+        self.assertEqual(instancia.codigo_ejemplar, "OBJ-001-01")
+        self.assertEqual(instancia.estado, "disponible")
+        self.assertEqual(instancia.numero_serie, "SER-01")
+        self.assertEqual(instancia.observaciones, "Bueno")
+        self.assertEqual(instancia.ubicacion, "Estante A")
+        self.assertNotIn("condicion_fisica", respuesta.json())
+        self.assertNotIn("estado_fisico", respuesta.json())
+
+    def test_modo_lote_genera_codigos_y_resuelve_estantes(self):
+        respuesta = self.client.post(
+            self.LIST_URL,
+            {
+                **self._payload_valido(
+                    modo="lote", stock=2, ubicacion="Estante común", observaciones="Bueno"
+                ),
+                "instancias": [
+                    {"numero_serie": "SER-A", "color": "Negro", "observaciones": "Con funda"},
+                    {"numero_serie": "SER-B", "color": "Blanco", "ubicacion": "Estante propio"},
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, 201, respuesta.content)
+        instancias = list(InstanciaMaterial.objects.order_by("codigo_ejemplar"))
+        self.assertEqual([fila.codigo_ejemplar for fila in instancias], ["OBJ-001-01", "OBJ-001-02"])
+        self.assertEqual([fila.ubicacion for fila in instancias], ["Estante común", "Estante propio"])
+        self.assertEqual([fila.observaciones for fila in instancias], ["Con funda", ""])
+        self.assertEqual([fila.numero_serie for fila in instancias], ["", ""])
+        self.assertEqual([fila.color for fila in instancias], ["Negro", "Blanco"])
+        self.assertEqual(instancias[0].observaciones, "Con funda")
+        self.assertTrue(all(fila.estado == "disponible" for fila in instancias))
+
+    def test_modo_detalle_guarda_datos_individuales(self):
+        respuesta = self.client.post(
+            self.LIST_URL,
+            {
+                **self._payload_valido(modo="detalle", stock=2),
+                "instancias": [
+                    {"codigo_ejemplar": "UNIDAD-A", "numero_serie": "SER-A", "color": "Azul", "ubicacion": "A1", "observaciones": "Marca lateral"},
+                    {"codigo_ejemplar": "UNIDAD-B", "numero_serie": "SER-B", "color": "Rojo", "ubicacion": "B2"},
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, 201, respuesta.content)
+        primero = InstanciaMaterial.objects.get(codigo_ejemplar="UNIDAD-A")
+        self.assertEqual(primero.numero_serie, "SER-A")
+        self.assertEqual(primero.observaciones, "Marca lateral")
+        self.assertEqual(primero.color, "Azul")
+        self.assertEqual(primero.ubicacion, "A1")
+        self.assertEqual(primero.estado, "disponible")
+        segundo = InstanciaMaterial.objects.get(codigo_ejemplar="UNIDAD-B")
+        self.assertEqual(segundo.observaciones, "")
+
+    def test_codigo_repetido_en_payload_indica_fila_y_no_crea_registros(self):
+        respuesta = self.client.post(
+            self.LIST_URL,
+            {
+                **self._payload_valido(modo="detalle", stock=2),
+                "instancias": [{"codigo_ejemplar": "UNIDAD-A"}, {"codigo_ejemplar": "unidad-a"}],
+            },
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(respuesta.json()["indice"], 1)
+        self.assertEqual(Material.objects.count(), 0)
+        self.assertEqual(InstanciaMaterial.objects.count(), 0)
+
+    def test_codigo_existente_indica_fila_y_responde_409(self):
+        existente = registrar_material(nombre="Existente", codigo_material="EX-01", tipo="equipo")
+        self._autenticar("otro.gestor@unsa.edu.pe", "gestor")
+        respuesta = self.client.post(
+            self.LIST_URL,
+            {
+                **self._payload_valido(modo="detalle", stock=2),
+                "instancias": [
+                    {"codigo_ejemplar": existente.instancias.get().codigo_ejemplar},
+                    {"codigo_ejemplar": "UNIDAD-B"},
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, 409)
+        self.assertEqual(respuesta.json()["indice"], 0)
+        self.assertEqual(Material.objects.count(), 1)
+        self.assertEqual(InstanciaMaterial.objects.count(), 1)
+
+    def test_foto_individual_se_guarda_y_se_expone(self):
+        respuesta = self.client.post(
+            self.LIST_URL,
+            {
+                **self._payload_valido(modo="lote", stock=2),
+                "instancias": json.dumps([{}, {}]),
+                "instancia_foto_1": imagen_en_memoria("PNG", "ejemplar.png"),
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(respuesta.status_code, 201, respuesta.content)
+        segundo = InstanciaMaterial.objects.get(codigo_ejemplar="OBJ-001-02")
+        self.assertTrue(segundo.foto.name)
+        self.assertTrue(respuesta.json()["instancias"][1]["foto"])
+
+    def test_foto_invalida_en_fila_no_crea_registros_ni_archivos(self):
+        respuesta = self.client.post(
+            self.LIST_URL,
+            {
+                **self._payload_valido(modo="lote", stock=2),
+                "instancias": json.dumps([{}, {}]),
+                "instancia_foto_0": imagen_en_memoria(),
+                "instancia_foto_1": imagen_en_memoria("GIF"),
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(respuesta.json()["indice"], 1)
+        self.assertEqual(Material.objects.count(), 0)
+        self.assertEqual(InstanciaMaterial.objects.count(), 0)
+        self.assertEqual(list(Path(settings.MEDIA_ROOT).rglob("*.*")), [])
+
+    def test_stock_distinto_de_filas_responde_400_sin_crear(self):
+        respuesta = self.client.post(
+            self.LIST_URL,
+            {
+                **self._payload_valido(modo="detalle", stock=3),
+                "instancias": [{"codigo_ejemplar": "UNIDAD-A"}, {"codigo_ejemplar": "UNIDAD-B"}],
+            },
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn("stock", respuesta.json())
+        self.assertEqual(Material.objects.count(), 0)
+
+    def test_registro_multiple_rechaza_mas_de_cincuenta_filas(self):
+        filas = [{"codigo_ejemplar": f"UNIDAD-{indice}"} for indice in range(51)]
+        respuesta = self.client.post(
+            self.LIST_URL,
+            {**self._payload_valido(modo="detalle", stock=51), "instancias": filas},
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn("instancias", respuesta.json())
+        self.assertEqual(Material.objects.count(), 0)
+        self.assertEqual(InstanciaMaterial.objects.count(), 0)
+
+    def test_sin_modo_conserva_el_registro_unico(self):
+        respuesta = self.client.post(self.LIST_URL, self._payload_valido(), format="json")
+
+        self.assertEqual(respuesta.status_code, 201, respuesta.content)
+        self.assertEqual(InstanciaMaterial.objects.count(), 1)
+        self.assertEqual(InstanciaMaterial.objects.get().codigo_ejemplar, "OBJ-001-01")
+
+
+class InstanciaMaterialModelTestCase(TestCase):
+    """Pruebas del modelo InstanciaMaterial y generación automática."""
+
+    def test_registrar_material_crea_instancias_automaticas(self):
+        mat = registrar_material(
+            nombre="Libro CLRS",
+            codigo_material="LIB-CLRS",
+            tipo="libro",
+            stock=3,
+        )
+        self.assertEqual(mat.instancias.count(), 3)
+        codigos = list(mat.instancias.values_list("codigo_ejemplar", flat=True))
+        self.assertEqual(codigos, ["LIB-CLRS-01", "LIB-CLRS-02", "LIB-CLRS-03"])
+        for inst in mat.instancias.all():
+            self.assertEqual(inst.estado, "disponible")
+            self.assertEqual(inst.observaciones, "")
+
+    def test_registrar_lote_no_genera_numeros_de_serie(self):
+        mat = registrar_material(
+            nombre="Libro CLRS",
+            codigo_material="LIB-CLRS-SERIE",
+            tipo="libro",
+            stock=3,
+            numero_serie="SERIE-BASE",
+        )
+
+        series = list(mat.instancias.values_list("numero_serie", flat=True))
+        self.assertEqual(series, ["", "", ""])
+
+
+    def test_resumen_estados_de_material(self):
+        mat = registrar_material(
+            nombre="Arduino Mega",
+            codigo_material="EQ-ARD",
+            tipo="equipo",
+            stock=3,
+        )
+        instancias = list(mat.instancias.all())
+        instancias[0].estado = "prestado"
+        instancias[0].save()
+        instancias[1].estado = "en_mantenimiento"
+        instancias[1].save()
+
+        resumen = mat.resumen_estados
+        self.assertEqual(resumen["total"], 3)
+        self.assertEqual(resumen["disponible"], 1)
+        self.assertEqual(resumen["prestado"], 1)
+        self.assertEqual(resumen["en_mantenimiento"], 1)
+        self.assertEqual(resumen["reservado"], 0)
+
+
+class MigracionCondicionFisicaInstanciaTestCase(TransactionTestCase):
+    """La nueva columna conserva la condición que ya tenía cada ejemplar."""
+
+    migrate_from = ("inventario", "0007_alter_instanciamaterial_foto_alter_material_foto")
+    migrate_to = ("inventario", "0008_instanciamaterial_condicion_fisica")
+
+    def _restaurar_migraciones(self):
+        executor = MigrationExecutor(connection)
+        executor.migrate(executor.loader.graph.leaf_nodes())
+
+    def setUp(self):
+        self.addCleanup(self._restaurar_migraciones)
+        executor = MigrationExecutor(connection)
+        executor.migrate([self.migrate_from])
+        aplicaciones_anteriores = executor.loader.project_state([self.migrate_from]).apps
+        MaterialAnterior = aplicaciones_anteriores.get_model("inventario", "Material")
+        InstanciaAnterior = aplicaciones_anteriores.get_model("inventario", "InstanciaMaterial")
+        material = MaterialAnterior.objects.create(
+            nombre="Material de migración",
+            codigo_inventario="MIG-COND-01",
+            tipo="objeto",
+        )
+        InstanciaAnterior.objects.create(
+            material=material,
+            codigo_ejemplar="MIG-COND-01-01",
+            estado_fisico="Desgaste leve",
+        )
+
+        executor = MigrationExecutor(connection)
+        executor.migrate([self.migrate_to])
+        self.aplicaciones_nuevas = executor.loader.project_state([self.migrate_to]).apps
+
+    def test_copia_el_valor_existente_a_condicion_fisica(self):
+        InstanciaNueva = self.aplicaciones_nuevas.get_model("inventario", "InstanciaMaterial")
+        instancia = InstanciaNueva.objects.get(codigo_ejemplar="MIG-COND-01-01")
+
+        self.assertEqual(instancia.condicion_fisica, "Desgaste leve")
+
+
+class MigracionEliminarEstadoFisicoInstanciaTestCase(TransactionTestCase):
+    """La migración final conserva datos y puede revertirse sin perderlos."""
+
+    migrate_from = ("inventario", "0009_eliminar_estado_fisico_material")
+    migrate_to = ("inventario", "0010_eliminar_estado_fisico_legado_instancia")
+
+    def _restaurar_migraciones(self):
+        executor = MigrationExecutor(connection)
+        executor.migrate(executor.loader.graph.leaf_nodes())
+
+    def setUp(self):
+        self.addCleanup(self._restaurar_migraciones)
+        executor = MigrationExecutor(connection)
+        executor.migrate([self.migrate_from])
+        aplicaciones_anteriores = executor.loader.project_state([self.migrate_from]).apps
+        MaterialAnterior = aplicaciones_anteriores.get_model("inventario", "Material")
+        InstanciaAnterior = aplicaciones_anteriores.get_model("inventario", "InstanciaMaterial")
+        material = MaterialAnterior.objects.create(
+            nombre="Material de migración final",
+            codigo_inventario="MIG-COND-FINAL",
+            tipo="objeto",
+        )
+        InstanciaAnterior.objects.create(
+            material=material,
+            codigo_ejemplar="MIG-COND-FINAL-01",
+            estado_fisico="Desgaste leve",
+            condicion_fisica="Operativo",
+        )
+
+        executor = MigrationExecutor(connection)
+        executor.migrate([self.migrate_to])
+        self.aplicaciones_nuevas = executor.loader.project_state([self.migrate_to]).apps
+
+    def test_migracion_y_reversion_conservan_condicion_fisica(self):
+        InstanciaNueva = self.aplicaciones_nuevas.get_model("inventario", "InstanciaMaterial")
+        instancia_nueva = InstanciaNueva.objects.get(codigo_ejemplar="MIG-COND-FINAL-01")
+        self.assertEqual(instancia_nueva.condicion_fisica, "Desgaste leve")
+
+        executor = MigrationExecutor(connection)
+        executor.migrate([self.migrate_from])
+        aplicaciones_anteriores = executor.loader.project_state([self.migrate_from]).apps
+        InstanciaAnterior = aplicaciones_anteriores.get_model("inventario", "InstanciaMaterial")
+        instancia_anterior = InstanciaAnterior.objects.get(codigo_ejemplar="MIG-COND-FINAL-01")
+        self.assertEqual(instancia_anterior.estado_fisico, "Desgaste leve")
+
+
+class InstanciaMaterialAPITestCase(ConMediaTemporal, APITestCase):
+    """Pruebas de endpoints para gestión y consulta de instancias físicas."""
+
+    def setUp(self):
+        Rol.objects.get_or_create(nombre="administrador")
+        Rol.objects.get_or_create(nombre="gestor")
+        Rol.objects.get_or_create(nombre="prestatario")
+
+        self.material = registrar_material(
+            nombre="Osciloscopio Digital",
+            codigo_material="EQ-OSC-01",
+            tipo="equipo",
+            stock=2,
+        )
+
+    def _autenticar(self, email, rol):
+        usuario = registrar_usuario(
+            nombre="Gestor",
+            apellido="Inventario",
+            email=email,
+            dni="12345678",
+            tipo="docente",
+            facultad="Ingeniería de Producción y Servicios",
+            password="Password123!",
+        )
+        usuario.rol = Rol.objects.get(nombre=rol)
+        usuario.save()
+        session = self.client.session
+        session[CLAVE_SESION_USUARIO_ID] = str(usuario.id)
+        session[CLAVE_SESION_ULTIMA_ACTIVIDAD] = timezone.now().isoformat()
+        session.save()
+        return usuario
+
+    def test_listar_instancias_de_un_material(self):
+        url = f"/api/materiales/{self.material.id}/instancias/"
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        datos = resp.json()
+        self.assertEqual(len(datos), 2)
+        self.assertEqual(datos[0]["codigo_ejemplar"], "EQ-OSC-01-01")
+        self.assertEqual(datos[1]["codigo_ejemplar"], "EQ-OSC-01-02")
+
+    def test_listar_instancias_filtradas_por_estado(self):
+        instancia_prestada = self.material.instancias.order_by("codigo_ejemplar").first()
+        instancia_prestada.estado = "prestado"
+        instancia_prestada.save(update_fields=["estado"])
+
+        url = f"/api/materiales/{self.material.id}/instancias/?estado=disponible"
+        respuesta = self.client.get(url)
+
+        self.assertEqual(respuesta.status_code, 200)
+        datos = respuesta.json()
+        self.assertEqual(len(datos), 1)
+        self.assertEqual(datos[0]["codigo_ejemplar"], "EQ-OSC-01-02")
+
+    def test_rechazar_estado_de_instancia_invalido(self):
+        url = f"/api/materiales/{self.material.id}/instancias/?estado=perdida"
+        respuesta = self.client.get(url)
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(
+            respuesta.json(),
+            {"estado": ["El estado de la instancia no es válido."]},
+        )
+
+    def test_gestor_puede_listar_instancias(self):
+        self._autenticar("gestor.listado@unsa.edu.pe", "gestor")
+        url = f"/api/materiales/{self.material.id}/instancias/?estado=disponible"
+
+        respuesta = self.client.get(url)
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(len(respuesta.json()), 2)
+
+    def test_crear_instancia_manual(self):
+        self._autenticar("gestor.inst@unsa.edu.pe", "gestor")
+        url = f"/api/materiales/{self.material.id}/instancias/"
+        resp = self.client.post(
+            url,
+            {
+                "codigo_ejemplar": "EQ-OSC-01-03",
+                "numero_serie": "SN-998877",
+                "estado": "disponible",
+                "color": "Gris",
+                "observaciones": "Donación con cables de prueba",
+                "ubicacion": "Estante B-4",
+            },
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 201)
+        instancia_creada = InstanciaMaterial.objects.get(codigo_ejemplar="EQ-OSC-01-03")
+        self.assertEqual(instancia_creada.color, "Gris")
+        self.assertEqual(instancia_creada.observaciones, "Donación con cables de prueba")
+        self.assertEqual(resp.json()["observaciones"], "Donación con cables de prueba")
+        self.assertNotIn("estado_fisico", resp.json())
+        self.assertEqual(resp.json()["color"], "Gris")
+        self.material.refresh_from_db()
+        self.assertEqual(self.material.stock, 3)
+
+    def test_agregar_varias_instancias_con_colores_distintos_actualiza_stock(self):
+        self._autenticar("gestor.inst.lote@unsa.edu.pe", "gestor")
+        respuesta = self.client.post(
+            f"/api/materiales/{self.material.id}/instancias/",
+            {
+                "instancias": [
+                    {"codigo_ejemplar": "EQ-OSC-01-03", "color": "Negro"},
+                    {"codigo_ejemplar": "EQ-OSC-01-04", "color": "Blanco"},
+                ]
+            },
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, 201, respuesta.content)
+        self.assertEqual([fila["color"] for fila in respuesta.json()], ["Negro", "Blanco"])
+        self.material.refresh_from_db()
+        self.assertEqual(self.material.stock, 4)
+        self.assertEqual(
+            list(self.material.instancias.order_by("codigo_ejemplar").values_list("color", flat=True)),
+            ["", "", "Negro", "Blanco"],
+        )
+
+    def test_alta_multiple_con_codigo_duplicado_no_crea_parte_del_lote(self):
+        self._autenticar("gestor.inst.lote.duplicado@unsa.edu.pe", "gestor")
+        respuesta = self.client.post(
+            f"/api/materiales/{self.material.id}/instancias/",
+            {
+                "instancias": [
+                    {"codigo_ejemplar": "EQ-OSC-01-03", "color": "Negro"},
+                    {"codigo_ejemplar": "eq-osc-01-03", "color": "Blanco"},
+                ]
+            },
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(respuesta.json()["indice"], 1)
+        self.assertEqual(self.material.instancias.count(), 2)
+        self.material.refresh_from_db()
+        self.assertEqual(self.material.stock, 2)
+
+    def test_actualizar_estado_de_instancia(self):
+        self._autenticar("gestor.inst@unsa.edu.pe", "gestor")
+        instancia = self.material.instancias.first()
+        url = f"/api/instancias/{instancia.id}/"
+        resp = self.client.patch(
+            url,
+            {
+                "estado": "en_mantenimiento",
+                "color": "Verde",
+                "observaciones": "Punta de prueba dañada",
+            },
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        instancia.refresh_from_db()
+        self.assertEqual(instancia.estado, "en_mantenimiento")
+        self.assertEqual(instancia.color, "Verde")
+        self.assertEqual(instancia.observaciones, "Punta de prueba dañada")
+        self.assertEqual(resp.json()["observaciones"], "Punta de prueba dañada")
+        self.assertNotIn("estado_fisico", resp.json())
+        self.assertEqual(instancia.observaciones, "Punta de prueba dañada")
+
+    def test_no_permite_cambiar_manualmente_estado_de_instancia_prestada_o_reservada(self):
+        self._autenticar("gestor.inst.bloqueada@unsa.edu.pe", "gestor")
+        instancia = self.material.instancias.first()
+        instancia.estado = "prestado"
+        instancia.save(update_fields=["estado"])
+
+        respuesta = self.client.patch(
+            f"/api/instancias/{instancia.id}/",
+            {"estado": "disponible"},
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, 409)
+        instancia.refresh_from_db()
+        self.assertEqual(instancia.estado, "prestado")
+
+    def test_no_permite_modificar_codigo_de_ejemplar_por_inmutabilidad(self):
+        self._autenticar("gestor.inst.inmutable@unsa.edu.pe", "gestor")
+        instancia = self.material.instancias.first()
+        codigo_original = instancia.codigo_ejemplar
+
+        respuesta = self.client.patch(
+            f"/api/instancias/{instancia.id}/",
+            {"codigo_ejemplar": "COD-NUEVO-99"},
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, 409)
+        self.assertIn("codigo_ejemplar", respuesta.json())
+        self.assertIn("inmutable", respuesta.json()["codigo_ejemplar"][0].lower())
+        instancia.refresh_from_db()
+        self.assertEqual(instancia.codigo_ejemplar, codigo_original)
+
+    def test_cambiar_estado_general_propaga_solo_a_instancias_disponibles_o_mantenimiento(self):
+        self._autenticar("gestor.estado.general@unsa.edu.pe", "gestor")
+        instancias = list(self.material.instancias.order_by("codigo_ejemplar"))
+        instancias[0].estado = "prestado"
+        instancias[0].save(update_fields=["estado"])
+
+        respuesta = self.client.patch(
+            f"/api/materiales/{self.material.id}/",
+            {"estado": "en_mantenimiento"},
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        instancias[0].refresh_from_db()
+        instancias[1].refresh_from_db()
+        self.assertEqual(instancias[0].estado, "prestado")
+        self.assertEqual(instancias[1].estado, "en_mantenimiento")
+        self.material.refresh_from_db()
+        self.assertEqual(self.material.estado, "prestado")
+
+    def test_actualizar_foto_de_instancia_reemplaza_y_borra_la_anterior(self):
+        self._autenticar("gestor.foto.inst@unsa.edu.pe", "gestor")
+        instancia = self.material.instancias.first()
+        url = f"/api/instancias/{instancia.id}/"
+
+        with tempfile.TemporaryDirectory() as directorio:
+            with override_settings(MEDIA_ROOT=Path(directorio)):
+                primera = self.client.patch(
+                    url,
+                    {"foto": imagen_en_memoria("JPEG", "primera.jpg")},
+                    format="multipart",
+                )
+                self.assertEqual(primera.status_code, 200, primera.content)
+                instancia.refresh_from_db()
+                nombre_anterior = instancia.foto.name
+                storage = instancia.foto.storage
+                self.assertTrue(storage.exists(nombre_anterior))
+
+                with self.captureOnCommitCallbacks(execute=True):
+                    segunda = self.client.patch(
+                        url,
+                        {"foto": imagen_en_memoria("PNG", "segunda.png")},
+                        format="multipart",
+                    )
+
+                self.assertEqual(segunda.status_code, 200, segunda.content)
+                instancia.refresh_from_db()
+                self.assertNotEqual(instancia.foto.name, nombre_anterior)
+                self.assertFalse(storage.exists(nombre_anterior))
+                self.assertTrue(storage.exists(instancia.foto.name))
+                self.assertTrue(segunda.json()["foto"])
+
+    def test_editar_instancia_rechaza_foto_invalida_sin_guardarla(self):
+        self._autenticar("gestor.foto.invalida.inst@unsa.edu.pe", "gestor")
+        instancia = self.material.instancias.first()
+        url = f"/api/instancias/{instancia.id}/"
+
+        with tempfile.TemporaryDirectory() as directorio:
+            with override_settings(MEDIA_ROOT=Path(directorio)):
+                respuesta = self.client.patch(
+                    url,
+                    {"foto": imagen_en_memoria("GIF", "invalida.gif")},
+                    format="multipart",
+                )
+
+                self.assertEqual(respuesta.status_code, 400)
+                self.assertIn("foto", respuesta.json())
+                instancia.refresh_from_db()
+                self.assertFalse(instancia.foto)
+
+    def test_eliminar_material_borra_sus_ejemplares_y_fotos(self):
+        self._autenticar("gestor.eliminar.material@unsa.edu.pe", "gestor")
+
+        with tempfile.TemporaryDirectory() as directorio:
+            with override_settings(MEDIA_ROOT=Path(directorio)):
+                self.material.foto = imagen_en_memoria("JPEG", "portada.jpg")
+                self.material.save(update_fields=["foto"])
+                instancia = self.material.instancias.first()
+                instancia.foto = imagen_en_memoria("PNG", "ejemplar.png")
+                instancia.save(update_fields=["foto"])
+                nombres_fotos = [self.material.foto.name, instancia.foto.name]
+                storage = self.material.foto.storage
+                self.assertTrue(all(storage.exists(nombre) for nombre in nombres_fotos))
+
+                with self.captureOnCommitCallbacks(execute=True):
+                    respuesta = self.client.delete(f"/api/materiales/{self.material.id}/")
+
+                self.assertEqual(respuesta.status_code, 204)
+                self.assertFalse(Material.objects.filter(pk=self.material.id).exists())
+                self.assertEqual(InstanciaMaterial.objects.count(), 0)
+                self.assertTrue(all(not storage.exists(nombre) for nombre in nombres_fotos))
+
+    def test_no_eliminar_material_con_ejemplar_prestado(self):
+        self._autenticar("gestor.material.prestado@unsa.edu.pe", "gestor")
+        instancia = self.material.instancias.first()
+        instancia.estado = "prestado"
+        instancia.save(update_fields=["estado"])
+
+        respuesta = self.client.delete(f"/api/materiales/{self.material.id}/")
+
+        self.assertEqual(respuesta.status_code, 409)
+        self.assertTrue(Material.objects.filter(pk=self.material.id).exists())
+        self.assertTrue(InstanciaMaterial.objects.filter(pk=instancia.id).exists())
+
+    def test_eliminar_instancia_actualiza_stock_y_borra_su_foto(self):
+        self._autenticar("gestor.eliminar.instancia@unsa.edu.pe", "gestor")
+        instancia = self.material.instancias.first()
+
+        with tempfile.TemporaryDirectory() as directorio:
+            with override_settings(MEDIA_ROOT=Path(directorio)):
+                instancia.foto = imagen_en_memoria("PNG", "ejemplar.png")
+                instancia.save(update_fields=["foto"])
+                nombre_foto = instancia.foto.name
+                storage = instancia.foto.storage
+
+                with self.captureOnCommitCallbacks(execute=True):
+                    respuesta = self.client.delete(f"/api/instancias/{instancia.id}/")
+
+                self.assertEqual(respuesta.status_code, 204)
+                self.assertFalse(InstanciaMaterial.objects.filter(pk=instancia.id).exists())
+                self.assertFalse(storage.exists(nombre_foto))
+                self.material.refresh_from_db()
+                self.assertEqual(self.material.stock, 1)
+
+    def test_no_eliminar_por_separado_el_ultimo_ejemplar(self):
+        material = registrar_material(
+            nombre="Unidad única",
+            codigo_material="EQ-UNICO-DELETE",
+            tipo="equipo",
+        )
+        self._autenticar("gestor.eliminar.ultimo@unsa.edu.pe", "gestor")
+
+        respuesta = self.client.delete(
+            f"/api/instancias/{material.instancias.get().id}/"
+        )
+
+        self.assertEqual(respuesta.status_code, 409)
+        self.assertTrue(Material.objects.filter(pk=material.id).exists())
+        self.assertEqual(material.instancias.count(), 1)
+
+    def test_busqueda_materiales_incluye_instancias_y_resumen(self):
+        resp = self.client.get("/api/materiales/buscar/?q=Osciloscopio")
+        self.assertEqual(resp.status_code, 200)
+        resultados = resp.json()
+        self.assertEqual(len(resultados), 1)
+        item = resultados[0]
+        self.assertIn("instancias", item)
+        self.assertIn("resumen_instancias", item)
+        self.assertEqual(len(item["instancias"]), 2)
+        self.assertEqual(item["resumen_instancias"]["total"], 2)
+        self.assertEqual(item["resumen_instancias"]["disponible"], 2)

@@ -1,0 +1,79 @@
+from django.urls import path
+
+from apps.prestamos.views import (
+    DetalleHistorialPrestamoView,
+    DetallePrestamoParaDevolucionView,
+    BuscarPrestatariosView,
+    DescargarDocumentoGarantiaView,
+    DescargarFotoChecklistView,
+    EstimarDevolucionView,
+    HistorialPrestamosView,
+    HistorialMaterialView,
+    ListarReportesDevolucionView,
+    MisPrestamosView,
+    RegistrarDevolucionView,
+    RegistrarPrestamoExcepcionalView,
+    RegistrarPrestamoView,
+    ReporteDevolucionView,
+)
+
+urlpatterns = [
+    path("prestamos/", RegistrarPrestamoView.as_view(), name="registrar-prestamo"),
+    path(
+        "prestamos/excepcion/",
+        RegistrarPrestamoExcepcionalView.as_view(),
+        name="registrar-prestamo-excepcional",
+    ),
+    path(
+        "prestamos/prestatarios/",
+        BuscarPrestatariosView.as_view(),
+        name="buscar-prestatarios-prestamo",
+    ),
+    path("prestamos/historial/", HistorialPrestamosView.as_view(), name="historial-prestamos"),
+    path(
+        "materiales/<uuid:material_id>/historial/",
+        HistorialMaterialView.as_view(),
+        name="historial-material",
+    ),
+    path(
+        "prestamos/<int:prestamo_id>/historial/",
+        DetalleHistorialPrestamoView.as_view(),
+        name="detalle-historial-prestamo",
+    ),
+    path("prestamos/mis-prestamos/", MisPrestamosView.as_view(), name="mis-prestamos"),
+    path(
+        "prestamos/devoluciones/reportes/",
+        ListarReportesDevolucionView.as_view(),
+        name="reportes-devolucion",
+    ),
+    path(
+        "prestamos/devoluciones/<int:devolucion_id>/reporte/",
+        ReporteDevolucionView.as_view(),
+        name="reporte-devolucion",
+    ),
+    path(
+        "prestamos/<int:prestamo_id>/garantia/<str:tipo>/",
+        DescargarDocumentoGarantiaView.as_view(),
+        name="descargar-documento-garantia",
+    ),
+    path(
+        "prestamos/<int:prestamo_id>/checklist/<str:fase>/<int:indice>/foto/",
+        DescargarFotoChecklistView.as_view(),
+        name="foto-checklist",
+    ),
+    path(
+        "prestamos/<int:prestamo_id>/devolucion/estimar/",
+        EstimarDevolucionView.as_view(),
+        name="estimar-devolucion",
+    ),
+    path(
+        "prestamos/<int:prestamo_id>/devolucion/",
+        RegistrarDevolucionView.as_view(),
+        name="registrar-devolucion",
+    ),
+    path(
+        "prestamos/<int:prestamo_id>/",
+        DetallePrestamoParaDevolucionView.as_view(),
+        name="detalle-prestamo-devolucion",
+    ),
+]

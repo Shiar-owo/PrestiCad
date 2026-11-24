@@ -24,7 +24,8 @@ Cada módulo es autocontenido:
 |--------|-----------------|-----------------|
 | `usuarios` | Identidad y Acceso | Registro, roles, autenticación, perfil |
 | `inventario` | Bienes y Conservación | Catálogo de materiales y su estado |
-| `prestamos` | Ciclo de Préstamo | Reservas, préstamos y garantías |
+| `prestamos` | Ciclo de Préstamo | Préstamos, devoluciones y garantías |
+| `reservas` | Reservas y Espera | Reservas confirmadas, lista de espera y excepciones |
 | `reputacion` | Reputación y Confianza | Puntaje, Tiers y sanciones |
 
 > Los módulos se incorporan como "Django apps" dentro de `backend/apps/` cuando su primera historia entra al sprint. Hoy solo existe `usuarios`.
@@ -75,6 +76,57 @@ Servicios:
 - **db** — PostgreSQL en `localhost:5432`.
 - **backend** — API en `http://localhost:8000`; ejecuta las migraciones al arrancar.
 - **frontend** — SPA en `http://localhost:5173`; proxy `/api` → backend.
+
+### Datos de prueba
+
+Al iniciar el backend en desarrollo, se crean automáticamente tres cuentas iniciales. Todas usan la contraseña `PresticadDemo2026!`:
+
+| Rol | Correo |
+|-----|--------|
+| Prestatario | `prestatario@presticad.test` |
+| Administrador | `administrador@presticad.test` |
+| Gestor de Almacén | `gestor@presticad.test` |
+
+La creación es idempotente: si las cuentas ya existen, no se restablecen sus contraseñas ni roles. Estas credenciales públicas son solo para desarrollo local; nunca deben usarse en producción.
+
+#### Modo 1: solo cuentas iniciales
+
+No se necesita ejecutar otro comando. Al arrancar, el backend crea las cuentas de prestatario, administrador y gestor. En una base vacía, el inventario y los préstamos permanecen vacíos.
+
+#### Modo 2: escenario completo de demostración
+
+Con el backend en ejecución, carga usuarios con distintos niveles de reputación, materiales y ejemplares con imágenes, préstamos activos, una garantía pendiente y un historial de devolución con tardanza y daño parcial:
+
+```bash
+docker compose exec backend python manage.py cargar_datos_demo
+```
+
+El inventario de ejemplo contiene una laptop con Windows 11, unas gafas de realidad virtual Meta Quest 2, una calculadora científica Casio y el libro *C++ Programming Language*. El comando es repetible y usa la contraseña `PresticadDemo2026!` para las cuentas demo. Copia las imágenes de ejemplo a `backend/media/inventario/`. Para recrear los préstamos demo y sus devoluciones y garantías asociadas, ejecuta:
+
+```bash
+docker compose exec backend python manage.py cargar_datos_demo --reiniciar
+```
+
+El comando `crear_usuarios_prueba` solo crea las cuentas iniciales; no borra datos ya existentes. Para probar el modo de solo cuentas desde cero, usa una base de datos vacía.
+
+### Procesamiento de Reservas y Vencimientos (Cron)
+
+El módulo de reservas cuenta con un comando administrativo para procesar expiraciones y autopromociones atómicas:
+
+```bash
+docker compose exec backend python manage.py procesar_reservas
+```
+
+**Comportamiento operativo:**
+1. **Reservas confirmadas vencidas (24 h de vigencia):** Libera el ejemplar reservado a `disponible` y aplica la deducción configurable (`RESERVA_PENALIZACION_PUNTOS`, por defecto 20 puntos de reputación).
+2. **Solicitudes en espera expiradas (72 h de vigencia):** Pasa la solicitud a estado `expirada` sin consumir inventario ni penalizar al prestatario.
+3. **Autopromoción automática:** Al liberar ejemplares de reservas vencidas, promueve atómicamente a la solicitud en espera con mayor prioridad, antigüedad y Tier.
+
+**Ejecución periódica recomendada:**
+En Docker Compose, el servicio `scheduler` ejecuta el comando cada cinco minutos. En producción o servidores locales fuera de Compose, configurar una tarea cron periódica (por ejemplo, cada 5 minutos):
+```bash
+*/5 * * * * docker compose exec -T backend python manage.py procesar_reservas >> /var/log/presticad_reservas.log 2>&1
+```
 
 Tests:
 

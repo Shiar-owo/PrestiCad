@@ -1,0 +1,312 @@
+from decimal import Decimal
+import uuid
+from pathlib import Path
+
+from django.core.validators import MaxValueValidator, MinValueValidator
+from django.db import models
+from django.utils import timezone
+
+from apps.inventario.constants import (
+    DEFAULT_TIEMPO_MAXIMO_PRESTAMO_MINUTOS,
+    ESTADOS_INSTANCIA,
+    ESTADOS_MATERIAL,
+    MAXIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS,
+    MINIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS,
+    TIPOS_MATERIAL,
+    UMBRAL_PRECIO_ALTO_VALOR,
+)
+from apps.inventario.validators import validar_foto
+
+# La taxonomía de Tiers es la misma que usa el módulo usuarios (RN03): un
+# material declara el Tier mínimo que un usuario necesita para llevárselo.
+# Se importa solo la lista de opciones: el módulo inventario no accede a
+# ninguna tabla de usuarios.
+from apps.usuarios.constants import TIERS
+
+# Los defaults del modelo corresponden al Tier Estándar. El servicio aplica
+# la tabla completa de defaults por Tier al registrar materiales.
+DEFAULT_TIER_MINIMO = "estandar"
+DEFAULT_BONIFICACION_TIEMPO = 15
+DEFAULT_DEDUCCION_TARDANZA = 10
+DEFAULT_DEDUCCION_DANO_PARCIAL = 30
+DEFAULT_DEDUCCION_DANO_TOTAL = 60
+
+# Rango de los puntos de reputación por objeto (RN06). Misma magnitud que el
+# rango de `Usuario.reputacion_puntaje` (-500 a 500).
+PUNTOS_MINIMO = 0
+PUNTOS_MAXIMO = 500
+
+
+def ruta_foto(instance, filename):
+    """Destino de la foto: `inventario/<año>/<mes>/<token>.<ext>`.
+
+    El token aleatorio evita que dos materiales con el mismo nombre de archivo
+    se pisen: conservar el nombre original haría que el segundo sobrescribiera
+    al primero. La fecha mantiene ordenadas las carpetas y no estorba, porque
+    `CloudinaryStorage.get_available_name` devuelve el nombre tal cual y no
+    deduplica.
+    """
+    extension = Path(filename).suffix.lower() or ".jpg"
+    return f"inventario/{timezone.now():%Y/%m}/{uuid.uuid4().hex[:12]}{extension}"
+
+
+class Material(models.Model):
+    """Entidad del dominio: material del inventario de préstamos.
+
+    Es el *Aggregate Root* del contexto de inventario (ver
+    `docs/diagrams/ddd_detailed/03-inventario.puml`). Reúne la identidad y
+    clasificación del material, su ficha técnica, sus parámetros de
+    reputación (RN06) y la cantidad de unidades registradas (HU04, criterio 5).
+
+    Aquí solo se declara la estructura de datos y las validaciones simples;
+    las reglas de negocio (código único, estado inicial, defaults) viven en
+    `services.py`.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    nombre = models.CharField(max_length=150)
+    descripcion = models.TextField(blank=True, default="")
+    codigo_material = models.CharField(
+        max_length=30,
+        unique=True,
+        verbose_name="Código de material",
+        help_text="Identificador único del material en el inventario.",
+    )
+
+    tipo = models.CharField(max_length=20, choices=TIPOS_MATERIAL)
+    estado = models.CharField(
+        max_length=20,
+        choices=ESTADOS_MATERIAL,
+        default="disponible",
+    )
+    es_alto_valor = models.BooleanField(
+        default=False,
+        verbose_name="Es de alto valor",
+        help_text="Los equipos de alto valor exigen garantía al prestarlos (RN05).",
+    )
+    precio = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        verbose_name="Precio",
+    )
+
+    # Ficha técnica (value object `FichaTecnica` del modelo de dominio).
+    marca = models.CharField(max_length=80, blank=True, default="")
+    modelo = models.CharField(max_length=80, blank=True, default="")
+    numero_serie = models.CharField(max_length=50, blank=True, default="")
+    color = models.CharField(max_length=30, blank=True, default="")
+    foto = models.ImageField(
+        upload_to=ruta_foto,
+        blank=True,
+        validators=[validar_foto],
+        verbose_name="Foto del material",
+        help_text="Imagen del material: JPG, PNG o WEBP, hasta 4 MB.",
+    )
+
+    # Parámetros de reputación por objeto (value object `AtributosReputacion`,
+    # RN06). Las sanciones de la devolución se calculan con estos valores.
+    tier_minimo_requerido = models.CharField(
+        max_length=20,
+        choices=TIERS,
+        default=DEFAULT_TIER_MINIMO,
+        verbose_name="Tier mínimo requerido",
+    )
+    tiempo_maximo_prestamo = models.PositiveIntegerField(
+        default=DEFAULT_TIEMPO_MAXIMO_PRESTAMO_MINUTOS,
+        validators=[
+            MinValueValidator(MINIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS),
+            MaxValueValidator(MAXIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS),
+        ],
+        verbose_name="Tiempo máximo de préstamo (minutos)",
+        help_text="Duración máxima permitida de préstamo para este material, en minutos (1 hora a 15 días).",
+    )
+    bonificacion_tiempo = models.PositiveIntegerField(
+        default=DEFAULT_BONIFICACION_TIEMPO,
+        validators=[MinValueValidator(PUNTOS_MINIMO), MaxValueValidator(PUNTOS_MAXIMO)],
+        verbose_name="Bonificación por entrega a tiempo",
+    )
+    deduccion_tardanza = models.PositiveIntegerField(
+        default=DEFAULT_DEDUCCION_TARDANZA,
+        validators=[MinValueValidator(PUNTOS_MINIMO), MaxValueValidator(PUNTOS_MAXIMO)],
+        verbose_name="Deducción por tardanza (por día)",
+    )
+    deduccion_dano_parcial = models.PositiveIntegerField(
+        default=DEFAULT_DEDUCCION_DANO_PARCIAL,
+        validators=[MinValueValidator(PUNTOS_MINIMO), MaxValueValidator(PUNTOS_MAXIMO)],
+        verbose_name="Deducción por daño parcial",
+    )
+    deduccion_dano_total = models.PositiveIntegerField(
+        default=DEFAULT_DEDUCCION_DANO_TOTAL,
+        validators=[MinValueValidator(PUNTOS_MINIMO), MaxValueValidator(PUNTOS_MAXIMO)],
+        verbose_name="Deducción por daño total",
+    )
+    costo_reparacion = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name="Costo de reparación",
+    )
+    costo_reposicion = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name="Costo de reposición",
+    )
+
+    stock = models.PositiveIntegerField(
+        default=1,
+        validators=[MinValueValidator(1)],
+        verbose_name="Unidades registradas",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Material"
+        verbose_name_plural = "Materiales"
+        ordering = ["nombre"]
+        indexes = [
+            models.Index(fields=["estado"], name="material_estado_idx"),
+            models.Index(fields=["tipo"], name="material_tipo_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.nombre} ({self.codigo_material})"
+
+    def esta_disponible(self):
+        """RN01: solo un material en estado 'Disponible' puede prestarse."""
+        return self.estado == "disponible"
+
+    def requiere_garantia(self):
+        """RN05: los materiales de alto valor exigen garantía al prestarlos."""
+        if self.precio is not None and Decimal(str(self.precio)) > 0:
+            return Decimal(str(self.precio)) > Decimal(UMBRAL_PRECIO_ALTO_VALOR)
+        return bool(self.es_alto_valor)
+
+    def save(self, *args, **kwargs):
+        """Mantiene la clasificación sincronizada con el precio del material."""
+        if self.precio is None:
+            self.precio = Decimal("0")
+        self.es_alto_valor = self.requiere_garantia()
+        if Decimal(str(self.precio)) > Decimal(UMBRAL_PRECIO_ALTO_VALOR):
+            self.tier_minimo_requerido = "avanzado"
+        super().save(*args, **kwargs)
+
+    @property
+    def total_instancias(self):
+        """Total de instancias físicas. Fallback a stock si no tiene instancias creadas."""
+        instancias = list(self.instancias.all())
+        return len(instancias) if instancias else self.stock
+
+    @property
+    def resumen_estados(self):
+        """Desglose de estados operativos entre todas las instancias registradas."""
+        instancias = list(self.instancias.all())
+        if not instancias:
+            return {
+                "total": self.stock,
+                "disponible": self.stock if self.estado == "disponible" else 0,
+                "reservado": self.stock if self.estado == "reservado" else 0,
+                "prestado": self.stock if self.estado == "prestado" else 0,
+                "en_mantenimiento": self.stock if self.estado == "en_mantenimiento" else 0,
+                "de_baja": 0,
+            }
+
+        conteo = {
+            "total": len(instancias),
+            "disponible": 0,
+            "reservado": 0,
+            "prestado": 0,
+            "en_mantenimiento": 0,
+            "de_baja": 0,
+        }
+        for inst in instancias:
+            if inst.estado in conteo:
+                conteo[inst.estado] += 1
+        return conteo
+
+
+class InstanciaMaterial(models.Model):
+    """Copia física o ejemplar individual de un material.
+
+    Representa la unidad tangible que un usuario solicita, reserva o recibe
+    en préstamo. Cada instancia posee su propia identificación patrimonial
+    única (`codigo_ejemplar`), número de serie de fábrica opcional, estado
+    operativo (`disponible`, `reservado`, `prestado`, `en_mantenimiento`,
+    `de_baja`) y observaciones de almacén.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    material = models.ForeignKey(
+        Material,
+        on_delete=models.CASCADE,
+        related_name="instancias",
+        verbose_name="Material al que pertenece",
+    )
+    codigo_ejemplar = models.CharField(
+        max_length=50,
+        unique=True,
+        verbose_name="Código de ejemplar / patrimonial",
+        help_text="Identificador único de la copia física (ej. LIB-CLRS-01).",
+    )
+    numero_serie = models.CharField(
+        max_length=80,
+        blank=True,
+        default="",
+        verbose_name="Número de serie",
+        help_text="Número de serie del fabricante si aplica a esta unidad.",
+    )
+    estado = models.CharField(
+        max_length=20,
+        choices=ESTADOS_INSTANCIA,
+        default="disponible",
+        verbose_name="Estado de la instancia",
+    )
+    color = models.CharField(
+        max_length=30,
+        blank=True,
+        default="",
+        verbose_name="Color del ejemplar",
+        help_text="Color propio de esta unidad; si queda vacío, se muestra el color del material.",
+    )
+    foto = models.ImageField(
+        upload_to=ruta_foto,
+        blank=True,
+        validators=[validar_foto],
+        verbose_name="Foto del ejemplar",
+        help_text="Imagen del ejemplar: JPG, PNG o WEBP, hasta 4 MB.",
+    )
+    observaciones = models.TextField(
+        blank=True,
+        default="",
+        verbose_name="Observaciones",
+        help_text="Notas específicas sobre esta copia (accesorios, defectos, etc.).",
+    )
+    ubicacion = models.CharField(
+        max_length=100,
+        blank=True,
+        default="",
+        verbose_name="Ubicación física",
+        help_text="Estante, repisa o lugar donde se guarda en almacén.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Instancia de Material"
+        verbose_name_plural = "Instancias de Material"
+        ordering = ["codigo_ejemplar"]
+        indexes = [
+            models.Index(fields=["material", "estado"], name="instancia_mat_est_idx"),
+            models.Index(fields=["codigo_ejemplar"], name="instancia_cod_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.material.nombre} [{self.codigo_ejemplar}] ({self.get_estado_display()})"
+
+    def esta_disponible(self):
+        return self.estado == "disponible"

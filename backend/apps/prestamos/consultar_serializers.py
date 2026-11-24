@@ -1,0 +1,484 @@
+"""Serializadores de lectura del módulo de préstamos."""
+from django.urls import reverse
+from rest_framework import serializers
+
+from apps.inventario.models import Material
+from apps.inventario.serializers import FotoMaterial, InstanciaMaterialSerializer
+from apps.prestamos.models import Devolucion, Garantia, Prestamo
+from apps.prestamos.serializers import url_reporte_publica
+
+
+def serializar_checklist_inicial(prestamo):
+    """Devuelve el checklist sin condición inicial y con URL privada de la foto."""
+    fotos = {
+        foto.indice: foto
+        for foto in prestamo.fotos_checklist.filter(fase="inicial")
+    }
+    checklist = []
+    for indice, item in enumerate(prestamo.checklist_inicial or []):
+        if not isinstance(item, dict):
+            continue
+        foto = fotos.get(indice)
+        checklist.append({
+            "elemento": str(item.get("elemento", "")),
+            "observacion": str(item.get("observacion", "")),
+            "foto_url": (
+                reverse(
+                    "foto-checklist",
+                    kwargs={
+                        "prestamo_id": prestamo.pk,
+                        "fase": "inicial",
+                        "indice": indice,
+                    },
+                )
+                if foto and foto.imagen
+                else ""
+            ),
+        })
+    return checklist
+
+
+def serializar_checklist_devolucion(prestamo):
+    """Devuelve el checklist final de la devolución con URL privada de la foto."""
+    try:
+        devolucion = prestamo.devolucion
+    except Devolucion.DoesNotExist:
+        return []
+
+    fotos = {
+        foto.indice: foto
+        for foto in prestamo.fotos_checklist.filter(fase="final")
+    }
+    checklist = []
+    for indice, item in enumerate(devolucion.checklist_devolucion or []):
+        if not isinstance(item, dict):
+            continue
+        foto = fotos.get(indice)
+        checklist.append({
+            "elemento": str(item.get("elemento", "")),
+            "estado": str(item.get("estado", "")),
+            "observacion": str(item.get("observacion", "")),
+            "foto_url": (
+                reverse(
+                    "foto-checklist",
+                    kwargs={
+                        "prestamo_id": prestamo.pk,
+                        "fase": "final",
+                        "indice": indice,
+                    },
+                )
+                if foto and foto.imagen
+                else ""
+            ),
+        })
+    return checklist
+
+
+class SugerenciaPrestatarioSerializer(serializers.Serializer):
+    """Datos mínimos para identificar un prestatario durante la entrega."""
+
+    dni = serializers.CharField(read_only=True)
+    nombre_completo = serializers.SerializerMethodField()
+
+    def get_nombre_completo(self, obj):
+        return f"{obj.nombre} {obj.apellido}".strip()
+
+
+class PrestamoConsultaSerializer(serializers.ModelSerializer):
+    material_id = serializers.UUIDField(source="material.id", read_only=True)
+    material_nombre = serializers.CharField(source="material.nombre", read_only=True)
+    material_codigo = serializers.CharField(
+        source="material.codigo_material",
+        read_only=True,
+    )
+    codigo_ejemplar = serializers.SerializerMethodField()
+    estado = serializers.CharField(source="estado_consulta", read_only=True)
+
+    class Meta:
+        model = Prestamo
+        fields = (
+            "id",
+            "material_id",
+            "material_nombre",
+            "material_codigo",
+            "codigo_ejemplar",
+            "fecha_entrega",
+            "fecha_limite",
+            "tiempo_prestamo_minutos",
+            "tiempo_prestamo_dias",
+            "estado",
+            "es_excepcion",
+        )
+        read_only_fields = fields
+
+    def get_codigo_ejemplar(self, prestamo):
+        return prestamo.instancia.codigo_ejemplar if prestamo.instancia_id else None
+
+
+class PrestamoHistorialSerializer(serializers.ModelSerializer):
+    prestatario_nombre = serializers.SerializerMethodField()
+    material_id = serializers.UUIDField(source="material.id", read_only=True)
+    material_nombre = serializers.SerializerMethodField()
+    material_codigo = serializers.SerializerMethodField()
+    codigo_ejemplar = serializers.SerializerMethodField()
+    estado = serializers.CharField(source="estado_consulta", read_only=True)
+    material_snapshot = serializers.SerializerMethodField()
+    instancia_snapshot = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Prestamo
+        fields = (
+            "id",
+            "prestatario_nombre",
+            "material_id",
+            "material_nombre",
+            "material_codigo",
+            "codigo_ejemplar",
+            "fecha_entrega",
+            "fecha_limite",
+            "tiempo_prestamo_minutos",
+            "tiempo_prestamo_dias",
+            "estado",
+            "es_excepcion",
+            "material_snapshot",
+            "instancia_snapshot",
+        )
+        read_only_fields = fields
+
+    def get_prestatario_nombre(self, obj):
+        return f"{obj.usuario.nombre} {obj.usuario.apellido}".strip()
+
+    def get_material_nombre(self, obj):
+        snapshot = obj.material_snapshot or {}
+        return snapshot.get("nombre") or (obj.material.nombre if obj.material else "")
+
+    def get_material_codigo(self, obj):
+        snapshot = obj.material_snapshot or {}
+        return snapshot.get("codigo_material") or (obj.material.codigo_material if obj.material else "")
+
+    def get_codigo_ejemplar(self, prestamo):
+        snapshot = prestamo.instancia_snapshot or {}
+        if snapshot.get("codigo_ejemplar"):
+            return snapshot["codigo_ejemplar"]
+        return prestamo.instancia.codigo_ejemplar if prestamo.instancia_id else None
+
+    def get_material_snapshot(self, obj):
+        return obj.material_snapshot or {}
+
+    def get_instancia_snapshot(self, obj):
+        return obj.instancia_snapshot or {}
+
+
+class MaterialPrestamoHistorialSerializer(serializers.ModelSerializer):
+    """Ficha técnica del material asociada al detalle histórico del préstamo."""
+
+    foto = FotoMaterial(read_only=True)
+
+    class Meta:
+        model = Material
+        fields = (
+            "nombre",
+            "descripcion",
+            "codigo_material",
+            "tipo",
+            "estado",
+            "es_alto_valor",
+            "marca",
+            "modelo",
+            "numero_serie",
+            "color",
+            "foto",
+            "tier_minimo_requerido",
+            "tiempo_maximo_prestamo",
+            "bonificacion_tiempo",
+            "deduccion_tardanza",
+            "deduccion_dano_parcial",
+            "deduccion_dano_total",
+            "costo_reparacion",
+            "costo_reposicion",
+        )
+        read_only_fields = fields
+
+
+class DocumentosGarantiaHistorialSerializer(serializers.Serializer):
+    documento_identidad_disponible = serializers.SerializerMethodField()
+    compromiso_responsabilidad_disponible = serializers.SerializerMethodField()
+
+    def _obtener_garantia(self, prestamo):
+        try:
+            return prestamo.garantia
+        except Garantia.DoesNotExist:
+            return None
+
+    def get_documento_identidad_disponible(self, prestamo):
+        garantia = self._obtener_garantia(prestamo)
+        return bool(garantia and garantia.documento_identidad)
+
+    def get_compromiso_responsabilidad_disponible(self, prestamo):
+        garantia = self._obtener_garantia(prestamo)
+        return bool(garantia and garantia.compromiso_responsabilidad)
+
+
+class PrestamoHistorialDetalleSerializer(serializers.ModelSerializer):
+    """Detalle completo de préstamo para el titular y el historial de gestión."""
+
+    prestatario_nombre = serializers.SerializerMethodField()
+    prestatario_dni = serializers.CharField(source="usuario.dni", read_only=True)
+    material = MaterialPrestamoHistorialSerializer(read_only=True)
+    instancia = InstanciaMaterialSerializer(read_only=True, allow_null=True)
+    material_snapshot = serializers.SerializerMethodField()
+    instancia_snapshot = serializers.SerializerMethodField()
+    documentos_garantia = DocumentosGarantiaHistorialSerializer(
+        source="*",
+        read_only=True,
+    )
+    estado = serializers.CharField(source="estado_consulta", read_only=True)
+    checklist_inicial = serializers.SerializerMethodField()
+    checklist_final = serializers.SerializerMethodField()
+    fecha_devolucion = serializers.SerializerMethodField()
+    hay_dano = serializers.SerializerMethodField()
+    reporte_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Prestamo
+        fields = (
+            "id",
+            "prestatario_nombre",
+            "prestatario_dni",
+            "material",
+            "instancia",
+            "material_snapshot",
+            "instancia_snapshot",
+            "fecha_entrega",
+            "fecha_limite",
+            "tiempo_prestamo_minutos",
+            "tiempo_prestamo_dias",
+            "estado",
+            "es_excepcion",
+            "checklist_inicial",
+            "checklist_final",
+            "fecha_devolucion",
+            "hay_dano",
+            "reporte_url",
+            "documentos_garantia",
+        )
+        read_only_fields = fields
+
+    def get_prestatario_nombre(self, obj):
+        return f"{obj.usuario.nombre} {obj.usuario.apellido}".strip()
+
+    def get_checklist_inicial(self, obj):
+        return serializar_checklist_inicial(obj)
+
+    def get_checklist_final(self, obj):
+        return serializar_checklist_devolucion(obj)
+
+    def get_fecha_devolucion(self, obj):
+        try:
+            return obj.devolucion.fecha_devolucion
+        except Devolucion.DoesNotExist:
+            return None
+
+    def get_hay_dano(self, obj):
+        try:
+            devolucion = obj.devolucion
+            resultado = devolucion.resultado or {}
+            return bool(resultado.get("hay_dano", False))
+        except Devolucion.DoesNotExist:
+            return None
+
+    def get_reporte_url(self, obj):
+        try:
+            devolucion = obj.devolucion
+            return url_reporte_publica(devolucion) or None
+        except Devolucion.DoesNotExist:
+            return None
+
+    def get_material_snapshot(self, obj):
+        return obj.material_snapshot or {}
+
+    def get_instancia_snapshot(self, obj):
+        return obj.instancia_snapshot or {}
+
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        # Priorizar datos inmutables congelados en los snapshots históricos
+        mat_snap = instance.material_snapshot or {}
+        if mat_snap and ret.get("material"):
+            for campo in (
+                "nombre",
+                "descripcion",
+                "codigo_material",
+                "tipo",
+                "marca",
+                "modelo",
+                "numero_serie",
+                "color",
+                "tier_minimo_requerido",
+                "tiempo_maximo_prestamo",
+                "bonificacion_tiempo",
+                "deduccion_tardanza",
+                "deduccion_dano_parcial",
+                "deduccion_dano_total",
+                "costo_reparacion",
+                "costo_reposicion",
+            ):
+                if campo in mat_snap and mat_snap[campo] is not None:
+                    ret["material"][campo] = mat_snap[campo]
+
+        inst_snap = instance.instancia_snapshot or {}
+        if inst_snap and ret.get("instancia"):
+            for campo in ("codigo_ejemplar", "numero_serie", "color", "observaciones", "ubicacion"):
+                if campo in inst_snap and inst_snap[campo] is not None:
+                    ret["instancia"][campo] = inst_snap[campo]
+        elif inst_snap and not ret.get("instancia"):
+            ret["instancia"] = inst_snap
+
+        return ret
+
+
+class PrestamoMaterialHistorialSerializer(serializers.ModelSerializer):
+    """Fila resumida del historial de préstamos de un material."""
+
+    prestatario = serializers.SerializerMethodField()
+    fecha_devolucion = serializers.SerializerMethodField()
+    resultado = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Prestamo
+        fields = (
+            "id",
+            "prestatario",
+            "fecha_entrega",
+            "fecha_limite",
+            "fecha_devolucion",
+            "resultado",
+        )
+        read_only_fields = fields
+
+    def get_prestatario(self, obj):
+        return f"{obj.usuario.nombre} {obj.usuario.apellido}".strip()
+
+    def get_fecha_devolucion(self, obj):
+        try:
+            return obj.devolucion.fecha_devolucion
+        except Devolucion.DoesNotExist:
+            return None
+
+    def get_resultado(self, obj):
+        try:
+            devolucion = obj.devolucion
+        except Devolucion.DoesNotExist:
+            return "pendiente"
+
+        if (devolucion.resultado or {}).get("hay_dano"):
+            return "danado"
+        if devolucion.fecha_devolucion <= obj.fecha_limite:
+            return "a_tiempo"
+        return "tardio"
+
+
+class PrestamoDevolucionDetalleSerializer(serializers.ModelSerializer):
+    """Datos para el formulario de devolución: estado visible, actores,
+    checklist inicial y parámetros de sanción del material (RN06)."""
+
+    material_id = serializers.UUIDField(source="material.id", read_only=True)
+    material_nombre = serializers.SerializerMethodField()
+    material_codigo = serializers.SerializerMethodField()
+    codigo_ejemplar = serializers.SerializerMethodField()
+    estado = serializers.CharField(source="estado_consulta", read_only=True)
+    checklist_inicial = serializers.SerializerMethodField()
+    prestatario_nombre = serializers.SerializerMethodField()
+    prestatario_dni = serializers.CharField(source="usuario.dni", read_only=True)
+    bonificacion_tiempo = serializers.IntegerField(
+        source="material.bonificacion_tiempo",
+        read_only=True,
+    )
+    deduccion_tardanza = serializers.IntegerField(
+        source="material.deduccion_tardanza",
+        read_only=True,
+    )
+    deduccion_dano_parcial = serializers.IntegerField(
+        source="material.deduccion_dano_parcial",
+        read_only=True,
+    )
+    deduccion_dano_total = serializers.IntegerField(
+        source="material.deduccion_dano_total",
+        read_only=True,
+    )
+    costo_reparacion = serializers.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        source="material.costo_reparacion",
+        read_only=True,
+        allow_null=True,
+    )
+    costo_reposicion = serializers.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        source="material.costo_reposicion",
+        read_only=True,
+        allow_null=True,
+    )
+
+    class Meta:
+        model = Prestamo
+        fields = (
+            "id",
+            "material_id",
+            "material_nombre",
+            "material_codigo",
+            "codigo_ejemplar",
+            "fecha_entrega",
+            "fecha_limite",
+            "tiempo_prestamo_minutos",
+            "tiempo_prestamo_dias",
+            "estado",
+            "es_excepcion",
+            "prestatario_nombre",
+            "prestatario_dni",
+            "checklist_inicial",
+            "bonificacion_tiempo",
+            "deduccion_tardanza",
+            "deduccion_dano_parcial",
+            "deduccion_dano_total",
+            "costo_reparacion",
+            "costo_reposicion",
+        )
+        read_only_fields = fields
+
+    def get_prestatario_nombre(self, obj):
+        return f"{obj.usuario.nombre} {obj.usuario.apellido}".strip()
+
+    def get_material_nombre(self, obj):
+        snapshot = obj.material_snapshot or {}
+        return snapshot.get("nombre") or (obj.material.nombre if obj.material else "")
+
+    def get_material_codigo(self, obj):
+        snapshot = obj.material_snapshot or {}
+        return snapshot.get("codigo_material") or (obj.material.codigo_material if obj.material else "")
+
+    def get_codigo_ejemplar(self, prestamo):
+        snapshot = prestamo.instancia_snapshot or {}
+        if snapshot.get("codigo_ejemplar"):
+            return snapshot["codigo_ejemplar"]
+        return prestamo.instancia.codigo_ejemplar if prestamo.instancia_id else None
+
+    def get_checklist_inicial(self, obj):
+        return serializar_checklist_inicial(obj)
+
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        # Priorizar parámetros y datos inmutables congelados al momento del préstamo
+        mat_snap = instance.material_snapshot or {}
+        for campo in (
+            "bonificacion_tiempo",
+            "deduccion_tardanza",
+            "deduccion_dano_parcial",
+            "deduccion_dano_total",
+            "costo_reparacion",
+            "costo_reposicion",
+        ):
+            if campo in mat_snap and mat_snap[campo] is not None:
+                ret[campo] = mat_snap[campo]
+        return ret

@@ -6,6 +6,7 @@ import { api } from '../api/client'
 import BadgeEstado from '../components/ui/BadgeEstado'
 import Boton from '../components/ui/Boton'
 import ErrorAlerta from '../components/ui/ErrorAlerta'
+import ExitoModal from '../components/ui/ExitoModal'
 import EstadoVacio from '../components/ui/EstadoVacio'
 import Skeleton from '../components/ui/Skeleton'
 import Tarjeta from '../components/ui/Tarjeta'
@@ -47,6 +48,7 @@ export default function MisReservas() {
   const [reservaACancelar, setReservaACancelar] = useState(null)
   const [cancelando, setCancelando] = useState(false)
   const [errorCancelacion, setErrorCancelacion] = useState('')
+  const [exitoCancelacion, setExitoCancelacion] = useState('')
 
   async function confirmarCancelacion() {
     if (!reservaACancelar) return
@@ -56,8 +58,8 @@ export default function MisReservas() {
       await api.post(`/reservas/${reservaACancelar.id}/cancelar/`, {
         motivo: 'Cancelada por el prestatario.',
       })
+      setExitoCancelacion(`La reserva de ${reservaACancelar.material?.nombre || 'material'} fue cancelada correctamente.`)
       setReservaACancelar(null)
-      setIntento((v) => v + 1)
     } catch (err) {
       const datos = err?.datos
       const mensaje = datos?.detail || (datos && Object.values(datos).flat()[0]) || 'No se pudo cancelar la reserva.'
@@ -124,6 +126,14 @@ export default function MisReservas() {
 
   return (
     <section aria-labelledby="titulo-mis-reservas" className="space-y-5">
+      <ExitoModal
+        titulo="Reserva cancelada"
+        mensaje={exitoCancelacion}
+        onCerrar={() => {
+          setExitoCancelacion('')
+          setIntento((actual) => actual + 1)
+        }}
+      />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 id="titulo-mis-reservas" className="text-xl font-bold text-texto">

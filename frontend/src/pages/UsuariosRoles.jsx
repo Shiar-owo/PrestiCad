@@ -11,6 +11,7 @@ import EstadoVacio from '../components/ui/EstadoVacio'
 import BadgeEstado from '../components/ui/BadgeEstado'
 import ResumenTier from '../components/ui/ResumenTier'
 import Boton from '../components/ui/Boton'
+import ExitoModal from '../components/ui/ExitoModal'
 
 const OPCIONES_ROL = [
   { valor: 'gestor', etiqueta: 'Gestor de Almacén' },
@@ -35,6 +36,7 @@ function UsuariosRoles() {
   const [guardandoId, setGuardandoId] = useState(null)
   const [perfilSeleccionado, setPerfilSeleccionado] = useState(null)
   const [error, setError] = useState('')
+  const [mensajeExito, setMensajeExito] = useState('')
 
   useEffect(() => {
     cargarUsuarios()
@@ -63,6 +65,8 @@ function UsuariosRoles() {
       setUsuarios((actuales) => actuales.map((usuario) =>
         usuario.id === usuarioId ? { ...usuario, rol: actualizado.rol } : usuario,
       ))
+      const nombre = usuarios.find((usuario) => usuario.id === usuarioId)?.nombre || 'El usuario'
+      setMensajeExito(`El rol de ${nombre} se actualizó correctamente.`)
     } catch (fallo) {
       setError(
         (typeof fallo.datos?.detail === 'string' && fallo.datos.detail)
@@ -75,6 +79,7 @@ function UsuariosRoles() {
 
   return (
     <section className="mx-auto w-full max-w-6xl px-4 py-8">
+      <ExitoModal mensaje={mensajeExito} onCerrar={() => setMensajeExito('')} />
       <header className="mb-5">
         <h2 className="text-xl font-bold text-texto">Gestionar roles y permisos</h2>
         <p className="mt-1 text-sm text-texto-suave">

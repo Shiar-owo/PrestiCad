@@ -5,13 +5,19 @@ import {
   calcularFechaLimiteEstimada,
   evaluarCambioDuracion,
   mapearErroresFotoChecklist,
+  obtenerFechaMaximaFinPrestamo,
   obtenerMinutosMaximosMaterial,
   obtenerElementosSinFoto,
   validarFoto,
   validarFormularioPrestamo,
 } from './validacionesPrestamo'
 import { TAMANO_MAXIMO_GARANTIA_BYTES } from './constantes/garantia'
-import { TAMANO_MAXIMO_FOTO_CHECKLIST_BYTES } from './constantes/checklistPrestamo'
+import {
+  calcularMinutosDuracionPersonalizada,
+  formatearDuracionMinutos,
+  limitarValorCampoDuracion,
+  TAMANO_MAXIMO_FOTO_CHECKLIST_BYTES,
+} from './constantes/checklistPrestamo'
 
 const formularioValido = {
   dni: '12345678',
@@ -22,6 +28,38 @@ const formularioValido = {
 }
 
 describe('validarFormularioPrestamo', () => {
+  it('limita los días disponibles del préstamo según el máximo del material', () => {
+    expect(
+      obtenerFechaMaximaFinPrestamo('2026-10-23T09:00', { tiempo_maximo_prestamo: 60 }),
+    ).toBe('2026-10-23')
+    expect(
+      obtenerFechaMaximaFinPrestamo('2026-10-23T09:00', { tiempo_maximo_prestamo: 1440 }),
+    ).toBe('2026-10-24')
+    expect(obtenerFechaMaximaFinPrestamo('', { tiempo_maximo_prestamo: 60 })).toBe('')
+  })
+
+  it('formatea duraciones combinando días, horas y minutos', () => {
+    expect(formatearDuracionMinutos(45)).toBe('45 minutos')
+    expect(formatearDuracionMinutos(60)).toBe('1 hora')
+    expect(formatearDuracionMinutos(1500)).toBe('1 día y 1 hora')
+    expect(formatearDuracionMinutos(1565)).toBe('1 día, 2 horas y 5 minutos')
+  })
+
+  it('convierte cualquier duración personalizada en horas y minutos dentro del rango', () => {
+    expect(calcularMinutosDuracionPersonalizada('0', '7', '23')).toBe(443)
+    expect(calcularMinutosDuracionPersonalizada('15', '0', '0')).toBe(21600)
+    expect(calcularMinutosDuracionPersonalizada('16', '0', '0')).toBeNaN()
+    expect(calcularMinutosDuracionPersonalizada('15', '0', '1')).toBeNaN()
+    expect(calcularMinutosDuracionPersonalizada('0', '24', '0')).toBeNaN()
+    expect(calcularMinutosDuracionPersonalizada('0', '1', '60')).toBeNaN()
+  })
+
+  it('limita cada campo editable a su máximo lógico al escribir', () => {
+    expect(limitarValorCampoDuracion('tiempo_maximo_dias', '50')).toBe('15')
+    expect(limitarValorCampoDuracion('tiempo_maximo_horas', '50')).toBe('23')
+    expect(limitarValorCampoDuracion('tiempo_maximo_minutos', '60')).toBe('59')
+  })
+
   it('acepta una entrega regular válida', () => {
     expect(validarFormularioPrestamo(formularioValido)).toEqual({})
   })
@@ -164,6 +202,7 @@ describe('validarFormularioPrestamo', () => {
     expect(obtenerMinutosMaximosMaterial({ tier_minimo_requerido: 'estandar' })).toBe(1440)
     expect(obtenerMinutosMaximosMaterial({ tier_minimo_requerido: 'restringido' })).toBe(4320)
     expect(obtenerMinutosMaximosMaterial({ tiempo_maximo_prestamo: 180 })).toBe(180)
+    expect(obtenerMinutosMaximosMaterial({ tier_minimo_requerido: 'avanzado', tiempo_maximo_prestamo: 21600 })).toBe(21600)
 
     expect(
       validarFormularioPrestamo({
@@ -176,11 +215,11 @@ describe('validarFormularioPrestamo', () => {
     expect(
       validarFormularioPrestamo({
         ...formularioValido,
-        material: { id: 'vr-1', es_alto_valor: false, tier_minimo_requerido: 'avanzado' },
+        material: { id: 'vr-1', es_alto_valor: false, tier_minimo_requerido: 'avanzado', tiempo_maximo_prestamo: 21600 },
         duracionValor: '7',
         duracionUnidad: 'horas',
       }).dias,
-    ).toBe('El tiempo solicitado supera el máximo permitido para este material (6 horas).')
+    ).toBeUndefined()
 
     expect(
       validarFormularioPrestamo({

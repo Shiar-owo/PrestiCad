@@ -194,76 +194,41 @@ class ReservasServiceTestCase(TestCase):
         material.refresh_from_db()
         self.assertEqual(material.estado, "reservado")
 
-    def test_crear_reserva_normal_sin_instancia_queda_en_espera_72h_sin_consumir_stock(self):
+    def test_crear_reserva_normal_sin_instancia_rechaza_sin_entrar_en_espera(self):
         material = crear_material(codigo_material="EQ-RES-02", stock=1)
         crear_reserva(
             usuario=self.prestatario_estandar,
             material_id=material.id,
             justificacion="Primera reserva",
         )
-        ahora = timezone.now()
+        with self.assertRaises(ReservaError) as error:
+            crear_reserva(
+                usuario=self.prestatario_avanzado,
+                material_id=material.id,
+                justificacion="Segunda solicitud",
+            )
 
-        en_espera = crear_reserva(
-            usuario=self.prestatario_avanzado,
-            material_id=material.id,
-            justificacion="Segunda solicitud",
-            ahora=ahora,
-        )
+        self.assertEqual(error.exception.status_code, 409)
+        self.assertIn("No hay ejemplares disponibles", error.exception.mensaje)
+        self.assertEqual(Reserva.objects.filter(material=material).count(), 1)
 
-        self.assertEqual(en_espera.estado, "en_espera")
-        self.assertIsNone(en_espera.instancia_id)
-        self.assertEqual(en_espera.fecha_limite_espera, ahora + timedelta(hours=72))
-
-    def test_orden_autopromocion_respeta_prioridad_antiguedad_y_tier(self):
+    def test_sin_ejemplares_no_se_crea_reserva_en_espera(self):
         material = crear_material(
             codigo_material="EQ-RES-03",
             stock=1,
             estado_inicial_ejemplares="en_mantenimiento",
             estado="en_mantenimiento",
         )
-        base = timezone.now()
-        otro_estandar = crear_usuario(
-            "estandar2.res@unsa.edu.pe",
-            "20000005",
-            reputacion_puntaje=40,
-            reputacion_tier="estandar",
-        )
+        with self.assertRaises(ReservaError):
+            crear_reserva(
+                usuario=self.prestatario_estandar,
+                material_id=material.id,
+                justificacion="No hay ejemplares libres",
+            )
 
-        r_primero = crear_reserva(
-            usuario=otro_estandar,
-            material_id=material.id,
-            justificacion="Primera solicitud en fecha",
-            ahora=base,
-        )
-        r_mismo_tiempo_estandar = crear_reserva(
-            usuario=self.prestatario_estandar,
-            material_id=material.id,
-            justificacion="Misma fecha posterior, tier estándar",
-            ahora=base + timedelta(minutes=5),
-        )
-        r_mismo_tiempo_avanzado = crear_reserva(
-            usuario=self.prestatario_avanzado,
-            material_id=material.id,
-            justificacion="Misma fecha posterior, tier avanzado",
-            ahora=base + timedelta(minutes=5),
-        )
+        self.assertFalse(Reserva.objects.filter(material=material, estado="en_espera").exists())
 
-        instancia = material.instancias.first()
-        instancia.estado = "disponible"
-        instancia.save(update_fields=["estado", "updated_at"])
-
-        promovidas = autopromover_material(material.id)
-
-        self.assertEqual(len(promovidas), 1)
-        self.assertEqual(promovidas[0].id, r_primero.id)
-        r_primero.refresh_from_db()
-        r_mismo_tiempo_avanzado.refresh_from_db()
-        r_mismo_tiempo_estandar.refresh_from_db()
-        self.assertEqual(r_primero.estado, "reservada")
-        self.assertEqual(r_mismo_tiempo_avanzado.estado, "en_espera")
-        self.assertEqual(r_mismo_tiempo_estandar.estado, "en_espera")
-
-    def test_autopromocion_tras_devolucion_cancelacion_vencimiento_mantenimiento_y_alta(self):
+    def test_prestamo_activo_impide_reservar_un_rango_que_se_solapa(self):
         material = crear_material(codigo_material="EQ-RES-04", stock=1)
         prestamo = registrar_prestamo(
             dni_prestatario=self.prestatario_estandar.dni,
@@ -273,130 +238,33 @@ class ReservasServiceTestCase(TestCase):
             registrado_por=self.gestor,
         )
 
-        reserva_1 = crear_reserva(
-            usuario=self.prestatario_avanzado,
-            material_id=material.id,
-            justificacion="Espera tras préstamo",
-        )
-        self.assertEqual(reserva_1.estado, "en_espera")
-
-        # 1. Devolución sin daños -> libera instancia -> autopromueve reserva_1
-        with self.captureOnCommitCallbacks(execute=True):
-            registrar_devolucion(
-                prestamo_id=prestamo.id,
-                checklist_devolucion=[
-                    {"elemento": "Carcasa", "estado": "sin_cambios", "observacion": ""},
-                    {"elemento": "Cable", "estado": "sin_cambios", "observacion": ""},
-                ],
-                realizado_por=self.gestor,
+        with self.assertRaises(ReservaError) as error:
+            crear_reserva(
+                usuario=self.prestatario_avanzado,
+                material_id=material.id,
+                justificacion="Rango ocupado por un préstamo activo",
             )
 
-        reserva_1.refresh_from_db()
-        self.assertEqual(reserva_1.estado, "reservada")
+        self.assertEqual(error.exception.status_code, 409)
+        self.assertEqual(Reserva.objects.filter(material=material).count(), 0)
+        self.assertEqual(prestamo.estado, "activo")
 
-        # 2. Cancelación manual del gestor -> autopromueve reserva_2
-        reserva_2 = crear_reserva(
-            usuario=self.prestatario_estandar,
-            material_id=material.id,
-            justificacion="Espera tras reserva 1",
-        )
-        self.assertEqual(reserva_2.estado, "en_espera")
-
-        cancelar_reserva(
-            reserva_id=reserva_1.id,
-            motivo="Solicitada cancelación en ventanilla",
-            realizado_por=self.gestor,
-        )
-        reserva_1.refresh_from_db()
-        reserva_2.refresh_from_db()
-        self.assertEqual(reserva_1.estado, "cancelada")
-        self.assertEqual(reserva_2.estado, "reservada")
-
-        # 3. Vencimiento de reserva_2 -> autopromueve reserva_3 y penaliza a prestatario_estandar
-        self.prestatario_estandar.refresh_from_db()
-        puntaje_antes = self.prestatario_estandar.reputacion_puntaje
-        reserva_3 = crear_reserva(
-            usuario=self.prestatario_avanzado,
-            material_id=material.id,
-            justificacion="Espera tras reserva 2",
-        )
-        futuro = reserva_2.fecha_limite_recojo + timedelta(minutes=31)
-        resumen = expirar_reservas(ahora=futuro)
-        self.assertEqual(resumen["reservas_vencidas"], 1)
-        self.assertEqual(resumen["reservas_promovidas"], 1)
-
-        reserva_2.refresh_from_db()
-        reserva_3.refresh_from_db()
-        self.prestatario_estandar.refresh_from_db()
-        self.assertEqual(reserva_2.estado, "cancelada_por_vencimiento")
-        self.assertEqual(reserva_3.estado, "reservada")
-        self.assertEqual(self.prestatario_estandar.reputacion_puntaje, puntaje_antes - 20)
-
-        # 4. Alta de ejemplar nuevo -> autopromueve reserva_4
-        reserva_4 = crear_reserva(
-            usuario=self.prestatario_estandar,
-            material_id=material.id,
-            justificacion="Espera de nuevo ejemplar",
-        )
-        self.assertEqual(reserva_4.estado, "en_espera")
-        with self.captureOnCommitCallbacks(execute=True):
-            crear_instancia_material(
-                material.id,
-                codigo_ejemplar="EQ-RES-04-02",
-                estado="disponible",
-            )
-        reserva_4.refresh_from_db()
-        self.assertEqual(reserva_4.estado, "reservada")
-
-        # 5. Mantenimiento -> disponible autopromueve reserva_5
-        instancia_mant = crear_instancia_material(
-            material.id,
-            codigo_ejemplar="EQ-RES-04-03",
-            estado="en_mantenimiento",
-        )
-        otro = crear_usuario("otro.res@unsa.edu.pe", "20000006", reputacion_tier="estandar")
-        reserva_5 = crear_reserva(
-            usuario=otro,
-            material_id=material.id,
-            justificacion="Espera de salida de mantenimiento",
-        )
-        self.assertEqual(reserva_5.estado, "en_espera")
-        with self.captureOnCommitCallbacks(execute=True):
-            actualizar_instancia_material(instancia_mant.id, estado="disponible")
-        reserva_5.refresh_from_db()
-        self.assertEqual(reserva_5.estado, "reservada")
-
-    def test_expiracion_de_espera_sin_penalizacion_y_rechazo_manual(self):
+    def test_solicitud_sin_disponibilidad_se_rechaza_sin_penalizacion(self):
         material = crear_material(
             codigo_material="EQ-RES-05",
             stock=1,
             estado_inicial_ejemplares="en_mantenimiento",
             estado="en_mantenimiento",
         )
-        ahora = timezone.now()
-        r1 = crear_reserva(
-            usuario=self.prestatario_estandar,
-            material_id=material.id,
-            justificacion="Espera que vencerá",
-            ahora=ahora,
-        )
-        r2 = crear_reserva(
-            usuario=self.prestatario_avanzado,
-            material_id=material.id,
-            justificacion="Espera que será rechazada",
-            ahora=ahora,
-        )
-
-        rechazar_reserva(reserva_id=r2.id, motivo="Justificación insuficiente")
-        r2.refresh_from_db()
-        self.assertEqual(r2.estado, "rechazada")
-
         puntaje_antes = self.prestatario_estandar.reputacion_puntaje
-        resumen = expirar_reservas(ahora=ahora + timedelta(hours=73))
-        self.assertEqual(resumen["solicitudes_expiradas"], 1)
-        r1.refresh_from_db()
-        self.prestatario_estandar.refresh_from_db()
-        self.assertEqual(r1.estado, "expirada")
+        with self.assertRaises(ReservaError) as error:
+            crear_reserva(
+                usuario=self.prestatario_estandar,
+                material_id=material.id,
+                justificacion="No hay ejemplares disponibles",
+            )
+        self.assertEqual(error.exception.status_code, 409)
+        self.assertFalse(Reserva.objects.filter(material=material).exists())
         self.assertEqual(self.prestatario_estandar.reputacion_puntaje, puntaje_antes)
 
     @override_settings(MAXIMO_RESERVAS_ACTIVAS=2)
@@ -558,7 +426,7 @@ class ReservasServiceTestCase(TestCase):
                 material.deduccion_dano_parcial * 2,
             )
 
-    def test_aprobar_excepcion_sin_instancias_disponibles_entra_a_cola_y_se_autopromueve(self):
+    def test_solicitud_excepcional_sin_ejemplar_disponible_se_rechaza(self):
         material = crear_material(
             codigo_material="EQ-EXC-SIN-INSTANCIA",
             stock=1,
@@ -567,49 +435,18 @@ class ReservasServiceTestCase(TestCase):
             tier_minimo_requerido="estandar",
         )
         with storage_garantias_temporal():
-            reserva_exc = crear_reserva_excepcional(
-                usuario=self.prestatario_restringido,
-                material_id=material.id,
-                justificacion="Tesis sin copias libres",
-                documento_identidad=crear_pdf("dni.pdf"),
-                compromiso_responsabilidad=crear_pdf("compromiso.pdf"),
-            )
-            self.assertEqual(reserva_exc.estado, "en_espera")
-            self.assertFalse(reserva_exc.excepcion_aprobada)
+            with self.assertRaises(ReservaError) as error:
+                crear_reserva_excepcional(
+                    usuario=self.prestatario_restringido,
+                    material_id=material.id,
+                    justificacion="Tesis sin copias libres",
+                    documento_identidad=crear_pdf("dni.pdf"),
+                    compromiso_responsabilidad=crear_pdf("compromiso.pdf"),
+                )
+        self.assertEqual(error.exception.status_code, 409)
+        self.assertFalse(Reserva.objects.filter(material=material).exists())
 
-            # El gestor aprueba la excepción aunque NO haya ejemplares disponibles
-            aprobada = aprobar_excepcion(
-                reserva_id=reserva_exc.id,
-                realizado_por=self.gestor,
-            )
-            self.assertEqual(aprobada.estado, "en_espera")
-            self.assertTrue(aprobada.excepcion_aprobada)
-            self.assertIsNone(aprobada.instancia_id)
-
-            # Aparece en la cola activa con posición 1 (tanto por material como general)
-            cola = consultar_cola_material(material.id)
-            self.assertEqual(len(cola["en_espera_normales"]), 1)
-            self.assertEqual(cola["en_espera_normales"][0].id, aprobada.id)
-            self.assertEqual(cola["en_espera_normales"][0].posicion_cola, 1)
-            self.assertEqual(len(cola["en_espera_excepciones"]), 0)
-
-            cola_general = consultar_cola_general()
-            self.assertIn(aprobada.id, [r.id for r in cola_general["en_espera_normales"]])
-            self.assertNotIn(aprobada.id, [r.id for r in cola_general["en_espera_excepciones"]])
-
-            # Cuando se libera un ejemplar (pasa de mantenimiento a disponible), se autopromueve
-            instancia = material.instancias.first()
-            instancia.estado = "disponible"
-            instancia.save(update_fields=["estado", "updated_at"])
-
-            promovidas = autopromover_material(material.id)
-            self.assertEqual(len(promovidas), 1)
-            self.assertEqual(promovidas[0].id, aprobada.id)
-            aprobada.refresh_from_db()
-            self.assertEqual(aprobada.estado, "reservada")
-            self.assertIsNotNone(aprobada.instancia_id)
-
-    def test_mismo_prestatario_reserva_su_unico_ejemplar_prestado_y_lo_convierte_tras_devolverlo(self):
+    def test_mismo_prestatario_no_reserva_ejemplar_prestado_en_rango_solapado(self):
         material = crear_material(codigo_material="EQ-RES-MISMO", stock=1)
         prestamo = registrar_prestamo(
             dni_prestatario=self.prestatario_estandar.dni,
@@ -619,48 +456,18 @@ class ReservasServiceTestCase(TestCase):
             registrado_por=self.gestor,
         )
         inicio, fin = _rango_reserva_futuro()
-        reserva = crear_reserva(
-            usuario=self.prestatario_estandar,
-            material_id=material.id,
-            justificacion="Quiero seguir usándolo",
-            fecha_inicio=inicio,
-            fecha_fin=fin,
-        )
-        self.assertEqual(reserva.estado, "en_espera")
-
-        with self.captureOnCommitCallbacks(execute=True):
-            registrar_devolucion(
-                prestamo_id=prestamo.id,
-                checklist_devolucion=[
-                    {"elemento": "Carcasa", "estado": "sin_cambios", "observacion": ""},
-                    {"elemento": "Cable", "estado": "sin_cambios", "observacion": ""},
-                ],
-                realizado_por=self.gestor,
-            )
-
-        reserva.refresh_from_db()
-        self.assertEqual(reserva.estado, "reservada")
-        self.assertIsNotNone(reserva.instancia_id)
-        self.assertEqual(reserva.fecha_limite_recojo, reserva.fecha_fin)
-
-        confirmadas = list(consultar_reservas_confirmadas(self.prestatario_estandar.dni))
-        self.assertEqual([r.id for r in confirmadas], [reserva.id])
-
-        with patch(
-            "apps.prestamos.services.timezone.now",
-            return_value=inicio + timedelta(minutes=5),
-        ):
-            nuevo = registrar_prestamo(
-                dni_prestatario=self.prestatario_estandar.dni,
+        with self.assertRaises(ReservaError) as error:
+            crear_reserva(
+                usuario=self.prestatario_estandar,
                 material_id=material.id,
-                reserva_id=reserva.id,
-                tiempo_prestamo_minutos=60,
-                checklist_inicial=CHECKLIST,
-                registrado_por=self.gestor,
+                justificacion="Quiero seguir usándolo",
+                fecha_inicio=inicio,
+                fecha_fin=fin,
             )
-        reserva.refresh_from_db()
-        self.assertEqual(reserva.estado, "convertida_en_prestamo")
-        self.assertEqual(nuevo.instancia_id, reserva.instancia_id)
+
+        self.assertEqual(error.exception.status_code, 409)
+        self.assertEqual(prestamo.estado, "activo")
+        self.assertFalse(Reserva.objects.filter(material=material).exists())
 
 
 class ReservasAPITestCase(APITestCase):
@@ -763,8 +570,12 @@ class ReservasAPITestCase(APITestCase):
         self.assertIn("fecha_fin", menor_1h.data)
         self.assertIn("1 hora (60 minutos)", str(menor_1h.data["fecha_fin"]))
 
-    def test_api_reserva_permite_cruzar_fin_de_semana_sin_consumir_tiempo_maximo_y_convertirse(self):
+    def test_api_reserva_permite_cruzar_fin_de_semana_y_cuenta_todos_los_dias_intermedios(self):
         self._autenticar(self.prestatario)
+        # Configurar tiempo máximo de al menos 4 días (5760 min) para permitir 72h
+        self.material.tiempo_maximo_prestamo = 5760
+        self.material.save(update_fields=["tiempo_maximo_prestamo", "updated_at"])
+
         viernes = timezone.localtime(timezone.now()).replace(
             hour=14, minute=0, second=0, microsecond=0
         ) + timedelta(days=1)
@@ -793,13 +604,113 @@ class ReservasAPITestCase(APITestCase):
                 dni_prestatario=self.prestatario.dni,
                 material_id=self.material.id,
                 reserva_id=reserva_id,
-                tiempo_prestamo_minutos=1440,
+                tiempo_prestamo_minutos=4320,
                 checklist_inicial=CHECKLIST,
                 registrado_por=self.gestor,
             )
-        self.assertEqual(prestamo.tiempo_prestamo_minutos, 1440)
+        # Los días intermedios (sábado y domingo) sí cuentan en la duración total (72 h = 4320 min)
+        self.assertEqual(prestamo.tiempo_prestamo_minutos, 4320)
         self.assertEqual(prestamo.fecha_entrega, viernes)
         self.assertEqual(prestamo.fecha_limite, lunes)
+
+    def test_reserva_rechaza_inicio_o_fin_en_sabado_o_domingo(self):
+        self._autenticar(self.prestatario)
+        sabado = timezone.localtime(timezone.now()).replace(hour=10, minute=0, second=0, microsecond=0) + timedelta(days=1)
+        while sabado.weekday() != 5:
+            sabado += timedelta(days=1)
+        lunes = sabado + timedelta(days=2)
+        viernes = sabado - timedelta(days=1)
+
+        # Inicio en sábado
+        resp_sab_inicio = self.client.post(
+            "/api/reservas/",
+            {
+                "material_id": str(self.material.id),
+                "justificacion": "Intento de reserva sábado",
+                "fecha_inicio": sabado.isoformat(),
+                "fecha_fin": lunes.isoformat(),
+            },
+            format="json",
+        )
+        self.assertEqual(resp_sab_inicio.status_code, 400)
+        self.assertIn("fecha_inicio", resp_sab_inicio.data)
+
+        # Fin en domingo
+        domingo = sabado + timedelta(days=1)
+        resp_dom_fin = self.client.post(
+            "/api/reservas/",
+            {
+                "material_id": str(self.material.id),
+                "justificacion": "Intento fin domingo",
+                "fecha_inicio": viernes.isoformat(),
+                "fecha_fin": domingo.isoformat(),
+            },
+            format="json",
+        )
+        self.assertEqual(resp_dom_fin.status_code, 400)
+        self.assertIn("fecha_fin", resp_dom_fin.data)
+
+    def test_reserva_rechaza_horario_fuera_de_atencion(self):
+        self._autenticar(self.prestatario)
+        lunes = timezone.localtime(timezone.now()).replace(hour=8, minute=30, second=0, microsecond=0) + timedelta(days=1)
+        while lunes.weekday() != 0:
+            lunes += timedelta(days=1)
+
+        # Inicio antes de las 09:00
+        resp = self.client.post(
+            "/api/reservas/",
+            {
+                "material_id": str(self.material.id),
+                "justificacion": "Muy temprano",
+                "fecha_inicio": lunes.isoformat(),
+                "fecha_fin": lunes.replace(hour=12).isoformat(),
+            },
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("fecha_inicio", resp.data)
+
+        # Fin después de las 17:00
+        resp_tarde = self.client.post(
+            "/api/reservas/",
+            {
+                "material_id": str(self.material.id),
+                "justificacion": "Muy tarde",
+                "fecha_inicio": lunes.replace(hour=10).isoformat(),
+                "fecha_fin": lunes.replace(hour=17, minute=30).isoformat(),
+            },
+            format="json",
+        )
+        self.assertEqual(resp_tarde.status_code, 400)
+        self.assertIn("fecha_fin", resp_tarde.data)
+
+    def test_reserva_fines_de_semana_intermedios_cuentan_hacia_limite_maximo(self):
+        self._autenticar(self.prestatario)
+        # Material con tiempo máximo de 48 horas (2880 min)
+        material_corto = crear_material(
+            codigo_material="EQ-CORTO-01",
+            stock=1,
+            tiempo_maximo_prestamo=2880,
+        )
+        viernes = timezone.localtime(timezone.now()).replace(hour=10, minute=0, second=0, microsecond=0) + timedelta(days=1)
+        while viernes.weekday() != 4:
+            viernes += timedelta(days=1)
+        # Viernes 10:00 a Lunes 10:00 = 72 horas corridas (4320 min) > 2880 min
+        lunes = viernes + timedelta(days=3)
+
+        resp = self.client.post(
+            "/api/reservas/",
+            {
+                "material_id": str(material_corto.id),
+                "justificacion": "Prueba duración corrida fin de semana",
+                "fecha_inicio": viernes.isoformat(),
+                "fecha_fin": lunes.isoformat(),
+            },
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("fecha_fin", resp.data)
+        self.assertIn("supera el tiempo máximo permitido", str(resp.data["fecha_fin"]))
 
     def test_endpoint_conversion_rechaza_reserva_vencida_o_sin_instancia(self):
         self._autenticar(self.prestatario)
@@ -925,25 +836,173 @@ class ReservasConcurrenciaTestCase(TransactionTestCase):
         self.u2 = crear_usuario("conc2@unsa.edu.pe", "40000002", reputacion_tier="estandar")
         self.material = crear_material(codigo_material="EQ-CONC-01", stock=1)
 
-    def test_dos_reservas_simultaneas_por_una_instancia_confirman_una_y_dejan_otra_en_espera(self):
+    def test_dos_reservas_simultaneas_confirman_una_y_rechazan_la_otra(self):
         barrera = Barrier(2)
 
         def solicitar(usuario):
             close_old_connections()
             try:
                 barrera.wait(timeout=5)
-                return crear_reserva(
-                    usuario=usuario,
-                    material_id=self.material.id,
-                    justificacion="Solicitud concurrente",
-                )
+                try:
+                    return crear_reserva(
+                        usuario=usuario,
+                        material_id=self.material.id,
+                        justificacion="Solicitud concurrente",
+                    )
+                except ReservaError:
+                    return None
             finally:
                 close_old_connections()
 
         with ThreadPoolExecutor(max_workers=2) as pool:
             resultados = list(pool.map(solicitar, [self.u1, self.u2]))
 
-        estados = sorted(r.estado for r in resultados)
-        self.assertEqual(estados, ["en_espera", "reservada"])
+        reservas_confirmadas = [reserva for reserva in resultados if reserva is not None]
+        rechazadas = sum(reserva is None for reserva in resultados)
+        self.assertEqual(len(reservas_confirmadas), 1)
+        self.assertEqual(rechazadas, 1)
+        self.assertEqual(reservas_confirmadas[0].estado, "reservada")
         instancia = InstanciaMaterial.objects.get(material=self.material)
         self.assertEqual(instancia.estado, "reservado")
+
+
+
+class ReservasCalendarioTestCase(APITestCase):
+    """Pruebas de disponibilidad temporal, solapamiento y reservas múltiples por calendario."""
+
+    def setUp(self):
+        self.prestatario_1 = crear_usuario("cal1@unsa.edu.pe", "45000001", reputacion_tier="estandar")
+        self.prestatario_2 = crear_usuario("cal2@unsa.edu.pe", "45000002", reputacion_tier="estandar")
+        self.prestatario_3 = crear_usuario("cal3@unsa.edu.pe", "45000003", reputacion_tier="estandar")
+        self.gestor = crear_usuario("gestor_cal@unsa.edu.pe", "45000004", rol_nombre="gestor")
+        self.material = crear_material(
+            codigo_material="CAL-01",
+            stock=1,
+            tier_minimo_requerido="estandar",
+            tiempo_maximo_prestamo=1440 * 7,
+        )
+
+    def test_multiples_reservas_en_distintas_fechas_confirman_sin_bloquearse(self):
+        """Un mismo ejemplar puede reservarse en distintas fechas no solapadas."""
+        hoy = timezone.localtime(timezone.now()).replace(second=0, microsecond=0)
+        proximo_lunes = hoy + timedelta(days=1)
+        while proximo_lunes.weekday() != 0:  # Buscar próximo lunes
+            proximo_lunes += timedelta(days=1)
+        proximo_lunes = proximo_lunes.replace(hour=10, minute=0)
+        lunes_fin = proximo_lunes.replace(hour=14, minute=0)
+
+        proximo_miercoles = proximo_lunes + timedelta(days=2)
+        miercoles_fin = proximo_miercoles.replace(hour=14, minute=0)
+
+        # Reserva 1 para el lunes (10:00 a 14:00)
+        reserva_1 = crear_reserva(
+            usuario=self.prestatario_1,
+            material_id=self.material.id,
+            justificacion="Proyecto lunes",
+            fecha_inicio=proximo_lunes,
+            fecha_fin=lunes_fin,
+        )
+        self.assertEqual(reserva_1.estado, "reservada")
+        self.assertIsNotNone(reserva_1.instancia)
+
+        # Reserva 2 para el miércoles (10:00 a 14:00) con otro prestatario sobre el MISMO material de stock 1
+        reserva_2 = crear_reserva(
+            usuario=self.prestatario_2,
+            material_id=self.material.id,
+            justificacion="Proyecto miércoles",
+            fecha_inicio=proximo_miercoles,
+            fecha_fin=miercoles_fin,
+        )
+        # Ambas deben quedar confirmadas sin enviarse a lista de espera
+        self.assertEqual(reserva_2.estado, "reservada")
+        self.assertEqual(reserva_1.instancia_id, reserva_2.instancia_id)
+
+        # Reserva 3 para el lunes compitiendo por la misma franja (11:00 a 15:00)
+        lunes_solapado_inicio = proximo_lunes.replace(hour=11, minute=0)
+        lunes_solapado_fin = proximo_lunes.replace(hour=15, minute=0)
+        with self.assertRaises(ReservaError) as error:
+            crear_reserva(
+                usuario=self.prestatario_3,
+                material_id=self.material.id,
+                justificacion="Intento solapado",
+                fecha_inicio=lunes_solapado_inicio,
+                fecha_fin=lunes_solapado_fin,
+            )
+        self.assertEqual(error.exception.status_code, 409)
+        self.assertEqual(Reserva.objects.filter(material=self.material).count(), 2)
+
+    def test_prestamo_directo_exitoso_si_no_choca_con_reserva_futura(self):
+        """Se puede prestar hoy un ejemplar si se devuelve antes de su próxima reserva."""
+        # Reserva confirmada para el próximo jueves laborable
+        hoy = timezone.localtime(timezone.now()).replace(second=0, microsecond=0)
+        fecha_reserva_inicio = hoy + timedelta(days=2)
+        while fecha_reserva_inicio.weekday() not in (1, 2, 3):  # Martes a Jueves
+            fecha_reserva_inicio += timedelta(days=1)
+        fecha_reserva_inicio = fecha_reserva_inicio.replace(hour=10, minute=0)
+        fecha_reserva_fin = fecha_reserva_inicio.replace(hour=14, minute=0)
+
+        reserva = crear_reserva(
+            usuario=self.prestatario_1,
+            material_id=self.material.id,
+            justificacion="Reserva la próxima semana",
+            fecha_inicio=fecha_reserva_inicio,
+            fecha_fin=fecha_reserva_fin,
+        )
+        self.assertEqual(reserva.estado, "reservada")
+
+        # Préstamo directo hoy por solo 2 horas (devuelve hoy mismo, mucho antes de la reserva)
+        checklist = [{"elemento": "Pantalla", "observacion": "OK"}]
+        prestamo = registrar_prestamo(
+            dni_prestatario=self.prestatario_2.dni,
+            material_id=self.material.id,
+            tiempo_prestamo_minutos=120,
+            checklist_inicial=checklist,
+            registrado_por=self.gestor,
+        )
+        self.assertEqual(prestamo.estado, "activo")
+        self.assertEqual(prestamo.instancia_id, reserva.instancia_id)
+
+    def test_prestamo_directo_rechazado_si_choca_con_reserva_futura(self):
+        """Se rechaza el préstamo si su duración sobrepasa el inicio de una reserva futura."""
+        from apps.prestamos.services import PrestamoError
+
+        # Reserva confirmada para dentro de un día laborable
+        hoy = timezone.localtime(timezone.now()).replace(second=0, microsecond=0)
+        reserva_inicio = hoy + timedelta(days=1)
+        while reserva_inicio.weekday() > 4:
+            reserva_inicio += timedelta(days=1)
+        reserva_inicio = reserva_inicio.replace(hour=10, minute=0)
+        reserva_fin = reserva_inicio.replace(hour=14, minute=0)
+
+        crear_reserva(
+            usuario=self.prestatario_1,
+            material_id=self.material.id,
+            justificacion="Reserva inminente",
+            fecha_inicio=reserva_inicio,
+            fecha_fin=reserva_fin,
+        )
+
+        # Intento de préstamo por 5 días (sobrepasaría el inicio de la reserva)
+        checklist = [{"elemento": "Pantalla", "observacion": "OK"}]
+        with self.assertRaises(PrestamoError) as ctx:
+            registrar_prestamo(
+                dni_prestatario=self.prestatario_2.dni,
+                material_id=self.material.id,
+                tiempo_prestamo_minutos=1440 * 5,
+                checklist_inicial=checklist,
+                registrado_por=self.gestor,
+            )
+        self.assertIn("reserva", ctx.exception.mensaje.lower())
+
+    def test_api_disponibilidad_calendario(self):
+        """El endpoint de disponibilidad devuelve los días y franjas ocupadas correctamente."""
+        url = f"/api/materiales/{self.material.id}/disponibilidad/"
+        respuesta = self.client.get(url)
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertIn("total_ejemplares", respuesta.data)
+        self.assertIn("dias", respuesta.data)
+        self.assertGreaterEqual(len(respuesta.data["dias"]), 1)
+        primer_dia = respuesta.data["dias"][0]
+        self.assertIn("fecha", primer_dia)
+        self.assertIn("disponible", primer_dia)
+        self.assertIn("ejemplares_libres", primer_dia)

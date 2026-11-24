@@ -253,3 +253,29 @@ class RechazarReservaView(APIView):
             )
 
         return Response(ReservaDetalleSerializer(reserva).data)
+
+
+class DisponibilidadMaterialView(APIView):
+    """Consulta la disponibilidad de un material en un rango de fechas para el calendario: GET /api/materiales/<id>/disponibilidad/."""
+
+    permission_classes = []
+
+    def get(self, request, material_id):
+        from apps.inventario.models import Material
+        from apps.reservas.disponibilidad import consultar_disponibilidad_calendario
+
+        desde = request.query_params.get("desde")
+        hasta = request.query_params.get("hasta")
+        try:
+            datos = consultar_disponibilidad_calendario(material_id, desde=desde, hasta=hasta)
+            return Response(datos, status=status.HTTP_200_OK)
+        except Material.DoesNotExist:
+            return Response(
+                {"detail": "No existe el material indicado."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except ValueError as error:
+            return Response(
+                {"detail": f"Formato de fecha inválido: {error}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )

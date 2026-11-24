@@ -2,7 +2,6 @@ import { useContext, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
 import {
   CheckCircle2,
-  Clock,
   FileText,
   PackageCheck,
   RefreshCw,
@@ -11,10 +10,13 @@ import {
   XCircle,
 } from 'lucide-react'
 
+import { Calendar } from 'lucide-react'
+
 import { api, ErrorApi } from '../api/client'
 import BadgeEstado from '../components/ui/BadgeEstado'
 import Boton from '../components/ui/Boton'
 import ErrorAlerta from '../components/ui/ErrorAlerta'
+import ErrorModal from '../components/ui/ErrorModal'
 import EstadoVacio from '../components/ui/EstadoVacio'
 import Skeleton from '../components/ui/Skeleton'
 import Tarjeta from '../components/ui/Tarjeta'
@@ -23,9 +25,9 @@ import SesionContext from '../contextos/SesionContext'
 import useTituloPagina from '../hooks/useTituloPagina'
 import {
   formatearFechaReserva,
-  ordenarColaReservas,
   textoEstadoReserva,
 } from '../reservas/estadoReserva'
+import CalendarioDisponibilidad from '../components/reservas/CalendarioDisponibilidad'
 
 function extraerMensajeError(error, porDefecto) {
   if (error instanceof ErrorApi && error.datos) {
@@ -37,7 +39,7 @@ function extraerMensajeError(error, porDefecto) {
 }
 
 export default function ColaReservas() {
-  useTituloPagina('Cola de reservas')
+  useTituloPagina('Gestión de reservas')
   const { usuario } = useContext(SesionContext)
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -156,7 +158,7 @@ export default function ColaReservas() {
         )
       } else {
         setMensajeExito(
-          `Excepción académica aprobada para ${reserva.usuario?.nombre_completo || reserva.usuario?.dni}. Ha ingresado a la lista de espera con turno por orden de llegada.`,
+          `La solicitud de excepción de ${reserva.usuario?.nombre_completo || reserva.usuario?.dni} fue aprobada.`,
         )
       }
       setRecarga((v) => v + 1)
@@ -178,11 +180,11 @@ export default function ColaReservas() {
 
     const motivoLimpio = motivoTexto.trim()
     if (!motivoLimpio) {
-      setErrorMotivo(
-        accionConMotivo.tipo === 'rechazar'
-          ? 'El motivo de rechazo es obligatorio.'
-          : 'El motivo de cancelación es obligatorio.',
-      )
+      const mensaje = accionConMotivo.tipo === 'rechazar'
+        ? 'El motivo de rechazo es obligatorio.'
+        : 'El motivo de cancelación es obligatorio.'
+      setErrorMotivo(mensaje)
+      setErrorAccion(mensaje)
       return
     }
 
@@ -196,7 +198,7 @@ export default function ColaReservas() {
         await api.post(`/reservas/${accionConMotivo.id}/rechazar/`, {
           motivo: motivoLimpio,
         })
-        setMensajeExito('La solicitud en espera fue rechazada correctamente.')
+        setMensajeExito('La solicitud de excepción fue rechazada correctamente.')
       } else {
         await api.post(`/reservas/${accionConMotivo.id}/cancelar/`, {
           motivo: motivoLimpio,
@@ -223,7 +225,7 @@ export default function ColaReservas() {
   if (cargandoMateriales) {
     return (
       <div className="space-y-3" role="status" aria-live="polite">
-        <p className="text-sm text-texto-suave">Cargando materiales y colas de reserva…</p>
+        <p className="text-sm text-texto-suave">Cargando materiales y reservas…</p>
         <Skeleton className="h-24 rounded-xl" />
         <Skeleton className="h-44 rounded-xl" />
       </div>
@@ -234,7 +236,6 @@ export default function ColaReservas() {
     return <ErrorAlerta mensaje={errorMateriales} />
   }
 
-  const enEsperaNormales = ordenarColaReservas(cola?.en_espera_normales || [])
   const enEsperaExcepciones = cola?.en_espera_excepciones || []
   const reservasConfirmadas = cola?.reservas_confirmadas || []
   const instanciasDisponibles = cola?.instancias_disponibles || []
@@ -244,10 +245,10 @@ export default function ColaReservas() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 id="titulo-cola-reservas" className="text-xl font-bold text-texto">
-            Cola de reservas y excepciones por material
+            Gestión de reservas y agenda por material
           </h2>
           <p className="mt-1 text-sm text-texto-suave">
-            Consulta las solicitudes en lista de espera, evalúa excepciones académicas y administra las reservas confirmadas.
+            Consulta el calendario de disponibilidad, evalúa excepciones académicas y administra las reservas confirmadas. Las reservas se gestionan por fechas: un mismo ejemplar puede tener múltiples reservas en distintas temporadas.
           </p>
         </div>
         <Boton
@@ -257,7 +258,7 @@ export default function ColaReservas() {
           onClick={() => setRecarga((v) => v + 1)}
           deshabilitado={cargandoCola}
         >
-          Actualizar cola
+          Actualizar
         </Boton>
       </div>
 
@@ -323,7 +324,13 @@ export default function ColaReservas() {
         </div>
       )}
 
-      {errorAccion && <ErrorAlerta mensaje={errorAccion} />}
+      {errorAccion && (
+        <ErrorModal
+          titulo="No se pudo completar la acción"
+          mensaje={errorAccion}
+          onCerrar={() => setErrorAccion('')}
+        />
+      )}
 
       {/* Modal/Panel para ingresar motivo de rechazo o cancelación */}
       {accionConMotivo && (
@@ -331,7 +338,7 @@ export default function ColaReservas() {
           <form onSubmit={confirmarAccionConMotivo} className="space-y-3" noValidate>
             <h3 className="text-sm font-bold text-texto">
               {accionConMotivo.tipo === 'rechazar'
-                ? `Rechazar solicitud en espera (${accionConMotivo.etiqueta})`
+                ? `Rechazar solicitud de excepción (${accionConMotivo.etiqueta})`
                 : `Cancelar reserva confirmada (${accionConMotivo.etiqueta})`}
             </h3>
             <div>
@@ -417,7 +424,7 @@ export default function ColaReservas() {
                   </span>
                 )}
                 <span className="rounded-lg bg-amber-100 px-3 py-1 text-amber-900 dark:bg-amber-950/60 dark:text-amber-200">
-                  {enEsperaNormales.length + enEsperaExcepciones.length} en espera
+                  {enEsperaExcepciones.length} excepciones pendientes
                 </span>
                 <span className="rounded-lg bg-acento-100 px-3 py-1 text-acento-900 dark:bg-acento-950/60 dark:text-acento-200">
                   {reservasConfirmadas.length} reservada(s)
@@ -428,11 +435,11 @@ export default function ColaReservas() {
             {cola.material && (
               <div>
                 <p className="text-xs font-semibold text-texto-suave">
-                  Ejemplares físicos disponibles actualmente:
+                  Ejemplares físicos disponibles (sin préstamo activo):
                 </p>
                 {instanciasDisponibles.length === 0 ? (
                   <p className="mt-1 text-xs text-texto-suave">
-                    No hay ejemplares en estado Disponible en este momento.
+                    No hay ejemplares en estado Disponible en este momento (pueden tener reservas futuras programadas).
                   </p>
                 ) : (
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -451,14 +458,29 @@ export default function ColaReservas() {
             )}
           </Tarjeta>
 
-          {/* 1. Excepciones académicas en espera */}
+          {/* Calendario de disponibilidad del material seleccionado */}
+          {materialIdSeleccionado && (
+            <Tarjeta className="p-5 space-y-3">
+              <h3 className="flex items-center gap-2 text-base font-bold text-texto">
+                <Calendar aria-hidden="true" className="size-5 text-acento-600 dark:text-acento-400" />
+                Disponibilidad por fechas
+              </h3>
+              <p className="text-xs text-texto-suave">
+                Vista del calendario de ocupación del material. Los días en verde tienen al menos un
+                ejemplar libre; los días en rojo están completamente reservados o prestados.
+              </p>
+              <CalendarioDisponibilidad materialId={materialIdSeleccionado} />
+            </Tarjeta>
+          )}
+
+          {/* Excepciones académicas pendientes de revisión */}
           <section aria-labelledby="subtitulo-excepciones" className="space-y-3">
             <h3
               id="subtitulo-excepciones"
               className="flex items-center gap-2 text-base font-bold text-texto"
             >
               <ShieldAlert aria-hidden="true" className="size-5 text-amber-600" />
-              Solicitudes de Excepción Académica pendientes ({enEsperaExcepciones.length})
+              Excepciones académicas pendientes de revisión ({enEsperaExcepciones.length})
             </h3>
             {enEsperaExcepciones.length === 0 ? (
               <p className="rounded-xl border border-borde bg-superficie p-4 text-sm text-texto-suave">
@@ -491,8 +513,9 @@ export default function ColaReservas() {
                             </p>
                           )}
                           <p className="mt-1 text-xs text-texto-suave">
-                            Solicitada: {formatearFechaReserva(reserva.fecha_solicitud || reserva.fecha_creacion || reserva.created_at)} · Expira
-                            en espera: {formatearFechaReserva(reserva.fecha_limite_espera)}
+                            Solicitada: {formatearFechaReserva(reserva.fecha_solicitud || reserva.fecha_creacion || reserva.created_at)}
+                            {' · Límite de revisión: '}
+                            {formatearFechaReserva(reserva.fecha_limite_espera)}
                           </p>
                         </div>
                         <BadgeEstado
@@ -583,94 +606,7 @@ export default function ColaReservas() {
             )}
           </section>
 
-          {/* 2. Cola de espera normal */}
-          <section aria-labelledby="subtitulo-cola-normal" className="space-y-3">
-            <h3
-              id="subtitulo-cola-normal"
-              className="flex items-center gap-2 text-base font-bold text-texto"
-            >
-              <Clock aria-hidden="true" className="size-5 text-acento-600" />
-              Cola de espera ordenada ({enEsperaNormales.length})
-            </h3>
-            {enEsperaNormales.length === 0 ? (
-              <p className="rounded-xl border border-borde bg-superficie p-4 text-sm text-texto-suave">
-                No hay solicitudes en lista de espera para este material.
-              </p>
-            ) : (
-              <ul className="grid gap-3">
-                {enEsperaNormales.map((reserva, indice) => (
-                  <li key={reserva.id}>
-                    <Tarjeta className="p-4 space-y-2.5">
-                      <div className="flex flex-wrap items-start justify-between gap-2">
-                        <div className="flex items-start gap-3">
-                          <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-acento-100 text-xs font-bold text-acento-900 dark:bg-acento-950 dark:text-acento-200">
-                            #{reserva.posicion_cola || indice + 1}
-                          </span>
-                          <div>
-                            <div className="flex flex-wrap items-center gap-2">
-                              <p className="font-bold text-texto">
-                                {reserva.usuario?.nombre_completo}{' '}
-                                <span className="font-normal text-xs text-texto-suave">
-                                  · DNI {reserva.usuario?.dni} · Tier{' '}
-                                  {ETIQUETAS_TIER[reserva.usuario?.reputacion_tier] ||
-                                    reserva.usuario?.reputacion_tier}{' '}
-                                  ({reserva.usuario?.reputacion_puntaje} pts)
-                                </span>
-                              </p>
-                              {reserva.es_excepcion && (
-                                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900 dark:bg-amber-950/60 dark:text-amber-200">
-                                  Excepción aprobada
-                                </span>
-                              )}
-                            </div>
-                            {reserva.material && (
-                              <p className="mt-0.5 text-xs font-semibold text-acento-700 dark:text-acento-300">
-                                Material: {reserva.material.nombre} ({reserva.material.codigo_material})
-                              </p>
-                            )}
-                            <p className="text-xs text-texto-suave">
-                              Creada: {formatearFechaReserva(reserva.fecha_solicitud || reserva.fecha_creacion || reserva.created_at)} · Expira:{' '}
-                              {formatearFechaReserva(reserva.fecha_limite_espera)}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <BadgeEstado estado={reserva.estado} />
-                          {esGestor && (
-                            <Boton
-                              variante="peligro"
-                              tamanio="pequeno"
-                              icono={XCircle}
-                              deshabilitado={Boolean(procesandoId)}
-                              onClick={() => {
-                                setAccionConMotivo({
-                                  id: reserva.id,
-                                  tipo: 'rechazar',
-                                  etiqueta: reserva.usuario?.nombre_completo || reserva.id,
-                                })
-                                setMotivoTexto('')
-                                setErrorMotivo('')
-                              }}
-                            >
-                              Rechazar
-                            </Boton>
-                          )}
-                        </div>
-                      </div>
-
-                      <p className="rounded-lg bg-superficie-alta/40 p-2.5 text-sm text-texto">
-                        <span className="font-semibold">Justificación:</span>{' '}
-                        {reserva.justificacion}
-                      </p>
-                    </Tarjeta>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-
-          {/* 3. Reservas confirmadas vigentes */}
+          {/* Reservas confirmadas vigentes */}
           <section aria-labelledby="subtitulo-confirmadas" className="space-y-3">
             <h3
               id="subtitulo-confirmadas"

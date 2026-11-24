@@ -1590,15 +1590,21 @@ class RegistrarPrestamoAPITestCase(APITestCase):
         sesion[CLAVE_SESION_ULTIMA_ACTIVIDAD] = timezone.now().isoformat()
         sesion.save()
 
+    def _calcular_fecha_fin_valida(self, dias=2):
+        fecha = timezone.localtime(timezone.now()).replace(hour=14, minute=0, second=0, microsecond=0) + timedelta(days=dias)
+        while fecha.weekday() not in (0, 1, 2, 3, 4):
+            fecha += timedelta(days=1)
+        return fecha.isoformat()
+
     def _payload(self, **cambios):
         if "fecha_fin" in cambios:
             fecha_fin = cambios["fecha_fin"]
         elif "tiempo_prestamo_minutos" in cambios and isinstance(cambios["tiempo_prestamo_minutos"], (int, float)):
-            fecha_fin = (timezone.now() + timedelta(minutes=cambios["tiempo_prestamo_minutos"] + 1)).isoformat()
+            fecha_fin = self._calcular_fecha_fin_valida(dias=1)
         elif "tiempo_prestamo_dias" in cambios and isinstance(cambios["tiempo_prestamo_dias"], (int, float)) and cambios["tiempo_prestamo_dias"] > 0:
-            fecha_fin = (timezone.now() + timedelta(days=cambios["tiempo_prestamo_dias"])).isoformat()
+            fecha_fin = self._calcular_fecha_fin_valida(dias=int(cambios["tiempo_prestamo_dias"]))
         else:
-            fecha_fin = (timezone.now() + timedelta(days=3)).isoformat()
+            fecha_fin = self._calcular_fecha_fin_valida(dias=3)
         datos = {
             "dni_prestatario": self.prestatario.dni,
             "material_id": str(self.material.id),
@@ -1742,6 +1748,36 @@ class RegistrarPrestamoAPITestCase(APITestCase):
         self.assertEqual(respuesta.status_code, 400)
         self.assertIn("8 h (480 min)", str(respuesta.json()["tiempo_prestamo_minutos"]))
         self.assertEqual(Prestamo.objects.count(), 0)
+
+    def test_post_rechaza_fecha_fin_en_sabado_o_domingo(self):
+        self._iniciar_sesion(self.gestor)
+        sabado = timezone.localtime(timezone.now()).replace(hour=14, minute=0, second=0, microsecond=0) + timedelta(days=1)
+        while sabado.weekday() != 5:
+            sabado += timedelta(days=1)
+
+        respuesta = self.client.post(
+            self.URL,
+            self._payload_multipart(fecha_fin=sabado.isoformat()),
+            format="multipart",
+        )
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn("fecha_fin", respuesta.json())
+        self.assertIn("laborable", str(respuesta.json()["fecha_fin"]))
+
+    def test_post_rechaza_fecha_fin_fuera_de_horario_atencion(self):
+        self._iniciar_sesion(self.gestor)
+        lunes = timezone.localtime(timezone.now()).replace(hour=18, minute=30, second=0, microsecond=0) + timedelta(days=1)
+        while lunes.weekday() != 0:
+            lunes += timedelta(days=1)
+
+        respuesta = self.client.post(
+            self.URL,
+            self._payload_multipart(fecha_fin=lunes.isoformat()),
+            format="multipart",
+        )
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn("fecha_fin", respuesta.json())
+        self.assertIn("horario de devolución", str(respuesta.json()["fecha_fin"]))
 
     def test_post_multipart_registra_garantia_y_parsea_checklist_json(self):
         self._iniciar_sesion(self.gestor)
@@ -1961,6 +1997,177 @@ class RegistrarPrestamoAPITestCase(APITestCase):
         )
 
         self.assertEqual(respuesta.status_code, 403)
+        self.assertEqual(Prestamo.objects.count(), 0)
+
+    def _crear_reserva_confirmada_hoy(self, hora_inicio=9, hora_fin=17):
+        """Crea una reserva en estado 'reservada' cuya fecha_inicio es hoy."""
+        from datetime import datetime, time as dtime
+        from apps.reservas.models import Reserva
+
+        hoy = timezone.localtime(timezone.now()).date()
+        tz = timezone.get_current_timezone()
+        inicio = timezone.make_aware(datetime.combine(hoy, dtime(hora_inicio, 0)), tz)
+        fin = timezone.make_aware(datetime.combine(hoy, dtime(hora_fin, 0)), tz)
+        instancia = self.material.instancias.get()
+        reserva = Reserva.objects.create(
+            usuario=self.prestatario,
+            material=self.material,
+            instancia=instancia,
+            fecha_inicio=inicio,
+            fecha_fin=fin,
+            estado="reservada",
+            fecha_confirmacion=timezone.now() - timedelta(hours=1),
+            fecha_limite_recojo=fin,
+            justificacion="Test conversión mismo día",
+        )
+        instancia.estado = "reservado"
+        instancia.save(update_fields=["estado", "updated_at"])
+        return reserva
+
+    def _crear_reserva_confirmada_manana(self):
+        """Crea una reserva en estado 'reservada' cuya fecha_inicio es mañana."""
+        from datetime import datetime, time as dtime
+        from apps.reservas.models import Reserva
+
+        manana = timezone.localtime(timezone.now()).date() + timedelta(days=1)
+        # Ajustar al primer día laborable si mañana es fin de semana
+        while manana.weekday() >= 5:
+            manana += timedelta(days=1)
+        tz = timezone.get_current_timezone()
+        inicio = timezone.make_aware(datetime.combine(manana, dtime(9, 0)), tz)
+        fin = timezone.make_aware(datetime.combine(manana, dtime(17, 0)), tz)
+        instancia = self.material.instancias.get()
+        reserva = Reserva.objects.create(
+            usuario=self.prestatario,
+            material=self.material,
+            instancia=instancia,
+            fecha_inicio=inicio,
+            fecha_fin=fin,
+            estado="reservada",
+            fecha_confirmacion=timezone.now(),
+            fecha_limite_recojo=fin,
+            justificacion="Test conversión día futuro",
+        )
+        instancia.estado = "reservado"
+        instancia.save(update_fields=["estado", "updated_at"])
+        return reserva
+
+    def _crear_reserva_confirmada_ayer(self):
+        """
+        Crea una reserva en estado 'reservada' cuya fecha_inicio fue ayer
+        pero cuyo fecha_limite_recojo sigue vigente (dentro de las próximas horas).
+        Esto permite probar la validación del mismo día: ahora > fecha_inicio (pasa),
+        pero hoy != ayer.date() → debe fallar con 409.
+        """
+        from datetime import datetime, time as dtime
+        from apps.reservas.models import Reserva
+
+        ayer = timezone.localtime(timezone.now()).date() - timedelta(days=1)
+        # Ajustar al primer día laborable si ayer fue fin de semana
+        while ayer.weekday() >= 5:
+            ayer -= timedelta(days=1)
+        tz = timezone.get_current_timezone()
+        inicio = timezone.make_aware(datetime.combine(ayer, dtime(9, 0)), tz)
+        fin = timezone.make_aware(datetime.combine(ayer, dtime(17, 0)), tz)
+        instancia = self.material.instancias.get()
+        reserva = Reserva.objects.create(
+            usuario=self.prestatario,
+            material=self.material,
+            instancia=instancia,
+            fecha_inicio=inicio,
+            fecha_fin=fin,
+            estado="reservada",
+            fecha_confirmacion=inicio - timedelta(hours=2),
+            # fecha_limite_recojo: dentro de 1 hora, así la reserva sigue "vigente"
+            fecha_limite_recojo=timezone.now() + timedelta(hours=1),
+            justificacion="Test conversión día diferente",
+        )
+        instancia.estado = "reservado"
+        instancia.save(update_fields=["estado", "updated_at"])
+        return reserva
+
+    def test_post_conversion_rechaza_si_fecha_inicio_es_dia_diferente(self):
+        """
+        No se puede convertir una reserva cuyo fecha_inicio fue en un día diferente a hoy (409).
+        La reserva sigue vigente (fecha_limite_recojo en el futuro) pero el día de inicio
+        ya pasó y no es el día de hoy.
+        """
+        self._iniciar_sesion(self.gestor)
+        reserva = self._crear_reserva_confirmada_ayer()
+        instancia = self.material.instancias.get()
+
+        datos = self._payload_multipart(
+            reserva_id=str(reserva.id),
+            instancia_id=str(instancia.id),
+            material_id=str(self.material.id),
+            tiempo_prestamo_minutos=4320,
+        )
+
+        respuesta = self.client.post(self.URL, datos, format="multipart")
+
+        self.assertEqual(respuesta.status_code, 409, respuesta.content)
+        self.assertIn("reserva_id", respuesta.json())
+        self.assertIn("día de inicio reservado", str(respuesta.json()["reserva_id"]))
+        self.assertEqual(Prestamo.objects.count(), 0)
+
+    def test_post_conversion_acepta_si_fecha_inicio_es_hoy(self):
+        """La conversión es válida cuando fecha_inicio.date() == hoy."""
+        self._iniciar_sesion(self.gestor)
+        reserva = self._crear_reserva_confirmada_hoy(hora_inicio=9, hora_fin=17)
+        instancia = self.material.instancias.get()
+
+        datos = self._payload_multipart(
+            reserva_id=str(reserva.id),
+            instancia_id=str(instancia.id),
+            material_id=str(self.material.id),
+            tiempo_prestamo_minutos=4320,
+        )
+
+        with storage_garantias_temporal():
+            respuesta = self.client.post(self.URL, datos, format="multipart")
+
+        self.assertEqual(respuesta.status_code, 201, respuesta.content)
+        self.assertEqual(Prestamo.objects.count(), 1)
+        self.assertEqual(str(respuesta.json()["reserva_id"]), str(reserva.id))
+
+    def test_post_conversion_rechaza_si_hoy_aun_no_llega_hora_de_inicio(self):
+        """Una fecha que coincide no basta: la hora reservada también debe haber llegado."""
+        from datetime import datetime, time as dtime
+        from apps.reservas.models import Reserva
+
+        self._iniciar_sesion(self.gestor)
+        hoy = timezone.localtime(timezone.now()).date()
+        tz = timezone.get_current_timezone()
+        inicio = timezone.make_aware(datetime.combine(hoy, dtime(15, 0)), tz)
+        fin = timezone.make_aware(datetime.combine(hoy, dtime(17, 0)), tz)
+        instancia = self.material.instancias.get()
+        reserva = Reserva.objects.create(
+            usuario=self.prestatario,
+            material=self.material,
+            instancia=instancia,
+            fecha_inicio=inicio,
+            fecha_fin=fin,
+            estado="reservada",
+            fecha_confirmacion=timezone.now(),
+            fecha_limite_recojo=fin,
+            justificacion="Test antes de la hora reservada",
+        )
+        instancia.estado = "reservado"
+        instancia.save(update_fields=["estado", "updated_at"])
+        with patch("apps.prestamos.services.timezone.now", return_value=inicio - timedelta(minutes=1)):
+            with self.assertRaises(PrestamoError) as error:
+                registrar_prestamo(
+                    dni_prestatario=self.prestatario.dni,
+                    material_id=self.material.id,
+                    instancia_id=instancia.id,
+                    reserva_id=reserva.id,
+                    tiempo_prestamo_minutos=120,
+                    checklist_inicial=CHECKLIST,
+                    registrado_por=self.gestor,
+                )
+
+        self.assertEqual(error.exception.status_code, 409)
+        self.assertIn("antes de la fecha de inicio", error.exception.mensaje)
         self.assertEqual(Prestamo.objects.count(), 0)
 
 

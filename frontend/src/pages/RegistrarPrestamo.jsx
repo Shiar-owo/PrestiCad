@@ -24,10 +24,12 @@ import Boton from '../components/ui/Boton'
 import Tarjeta from '../components/ui/Tarjeta'
 import Skeleton from '../components/ui/Skeleton'
 import ErrorAlerta from '../components/ui/ErrorAlerta'
+import ErrorModal from '../components/ui/ErrorModal'
 import EstadoVacio from '../components/ui/EstadoVacio'
 import SubidaDocumentoPDF from '../components/prestamos/SubidaDocumentoPDF'
 import SelectorPrestatario from '../components/prestamos/SelectorPrestatario'
 import AdvertenciaModal from '../components/ui/AdvertenciaModal'
+import SelectorFechaHoraDesplegable from '../components/ui/SelectorFechaHoraDesplegable'
 import { TAMANO_MAXIMO_GARANTIA_MB } from '../constantes/garantia'
 import { esMaterialAltoValor } from '../constantes/catalogo'
 import {
@@ -43,6 +45,7 @@ import {
 import {
   calcularMinutosHabilesReserva,
   cruzaFinDeSemana,
+  puedeEntregarseReservaAhora,
 } from '../reservas/estadoReserva'
 
 const FORMULARIO_INICIAL = {
@@ -54,6 +57,13 @@ const FORMULARIO_INICIAL = {
   documentoIdentidad: null,
   compromisoResponsabilidad: null,
   esExcepcion: false,
+}
+
+function listarMensajesError(valor) {
+  if (typeof valor === 'string') return valor.trim() ? [valor.trim()] : []
+  if (Array.isArray(valor)) return valor.flatMap(listarMensajesError)
+  if (valor && typeof valor === 'object') return Object.values(valor).flatMap(listarMensajesError)
+  return []
 }
 
 const NIVEL_TIER = { restringido: 0, estandar: 1, avanzado: 2 }
@@ -101,7 +111,7 @@ const OPCIONES_MATERIAL = (materiales) => [
   { valor: '', etiqueta: 'Selecciona un material' },
   ...materiales.map((material) => ({
     valor: String(material.id),
-    etiqueta: `${material.nombre} — Código de Material: ${material.codigo_material || material.codigo_inventario} (${material.unidades_disponibles} disponibles)`,
+    etiqueta: `${material.nombre} — Código de Material: ${material.codigo_material || material.codigo_inventario} (${material.unidades_disponibles} libres ahora${Number(material.resumen_instancias?.reservado) > 0 ? `, ${material.resumen_instancias.reservado} con reservas futuras` : ''})`,
   })),
 ]
 
@@ -120,7 +130,15 @@ function RegistrarPrestamo() {
   const [cargandoReservaConversion, setCargandoReservaConversion] = useState(esConversionFija)
   const [errorReservaConversion, setErrorReservaConversion] = useState('')
   const [fechaInicioPrestamo, setFechaInicioPrestamo] = useState(() => fechaParaCalendario())
-  const [fechaFinPrestamo, setFechaFinPrestamo] = useState(() => fechaParaCalendario(Date.now() + 120 * 60000))
+  const [fechaFinPrestamo, setFechaFinPrestamo] = useState(() => {
+    const fin = new Date()
+    fin.setDate(fin.getDate() + 1)
+    while (fin.getDay() === 0 || fin.getDay() === 6) {
+      fin.setDate(fin.getDate() + 1)
+    }
+    fin.setHours(17, 0, 0, 0)
+    return fechaParaCalendario(fin)
+  })
   const [formulario, setFormulario] = useState(() => ({
     ...FORMULARIO_INICIAL,
     dni: dniInicial,
@@ -130,6 +148,7 @@ function RegistrarPrestamo() {
   const [cargandoInstancias, setCargandoInstancias] = useState(false)
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
+  const [errorConfirmacion, setErrorConfirmacion] = useState('')
   const [errorInstancias, setErrorInstancias] = useState('')
   const [errores, setErrores] = useState({})
   const [prestamoCreado, setPrestamoCreado] = useState(null)
@@ -138,6 +157,7 @@ function RegistrarPrestamo() {
   const [consultandoPerfil, setConsultandoPerfil] = useState(false)
   const [errorPerfil, setErrorPerfil] = useState('')
   const [elementosSinFoto, setElementosSinFoto] = useState(null)
+  const [advertenciaFechaHoraReserva, setAdvertenciaFechaHoraReserva] = useState(false)
   const referenciaFormulario = useRef(null)
   const referenciasFotos = useRef([])
   const urlsTemporales = useRef(new Set())
@@ -279,9 +299,14 @@ function RegistrarPrestamo() {
     }
 
     setCargandoInstancias(true)
-    api.get(`/materiales/${formulario.materialId}/instancias/?estado=disponible`)
+    api.get(`/materiales/${formulario.materialId}/instancias/`)
       .then((resultado) => {
-        if (!cancelado) setInstancias(resultado)
+        if (!cancelado) {
+          const lista = Array.isArray(resultado)
+            ? resultado.filter((inst) => ['disponible', 'reservado'].includes(inst.estado))
+            : []
+          setInstancias(lista)
+        }
       })
       .catch(() => {
         if (!cancelado) setErrorInstancias('No se pudieron cargar las instancias disponibles.')
@@ -301,7 +326,8 @@ function RegistrarPrestamo() {
     try {
       const resultado = await api.get('/materiales/')
       setMateriales(resultado.filter((material) => (
-        material.estado === 'disponible' && Number(material.unidades_disponibles) > 0
+        (material.estado === 'disponible' && Number(material.unidades_disponibles) > 0) ||
+        (material.estado === 'reservado' && Number(material.resumen_instancias?.reservado) > 0)
       )))
     } catch {
       setError('No se pudo cargar el inventario disponible.')
@@ -329,7 +355,7 @@ function RegistrarPrestamo() {
   )
   const perfilHabilitado = perfilVerificadoActual?.rol === 'prestatario' && perfilVerificadoActual?.estado === 'activo'
   const puedeSolicitarExcepcion = Boolean(
-    perfilHabilitado && materialSeleccionado && !tierCumple
+    !reservaSeleccionada && perfilHabilitado && materialSeleccionado && !tierCumple
     && ['restringido', 'estandar'].includes(perfilVerificadoActual?.reputacion_tier),
   )
   const excepcionActiva = Boolean(
@@ -390,14 +416,8 @@ function RegistrarPrestamo() {
     setPrestamoCreado(null)
   }
 
-  function desvincularReserva() {
-    setReservaFija(null)
-    setSearchParams(formulario.dni ? { dni: formulario.dni } : {})
-    seleccionarReserva('')
-  }
-
   function actualizar(campo, valor) {
-    if (campo === 'dni' && reservaSeleccionada) return
+    if (['dni', 'materialId', 'instanciaId', 'esExcepcion'].includes(campo) && reservaSeleccionada) return
     const camposError = {
       dni: 'dni',
       materialId: 'material',
@@ -511,7 +531,15 @@ function RegistrarPrestamo() {
 
   async function registrar(evento) {
     evento.preventDefault()
+    setErrorConfirmacion('')
     if (bloqueadoPorElegibilidad || bloqueadoPorReservaConversion) return
+    if (
+      reservaSeleccionada
+      && !puedeEntregarseReservaAhora(reservaSeleccionada.fecha_inicio, new Date())
+    ) {
+      setAdvertenciaFechaHoraReserva(true)
+      return
+    }
     const duracionMinutos = calcularMinutosEntreFechas(fechaInicioPrestamo, fechaFinPrestamo)
     const datosValidacion = {
       dni: formulario.dni,
@@ -524,6 +552,7 @@ function RegistrarPrestamo() {
       compromisoResponsabilidad: formulario.compromisoResponsabilidad,
       esExcepcion: excepcionActiva,
       garantiaReutilizada,
+      fechaFin: duracionBloqueadaPorReserva ? null : fechaFinPrestamo,
     }
     const validacion = validarFormularioPrestamo(datosValidacion)
     setErrores(validacion)
@@ -532,6 +561,10 @@ function RegistrarPrestamo() {
     const fotosFaltantes = obtenerElementosSinFoto(formulario.checklist)
     setElementosSinFoto(fotosFaltantes.length > 0 ? fotosFaltantes : null)
     if (Object.keys(validacion).length > 0) {
+      const mensajes = listarMensajesError(validacion)
+      if (mensajes.length) {
+        setErrorConfirmacion([...new Set(mensajes)].join('\n'))
+      }
       if (fotosFaltantes.length === 0) enfocarPrimerError()
       return
     }
@@ -553,7 +586,7 @@ function RegistrarPrestamo() {
       })
       const errorTamano = validarTamanoSolicitud(solicitud)
       if (errorTamano) {
-        setError(errorTamano)
+        setErrorConfirmacion(errorTamano)
         return
       }
       const respuesta = await api.post(
@@ -597,10 +630,14 @@ function RegistrarPrestamo() {
           ...erroresDeCampo,
           fotosChecklist: { ...actual.fotosChecklist, ...erroresFotosApi },
         }))
-        setError('')
+        const mensajes = [
+          ...Object.values(erroresDeCampo),
+          ...Object.values(erroresFotosApi),
+        ]
+        setErrorConfirmacion([...new Set(mensajes)].join('\n') || mensajeApi(errorApi))
         enfocarPrimerError()
       } else {
-        setError(mensajeApi(errorApi))
+        setErrorConfirmacion(mensajeApi(errorApi))
       }
     } finally {
       setGuardando(false)
@@ -688,47 +725,55 @@ function RegistrarPrestamo() {
                   requerido
                 />
 
-                {(opcionesReservas.length > 0 || reservaSeleccionada) && (
+                {esConversionFija && reservaSeleccionada ? (
+                  <div className="rounded-xl border border-marca-300 bg-marca-50/50 p-4 space-y-2.5 shadow-xs dark:border-marca-800 dark:bg-marca-950/30">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-marca-200/60 pb-2 dark:border-marca-800/60">
+                      <span className="block text-xs font-bold uppercase tracking-wider text-marca-900 dark:text-marca-200">
+                        Reserva confirmada vinculada
+                      </span>
+                      <span className="rounded-full bg-marca-200 px-2.5 py-0.5 text-xs font-bold text-marca-900 dark:bg-marca-900 dark:text-marca-200">
+                        Modo conversión fijado
+                      </span>
+                    </div>
+
+                    <div className="space-y-1 text-xs">
+                      <p className="font-semibold text-texto">
+                        {reservaSeleccionada.material?.nombre} ({reservaSeleccionada.material?.codigo_material})
+                        {reservaSeleccionada.es_excepcion ? ' [Excepción académica aprobada]' : ''}
+                      </p>
+                      <p className="text-texto-suave">
+                        Ejemplar reservado:{' '}
+                        <strong className="font-mono text-marca-800 dark:text-marca-300">
+                          {reservaSeleccionada.instancia?.codigo_ejemplar}
+                        </strong>{' '}
+                        · Límite de recojo: {fechaLegible(reservaSeleccionada.fecha_limite_recojo)}
+                      </p>
+                    </div>
+
+                    <p className="text-[11px] text-texto-suave italic">
+                      Todos los datos del prestatario, material, ejemplar y fechas provienen de la reserva confirmada y no pueden modificarse durante la entrega.
+                    </p>
+                  </div>
+                ) : (opcionesReservas.length > 0 || reservaSeleccionada) && (
                   <div className="rounded-xl border border-borde bg-white p-3.5 space-y-2.5 shadow-xs dark:bg-superficie">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <label
-                          htmlFor="select-reserva-confirmada"
-                          className="block text-xs font-bold uppercase tracking-wider text-texto"
-                        >
-                          {esConversionFija ? 'Reserva confirmada vinculada' : `Reservas confirmadas vigentes (${opcionesReservas.length})`}
-                        </label>
-                        {reservaIdInicial && (
-                          <span className="rounded-full bg-acento-100 px-2.5 py-0.5 text-xs font-bold text-acento-800 dark:bg-acento-950/60 dark:text-acento-300">
-                            Modo conversión
-                          </span>
-                        )}
-                      </div>
-                      {reservaSeleccionada && (
-                        <Boton
-                          tipo="button"
-                          variante="secundario"
-                          tamanio="pequeno"
-                          onClick={desvincularReserva}
-                        >
-                          Préstamo independiente
-                        </Boton>
-                      )}
+                      <label
+                        htmlFor="select-reserva-confirmada"
+                        className="block text-xs font-bold uppercase tracking-wider text-texto"
+                      >
+                        Reservas confirmadas vigentes ({opcionesReservas.length})
+                      </label>
                     </div>
 
                     <select
                       id="select-reserva-confirmada"
                       value={formulario.reservaId}
                       onChange={(e) => {
-                        if (e.target.value === '') {
-                          desvincularReserva()
-                        } else {
-                          seleccionarReserva(e.target.value)
-                        }
+                        seleccionarReserva(e.target.value)
                       }}
                       className="w-full rounded-lg border border-borde bg-white px-3 py-2 text-sm text-texto dark:bg-superficie"
                     >
-                      <option value="">-- Préstamo independiente (no usar reserva) --</option>
+                      <option value="">-- Préstamo directo (sin reserva previa) --</option>
                       {opcionesReservas.map((res) => (
                         <option key={res.id} value={res.id}>
                           {res.material?.nombre} ({res.material?.codigo_material}) — Ejemplar{' '}
@@ -741,16 +786,8 @@ function RegistrarPrestamo() {
 
                     {reservaSeleccionada && (
                       <p className="text-xs text-texto-suave">
-                        {esConversionFija ? (
-                          <span className="font-semibold text-texto">
-                            Conversión fija: ejemplar {reservaSeleccionada.instancia?.codigo_ejemplar} vinculado.
-                          </span>
-                        ) : (
-                          <>
-                            Se cargó el ejemplar{' '}
-                            <strong>{reservaSeleccionada.instancia?.codigo_ejemplar}</strong> de la reserva confirmada.
-                          </>
-                        )}
+                        Se cargó el ejemplar{' '}
+                        <strong>{reservaSeleccionada.instancia?.codigo_ejemplar}</strong> de la reserva confirmada (datos bloqueados para la entrega).
                       </p>
                     )}
                   </div>
@@ -920,44 +957,24 @@ function RegistrarPrestamo() {
                   </div>
 
                   <div className="grid gap-3 sm:grid-cols-2">
+                    <SelectorFechaHoraDesplegable
+                      id="fecha-inicio-prestamo"
+                      etiqueta="Fecha y hora de inicio (recojo) *"
+                      valor={fechaInicioPrestamo}
+                      deshabilitado
+                    />
                     <div>
-                      <label htmlFor="fecha-inicio-prestamo" className="block text-xs font-semibold text-texto mb-1">
-                        Fecha y hora de inicio *
-                      </label>
-                      <input
-                        id="fecha-inicio-prestamo"
-                        type="datetime-local"
-                        value={fechaInicioPrestamo}
-                        max={fechaFinPrestamo || undefined}
-                        disabled
-                        onChange={(evento) => {
-                          setFechaInicioPrestamo(evento.target.value)
-                          setErrores((actual) => ({ ...actual, dias: undefined }))
-                        }}
-                        className="w-full rounded-lg border border-borde bg-white px-2.5 py-1.5 text-sm text-texto disabled:bg-superficie-alta dark:bg-superficie"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label htmlFor="fecha-fin-prestamo" className="block text-xs font-semibold text-texto mb-1">
-                        Fecha y hora de fin *
-                      </label>
-                      <input
+                      <SelectorFechaHoraDesplegable
                         id="fecha-fin-prestamo"
-                        type="datetime-local"
-                        value={fechaFinPrestamo}
-                        min={
-                          fechaInicioPrestamo
-                            ? fechaParaCalendario(new Date(fechaInicioPrestamo).getTime() + 60 * 60000) || undefined
-                            : undefined
-                        }
-                        disabled={duracionBloqueadaPorReserva}
-                        onChange={(evento) => {
-                          setFechaFinPrestamo(evento.target.value)
+                        etiqueta="Fecha y hora de fin (devolución) *"
+                        valor={fechaFinPrestamo}
+                        minFecha={fechaInicioPrestamo ? fechaInicioPrestamo.slice(0, 10) : undefined}
+                        deshabilitado={duracionBloqueadaPorReserva}
+                        onCambio={(nuevoValor) => {
+                          setFechaFinPrestamo(nuevoValor)
                           setErrores((actual) => ({ ...actual, dias: undefined }))
                         }}
-                        className="w-full rounded-lg border border-borde bg-white px-2.5 py-1.5 text-sm text-texto disabled:bg-superficie-alta dark:bg-superficie"
-                        required
+                        error={errores.dias}
                       />
                     </div>
                   </div>
@@ -971,7 +988,7 @@ function RegistrarPrestamo() {
                     {Number.isFinite(duracionPrestamoMinutos) && duracionPrestamoMinutos > 0 && (
                       <span className="text-xs font-bold text-texto">
                         Duración: {formatearDuracionMinutos(duracionPrestamoMinutos)}
-                        {cruzaFinDeSemana(fechaInicioPrestamo, fechaFinPrestamo) ? ' (hábiles, sin fin de semana)' : ''}
+                        {cruzaFinDeSemana(fechaInicioPrestamo, fechaFinPrestamo) ? ' (todos los días intermedios computan)' : ''}
                       </span>
                     )}
                   </div>
@@ -980,7 +997,7 @@ function RegistrarPrestamo() {
                       role="note"
                       className="rounded-lg border border-acento-300 bg-acento-50/70 p-2.5 text-xs text-acento-900 dark:border-acento-800 dark:bg-acento-950/40 dark:text-acento-200"
                     >
-                      <strong>Aclaración para el trámite (cruce de fin de semana):</strong> Este préstamo cruza sábado y/o domingo. Como el almacén permanece cerrado los fines de semana, esos días no consumen el tiempo máximo permitido del material y la devolución queda programada para el día hábil límite indicado ({fechaLegible(fechaFinPrestamo)}).
+                      <strong>Aclaración para el trámite:</strong> Este préstamo incluye días de fin de semana intermedios. Recuerda que la entrega y la devolución se efectúan exclusivamente de lunes a viernes en horario de atención (09:00 a 17:00), y todos los días en medio computan dentro de la duración del préstamo.
                     </div>
                   )}
                   {errores.dias && <p className="text-xs font-medium text-error">{errores.dias}</p>}
@@ -1058,6 +1075,21 @@ function RegistrarPrestamo() {
                     </div>
                   </dl>
                 </div>
+              </div>
+            )}
+
+            {/* Advertencia: ejemplar con reservas programadas */}
+            {formulario.instanciaId && instanciaSeleccionada?.estado === 'reservado' && (
+              <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-950/30">
+                <p className="flex items-start gap-2 text-xs font-medium text-amber-800 dark:text-amber-300">
+                  <AlertTriangle aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+                  <span>
+                    Este ejemplar tiene{' '}
+                    <strong>reservas programadas a futuro</strong>. La duración del préstamo no
+                    debe solaparse con la próxima reserva confirmada. Si hay conflicto de fechas,
+                    el sistema rechazará el registro automáticamente.
+                  </span>
+                </p>
               </div>
             )}
 
@@ -1251,6 +1283,24 @@ function RegistrarPrestamo() {
           descripcion="Adjunta una foto para cada uno de estos elementos antes de continuar:"
           mensajes={elementosSinFoto.map(({ elemento }) => elemento)}
           onCerrar={cerrarAdvertenciaFotos}
+        />
+      )}
+      {advertenciaFechaHoraReserva && reservaSeleccionada && (
+        <AdvertenciaModal
+          titulo="La reserva todavía no está lista para entregar"
+          descripcion="La entrega solo se puede confirmar cuando hayan llegado tanto la fecha como la hora de inicio reservadas."
+          mensajes={[
+            `Inicio reservado: ${fechaLegible(reservaSeleccionada.fecha_inicio)}.`,
+            'Espera hasta ese momento y vuelve a confirmar la entrega.',
+          ]}
+          onCerrar={() => setAdvertenciaFechaHoraReserva(false)}
+        />
+      )}
+      {errorConfirmacion && (
+        <ErrorModal
+          titulo="No se pudo confirmar la entrega"
+          mensaje={errorConfirmacion}
+          onCerrar={() => setErrorConfirmacion('')}
         />
       )}
     </section>

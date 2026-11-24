@@ -17,6 +17,7 @@ import BadgeEstado from '../components/ui/BadgeEstado'
 import Boton from '../components/ui/Boton'
 import ErrorAlerta from '../components/ui/ErrorAlerta'
 import ErrorModal from '../components/ui/ErrorModal'
+import ExitoModal from '../components/ui/ExitoModal'
 import EstadoVacio from '../components/ui/EstadoVacio'
 import Skeleton from '../components/ui/Skeleton'
 import Tarjeta from '../components/ui/Tarjeta'
@@ -59,7 +60,7 @@ export default function ColaReservas() {
   const [recarga, setRecarga] = useState(0)
 
   const [procesandoId, setProcesandoId] = useState('')
-  const [mensajeExito, setMensajeExito] = useState('')
+  const [mensajePopupExito, setMensajePopupExito] = useState('')
   const [errorAccion, setErrorAccion] = useState('')
 
   // Estado para formulario de motivo (rechazar o cancelar)
@@ -137,7 +138,6 @@ export default function ColaReservas() {
 
   function seleccionarMaterial(nuevoId) {
     setMaterialIdSeleccionado(nuevoId)
-    setMensajeExito('')
     setErrorAccion('')
     setAccionConMotivo(null)
     if (nuevoId) {
@@ -147,19 +147,17 @@ export default function ColaReservas() {
 
   async function manejarAprobarExcepcion(reserva) {
     setErrorAccion('')
-    setMensajeExito('')
+    setMensajePopupExito('')
     setProcesandoId(reserva.id)
 
     try {
       const respuesta = await api.post(`/reservas/${reserva.id}/aprobar-excepcion/`, {})
       if (respuesta?.estado === 'reservada') {
-        setMensajeExito(
-          `Excepción académica aprobada para ${reserva.usuario?.nombre_completo || reserva.usuario?.dni}. Se asignó un ejemplar con recojo por 24 horas.`,
-        )
+        const mensaje = `Excepción académica aprobada para ${reserva.usuario?.nombre_completo || reserva.usuario?.dni}. Se asignó un ejemplar con recojo por 24 horas.`
+        setMensajePopupExito(mensaje)
       } else {
-        setMensajeExito(
-          `La solicitud de excepción de ${reserva.usuario?.nombre_completo || reserva.usuario?.dni} fue aprobada.`,
-        )
+        const mensaje = `La solicitud de excepción de ${reserva.usuario?.nombre_completo || reserva.usuario?.dni} fue aprobada.`
+        setMensajePopupExito(mensaje)
       }
       setRecarga((v) => v + 1)
     } catch (err) {
@@ -190,7 +188,7 @@ export default function ColaReservas() {
 
     setErrorMotivo('')
     setErrorAccion('')
-    setMensajeExito('')
+    setMensajePopupExito('')
     setProcesandoId(accionConMotivo.id)
 
     try {
@@ -198,14 +196,14 @@ export default function ColaReservas() {
         await api.post(`/reservas/${accionConMotivo.id}/rechazar/`, {
           motivo: motivoLimpio,
         })
-        setMensajeExito('La solicitud de excepción fue rechazada correctamente.')
+        const mensaje = 'La solicitud de excepción fue rechazada correctamente.'
+        setMensajePopupExito(mensaje)
       } else {
         await api.post(`/reservas/${accionConMotivo.id}/cancelar/`, {
           motivo: motivoLimpio,
         })
-        setMensajeExito(
-          'La reserva confirmada fue cancelada, liberando el ejemplar sin penalizar al prestatario.',
-        )
+        const mensaje = 'La reserva confirmada fue cancelada, liberando el ejemplar sin penalizar al prestatario.'
+        setMensajePopupExito(mensaje)
       }
       setAccionConMotivo(null)
       setMotivoTexto('')
@@ -315,15 +313,6 @@ export default function ColaReservas() {
         </div>
       </Tarjeta>
 
-      {mensajeExito && (
-        <div
-          role="status"
-          className="rounded-xl border border-marca-300 bg-marca-50 p-4 text-sm font-medium text-marca-800 dark:border-marca-700 dark:bg-marca-950/50 dark:text-marca-200"
-        >
-          {mensajeExito}
-        </div>
-      )}
-
       {errorAccion && (
         <ErrorModal
           titulo="No se pudo completar la acción"
@@ -331,6 +320,11 @@ export default function ColaReservas() {
           onCerrar={() => setErrorAccion('')}
         />
       )}
+      <ExitoModal
+        titulo="Acción completada"
+        mensaje={mensajePopupExito}
+        onCerrar={() => setMensajePopupExito('')}
+      />
 
       {/* Modal/Panel para ingresar motivo de rechazo o cancelación */}
       {accionConMotivo && (

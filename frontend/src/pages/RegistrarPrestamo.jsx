@@ -16,6 +16,7 @@ import {
   ayudaRangoDuracion,
   mapearErroresFotoChecklist,
   obtenerElementosSinFoto,
+  obtenerFechaMaximaFinPrestamo,
   validarFormularioPrestamo,
 } from '../validacionesPrestamo'
 import useTituloPagina from '../hooks/useTituloPagina'
@@ -25,12 +26,17 @@ import Tarjeta from '../components/ui/Tarjeta'
 import Skeleton from '../components/ui/Skeleton'
 import ErrorAlerta from '../components/ui/ErrorAlerta'
 import ErrorModal from '../components/ui/ErrorModal'
+import ExitoModal from '../components/ui/ExitoModal'
 import EstadoVacio from '../components/ui/EstadoVacio'
 import SubidaDocumentoPDF from '../components/prestamos/SubidaDocumentoPDF'
 import SelectorPrestatario from '../components/prestamos/SelectorPrestatario'
 import AdvertenciaModal from '../components/ui/AdvertenciaModal'
 import SelectorFechaHoraDesplegable from '../components/ui/SelectorFechaHoraDesplegable'
-import { TAMANO_MAXIMO_GARANTIA_MB } from '../constantes/garantia'
+import {
+  NOMBRE_FORMATO_COMPROMISO_RESPONSABILIDAD,
+  TAMANO_MAXIMO_GARANTIA_MB,
+  URL_FORMATO_COMPROMISO_RESPONSABILIDAD,
+} from '../constantes/garantia'
 import { esMaterialAltoValor } from '../constantes/catalogo'
 import {
   TAMANO_MAXIMO_FOTO_CHECKLIST_MB,
@@ -149,6 +155,7 @@ function RegistrarPrestamo() {
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
   const [errorConfirmacion, setErrorConfirmacion] = useState('')
+  const [mensajePopupExito, setMensajePopupExito] = useState('')
   const [errorInstancias, setErrorInstancias] = useState('')
   const [errores, setErrores] = useState({})
   const [prestamoCreado, setPrestamoCreado] = useState(null)
@@ -346,6 +353,10 @@ function RegistrarPrestamo() {
     ? perfilPrestatario
     : null
   const duracionPrestamoMinutos = calcularMinutosEntreFechas(fechaInicioPrestamo, fechaFinPrestamo)
+  const fechaMaximaFinPrestamo = obtenerFechaMaximaFinPrestamo(
+    fechaInicioPrestamo,
+    materialSeleccionado,
+  )
   const duracionBloqueadaPorReserva = Boolean(
     reservaSeleccionada?.fecha_inicio && reservaSeleccionada?.fecha_fin,
   )
@@ -594,6 +605,9 @@ function RegistrarPrestamo() {
         solicitud,
       )
       setPrestamoCreado(respuesta)
+      setMensajePopupExito(
+        `El préstamo para ${respuesta.usuario_nombre || 'el prestatario'} fue registrado correctamente.`,
+      )
       formulario.checklist.forEach((item) => {
         if (item.fotoPrevia) {
           URL.revokeObjectURL(item.fotoPrevia)
@@ -969,6 +983,7 @@ function RegistrarPrestamo() {
                         etiqueta="Fecha y hora de fin (devolución) *"
                         valor={fechaFinPrestamo}
                         minFecha={fechaInicioPrestamo ? fechaInicioPrestamo.slice(0, 10) : undefined}
+                        maxFecha={fechaMaximaFinPrestamo || undefined}
                         deshabilitado={duracionBloqueadaPorReserva}
                         onCambio={(nuevoValor) => {
                           setFechaFinPrestamo(nuevoValor)
@@ -1235,6 +1250,17 @@ function RegistrarPrestamo() {
                     onCambio={(archivo) => actualizar('compromisoResponsabilidad', archivo)}
                     error={errores.compromiso_responsabilidad}
                     ayuda={`Solo se aceptan archivos PDF (.pdf), hasta ${TAMANO_MAXIMO_GARANTIA_MB} MB.`}
+                    enlaceAyuda={(
+                      <a
+                        href={URL_FORMATO_COMPROMISO_RESPONSABILIDAD}
+                        download={NOMBRE_FORMATO_COMPROMISO_RESPONSABILIDAD}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Descargar formato oficial de compromiso de responsabilidad"
+                      >
+                        Descargar formato oficial de compromiso de responsabilidad (.pdf)
+                      </a>
+                    )}
                   />
                 </div>
               </fieldset>
@@ -1303,6 +1329,11 @@ function RegistrarPrestamo() {
           onCerrar={() => setErrorConfirmacion('')}
         />
       )}
+      <ExitoModal
+        titulo="Préstamo registrado"
+        mensaje={mensajePopupExito}
+        onCerrar={() => setMensajePopupExito('')}
+      />
     </section>
   )
 }

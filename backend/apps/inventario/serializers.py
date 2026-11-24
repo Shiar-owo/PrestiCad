@@ -371,12 +371,6 @@ class MaterialRegistroSerializer(RechazarCamposNoPermitidosMixin, serializers.Mo
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
-        tier = attrs.get("tier_minimo_requerido")
-        tiempo_max = attrs.get("tiempo_maximo_prestamo")
-        if tier == "avanzado" and tiempo_max and tiempo_max > 480:
-            raise serializers.ValidationError(
-                {"tiempo_maximo_prestamo": "El tiempo máximo de préstamo para materiales de tier avanzado no puede superar 8 horas (480 minutos)."}
-            )
         modo = attrs.get("modo", "unico")
         filas = attrs.get("instancias")
         if modo in ("lote", "detalle"):
@@ -432,18 +426,6 @@ class MaterialActualizacionSerializer(RechazarCamposNoPermitidosMixin, serialize
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
-        tier = attrs.get(
-            "tier_minimo_requerido",
-            getattr(self.instance, "tier_minimo_requerido", None),
-        )
-        tiempo_max = attrs.get(
-            "tiempo_maximo_prestamo",
-            getattr(self.instance, "tiempo_maximo_prestamo", None),
-        )
-        if tier == "avanzado" and tiempo_max and tiempo_max > 480:
-            raise serializers.ValidationError(
-                {"tiempo_maximo_prestamo": "El tiempo máximo de préstamo para materiales de tier avanzado no puede superar 8 horas (480 minutos)."}
-            )
         return attrs
 
     class Meta:

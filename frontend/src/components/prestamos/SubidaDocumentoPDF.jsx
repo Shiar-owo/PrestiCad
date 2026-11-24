@@ -1,6 +1,6 @@
 import { useId, useRef } from 'react'
 
-function SubidaDocumentoPDF({ etiqueta, archivo, onCambio, error = '', ayuda }) {
+function SubidaDocumentoPDF({ etiqueta, archivo, onCambio, error = '', ayuda, enlaceAyuda }) {
   const identificador = useId()
   const entrada = useRef(null)
   const idAyuda = `${identificador}-ayuda`
@@ -49,6 +49,7 @@ function SubidaDocumentoPDF({ etiqueta, archivo, onCambio, error = '', ayuda }) 
           {mensaje}
         </p>
       )}
+      {enlaceAyuda && <div className="text-xs text-marca-700 underline dark:text-marca-400">{enlaceAyuda}</div>}
     </div>
   )
 }

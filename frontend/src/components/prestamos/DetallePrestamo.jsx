@@ -10,6 +10,7 @@ import Boton from '../ui/Boton'
 import ErrorAlerta from '../ui/ErrorAlerta'
 import Skeleton from '../ui/Skeleton'
 import Tarjeta from '../ui/Tarjeta'
+import ExitoModal from '../ui/ExitoModal'
 
 function mostrarFecha(fecha) {
   const valor = new Date(fecha)
@@ -63,6 +64,7 @@ export default function DetallePrestamo({
   const [accion, setAccion] = useState('')
   const [error, setError] = useState('')
   const [errorArchivos, setErrorArchivos] = useState({})
+  const [mensajeExito, setMensajeExito] = useState('')
   const fileInputRef = useRef({})
 
   useEffect(() => {
@@ -111,6 +113,7 @@ export default function DetallePrestamo({
       else formulario.append('archivo', archivo)
       await api.patch(`/prestamos/${prestamo.id}/garantia/${documento.tipo}/`, formulario)
       setArchivos((actual) => ({ ...actual, [documento.nombreArchivo]: null }))
+      setMensajeExito(`El documento de ${documento.etiqueta.toLowerCase()} se ${eliminar ? 'eliminó' : 'actualizó'} correctamente.`)
       setIntento((actual) => actual + 1)
     } catch (errorApi) {
       setErrorArchivos((actual) => ({
@@ -155,7 +158,9 @@ export default function DetallePrestamo({
   )).length
 
   return (
-    <Tarjeta className="max-w-[1700px] mx-auto p-0" aria-labelledby="prestamo-detalle-titulo">
+    <>
+      <ExitoModal mensaje={mensajeExito} onCerrar={() => setMensajeExito('')} />
+      <Tarjeta className="max-w-[1700px] mx-auto p-0" aria-labelledby="prestamo-detalle-titulo">
       <header className="bg-superficie/50 border-b border-borde p-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Boton
@@ -758,5 +763,6 @@ export default function DetallePrestamo({
         </div>
       )}
     </Tarjeta>
+    </>
   )
 }

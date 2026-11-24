@@ -7,6 +7,7 @@ import BadgeEstado from '../components/ui/BadgeEstado'
 import Boton from '../components/ui/Boton'
 import ErrorAlerta from '../components/ui/ErrorAlerta'
 import ErrorModal from '../components/ui/ErrorModal'
+import ExitoModal from '../components/ui/ExitoModal'
 import Skeleton from '../components/ui/Skeleton'
 import Tarjeta from '../components/ui/Tarjeta'
 import CalendarioDisponibilidad from '../components/reservas/CalendarioDisponibilidad'
@@ -38,6 +39,10 @@ import {
   validarHorarioReserva,
 } from '../reservas/estadoReserva'
 import { formatearDuracionMinutos } from '../constantes/checklistPrestamo'
+import {
+  NOMBRE_FORMATO_COMPROMISO_RESPONSABILIDAD,
+  URL_FORMATO_COMPROMISO_RESPONSABILIDAD,
+} from '../constantes/garantia'
 
 function extraerMensajeError(error) {
   if (error instanceof ErrorApi && error.datos) {
@@ -71,6 +76,7 @@ export default function ReservarMaterial() {
   const [errorEnvio, setErrorEnvio] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [reservaCreada, setReservaCreada] = useState(null)
+  const [mostrarExitoReserva, setMostrarExitoReserva] = useState(false)
 
   const [instancias, setInstancias] = useState([])
   const [cargandoInstancias, setCargandoInstancias] = useState(false)
@@ -396,6 +402,7 @@ export default function ReservarMaterial() {
         })
       }
       setReservaCreada(respuesta)
+      setMostrarExitoReserva(true)
     } catch (err) {
       setErrorEnvio(extraerMensajeError(err))
     } finally {
@@ -431,6 +438,15 @@ export default function ReservarMaterial() {
   if (reservaCreada) {
     const confirmada = reservaCreada.estado === 'reservada'
     return (
+      <>
+      <ExitoModal
+        titulo={confirmada ? 'Reserva confirmada' : 'Solicitud registrada'}
+        mensaje={confirmada
+          ? 'La reserva fue aceptada y el ejemplar quedó asignado.'
+          : 'La solicitud de excepción fue aceptada y quedó pendiente de evaluación.'}
+        onCerrar={() => setMostrarExitoReserva(false)}
+        abierto={mostrarExitoReserva}
+      />
       <Tarjeta className="p-6 space-y-5" aria-labelledby="titulo-reserva-exitosa">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
@@ -523,6 +539,7 @@ export default function ReservarMaterial() {
           </Boton>
         </div>
       </Tarjeta>
+      </>
     )
   }
 
@@ -670,8 +687,8 @@ export default function ReservarMaterial() {
                   </p>
                   <p>
                     <a
-                      href="/compromiso_responsabilidad.pdf"
-                      download="compromiso_responsabilidad.pdf"
+                      href={URL_FORMATO_COMPROMISO_RESPONSABILIDAD}
+                      download={NOMBRE_FORMATO_COMPROMISO_RESPONSABILIDAD}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-1.5 font-bold text-amber-900 underline hover:text-amber-950 dark:text-amber-200"
@@ -913,8 +930,8 @@ export default function ReservarMaterial() {
                       Compromiso de responsabilidad firmado (PDF) *
                     </label>
                     <a
-                      href="/compromiso_responsabilidad.pdf"
-                      download="compromiso_responsabilidad.pdf"
+                      href={URL_FORMATO_COMPROMISO_RESPONSABILIDAD}
+                      download={NOMBRE_FORMATO_COMPROMISO_RESPONSABILIDAD}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-1 text-xs font-semibold text-marca-700 hover:text-marca-800 underline dark:text-marca-400"

@@ -28,6 +28,19 @@ export function obtenerMinutosMaximosMaterial(material) {
   return DURACION_MAXIMA_PRESTAMO_MINUTOS
 }
 
+export function obtenerFechaMaximaFinPrestamo(fechaInicio, material = null) {
+  if (!fechaInicio) return ''
+  const inicio = new Date(fechaInicio)
+  if (Number.isNaN(inicio.getTime())) return ''
+  const finMaximo = new Date(
+    inicio.getTime() + obtenerMinutosMaximosMaterial(material) * 60 * 1000,
+  )
+  const anio = finMaximo.getFullYear()
+  const mes = String(finMaximo.getMonth() + 1).padStart(2, '0')
+  const dia = String(finMaximo.getDate()).padStart(2, '0')
+  return `${anio}-${mes}-${dia}`
+}
+
 export function mensajeRangoDuracion(material = null) {
   const maximoMinutos = obtenerMinutosMaximosMaterial(material)
   return `La duración debe ser de al menos 1 hora (60 minutos) y máximo ${formatearDuracionMinutos(maximoMinutos)}.`

@@ -11,6 +11,7 @@ import {
 import MaterialForm from '../components/MaterialForm'
 import FichaTecnicaModal from '../components/FichaTecnicaModal'
 import ConfirmacionDobleEliminacion from '../components/ConfirmacionDobleEliminacion'
+import ExitoModal from '../components/ui/ExitoModal'
 import Boton from '../components/ui/Boton'
 import Tarjeta from '../components/ui/Tarjeta'
 import Skeleton from '../components/ui/Skeleton'
@@ -48,6 +49,7 @@ function Materiales() {
   const [resumenRegistro, setResumenRegistro] = useState(null)
   const [materialFicha, setMaterialFicha] = useState(null)
   const [registroAEliminar, setRegistroAEliminar] = useState(null)
+  const [mensajePopupExito, setMensajePopupExito] = useState('')
 
   useEffect(() => {
     cargarMateriales()
@@ -85,6 +87,7 @@ function Materiales() {
 
   async function manejarGuardado(resultadoRegistro) {
     setResumenRegistro(resultadoRegistro || null)
+    if (!resultadoRegistro) setMensajePopupExito('Los cambios del material se guardaron correctamente.')
     setMostrarFormulario(false)
     setMaterialEnEdicion(null)
     await cargarMateriales()
@@ -94,6 +97,7 @@ function Materiales() {
     try {
       const materialActualizado = await api.get(`/materiales/${materialFicha.id}/`)
       setMaterialFicha(materialActualizado)
+      setMensajePopupExito('Los ejemplares se actualizaron correctamente.')
     } catch {
       setError('Los ejemplares se agregaron, pero no se pudo actualizar la ficha.')
     }
@@ -101,6 +105,9 @@ function Materiales() {
   }
 
   async function confirmarEliminacion() {
+    const nombreEliminado = registroAEliminar.tipo === 'material'
+      ? registroAEliminar.material.nombre
+      : obtenerCodigoInstancia(registroAEliminar.instancia)
     if (registroAEliminar.tipo === 'material') {
       await api.delete(`/materiales/${registroAEliminar.material.id}/`)
     } else {
@@ -108,6 +115,7 @@ function Materiales() {
     }
     setRegistroAEliminar(null)
     setMaterialFicha(null)
+    setMensajePopupExito(`${registroAEliminar.tipo === 'material' ? 'Material' : 'Ejemplar'} ${nombreEliminado} eliminado correctamente.`)
     await cargarMateriales()
   }
 
@@ -121,6 +129,11 @@ function Materiales() {
 
   return (
     <section>
+      <ExitoModal
+        titulo="Acción completada"
+        mensaje={mensajePopupExito}
+        onCerrar={() => setMensajePopupExito('')}
+      />
       <header className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-xl font-bold text-texto">Inventario de materiales</h2>

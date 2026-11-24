@@ -15,7 +15,7 @@ export const TIEMPO_MAXIMO_DEFAULT_POR_TIER = {
   restringido: { valor: 3, unidad: 'dias', minutos: 4320 },
 }
 
-export const UNIDADES_TIEMPO_PRESTAMO = [
+const UNIDADES_TIEMPO_PRESTAMO = [
   { valor: 'minutos', etiqueta: 'Minutos', factor: 1 },
   { valor: 'horas', etiqueta: 'Horas', factor: 60 },
   { valor: 'dias', etiqueta: 'Días', factor: 1440 },
@@ -29,33 +29,52 @@ export function convertirTiempoAMinutos(cantidad, unidad = 'horas') {
   return numero * factor
 }
 
-export function descomponerMinutosEnUnidad(minutos) {
-  const total = Number(minutos)
-  if (!Number.isFinite(total) || total <= 0) {
-    return { valor: 24, unidad: 'horas' }
+export function calcularMinutosDuracionPersonalizada(dias, horas, minutos) {
+  const cantidadDias = dias === '' || dias === null ? 0 : Number(dias)
+  const cantidadHoras = horas === '' || horas === null ? 0 : Number(horas)
+  const cantidadMinutos = minutos === '' || minutos === null ? 0 : Number(minutos)
+  if (
+    !Number.isInteger(cantidadDias)
+    || !Number.isInteger(cantidadHoras)
+    || !Number.isInteger(cantidadMinutos)
+    || cantidadDias < 0
+    || cantidadDias > 15
+    || cantidadHoras < 0
+    || cantidadHoras > 23
+    || cantidadMinutos < 0
+    || cantidadMinutos > 59
+  ) return NaN
+  const totalMinutos = cantidadDias * 1440 + cantidadHoras * 60 + cantidadMinutos
+  return totalMinutos <= DURACION_MAXIMA_MATERIAL_MINUTOS ? totalMinutos : NaN
+}
+
+export function limitarValorCampoDuracion(campo, valor) {
+  const limites = {
+    tiempo_maximo_dias: 15,
+    tiempo_maximo_horas: 23,
+    tiempo_maximo_minutos: 59,
   }
-  if (total >= 1440 && total % 1440 === 0) {
-    if (total === 1440) return { valor: 24, unidad: 'horas' }
-    return { valor: total / 1440, unidad: 'dias' }
-  }
-  if (total >= 60 && total % 60 === 0) {
-    return { valor: total / 60, unidad: 'horas' }
-  }
-  return { valor: total, unidad: 'minutos' }
+  const maximo = limites[campo]
+  if (maximo === undefined || valor === '') return valor
+  const numero = Number(valor)
+  if (!Number.isFinite(numero)) return ''
+  return String(Math.min(maximo, Math.max(0, Math.trunc(numero))))
 }
 
 export function formatearDuracionMinutos(minutos) {
-  const total = Number(minutos)
+  const total = Math.floor(Number(minutos))
   if (!Number.isFinite(total) || total <= 0) return '—'
-  if (total >= 1440 && total % 1440 === 0) {
-    const dias = total / 1440
-    return dias === 1 ? '24 horas (1 día)' : `${dias} días`
+  const partes = []
+  const dias = Math.floor(total / 1440)
+  const horas = Math.floor((total % 1440) / 60)
+  const restoMinutos = total % 60
+  if (dias) partes.push(`${dias} ${dias === 1 ? 'día' : 'días'}`)
+  if (horas) partes.push(`${horas} ${horas === 1 ? 'hora' : 'horas'}`)
+  if (restoMinutos || partes.length === 0) {
+    partes.push(`${restoMinutos} ${restoMinutos === 1 ? 'minuto' : 'minutos'}`)
   }
-  if (total >= 60 && total % 60 === 0) {
-    const horas = total / 60
-    return horas === 1 ? '1 hora' : `${horas} horas`
-  }
-  return total === 1 ? '1 minuto' : `${total} minutos`
+  if (partes.length < 2) return partes[0]
+  return `${partes.slice(0, -1).join(', ')} y ${partes.at(-1)}`
 }
 
 export const TAMANO_MAXIMO_FOTO_CHECKLIST_BYTES = TAMANO_PREDETERMINADO

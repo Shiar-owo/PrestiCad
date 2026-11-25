@@ -199,8 +199,8 @@ describe('validarFormularioPrestamo', () => {
   })
 
   it('limita la duración mínima a 1 hora y la máxima según el material (defaults por Tier)', () => {
-    expect(obtenerMinutosMaximosMaterial({ tier_minimo_requerido: 'avanzado' })).toBe(360)
-    expect(obtenerMinutosMaximosMaterial({ tier_minimo_requerido: 'estandar' })).toBe(1440)
+    expect(obtenerMinutosMaximosMaterial({ tier_minimo_requerido: 'avanzado' })).toBe(4290)
+    expect(obtenerMinutosMaximosMaterial({ tier_minimo_requerido: 'estandar' })).toBe(4290)
     expect(obtenerMinutosMaximosMaterial({ tier_minimo_requerido: 'restringido' })).toBe(4290)
     expect(obtenerMinutosMaximosMaterial({ tiempo_maximo_prestamo: 180 })).toBe(180)
     expect(obtenerMinutosMaximosMaterial({ tier_minimo_requerido: 'avanzado', tiempo_maximo_prestamo: 21600 })).toBe(4290)
@@ -246,12 +246,12 @@ describe('validarFormularioPrestamo', () => {
       }),
     ).toEqual({})
 
-    expect(ayudaRangoDuracion({ tier_minimo_requerido: 'avanzado' })).toMatch(/6 horas/)
+    expect(ayudaRangoDuracion({ tier_minimo_requerido: 'avanzado' })).toMatch(/2 días, 23 horas y 30 minutos/)
     expect(ayudaRangoDuracion({ tier_minimo_requerido: 'avanzado' })).toMatch(/tolerancia de 30 minutos/)
   })
 
   it('conserva el último valor válido y avisa ante duraciones fuera del rango permitido', () => {
-    const materialVr = { tier_minimo_requerido: 'avanzado' }
+    const materialVr = { tier_minimo_requerido: 'avanzado', tiempo_maximo_prestamo: 360 }
     expect(evaluarCambioDuracion('59', '30', 'minutos', materialVr)).toEqual({
       valor: '30',
       error: 'El tiempo mínimo de préstamo es de 1 hora (60 minutos).',

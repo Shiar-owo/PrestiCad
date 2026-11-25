@@ -198,7 +198,7 @@ class RegistrarMaterialServiceTestCase(TestCase):
         )
 
         self.assertEqual(material.tier_minimo_requerido, "avanzado")
-        self.assertEqual(material.tiempo_maximo_prestamo, 360)
+        self.assertEqual(material.tiempo_maximo_prestamo, 4320)
         self.assertEqual(material.bonificacion_tiempo, 20)
         self.assertEqual(material.deduccion_tardanza, 15)
         self.assertEqual(material.deduccion_dano_parcial, 40)
@@ -224,8 +224,8 @@ class RegistrarMaterialServiceTestCase(TestCase):
             )
         )
         self.assertEqual(material_restringido.tiempo_maximo_prestamo, 4320)
-        self.assertEqual(material_estandar.tiempo_maximo_prestamo, 1440)
-        self.assertEqual(material_avanzado.tiempo_maximo_prestamo, 360)
+        self.assertEqual(material_estandar.tiempo_maximo_prestamo, 4320)
+        self.assertEqual(material_avanzado.tiempo_maximo_prestamo, 4320)
 
         material_avanzado_tres_dias = registrar_material(
             **self._datos_validos(

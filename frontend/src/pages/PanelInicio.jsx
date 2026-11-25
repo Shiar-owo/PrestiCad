@@ -14,7 +14,7 @@ import {
 
 import SesionContext from '../contextos/SesionContext'
 import useTituloPagina from '../hooks/useTituloPagina'
-import { ETIQUETAS_ROL, ETIQUETAS_TIER } from '../constantes/roles'
+import { ETIQUETAS_ROL } from '../constantes/roles'
 import Tarjeta from '../components/ui/Tarjeta'
 import TarjetaReputacion from '../components/ui/TarjetaReputacion'
 
@@ -114,7 +114,6 @@ function PanelInicio() {
   }
 
   const nombreRol = ETIQUETAS_ROL[usuario.rol] || usuario.rol
-  const tier = ETIQUETAS_TIER[usuario.reputacion_tier] || usuario.reputacion_tier
   const accesos = ACCESOS[usuario.rol] || []
 
   return (
@@ -138,7 +137,7 @@ function PanelInicio() {
               <p className="mt-1 text-lg font-bold text-texto">{usuario.estado}</p>
             )}
           </Tarjeta>
-          {usuario.reputacion_tier && (
+          {!['gestor', 'administrador'].includes(usuario.rol) && usuario.reputacion_tier && (
             <TarjetaReputacion
               tier={usuario.reputacion_tier}
               puntaje={usuario.reputacion_puntaje}

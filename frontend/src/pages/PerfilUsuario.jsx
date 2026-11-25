@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useContext, useEffect, useRef, useState } from 'react'
 import {
   AlertTriangle,
   Building,
@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 
 import { api, ErrorApi } from '../api/client'
+import SesionContext from '../contextos/SesionContext'
 import { validarEmailSecundario, validarTelefono } from '../validaciones'
 import useTituloPagina from '../hooks/useTituloPagina'
 import Campo from '../components/ui/Campo'
@@ -662,14 +663,15 @@ function FormularioPerfil({ perfil, onGuardar, onGuardarFoto, onEliminarFoto, gu
         </div>
       )}
 
-      {/* Bloque Destacado de Reputación */}
-      <section aria-labelledby="titulo-reputacion">
-        <h2 id="titulo-reputacion" className="sr-only">Nivel de Reputación</h2>
-        <TarjetaReputacion
-          tier={perfil.reputacion_tier}
-          puntaje={perfil.reputacion_puntaje}
-        />
-      </section>
+      {!['gestor', 'administrador'].includes(perfil.rol) && (
+        <section aria-labelledby="titulo-reputacion">
+          <h2 id="titulo-reputacion" className="sr-only">Nivel de Reputación</h2>
+          <TarjetaReputacion
+            tier={perfil.reputacion_tier}
+            puntaje={perfil.reputacion_puntaje}
+          />
+        </section>
+      )}
 
       {/* Las dos secciones principales organizadas limpiamente */}
       <div className="grid gap-8 lg:grid-cols-2">
@@ -907,6 +909,7 @@ function mensajeErrorApi(error, mensajePredeterminado) {
 
 function PerfilUsuario({ onPerfilActualizado }) {
   useTituloPagina('Mi perfil')
+  const { usuario } = useContext(SesionContext) || {}
   const [perfil, setPerfil] = useState(null)
   const [cargando, setCargando] = useState(true)
   const [guardando, setGuardando] = useState(false)
@@ -1007,7 +1010,7 @@ function PerfilUsuario({ onPerfilActualizado }) {
       <ExitoModal mensaje={mensajeExito} onCerrar={() => setMensajeExito('')} />
       {error && <ErrorAlerta mensaje={error} className="mb-6" />}
       <FormularioPerfil
-        perfil={perfil}
+        perfil={{ ...perfil, rol: perfil.rol || usuario?.rol }}
         onGuardar={guardarPerfil}
         onGuardarFoto={guardarFotoPerfil}
         onEliminarFoto={eliminarFotoPerfil}

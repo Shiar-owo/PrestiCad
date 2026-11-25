@@ -153,7 +153,7 @@ export default function ColaReservas() {
     try {
       const respuesta = await api.post(`/reservas/${reserva.id}/aprobar-excepcion/`, {})
       if (respuesta?.estado === 'reservada') {
-        const mensaje = `Excepción académica aprobada para ${reserva.usuario?.nombre_completo || reserva.usuario?.dni}. Se asignó un ejemplar con recojo por 24 horas.`
+        const mensaje = `Excepción académica aprobada para ${reserva.usuario?.nombre_completo || reserva.usuario?.dni}. Se asignó un ejemplar con 30 minutos de tolerancia para el recojo pactado.`
         setMensajePopupExito(mensaje)
       } else {
         const mensaje = `La solicitud de excepción de ${reserva.usuario?.nombre_completo || reserva.usuario?.dni} fue aprobada.`
@@ -612,7 +612,7 @@ export default function ColaReservas() {
             {reservasConfirmadas.length === 0 ? (
               <EstadoVacio
                 titulo="Sin reservas confirmadas activas"
-                mensaje="Las reservas confirmadas con ejemplar asignado (vigencia de 24 h) aparecerán aquí."
+                mensaje="Las reservas confirmadas con ejemplar asignado y su límite de recojo aparecerán aquí."
               />
             ) : (
               <ul className="grid gap-3">
@@ -646,7 +646,7 @@ export default function ColaReservas() {
                             <strong className="font-mono text-texto">
                               {reserva.instancia?.codigo_ejemplar}
                             </strong>{' '}
-                            · Límite de recojo (24 h):{' '}
+                            · Límite de recojo (30 min de tolerancia):{' '}
                             <strong className="text-texto">
                               {formatearFechaReserva(reserva.fecha_limite_recojo)}
                             </strong>

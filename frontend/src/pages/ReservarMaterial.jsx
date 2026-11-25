@@ -460,7 +460,7 @@ export default function ReservarMaterial() {
             )}
             <h2 id="titulo-reserva-exitosa" className="text-xl font-bold text-texto">
               {confirmada
-                ? 'Reserva confirmada por 24 horas'
+                ? 'Reserva confirmada'
                 : 'Solicitud de excepción académica registrada'}
             </h2>
           </div>
@@ -505,7 +505,7 @@ export default function ReservarMaterial() {
               </div>
               <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3 dark:border-amber-800 dark:bg-marca-950/30">
                 <dt className="text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-300">
-                  Límite de recojo (24 h)
+                  Límite de recojo (30 min de tolerancia)
                 </dt>
                 <dd className="mt-1 font-bold text-texto">
                   {formatearFechaReserva(reservaCreada.fecha_limite_recojo)}
@@ -662,7 +662,7 @@ export default function ReservarMaterial() {
                   {aplicaExcepcion
                     ? 'Solicitud excepcional en espera (72 h, sujeta a aprobación del gestor)'
                     : unidadesDisponibles > 0
-                      ? 'Reserva confirmada inmediata (24 h de vigencia)'
+                      ? 'Reserva confirmada inmediata (recojo dentro de 30 min)'
                       : 'Lista de espera sin bloquear inventario (72 h de vigencia)'}
                 </p>
               </div>

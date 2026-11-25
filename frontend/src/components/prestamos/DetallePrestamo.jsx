@@ -25,6 +25,15 @@ function mostrarFecha(fecha) {
   }).format(valor)
 }
 
+function formatearActorPrestamo(actor) {
+  if (!actor) return null
+  const partes = [actor.nombre]
+  if (actor.dni) partes.push(`DNI ${actor.dni}`)
+  const rol = actor.rol_display || actor.rol
+  if (rol) partes.push(rol)
+  return partes.filter(Boolean).join(' · ')
+}
+
 const DOCUMENTOS_GARANTIA = [
   {
     tipo: 'documento-identidad',
@@ -301,9 +310,21 @@ export default function DetallePrestamo({
                   )}
                   <td className="w-1/4 p-2">
                     <span className="text-[11px] font-bold uppercase tracking-wider text-texto-suave block mb-0.5">
-                      Registrado por
+                      Entregado por
                     </span>
-                    <span className="text-lg font-bold text-texto">{detalle.prestatario_nombre}</span>
+                    <span className="text-base font-bold text-texto break-words">
+                      {formatearActorPrestamo(detalle.entregado_por) || 'No registrado'}
+                    </span>
+                  </td>
+                  <td className="w-1/4 p-2">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-texto-suave block mb-0.5">
+                      Recibido por
+                    </span>
+                    <span className="text-base font-bold text-texto break-words">
+                      {detalle.recibido_por
+                        ? formatearActorPrestamo(detalle.recibido_por)
+                        : 'Pendiente de devolución'}
+                    </span>
                   </td>
                 </tr>
               </tbody>

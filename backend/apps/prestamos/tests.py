@@ -1041,6 +1041,8 @@ class HistorialPrestamosAPITestCase(APITestCase):
     CAMPOS_HISTORIAL = {
         "id",
         "prestatario_nombre",
+        "entregado_por",
+        "recibido_por",
         "material_id",
         "material_nombre",
         "material_codigo",
@@ -1308,6 +1310,52 @@ class HistorialPrestamosAPITestCase(APITestCase):
         respuesta = self.client.get(self.URL_DETALLE.format(prestamo_id=999999))
 
         self.assertEqual(respuesta.status_code, 404)
+
+    def test_historial_y_detalle_exponen_entregado_por_y_recibido_por(self):
+        prestamo = self._crear_prestamo(self.prestatario, "HIST-ACTORES-001")
+        self._iniciar_sesion(self.gestor)
+
+        detalle_activo = self.client.get(self.URL_DETALLE.format(prestamo_id=prestamo.id))
+        self.assertEqual(detalle_activo.status_code, 200)
+        datos_activo = detalle_activo.json()
+        self.assertEqual(
+            datos_activo["entregado_por"],
+            {
+                "nombre": f"{self.gestor.nombre} {self.gestor.apellido}".strip(),
+                "dni": self.gestor.dni,
+                "rol": "gestor",
+                "rol_display": "Gestor de Almacén",
+            },
+        )
+        self.assertIsNone(datos_activo["recibido_por"])
+
+        registrar_devolucion(
+            prestamo_id=prestamo.id,
+            checklist_devolucion=[
+                {"elemento": "Carcasa", "estado": "sin_cambios", "observacion": ""},
+                {"elemento": "Cable", "estado": "sin_cambios", "observacion": ""},
+            ],
+            realizado_por=self.administrador,
+        )
+
+        detalle_devuelto = self.client.get(self.URL_DETALLE.format(prestamo_id=prestamo.id))
+        self.assertEqual(detalle_devuelto.status_code, 200)
+        datos_devuelto = detalle_devuelto.json()
+        self.assertEqual(
+            datos_devuelto["recibido_por"],
+            {
+                "nombre": f"{self.administrador.nombre} {self.administrador.apellido}".strip(),
+                "dni": self.administrador.dni,
+                "rol": "administrador",
+                "rol_display": "Administrador",
+            },
+        )
+
+        listado = self.client.get(self.URL)
+        self.assertEqual(listado.status_code, 200)
+        fila = next(item for item in listado.json()["results"] if item["id"] == prestamo.id)
+        self.assertEqual(fila["entregado_por"]["dni"], self.gestor.dni)
+        self.assertEqual(fila["recibido_por"]["dni"], self.administrador.dni)
 
 
 class HistorialMaterialAPITestCase(APITestCase):

@@ -8,6 +8,19 @@ from apps.prestamos.models import Devolucion, Garantia, Prestamo
 from apps.prestamos.serializers import url_reporte_publica
 
 
+def _serializar_actor_prestamo(usuario):
+    """Serializa el actor responsable (entrega o recepción) con Nombre, DNI y Rol."""
+    if usuario is None:
+        return None
+    rol = getattr(usuario, "rol", None)
+    return {
+        "nombre": f"{usuario.nombre} {usuario.apellido}".strip(),
+        "dni": usuario.dni,
+        "rol": rol.nombre if rol else "",
+        "rol_display": rol.get_nombre_display() if rol else "",
+    }
+
+
 def serializar_checklist_inicial(prestamo):
     """Devuelve el checklist sin condición inicial y con URL privada de la foto."""
     fotos = {
@@ -117,6 +130,8 @@ class PrestamoConsultaSerializer(serializers.ModelSerializer):
 
 class PrestamoHistorialSerializer(serializers.ModelSerializer):
     prestatario_nombre = serializers.SerializerMethodField()
+    entregado_por = serializers.SerializerMethodField()
+    recibido_por = serializers.SerializerMethodField()
     material_id = serializers.UUIDField(source="material.id", read_only=True)
     material_nombre = serializers.SerializerMethodField()
     material_codigo = serializers.SerializerMethodField()
@@ -130,6 +145,8 @@ class PrestamoHistorialSerializer(serializers.ModelSerializer):
         fields = (
             "id",
             "prestatario_nombre",
+            "entregado_por",
+            "recibido_por",
             "material_id",
             "material_nombre",
             "material_codigo",
@@ -147,6 +164,16 @@ class PrestamoHistorialSerializer(serializers.ModelSerializer):
 
     def get_prestatario_nombre(self, obj):
         return f"{obj.usuario.nombre} {obj.usuario.apellido}".strip()
+
+    def get_entregado_por(self, obj):
+        return _serializar_actor_prestamo(getattr(obj, "registrado_por", None))
+
+    def get_recibido_por(self, obj):
+        try:
+            devolucion = obj.devolucion
+        except Devolucion.DoesNotExist:
+            return None
+        return _serializar_actor_prestamo(getattr(devolucion, "realizado_por", None))
 
     def get_material_nombre(self, obj):
         snapshot = obj.material_snapshot or {}
@@ -224,6 +251,8 @@ class PrestamoHistorialDetalleSerializer(serializers.ModelSerializer):
 
     prestatario_nombre = serializers.SerializerMethodField()
     prestatario_dni = serializers.CharField(source="usuario.dni", read_only=True)
+    entregado_por = serializers.SerializerMethodField()
+    recibido_por = serializers.SerializerMethodField()
     material = MaterialPrestamoHistorialSerializer(read_only=True)
     instancia = InstanciaMaterialSerializer(read_only=True, allow_null=True)
     material_snapshot = serializers.SerializerMethodField()
@@ -245,6 +274,8 @@ class PrestamoHistorialDetalleSerializer(serializers.ModelSerializer):
             "id",
             "prestatario_nombre",
             "prestatario_dni",
+            "entregado_por",
+            "recibido_por",
             "material",
             "instancia",
             "material_snapshot",
@@ -266,6 +297,16 @@ class PrestamoHistorialDetalleSerializer(serializers.ModelSerializer):
 
     def get_prestatario_nombre(self, obj):
         return f"{obj.usuario.nombre} {obj.usuario.apellido}".strip()
+
+    def get_entregado_por(self, obj):
+        return _serializar_actor_prestamo(getattr(obj, "registrado_por", None))
+
+    def get_recibido_por(self, obj):
+        try:
+            devolucion = obj.devolucion
+        except Devolucion.DoesNotExist:
+            return None
+        return _serializar_actor_prestamo(getattr(devolucion, "realizado_por", None))
 
     def get_checklist_inicial(self, obj):
         return serializar_checklist_inicial(obj)

@@ -150,7 +150,14 @@ def consultar_prestamos_usuario(usuario_id, ahora=None):
 
 def consultar_historial_prestamos(ahora=None, estado=None, dni=None):
     """Lista global de préstamos para consulta histórica de gestión."""
-    prestamos = _consultar_prestamos_con_estado(ahora=ahora).select_related("usuario")
+    prestamos = _consultar_prestamos_con_estado(ahora=ahora).select_related(
+        "usuario",
+        "registrado_por",
+        "registrado_por__rol",
+        "devolucion",
+        "devolucion__realizado_por",
+        "devolucion__realizado_por__rol",
+    )
     if estado == "devoluble":
         prestamos = prestamos.filter(estado_consulta__in=("activo", "vencido"))
     elif estado is not None:
@@ -674,7 +681,17 @@ def consultar_detalle_historial_prestamo(prestamo_id, ahora=None):
     try:
         return (
             _consultar_prestamos_con_estado(ahora=ahora)
-            .select_related("usuario", "material", "instancia", "garantia")
+            .select_related(
+                "usuario",
+                "registrado_por",
+                "registrado_por__rol",
+                "devolucion",
+                "devolucion__realizado_por",
+                "devolucion__realizado_por__rol",
+                "material",
+                "instancia",
+                "garantia",
+            )
             .get(pk=prestamo_id)
         )
     except (Prestamo.DoesNotExist, ValueError, TypeError) as error:

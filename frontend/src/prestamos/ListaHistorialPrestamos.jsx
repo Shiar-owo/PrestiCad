@@ -72,6 +72,22 @@ export default function ListaHistorialPrestamos({
                 <span className="text-texto-suave">Prestatario</span>
                 <span className="font-medium text-texto">{prestamo.prestatario_nombre}</span>
               </div>
+              {prestamo.entregado_por?.nombre && (
+                <div className="flex items-center justify-between gap-2 text-xs">
+                  <span className="text-texto-suave shrink-0">Entregado por</span>
+                  <span className="font-medium text-texto truncate text-right" title={`${prestamo.entregado_por.nombre} · DNI ${prestamo.entregado_por.dni} · ${prestamo.entregado_por.rol_display || prestamo.entregado_por.rol}`}>
+                    {prestamo.entregado_por.nombre} · DNI {prestamo.entregado_por.dni} · {prestamo.entregado_por.rol_display || prestamo.entregado_por.rol}
+                  </span>
+                </div>
+              )}
+              {prestamo.recibido_por?.nombre && (
+                <div className="flex items-center justify-between gap-2 text-xs">
+                  <span className="text-texto-suave shrink-0">Recibido por</span>
+                  <span className="font-medium text-texto truncate text-right" title={`${prestamo.recibido_por.nombre} · DNI ${prestamo.recibido_por.dni} · ${prestamo.recibido_por.rol_display || prestamo.recibido_por.rol}`}>
+                    {prestamo.recibido_por.nombre} · DNI {prestamo.recibido_por.dni} · {prestamo.recibido_por.rol_display || prestamo.recibido_por.rol}
+                  </span>
+                </div>
+              )}
               {codigoEjemplar && (
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-texto-suave">Código Ejemplar</span>

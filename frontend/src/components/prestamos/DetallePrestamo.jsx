@@ -103,8 +103,9 @@ export default function DetallePrestamo({
     }
   }, [prestamo.id, intento])
 
-  async function gestionarDocumento(documento, eliminar = false) {
-    const archivo = archivos[documento.nombreArchivo]
+  async function gestionarDocumento(documento, eliminar = false, archivoDirecto = null) {
+    if (estado === 'devuelto') return
+    const archivo = archivoDirecto ?? archivos[documento.nombreArchivo]
     if (!eliminar && !archivo) {
       setErrorArchivos((actual) => ({
         ...actual,
@@ -138,6 +139,8 @@ export default function DetallePrestamo({
   }
 
   const estado = detalle?.estado ?? prestamo.estado_visible ?? prestamo.estado
+  const esPrestamoFinalizado = estado === 'devuelto'
+  const puedeModificarGarantia = puedeEditarGarantia && !esPrestamoFinalizado
   const esExcepcion = detalle?.es_excepcion ?? prestamo.es_excepcion
 
   // Priorizar snapshots históricos para que los cambios posteriores en catálogo o
@@ -684,10 +687,15 @@ export default function DetallePrestamo({
 
           {/* Documentos de garantía */}
           <section className="rounded-xl border border-borde bg-white dark:bg-superficie p-3">
-            <div className="flex items-center gap-1 mb-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-marca-100 text-marca-800 dark:bg-marca-900/30 dark:text-marca-300 text-[11px] font-bold uppercase tracking-wider">
                 Documentos de garantía
               </span>
+              {puedeEditarGarantia && esPrestamoFinalizado && (
+                <span className="text-xs font-medium text-texto-suave">
+                  Préstamo finalizado · registro de solo lectura
+                </span>
+              )}
             </div>
             {!esExcepcion && !esMaterialAltoValor(material) ? (
               <p className="mt-2 text-xs text-texto-suave">
@@ -698,7 +706,6 @@ export default function DetallePrestamo({
                 {DOCUMENTOS_GARANTIA.map((documento) => {
                   const disponible = Boolean(documentos?.[documento.campo])
                   const otroDisponible = totalDocumentos > Number(disponible)
-                  const archivo = archivos[documento.nombreArchivo]
 
                   return (
                     <li key={documento.tipo} className="rounded border border-borde bg-white p-2 dark:bg-superficie">
@@ -718,7 +725,7 @@ export default function DetallePrestamo({
                             <span className="text-sm text-texto-suave">No disponible</span>
                           )}
                         </div>
-                        {puedeEditarGarantia && (
+                        {puedeModificarGarantia && (
                           <div className="flex gap-0.5">
                             <label className="cursor-pointer">
                               <input
@@ -726,13 +733,18 @@ export default function DetallePrestamo({
                                 type="file"
                                 accept="application/pdf,.pdf"
                                 className="sr-only"
-                                ref={el => (fileInputRef[documento.tipo] = el)}
+                                ref={(el) => {
+                                  fileInputRef.current[documento.tipo] = el
+                                }}
                                 onChange={(evento) => {
+                                  const archivoSeleccionado = evento.target.files?.[0] ?? null
                                   setArchivos((actual) => ({
                                     ...actual,
-                                    [documento.nombreArchivo]: evento.target.files?.[0] ?? null,
+                                    [documento.nombreArchivo]: archivoSeleccionado,
                                   }))
-                                  gestionarDocumento(documento)
+                                  if (archivoSeleccionado) {
+                                    gestionarDocumento(documento, false, archivoSeleccionado)
+                                  }
                                 }}
                               />
                             </label>
@@ -743,7 +755,7 @@ export default function DetallePrestamo({
                               icono={Upload}
                               cargando={accion === documento.tipo}
                               deshabilitado={Boolean(accion)}
-                              onClick={() => fileInputRef[documento.tipo]?.click()}
+                              onClick={() => fileInputRef.current[documento.tipo]?.click()}
                             >
                               Reemplazar
                             </Boton>
@@ -761,7 +773,7 @@ export default function DetallePrestamo({
                             )}
                           </div>
                         )}
-                        {disponible && !otroDisponible && puedeEditarGarantia && (
+                        {disponible && !otroDisponible && puedeModificarGarantia && (
                           <p className="text-sm text-texto-suave">
                             No se puede eliminar: debe quedar al menos un PDF.
                           </p>

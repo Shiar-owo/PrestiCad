@@ -621,6 +621,12 @@ def actualizar_documento_garantia(*, prestamo_id, tipo, archivo=None, eliminar=F
             "No existe el préstamo indicado.",
             status_code=404,
         ) from error
+    if prestamo.estado == "devuelto":
+        raise PrestamoError(
+            "prestamo_id",
+            "No se pueden modificar ni eliminar datos o documentos de un préstamo ya finalizado.",
+            status_code=409,
+        )
     try:
         garantia = Garantia.objects.select_for_update().get(prestamo=prestamo)
     except Garantia.DoesNotExist as error:

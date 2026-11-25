@@ -2435,6 +2435,46 @@ class DescargarGarantiaAPITestCase(APITestCase):
             prestamo.garantia.refresh_from_db()
             self.assertEqual(prestamo.garantia.documento_identidad.name, nombre_anterior)
 
+    def test_no_permite_modificar_ni_eliminar_datos_o_garantia_de_prestamo_finalizado(self):
+        with storage_garantias_temporal():
+            prestamo = self._registrar_prestamo_con_garantia()
+            registrar_devolucion(
+                prestamo_id=prestamo.id,
+                checklist_devolucion=[
+                    {"elemento": "Carcasa", "estado": "sin_cambios", "observacion": ""},
+                    {"elemento": "Cable", "estado": "sin_cambios", "observacion": ""},
+                ],
+                realizado_por=self.gestor,
+            )
+            url_garantia = self.URL.format(
+                prestamo_id=prestamo.id,
+                tipo="documento-identidad",
+            )
+            self._iniciar_sesion(self.administrador)
+
+            reemplazo = self.client.patch(
+                url_garantia,
+                {"archivo": crear_pdf("nuevo.pdf")},
+                format="multipart",
+            )
+            self.assertEqual(reemplazo.status_code, 409)
+
+            eliminacion = self.client.patch(
+                url_garantia,
+                {"eliminar": "true"},
+                format="multipart",
+            )
+            self.assertEqual(eliminacion.status_code, 409)
+
+            # Los endpoints de préstamo e historial no admiten DELETE/PUT/PATCH
+            self.assertEqual(self.client.delete(f"/api/prestamos/{prestamo.id}/").status_code, 405)
+            self.assertEqual(self.client.put(f"/api/prestamos/{prestamo.id}/", {}, format="json").status_code, 405)
+            self.assertEqual(self.client.delete(f"/api/prestamos/{prestamo.id}/historial/").status_code, 405)
+
+            prestamo.garantia.refresh_from_db()
+            self.assertTrue(prestamo.garantia.documento_identidad)
+            self.assertTrue(prestamo.garantia.compromiso_responsabilidad)
+
     def test_descarga_informa_prestamo_o_documento_inexistente(self):
         self._iniciar_sesion(self.gestor)
         inexistente = self.client.get(

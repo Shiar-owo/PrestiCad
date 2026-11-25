@@ -2,6 +2,7 @@ import { useContext, useEffect, useState } from 'react'
 import {
   Award,
   Box,
+  Calendar,
   Cpu,
   FileText,
   Info,
@@ -19,6 +20,7 @@ import { ETIQUETAS_TIER } from '../constantes/catalogo'
 import SesionContext from '../contextos/SesionContext'
 import { esElegiblePorTier, requiereExcepcionAcademica } from '../reservas/estadoReserva'
 import AgregarEjemplaresMaterial from './AgregarEjemplaresMaterial'
+import CalendarioDisponibilidad from './reservas/CalendarioDisponibilidad'
 import BadgeEstado from './ui/BadgeEstado'
 import Boton from './ui/Boton'
 
@@ -379,6 +381,23 @@ function FichaTecnicaModal({
               </p>
             )}
           </div>
+
+          {/* Sección de Calendario de Reservas Futuras por Objeto (PRTCAD-221) */}
+          {material?.id && (
+            <div>
+              <h4 className="flex items-center gap-2 border-b border-borde pb-2 text-sm font-bold uppercase tracking-wider text-texto">
+                <Calendar className="size-4 text-acento-600 dark:text-acento-400" aria-hidden="true" />
+                Calendario de Reservas Futuras
+              </h4>
+              <div className="mt-3">
+                <CalendarioDisponibilidad
+                  materialId={material.id}
+                  soloLectura
+                  mostrarResumenReservas
+                />
+              </div>
+            </div>
+          )}
 
           {/* Sección de Reglas de Préstamo y Reputación (RN06) */}
           <div>

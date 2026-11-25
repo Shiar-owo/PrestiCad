@@ -906,7 +906,7 @@ class ReservasCalendarioTestCase(APITestCase):
         self.prestatario_1 = crear_usuario("cal1@unsa.edu.pe", "45000001", reputacion_tier="estandar")
         self.prestatario_2 = crear_usuario("cal2@unsa.edu.pe", "45000002", reputacion_tier="estandar")
         self.prestatario_3 = crear_usuario("cal3@unsa.edu.pe", "45000003", reputacion_tier="estandar")
-        self.gestor = crear_usuario("gestor_cal@unsa.edu.pe", "45000004", rol_nombre="gestor")
+        self.gestor = crear_usuario("gestor_cal@unsa.edu.pe", "45000004", rol="gestor")
         self.material = crear_material(
             codigo_material="CAL-01",
             stock=1,
@@ -1038,6 +1038,48 @@ class ReservasCalendarioTestCase(APITestCase):
         self.assertIn("fecha", primer_dia)
         self.assertIn("disponible", primer_dia)
         self.assertIn("ejemplares_libres", primer_dia)
+
+    def test_api_disponibilidad_expone_reservas_futuras_y_prestatario_solo_a_gestion(self):
+        hoy = timezone.localtime(timezone.now()).replace(second=0, microsecond=0)
+        lunes = hoy + timedelta(days=1)
+        while lunes.weekday() != 0:
+            lunes += timedelta(days=1)
+        inicio = lunes.replace(hour=10, minute=0)
+        fin = lunes.replace(hour=13, minute=0)
+
+        crear_reserva(
+            usuario=self.prestatario_1,
+            material_id=self.material.id,
+            justificacion="Reserva futura de prueba",
+            fecha_inicio=inicio,
+            fecha_fin=fin,
+        )
+
+        url = f"/api/materiales/{self.material.id}/disponibilidad/"
+        params = {"desde": lunes.date().isoformat(), "hasta": lunes.date().isoformat()}
+
+        # Consulta pública/prestatario: muestra franja reservada sin exponer nombre del prestatario
+        resp_publica = self.client.get(url, params)
+        self.assertEqual(resp_publica.status_code, 200)
+        ocupaciones_pub = resp_publica.json()["dias"][0]["ocupaciones"]
+        self.assertEqual(len(ocupaciones_pub), 1)
+        self.assertEqual(ocupaciones_pub[0]["tipo"], "reserva")
+        self.assertNotIn("prestatario", ocupaciones_pub[0])
+
+        # Consulta como gestor: incluye el nombre del prestatario en las ocupaciones
+        sesion = self.client.session
+        sesion[CLAVE_SESION_USUARIO_ID] = self.gestor.id
+        sesion[CLAVE_SESION_ULTIMA_ACTIVIDAD] = timezone.now().isoformat()
+        sesion.save()
+
+        resp_gestor = self.client.get(url, params)
+        self.assertEqual(resp_gestor.status_code, 200)
+        ocupaciones_gestor = resp_gestor.json()["dias"][0]["ocupaciones"]
+        self.assertEqual(len(ocupaciones_gestor), 1)
+        self.assertEqual(
+            ocupaciones_gestor[0]["prestatario"],
+            f"{self.prestatario_1.nombre} {self.prestatario_1.apellido}".strip(),
+        )
 
 
 class DiasNoLaborablesAPITestCase(APITestCase):

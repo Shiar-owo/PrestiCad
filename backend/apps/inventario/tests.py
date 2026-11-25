@@ -714,6 +714,46 @@ class MaterialSerializerContratoTestCase(SimpleTestCase):
         self.assertEqual(serializer.validated_data["estado"], "disponible")
         self.assertNotIn("unidades_disponibles", serializer.validated_data)
 
+    def test_alta_rechaza_costos_negativos(self):
+        for campo in ("costo_reparacion", "costo_reposicion"):
+            with self.subTest(campo=campo):
+                serializer = MaterialRegistroSerializer(
+                    data={
+                        "nombre": "Cable",
+                        "codigo_material": "OBJ-1",
+                        "tipo": "objeto",
+                        campo: "-0.01",
+                    }
+                )
+
+                self.assertFalse(serializer.is_valid())
+                self.assertEqual(serializer.errors[campo], ["El costo no puede ser negativo."])
+
+    def test_alta_admite_costos_cero_y_mantiene_limite_de_digitos(self):
+        serializer = MaterialRegistroSerializer(
+            data={
+                "nombre": "Cable",
+                "codigo_material": "OBJ-1",
+                "tipo": "objeto",
+                "costo_reparacion": "0.00",
+                "costo_reposicion": "99999999.99",
+            }
+        )
+
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+
+        serializer = MaterialRegistroSerializer(
+            data={
+                "nombre": "Cable",
+                "codigo_material": "OBJ-1",
+                "tipo": "objeto",
+                "costo_reparacion": "100000000.00",
+            }
+        )
+
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("costo_reparacion", serializer.errors)
+
     def test_alta_acepta_observaciones_como_entrada(self):
         serializer = MaterialRegistroSerializer(
             data={
@@ -782,6 +822,17 @@ class MaterialSerializerContratoTestCase(SimpleTestCase):
 
         self.assertTrue(serializer.is_valid(), serializer.errors)
         self.assertIsNone(serializer.validated_data["costo_reparacion"])
+
+    def test_edicion_rechaza_costos_negativos_y_admite_cero(self):
+        for campo in ("costo_reparacion", "costo_reposicion"):
+            with self.subTest(campo=campo):
+                serializer = MaterialActualizacionSerializer(data={campo: "-0.01"})
+
+                self.assertFalse(serializer.is_valid())
+                self.assertEqual(serializer.errors[campo], ["El costo no puede ser negativo."])
+
+                serializer = MaterialActualizacionSerializer(data={campo: "0.00"})
+                self.assertTrue(serializer.is_valid(), serializer.errors)
 
 
 class ModuloInventarioTestCase(SimpleTestCase):

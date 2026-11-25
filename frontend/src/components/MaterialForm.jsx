@@ -31,6 +31,10 @@ import {
   validarCodigosDuplicados,
   validarFotosEjemplares,
 } from '../inventario/registroMaterial'
+import {
+  validarCostoMaterial,
+  validarCostosMaterial,
+} from '../inventario/validacionCostosMaterial'
 import Campo from './ui/Campo'
 import Boton from './ui/Boton'
 import Tarjeta from './ui/Tarjeta'
@@ -81,6 +85,8 @@ const ETIQUETAS_CAMPOS_ERROR = {
   estado: 'Estado',
   estado_inicial_ejemplares: 'Estado',
   tiempo_maximo_prestamo: 'Tiempo máximo de préstamo',
+  costo_reparacion: 'Costo de reparación',
+  costo_reposicion: 'Costo de reposición',
   foto: 'Foto',
   formulario: 'Registro',
 }
@@ -218,11 +224,7 @@ function validar(datos) {
     }
   }
 
-  for (const campo of ['costo_reparacion', 'costo_reposicion']) {
-    if (datos[campo] !== '' && !Number.isFinite(Number(datos[campo]))) {
-      errores[campo] = 'Ingresa un monto o déjalo vacío.'
-    }
-  }
+  Object.assign(errores, validarCostosMaterial(datos))
 
   const errorFoto = validarFoto(datos.foto)
   if (errorFoto) {
@@ -350,6 +352,12 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
           ? (tierPrevioAAltoValor.current || 'estandar')
           : datos.tier_minimo_requerido
       if (antesEsAltoValor && !ahoraEsAltoValor) tierPrevioAAltoValor.current = null
+      if (reposicionVinculadaAlPrecio) {
+        setErrores((previos) => ({
+          ...previos,
+          costo_reposicion: validarCostoMaterial(valor),
+        }))
+      }
       setDatos((previos) => {
         const cambioTier = tierAutomatico !== previos.tier_minimo_requerido
         const defaultTiempoTier =
@@ -376,6 +384,12 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
     }
     if (campo === 'costo_reposicion') {
       setReposicionVinculadaAlPrecio(false)
+    }
+    if (campo === 'costo_reparacion' || campo === 'costo_reposicion') {
+      setErrores((previos) => ({
+        ...previos,
+        [campo]: validarCostoMaterial(valor),
+      }))
     }
     if (campo === 'tier_minimo_requerido' && DEFAULTS_REPUTACION_POR_TIER[valor]) {
       setDatos((previos) => {
@@ -1295,6 +1309,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
               min="0"
               step="0.01"
               valor={datos.costo_reparacion}
+              ayuda="No puede ser negativo."
               onCambio={(evento) => actualizar('costo_reparacion', evento.target.value)}
               error={errores.costo_reparacion}
             />
@@ -1304,7 +1319,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
               min="0"
               step="0.01"
               valor={datos.costo_reposicion}
-              ayuda="Por defecto, se completa con el Precio. Puedes cambiarlo manualmente."
+              ayuda="Por defecto, se completa con el Precio. Puedes cambiarlo manualmente; no puede ser negativo."
               onCambio={(evento) => actualizar('costo_reposicion', evento.target.value)}
               error={errores.costo_reposicion}
             />

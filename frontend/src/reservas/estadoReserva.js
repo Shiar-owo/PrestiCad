@@ -1,4 +1,8 @@
 import { validarTamanoSolicitud } from '../prestamos/tamanoSolicitud'
+import {
+  DURACION_MAXIMA_RESERVA_MINUTOS,
+  formatearDuracionMinutos,
+} from '../constantes/checklistPrestamo'
 
 export const MAXIMO_RESERVAS_ACTIVAS = 3
 
@@ -6,13 +10,16 @@ export const ESTADOS_ACTIVOS_RESERVA = ['en_espera', 'reservada']
 
 export const HORARIO_ATENCION_INICIO = 8
 export const HORARIO_ATENCION_FIN = 18
-export const HORA_RESERVA_MINIMO_INICIO = 9
+export const HORA_RESERVA_MINIMO_INICIO = 8
 export const HORA_RESERVA_MAXIMO_FIN = 17
+export const MINUTO_RESERVA_MAXIMO_FIN = 30
+export const TEXTO_HORA_RESERVA_MAXIMO_FIN = '17:30'
 // getDay() en JS: 0=Domingo, 1=Lunes, 2=Martes, 3=Miercoles, 4=Jueves, 5=Viernes, 6=Sabado
 // weekday() en Python: 0=Lunes ... 4=Viernes. No copiar ese valor directamente aqui.
 export const DIAS_LABORABLES = [1, 2, 3, 4, 5]
 export const TOLERANCIA_RECOJO_MINUTOS = 30
 export const MINIMO_MINUTOS_RESERVA = 60
+export const MINIMO_RANGO_RESERVA_MINUTOS = MINIMO_MINUTOS_RESERVA + TOLERANCIA_RECOJO_MINUTOS
 
 export const ETIQUETAS_ESTADO_RESERVA = {
   en_espera: 'En espera',
@@ -205,6 +212,8 @@ export function formatearFechaReserva(fecha) {
   return new Intl.DateTimeFormat('es-PE', {
     dateStyle: 'medium',
     timeStyle: 'short',
+    hourCycle: 'h23',
+    timeZone: 'America/Lima',
   }).format(valor)
 }
 
@@ -242,7 +251,7 @@ export function obtenerMinimoFinReserva(fechaInicio) {
   if (!fechaInicio) return ''
   const minimo = new Date(fechaInicio)
   if (Number.isNaN(minimo.getTime())) return ''
-  minimo.setMinutes(minimo.getMinutes() + MINIMO_MINUTOS_RESERVA)
+  minimo.setMinutes(minimo.getMinutes() + MINIMO_RANGO_RESERVA_MINUTOS)
   return formatearFechaHoraInput(minimo)
 }
 
@@ -285,26 +294,31 @@ export function obtenerMaximoFinReserva(fechaInicio, material = null) {
   if (!fechaInicio) return ''
   const inicio = new Date(fechaInicio)
   if (Number.isNaN(inicio.getTime())) return ''
-  const maximoMinutos = Number(material?.tiempo_maximo_prestamo) > 0
-    ? Number(material.tiempo_maximo_prestamo)
-    : 15 * 24 * 60
+  const maximoMinutos = obtenerMaximoMinutosReserva(material)
 
   const maximo = new Date(inicio.getTime() + maximoMinutos * 60000)
   // Si maximo cae en fin de semana, ajustar al viernes anterior a las 17:00
   if (maximo.getDay() === 6) {
     maximo.setDate(maximo.getDate() - 1)
-    maximo.setHours(HORA_RESERVA_MAXIMO_FIN, 0, 0, 0)
+    maximo.setHours(HORA_RESERVA_MAXIMO_FIN, MINUTO_RESERVA_MAXIMO_FIN, 0, 0)
   } else if (maximo.getDay() === 0) {
     maximo.setDate(maximo.getDate() - 2)
-    maximo.setHours(HORA_RESERVA_MAXIMO_FIN, 0, 0, 0)
+    maximo.setHours(HORA_RESERVA_MAXIMO_FIN, MINUTO_RESERVA_MAXIMO_FIN, 0, 0)
   }
   const minutosDia = maximo.getHours() * 60 + maximo.getMinutes()
-  if (minutosDia > HORA_RESERVA_MAXIMO_FIN * 60) {
-    maximo.setHours(HORA_RESERVA_MAXIMO_FIN, 0, 0, 0)
+  if (minutosDia > HORA_RESERVA_MAXIMO_FIN * 60 + MINUTO_RESERVA_MAXIMO_FIN) {
+    maximo.setHours(HORA_RESERVA_MAXIMO_FIN, MINUTO_RESERVA_MAXIMO_FIN, 0, 0)
   } else if (minutosDia < HORA_RESERVA_MINIMO_INICIO * 60) {
     maximo.setHours(HORA_RESERVA_MINIMO_INICIO, 0, 0, 0)
   }
   return formatearFechaHoraInput(maximo)
+}
+
+export function obtenerMaximoMinutosReserva(material = null) {
+  const maximoConfigurado = Number(material?.tiempo_maximo_prestamo)
+  return maximoConfigurado > 0
+    ? Math.min(maximoConfigurado, DURACION_MAXIMA_RESERVA_MINUTOS)
+    : DURACION_MAXIMA_RESERVA_MINUTOS
 }
 
 export function obtenerFechaLocal(fecha = new Date()) {
@@ -324,23 +338,27 @@ export function obtenerMinimaHoraInicioReserva(fecha, ahora = new Date()) {
 }
 
 export function obtenerMinimaHoraFinReserva(horaInicio) {
-  if (!horaInicio) return `${String(HORA_RESERVA_MINIMO_INICIO + 1).padStart(2, '0')}:00`
+  if (!horaInicio) {
+    const minimo = HORA_RESERVA_MINIMO_INICIO * 60 + MINIMO_RANGO_RESERVA_MINUTOS
+    return `${String(Math.floor(minimo / 60)).padStart(2, '0')}:${String(minimo % 60).padStart(2, '0')}`
+  }
   const [hora, minuto] = horaInicio.split(':').map(Number)
   const minutos = Math.max(
-    (HORA_RESERVA_MINIMO_INICIO + 1) * 60,
-    hora * 60 + minuto + MINIMO_MINUTOS_RESERVA,
+    (HORA_RESERVA_MINIMO_INICIO * 60) + MINIMO_RANGO_RESERVA_MINUTOS,
+    hora * 60 + minuto + MINIMO_RANGO_RESERVA_MINUTOS,
   )
   return `${String(Math.floor(minutos / 60)).padStart(2, '0')}:${String(minutos % 60).padStart(2, '0')}`
 }
 
-export function puedeEntregarseReservaAhora(fechaInicio, ahora = new Date()) {
+export function puedeEntregarseReservaAhora(fechaInicio, ahora = new Date(), fechaLimiteRecojo = null) {
   if (!fechaInicio) return false
   const inicio = new Date(fechaInicio)
   if (Number.isNaN(inicio.getTime())) return false
   const mismoDia = inicio.getFullYear() === ahora.getFullYear()
     && inicio.getMonth() === ahora.getMonth()
     && inicio.getDate() === ahora.getDate()
-  return mismoDia && ahora >= inicio
+  const limite = fechaLimiteRecojo ? new Date(fechaLimiteRecojo) : null
+  return mismoDia && ahora >= inicio && (!limite || ahora <= limite)
 }
 
 export function obtenerLunesSemana(fecha) {
@@ -363,9 +381,7 @@ export function validarHorarioReserva(
   material = null,
 ) {
   const errores = {}
-  const maximoMinutosMaterial = Number(material?.tiempo_maximo_prestamo) > 0
-    ? Number(material.tiempo_maximo_prestamo)
-    : null
+  const maximoMinutosMaterial = material ? obtenerMaximoMinutosReserva(material) : null
   if (esAvanzado) {
     // Validar fecha de forma independiente
     if (!fechaSeleccionada) {
@@ -389,8 +405,8 @@ export function validarHorarioReserva(
       errores.horaInicio = 'La hora de inicio no es válida.'
     } else {
       const minutosInicio = parseInt(horaInicio.split(':')[0], 10) * 60 + parseInt(horaInicio.split(':')[1], 10)
-      if (minutosInicio < HORA_RESERVA_MINIMO_INICIO * 60 || minutosInicio > HORA_RESERVA_MAXIMO_FIN * 60) {
-        errores.horaInicio = `El horario de atención es de ${HORA_RESERVA_MINIMO_INICIO}:00 a ${HORA_RESERVA_MAXIMO_FIN}:00.`
+      if (minutosInicio < HORA_RESERVA_MINIMO_INICIO * 60 || minutosInicio > HORA_RESERVA_MAXIMO_FIN * 60 + MINUTO_RESERVA_MAXIMO_FIN) {
+        errores.horaInicio = `El horario pactado es de 08:00 a ${TEXTO_HORA_RESERVA_MAXIMO_FIN}.`
       }
     }
 
@@ -401,8 +417,8 @@ export function validarHorarioReserva(
       errores.horaFin = 'La hora de fin no es válida.'
     } else {
       const minutosFin = parseInt(horaFin.split(':')[0], 10) * 60 + parseInt(horaFin.split(':')[1], 10)
-      if (minutosFin < HORA_RESERVA_MINIMO_INICIO * 60 || minutosFin > HORA_RESERVA_MAXIMO_FIN * 60) {
-        errores.horaFin = `El horario de atención es de ${HORA_RESERVA_MINIMO_INICIO}:00 a ${HORA_RESERVA_MAXIMO_FIN}:00.`
+      if (minutosFin < HORA_RESERVA_MINIMO_INICIO * 60 || minutosFin > HORA_RESERVA_MAXIMO_FIN * 60 + MINUTO_RESERVA_MAXIMO_FIN) {
+        errores.horaFin = `El horario pactado es de 08:00 a ${TEXTO_HORA_RESERVA_MAXIMO_FIN}.`
       }
     }
 
@@ -413,10 +429,10 @@ export function validarHorarioReserva(
       const minutosReserva = (fin.getTime() - inicio.getTime()) / 60000
       if (fin <= inicio) {
         errores.horaFin = 'La hora de fin debe ser posterior a la de inicio.'
-      } else if (minutosReserva < MINIMO_MINUTOS_RESERVA) {
-        errores.horaFin = 'La reserva debe tener una duración mínima de 1 hora (60 minutos).'
+      } else if (minutosReserva < MINIMO_RANGO_RESERVA_MINUTOS) {
+        errores.horaFin = 'Debe haber al menos 1 hora entre el límite de recojo y la devolución pactada.'
       } else if (maximoMinutosMaterial && minutosReserva > maximoMinutosMaterial) {
-        errores.horaFin = 'La duración de la reserva supera el tiempo máximo permitido para este material.'
+        errores.horaFin = `La duración de la reserva supera el tiempo máximo permitido para este material (${formatearDuracionMinutos(maximoMinutosMaterial)}).`
       }
     }
   } else {
@@ -433,10 +449,10 @@ export function validarHorarioReserva(
           errores.fechaInicio = 'Solo se permite reservar de lunes a viernes (días laborables).'
         }
         const minutosInicio = inicio.getHours() * 60 + inicio.getMinutes()
-        if (minutosInicio < HORA_RESERVA_MINIMO_INICIO * 60 || minutosInicio > HORA_RESERVA_MAXIMO_FIN * 60) {
+        if (minutosInicio < HORA_RESERVA_MINIMO_INICIO * 60 || minutosInicio > HORA_RESERVA_MAXIMO_FIN * 60 + MINUTO_RESERVA_MAXIMO_FIN) {
           errores.fechaInicio =
             (errores.fechaInicio ? errores.fechaInicio + ' ' : '') +
-            `El horario de atención es de ${HORA_RESERVA_MINIMO_INICIO}:00 a ${HORA_RESERVA_MAXIMO_FIN}:00.`
+            `El horario pactado es de 08:00 a ${TEXTO_HORA_RESERVA_MAXIMO_FIN}.`
         }
       }
     }
@@ -454,10 +470,10 @@ export function validarHorarioReserva(
           errores.fechaFin = 'Solo se permite reservar de lunes a viernes (días laborables).'
         }
         const minutosFin = fin.getHours() * 60 + fin.getMinutes()
-        if (minutosFin < HORA_RESERVA_MINIMO_INICIO * 60 || minutosFin > HORA_RESERVA_MAXIMO_FIN * 60) {
+        if (minutosFin < HORA_RESERVA_MINIMO_INICIO * 60 || minutosFin > HORA_RESERVA_MAXIMO_FIN * 60 + MINUTO_RESERVA_MAXIMO_FIN) {
           errores.fechaFin =
             (errores.fechaFin ? errores.fechaFin + ' ' : '') +
-            `El horario de atención es de ${HORA_RESERVA_MINIMO_INICIO}:00 a ${HORA_RESERVA_MAXIMO_FIN}:00.`
+            `El horario pactado es de 08:00 a ${TEXTO_HORA_RESERVA_MAXIMO_FIN}.`
         }
       }
     }
@@ -472,14 +488,14 @@ export function validarHorarioReserva(
           errores.fechaFin =
             (errores.fechaFin ? errores.fechaFin + ' ' : '') +
             'La fecha y hora de fin debe ser posterior a la de inicio.'
-        } else if (minutosHabiles < MINIMO_MINUTOS_RESERVA) {
+        } else if (minutosHabiles < MINIMO_RANGO_RESERVA_MINUTOS) {
           errores.fechaFin =
             (errores.fechaFin ? errores.fechaFin + ' ' : '') +
-            'La reserva debe tener una duración mínima de 1 hora (60 minutos).'
+            'Debe haber al menos 1 hora entre el límite de recojo y la devolución pactada.'
         } else if (maximoMinutosMaterial && minutosHabiles > maximoMinutosMaterial) {
           errores.fechaFin =
             (errores.fechaFin ? errores.fechaFin + ' ' : '') +
-            'La duración de la reserva supera el tiempo máximo permitido para este material.'
+            `La duración de la reserva supera el tiempo máximo permitido para este material (${formatearDuracionMinutos(maximoMinutosMaterial)}).`
         }
       }
     }

@@ -7,6 +7,7 @@ from django.db import transaction
 from django.db.models import Case, IntegerField, Q, Value, When
 from django.utils import timezone
 
+from apps.compartido.constants import MAXIMO_DURACION_PACTADA_MINUTOS
 from apps.inventario import services as servicios_inventario
 from apps.inventario.constants import TIERS_ACCESIBLES
 from apps.inventario.models import InstanciaMaterial, Material
@@ -22,10 +23,8 @@ from apps.reservas.constants import (
     ESTADOS_ACTIVOS,
     HORA_RESERVA_MAXIMO_FIN,
     HORA_RESERVA_MINIMO_INICIO,
-    HORARIO_ATENCION_FIN,
-    HORARIO_ATENCION_INICIO,
+    MINUTO_RESERVA_MAXIMO_FIN,
     HORAS_ESPERA,
-    HORAS_RECOJO,
     MENSAJES_ERROR_RESERVA,
     MINIMO_MINUTOS_RESERVA,
     TOLERANCIA_RECOJO_MINUTOS,
@@ -198,7 +197,7 @@ def autopromover_material(material_id, *, ahora=None):
             reserva.fecha_confirmacion = ahora
             # Mismo criterio que `crear_reserva`: el plazo de recojo es el fin del
             # rango reservado; las 24 h solo aplican a datos antiguos sin rango.
-            reserva.fecha_limite_recojo = reserva.fecha_fin or (ahora + timedelta(hours=HORAS_RECOJO))
+            reserva.fecha_limite_recojo = reserva.fecha_inicio + timedelta(minutes=TOLERANCIA_RECOJO_MINUTOS)
             reserva.save(
                 update_fields=[
                     "instancia",
@@ -242,12 +241,11 @@ def _validar_horario_reserva(
     fecha_inicio,
     fecha_fin,
     *,
-    es_avanzado=False,
     maximo_minutos=None,
     ahora=None,
 ):
     """Valida que la reserva esté dentro del horario de atención y días laborables.
-    Tanto el inicio como el fin deben ser de lunes a viernes entre 09:00 y 17:00.
+    Recojo y devolución pactados deben quedar de lunes a viernes entre 08:00 y 17:30.
     Todos los días intermedios (incluyendo fines de semana) cuentan en el cálculo de duración."""
     ahora = ahora or timezone.now()
     if fecha_inicio is None or fecha_fin is None:
@@ -262,12 +260,11 @@ def _validar_horario_reserva(
                 "Solo se permite reservar de lunes a viernes (días laborables).",
             )
         minutos_dia = valor.hour * 60 + valor.minute
-        if not (
-            HORA_RESERVA_MINIMO_INICIO * 60 <= minutos_dia <= HORA_RESERVA_MAXIMO_FIN * 60
-        ):
+        if not (HORA_RESERVA_MINIMO_INICIO * 60 <= minutos_dia <= HORA_RESERVA_MAXIMO_FIN * 60 + 30):
             raise ReservaError(
                 etiqueta,
-                f"El horario de atención es de {HORA_RESERVA_MINIMO_INICIO}:00 a {HORA_RESERVA_MAXIMO_FIN}:00.",
+                f"El horario pactado es de {HORA_RESERVA_MINIMO_INICIO:02d}:00 a "
+                f"{HORA_RESERVA_MAXIMO_FIN:02d}:{MINUTO_RESERVA_MAXIMO_FIN:02d}.",
             )
 
     if fecha_fin <= fecha_inicio:
@@ -283,17 +280,18 @@ def _validar_horario_reserva(
             "La reserva debe tener una duración mínima de 1 hora (60 minutos).",
         )
 
-    if es_avanzado:
-        if fecha_inicio.date() != fecha_fin.date():
-            raise ReservaError(
-                "fecha_inicio",
-                "Para materiales de Tier avanzado, el inicio y el fin deben ser el mismo día.",
-            )
-
-    if maximo_minutos is not None and minutos_habiles > maximo_minutos:
+    limite_recojo = fecha_inicio + timedelta(minutes=TOLERANCIA_RECOJO_MINUTOS)
+    if fecha_fin - limite_recojo < timedelta(minutes=MINIMO_MINUTOS_RESERVA):
+        raise ReservaError(
+            "fecha_fin",
+            "Debe haber al menos 1 hora entre el límite de recojo y la devolución pactada.",
+        )
+    maximo_configurado = maximo_minutos or MAXIMO_DURACION_PACTADA_MINUTOS
+    maximo_efectivo = min(maximo_configurado, MAXIMO_DURACION_PACTADA_MINUTOS)
+    if minutos_habiles > maximo_efectivo:
         from apps.prestamos.constants import formatear_duracion_minutos
 
-        limite_legible = formatear_duracion_minutos(maximo_minutos)
+        limite_legible = formatear_duracion_minutos(maximo_efectivo)
         raise ReservaError(
             "fecha_fin",
             f"La duración de la reserva supera el tiempo máximo permitido para este material ({limite_legible}).",
@@ -325,19 +323,9 @@ def crear_reserva(
     material = _obtener_material_bloqueado(material_id)
 
     # Para materiales de Tier avanzado, inicio y fin deben ser el mismo día; solo se eligen horas.
-    es_avanzado = material.tier_minimo_requerido == "avanzado"
-    if es_avanzado:
-        if fecha_inicio is not None and fecha_fin is not None:
-            if fecha_inicio.date() != fecha_fin.date():
-                raise ReservaError(
-                    "fecha_fin",
-                    "Para materiales de Tier avanzado, el inicio y el fin deben ser el mismo día.",
-                )
-
     _validar_horario_reserva(
         fecha_inicio,
         fecha_fin,
-        es_avanzado=es_avanzado,
         maximo_minutos=material.tiempo_maximo_prestamo,
         ahora=ahora,
     )
@@ -413,7 +401,10 @@ def crear_reserva(
             status_code=409,
         )
 
-    fecha_limite_recojo = fecha_fin or (ahora + timedelta(hours=HORAS_RECOJO))
+    fecha_limite_recojo = (
+        fecha_inicio + timedelta(minutes=TOLERANCIA_RECOJO_MINUTOS)
+        if fecha_inicio else ahora + timedelta(minutes=TOLERANCIA_RECOJO_MINUTOS)
+    )
 
     if instancia_elegida is not None:
         try:
@@ -494,7 +485,6 @@ def crear_reserva_excepcional(
     _validar_horario_reserva(
         fecha_inicio,
         fecha_fin,
-        es_avanzado=material.tier_minimo_requerido == "avanzado",
         maximo_minutos=material.tiempo_maximo_prestamo,
         ahora=ahora,
     )
@@ -622,7 +612,10 @@ def aprobar_excepcion(*, reserva_id, realizado_por=None, ahora=None):
     reserva.estado = "reservada"
     reserva.excepcion_aprobada = True
     reserva.fecha_confirmacion = ahora
-    reserva.fecha_limite_recojo = reserva.fecha_fin or (ahora + timedelta(hours=HORAS_RECOJO))
+    reserva.fecha_limite_recojo = (
+        reserva.fecha_inicio + timedelta(minutes=TOLERANCIA_RECOJO_MINUTOS)
+        if reserva.fecha_inicio else ahora + timedelta(minutes=TOLERANCIA_RECOJO_MINUTOS)
+    )
     reserva.save(
         update_fields=(
             "instancia", "estado", "excepcion_aprobada", "fecha_confirmacion",
@@ -646,7 +639,7 @@ def obtener_documento_garantia_reserva(reserva_id, tipo):
 
 @transaction.atomic
 def expirar_reservas(*, ahora=None):
-    """Procesa vencimientos de reservas confirmadas (24 h) y solicitudes en espera (72 h) (HU07)."""
+    """Procesa reservas confirmadas tras 30 min y solicitudes en espera tras 72 h (HU07)."""
     ahora = ahora or timezone.now()
     penalizacion = getattr(settings, "RESERVA_PENALIZACION_PUNTOS", 20)
 
@@ -655,7 +648,7 @@ def expirar_reservas(*, ahora=None):
         .select_related("usuario", "material", "instancia")
         .filter(
             estado="reservada",
-            fecha_limite_recojo__lt=ahora - timedelta(minutes=TOLERANCIA_RECOJO_MINUTOS),
+            fecha_limite_recojo__lt=ahora,
         )
         .order_by("fecha_limite_recojo", "id")
     )
@@ -919,14 +912,13 @@ def consultar_cola_general():
 
 def _queryset_reservas_confirmadas_vigentes(ahora=None):
     ahora = ahora or timezone.now()
-    limite_conversion = ahora - timedelta(minutes=TOLERANCIA_RECOJO_MINUTOS)
     return (
         Reserva.objects.select_related("usuario", "material", "instancia")
         .filter(
             estado="reservada",
             instancia__isnull=False,
             instancia__estado="reservado",
-            fecha_limite_recojo__gte=limite_conversion,
+            fecha_limite_recojo__gte=ahora,
         )
         .order_by("fecha_limite_recojo", "fecha_confirmacion", "id")
     )

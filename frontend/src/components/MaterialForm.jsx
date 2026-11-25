@@ -15,6 +15,7 @@ import {
 } from '../constantes/catalogo'
 import {
   DURACION_MAXIMA_MATERIAL_MINUTOS,
+  DURACION_MAXIMA_PRESTAMO_DIAS,
   DURACION_MINIMA_MATERIAL_MINUTOS,
   TIEMPO_MAXIMO_DEFAULT_POR_TIER,
   calcularMinutosDuracionPersonalizada,
@@ -31,6 +32,10 @@ import {
   validarCodigosDuplicados,
   validarFotosEjemplares,
 } from '../inventario/registroMaterial'
+import {
+  validarCostoMaterial,
+  validarCostosMaterial,
+} from '../inventario/validacionCostosMaterial'
 import Campo from './ui/Campo'
 import Boton from './ui/Boton'
 import Tarjeta from './ui/Tarjeta'
@@ -81,6 +86,8 @@ const ETIQUETAS_CAMPOS_ERROR = {
   estado: 'Estado',
   estado_inicial_ejemplares: 'Estado',
   tiempo_maximo_prestamo: 'Tiempo máximo de préstamo',
+  costo_reparacion: 'Costo de reparación',
+  costo_reposicion: 'Costo de reposición',
   foto: 'Foto',
   formulario: 'Registro',
 }
@@ -157,7 +164,10 @@ function crearDatosIniciales(material) {
   const tierInicial = material?.tier_minimo_requerido || 'estandar'
   const defaultTier =
     TIEMPO_MAXIMO_DEFAULT_POR_TIER[tierInicial] || TIEMPO_MAXIMO_DEFAULT_POR_TIER.estandar
-  const minutosIniciales = Number(material?.tiempo_maximo_prestamo || defaultTier.minutos)
+  const minutosIniciales = Math.min(
+    Number(material?.tiempo_maximo_prestamo || defaultTier.minutos),
+    DURACION_MAXIMA_MATERIAL_MINUTOS,
+  )
   return {
     ...DATOS_INICIALES,
     ...Object.fromEntries(
@@ -207,7 +217,7 @@ function validar(datos) {
       || minutos > DURACION_MAXIMA_MATERIAL_MINUTOS
     ) {
       errores.tiempo_maximo_prestamo =
-        'El tiempo máximo de préstamo del material debe estar entre 1 hora (60 minutos) y 15 días (21600 minutos).'
+        `El tiempo máximo de préstamo del material debe estar entre 1 hora (60 minutos) y ${DURACION_MAXIMA_PRESTAMO_DIAS} días (${DURACION_MAXIMA_MATERIAL_MINUTOS} minutos).`
     }
   }
 
@@ -218,11 +228,7 @@ function validar(datos) {
     }
   }
 
-  for (const campo of ['costo_reparacion', 'costo_reposicion']) {
-    if (datos[campo] !== '' && !Number.isFinite(Number(datos[campo]))) {
-      errores[campo] = 'Ingresa un monto o déjalo vacío.'
-    }
-  }
+  Object.assign(errores, validarCostosMaterial(datos))
 
   const errorFoto = validarFoto(datos.foto)
   if (errorFoto) {
@@ -350,6 +356,12 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
           ? (tierPrevioAAltoValor.current || 'estandar')
           : datos.tier_minimo_requerido
       if (antesEsAltoValor && !ahoraEsAltoValor) tierPrevioAAltoValor.current = null
+      if (reposicionVinculadaAlPrecio) {
+        setErrores((previos) => ({
+          ...previos,
+          costo_reposicion: validarCostoMaterial(valor),
+        }))
+      }
       setDatos((previos) => {
         const cambioTier = tierAutomatico !== previos.tier_minimo_requerido
         const defaultTiempoTier =
@@ -376,6 +388,12 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
     }
     if (campo === 'costo_reposicion') {
       setReposicionVinculadaAlPrecio(false)
+    }
+    if (campo === 'costo_reparacion' || campo === 'costo_reposicion') {
+      setErrores((previos) => ({
+        ...previos,
+        [campo]: validarCostoMaterial(valor),
+      }))
     }
     if (campo === 'tier_minimo_requerido' && DEFAULTS_REPUTACION_POR_TIER[valor]) {
       setDatos((previos) => {
@@ -1238,7 +1256,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
                   etiqueta="Días"
                   tipo="number"
                   min="0"
-                  max="15"
+                  max={DURACION_MAXIMA_PRESTAMO_DIAS}
                   step="1"
                   valor={datos.tiempo_maximo_dias}
                   onCambio={(evento) => actualizar(
@@ -1273,7 +1291,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
                 />
               </div>
               <p className="text-xs text-texto-suave">
-                Ingresa cualquier duración entre 1 hora y 15 días. Valores predeterminados según Tier: Avanzado 6 h, Estándar 24 h, Restringido 3 días.
+                Ingresa cualquier duración entre 1 hora y {DURACION_MAXIMA_PRESTAMO_DIAS} días. Valores predeterminados según Tier: Avanzado 6 h, Estándar 24 h, Restringido 3 días.
               </p>
             </div>
             {CAMPOS_PUNTOS.map(({ campo, etiqueta }) => (
@@ -1295,6 +1313,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
               min="0"
               step="0.01"
               valor={datos.costo_reparacion}
+              ayuda="No puede ser negativo."
               onCambio={(evento) => actualizar('costo_reparacion', evento.target.value)}
               error={errores.costo_reparacion}
             />
@@ -1304,7 +1323,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
               min="0"
               step="0.01"
               valor={datos.costo_reposicion}
-              ayuda="Por defecto, se completa con el Precio. Puedes cambiarlo manualmente."
+              ayuda="Por defecto, se completa con el Precio. Puedes cambiarlo manualmente; no puede ser negativo."
               onCambio={(evento) => actualizar('costo_reposicion', evento.target.value)}
               error={errores.costo_reposicion}
             />

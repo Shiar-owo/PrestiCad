@@ -3,7 +3,10 @@ import { ArrowLeft, ChevronLeft, ChevronRight, ExternalLink, RotateCcw, Trash2, 
 
 import { api, ErrorApi } from '../../api/client'
 import { ETIQUETAS_ESTADO, esMaterialAltoValor } from '../../constantes/catalogo'
-import { formatearDuracionMinutos } from '../../constantes/checklistPrestamo'
+import {
+  DURACION_MAXIMA_PRESTAMO_MINUTOS,
+  formatearDuracionMinutos,
+} from '../../constantes/checklistPrestamo'
 import { textoEstadoPrestamo } from '../../prestamos/estadoPrestamo'
 import BadgeEstado from '../ui/BadgeEstado'
 import Boton from '../ui/Boton'
@@ -408,7 +411,12 @@ export default function DetallePrestamo({
                           Tiempo máximo
                         </span>
                         <span className="text-base font-semibold text-texto">
-                          {material?.tiempo_maximo_prestamo ? formatearDuracionMinutos(material.tiempo_maximo_prestamo) : 'No definido'}
+                          {material?.tiempo_maximo_prestamo
+                            ? formatearDuracionMinutos(Math.min(
+                              Number(material.tiempo_maximo_prestamo),
+                              DURACION_MAXIMA_PRESTAMO_MINUTOS,
+                            ))
+                            : 'No definido'}
                         </span>
                       </td>
                     </tr>

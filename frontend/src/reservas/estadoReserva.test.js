@@ -178,17 +178,21 @@ describe('presentación de motivos y fechas', () => {
   it('calcula límites de inicio y fin y ajusta si el máximo cae en fin de semana', () => {
     const ahora = new Date(2026, 5, 17, 10, 20, 35)
     expect(obtenerMinimoInicioReserva(ahora)).toBe('2026-06-17T10:21')
-    expect(obtenerMinimoFinReserva('2026-06-17T10:30')).toBe('2026-06-17T11:30')
-    // Viernes 14:00 con 3 días (4320 min) llega a Lunes 14:00
+    expect(obtenerMinimoFinReserva('2026-06-17T10:30')).toBe('2026-06-17T12:00')
+    // Máximo pactado de 2 días, 23 horas y 30 minutos: viernes 14:00 a lunes 13:30.
     expect(
       obtenerMaximoFinReserva('2026-12-18T14:00', { tiempo_maximo_prestamo: 4320 }),
-    ).toBe('2026-12-21T14:00')
+    ).toBe('2026-12-21T13:30')
+    // Un límite guardado antiguo superior a 3 días también se recorta al máximo universal.
+    expect(
+      obtenerMaximoFinReserva('2026-12-18T14:00', { tiempo_maximo_prestamo: 10080 }),
+    ).toBe('2026-12-21T13:30')
     // Viernes 14:00 con 1 día (1440 min) caería en sábado -> se ajusta a viernes 17:00
     expect(
       obtenerMaximoFinReserva('2026-12-18T14:00', { tiempo_maximo_prestamo: 1440 }),
-    ).toBe('2026-12-18T17:00')
+    ).toBe('2026-12-18T17:30')
     expect(obtenerMinimaHoraInicioReserva('2026-06-17', ahora)).toBe('10:21')
-    expect(obtenerMinimaHoraFinReserva('10:30')).toBe('11:30')
+    expect(obtenerMinimaHoraFinReserva('10:30')).toBe('12:00')
   })
 
   it('cuenta todos los días en medio (sábado y domingo) en el cómputo de duración', () => {
@@ -196,16 +200,26 @@ describe('presentación de motivos y fechas', () => {
     // Viernes a lunes = 72 horas corridas = 4320 minutos
     expect(calcularMinutosHabilesReserva('2026-12-18T14:00', '2026-12-21T14:00')).toBe(4320)
 
-    // Si el material permite 72 horas (4320 min), la reserva es válida
+    // El rango pactado debe dejar los 30 minutos de tolerancia dentro del máximo total.
     const erroresValidos = validarFormularioReserva({
       materialId: 'mat-1',
       justificacion: 'Préstamo de viernes a lunes con material de 3 días',
       esAvanzado: false,
       material: { tiempo_maximo_prestamo: 4320 },
       fechaInicio: '2026-12-18T14:00',
-      fechaFin: '2026-12-21T14:00',
+      fechaFin: '2026-12-21T13:30',
     })
     expect(erroresValidos).toEqual({})
+
+    const excedePorTolerancia = validarFormularioReserva({
+      materialId: 'mat-1',
+      justificacion: 'El rango pactado completo excede tres días con tolerancia',
+      esAvanzado: false,
+      material: { tiempo_maximo_prestamo: 10080 },
+      fechaInicio: '2026-12-18T14:00',
+      fechaFin: '2026-12-21T14:00',
+    })
+    expect(excedePorTolerancia.fechaFin).toContain('(2 días, 23 horas y 30 minutos)')
 
     // Si el material solo permite 24 horas (1440 min), supera el máximo
     const erroresExcedeMaximo = validarFormularioReserva({
@@ -219,6 +233,19 @@ describe('presentación de motivos y fechas', () => {
     expect(erroresExcedeMaximo.fechaFin).toMatch(/tiempo máximo permitido/)
   })
 
+  it('informa el máximo universal de 3 días para un material con límite antiguo mayor', () => {
+    const errores = validarFormularioReserva({
+      materialId: 'mat-1',
+      justificacion: 'Supera el máximo universal',
+      esAvanzado: false,
+      material: { tiempo_maximo_prestamo: 10080 },
+      fechaInicio: '2026-12-14T09:00',
+      fechaFin: '2026-12-17T10:00',
+    })
+
+    expect(errores.fechaFin).toContain('(2 días, 23 horas y 30 minutos)')
+  })
+
   it('rechaza reservas con duración menor a 1 hora (60 minutos)', () => {
     const erroresNormal = validarFormularioReserva({
       materialId: 'mat-1',
@@ -227,7 +254,7 @@ describe('presentación de motivos y fechas', () => {
       fechaInicio: '2026-12-16T10:00',
       fechaFin: '2026-12-16T10:59',
     })
-    expect(erroresNormal.fechaFin).toMatch(/1 hora \(60 minutos\)/)
+    expect(erroresNormal.fechaFin).toMatch(/1 hora/)
 
     const erroresAvanzado = validarFormularioReserva({
       materialId: 'mat-1',
@@ -237,7 +264,7 @@ describe('presentación de motivos y fechas', () => {
       horaInicio: '10:00',
       horaFin: '10:45',
     })
-    expect(erroresAvanzado.horaFin).toMatch(/1 hora \(60 minutos\)/)
+    expect(erroresAvanzado.horaFin).toMatch(/1 hora/)
   })
 
   it('devuelve el motivo correspondiente según el estado de la reserva', () => {
@@ -259,5 +286,8 @@ describe('presentación de motivos y fechas', () => {
   it('formatea fechas válidas y maneja valores vacíos', () => {
     expect(formatearFechaReserva(null)).toBe('No disponible')
     expect(formatearFechaReserva('2026-04-12T15:30:00Z')).toEqual(expect.any(String))
+    expect(formatearFechaReserva('2026-06-17T13:00:00Z')).toContain('08:00')
+    expect(formatearFechaReserva('2026-06-17T17:00:00Z')).toContain('12:00')
+    expect(formatearFechaReserva('2026-06-17T22:00:00Z')).toContain('17:00')
   })
 })

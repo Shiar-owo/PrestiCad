@@ -4,7 +4,7 @@ import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Clock, X } from 'l
 const DIAS_CABECERA = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
 
 // Accesos rápidos de horario frecuentes dentro de la ventana de atención
-const ATAJOS_HORA = ['09:00', '11:00', '13:00', '15:00', '17:00']
+const ATAJOS_HORA = ['08:00', '10:00', '12:00', '14:00', '17:30']
 const FORMATO_HORA_24H = /^(?:[01]\d|2[0-3]):[0-5]\d$/
 
 function formatearFechaIso(anio, mes, dia) {
@@ -14,12 +14,12 @@ function formatearFechaIso(anio, mes, dia) {
 }
 
 function parsearValor(valor) {
-  if (!valor) return { fecha: '', hora: '09:00' }
+  if (!valor) return { fecha: '', hora: '08:00' }
   const partes = String(valor).split('T')
   if (partes.length === 2) {
-    return { fecha: partes[0], hora: partes[1].slice(0, 5) || '09:00' }
+    return { fecha: partes[0], hora: partes[1].slice(0, 5) || '08:00' }
   }
-  return { fecha: partes[0] || '', hora: '09:00' }
+  return { fecha: partes[0] || '', hora: '08:00' }
 }
 
 export default function SelectorFechaHoraDesplegable({
@@ -28,8 +28,8 @@ export default function SelectorFechaHoraDesplegable({
   onCambio,
   minFecha,
   maxFecha,
-  minHora = '09:00',
-  maxHora = '17:00',
+  minHora = '08:00',
+  maxHora = '17:30',
   deshabilitado = false,
   soloFecha = false,
   etiqueta,

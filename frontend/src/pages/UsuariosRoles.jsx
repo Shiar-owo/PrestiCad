@@ -197,7 +197,9 @@ function UsuariosRoles() {
                 ['Departamento / carrera', perfilSeleccionado.departamento_carrera || 'Sin especificar'],
                 ['Rol', ETIQUETAS_ROL[perfilSeleccionado.rol] || perfilSeleccionado.rol],
                 ['Estado', perfilSeleccionado.estado],
-                ['Puntaje de reputación', perfilSeleccionado.reputacion_puntaje],
+                ...(!['gestor', 'administrador'].includes(perfilSeleccionado.rol)
+                  ? [['Puntaje de reputación', perfilSeleccionado.reputacion_puntaje]]
+                  : []),
               ].map(([etiqueta, valor]) => (
                 <div key={etiqueta} className="rounded-lg border border-borde bg-superficie p-3">
                   <dt className="text-xs font-semibold uppercase tracking-wide text-texto-suave">{etiqueta}</dt>
@@ -205,7 +207,9 @@ function UsuariosRoles() {
                 </div>
               ))}
             </dl>
-            <ResumenTier tier={perfilSeleccionado.reputacion_tier} className="mt-3" />
+            {!['gestor', 'administrador'].includes(perfilSeleccionado.rol) && (
+              <ResumenTier tier={perfilSeleccionado.reputacion_tier} className="mt-3" />
+            )}
           </section>
         </div>
       )}

@@ -31,8 +31,10 @@ import {
   obtenerMinimaHoraInicioReserva,
   obtenerMinimoFinReserva,
   obtenerMinimoInicioReserva,
+  obtenerMaximoMinutosReserva,
   HORA_RESERVA_MAXIMO_FIN,
   HORA_RESERVA_MINIMO_INICIO,
+  TEXTO_HORA_RESERVA_MAXIMO_FIN,
   requiereExcepcionAcademica,
   textoEstadoReserva,
   validarFormularioReserva,
@@ -157,7 +159,8 @@ export default function ReservarMaterial() {
 
   const tierUsuario = usuario?.reputacion_tier || 'estandar'
   const tierMaterial = materialSeleccionado?.tier_minimo_requerido || 'estandar'
-  const esAvanzado = tierMaterial === 'avanzado'
+  // Todos los Tiers usan un rango de fechas; Avanzado ya puede abarcar otro día.
+  const esAvanzado = false
   const elegibleNormal = materialSeleccionado
     ? esElegiblePorTier(tierUsuario, tierMaterial)
     : true
@@ -457,7 +460,7 @@ export default function ReservarMaterial() {
             )}
             <h2 id="titulo-reserva-exitosa" className="text-xl font-bold text-texto">
               {confirmada
-                ? 'Reserva confirmada por 24 horas'
+                ? 'Reserva confirmada'
                 : 'Solicitud de excepción académica registrada'}
             </h2>
           </div>
@@ -502,7 +505,7 @@ export default function ReservarMaterial() {
               </div>
               <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3 dark:border-amber-800 dark:bg-marca-950/30">
                 <dt className="text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-300">
-                  Límite de recojo (24 h)
+                  Límite de recojo (30 min de tolerancia)
                 </dt>
                 <dd className="mt-1 font-bold text-texto">
                   {formatearFechaReserva(reservaCreada.fecha_limite_recojo)}
@@ -528,7 +531,7 @@ export default function ReservarMaterial() {
             role="note"
             className="rounded-lg border border-acento-300 bg-acento-50/70 p-3.5 text-xs text-acento-900 dark:border-acento-800 dark:bg-acento-950/40 dark:text-acento-200"
           >
-            <strong>Aclaración para el trámite:</strong> Tu reserva incluye días de fin de semana intermedios. Recuerda que el recojo y la devolución son únicamente de lunes a viernes dentro del horario de atención (09:00 a 17:00), y todos los días en medio computan dentro de la duración de tu reserva.
+            <strong>Aclaración para el trámite:</strong> El recojo y la devolución pactados son de lunes a viernes entre 08:00 y 17:30. El recojo tiene 30 minutos de tolerancia, hasta las 18:00.
           </div>
         )}
 
@@ -659,7 +662,7 @@ export default function ReservarMaterial() {
                   {aplicaExcepcion
                     ? 'Solicitud excepcional en espera (72 h, sujeta a aprobación del gestor)'
                     : unidadesDisponibles > 0
-                      ? 'Reserva confirmada inmediata (24 h de vigencia)'
+                      ? 'Reserva confirmada inmediata (recojo dentro de 30 min)'
                       : 'Lista de espera sin bloquear inventario (72 h de vigencia)'}
                 </p>
               </div>
@@ -747,7 +750,7 @@ export default function ReservarMaterial() {
                   if (esAvanzado) {
                     actualizarFechaAvanzada(fechaIso)
                   } else {
-                    const inicio = `${fechaIso}T09:00`
+                    const inicio = `${fechaIso}T08:00`
                     const fin = `${fechaIso}T13:00`
                     actualizarFechaInicioReserva(inicio)
                     actualizarFechaFinReserva(fin)
@@ -782,7 +785,7 @@ export default function ReservarMaterial() {
                   type="time"
                   value={horaInicio}
                   min={obtenerMinimaHoraInicioReserva(fechaSeleccionada)}
-                  max={`${String(HORA_RESERVA_MAXIMO_FIN).padStart(2, '0')}:00`}
+                  max={TEXTO_HORA_RESERVA_MAXIMO_FIN}
                   step="60"
                   aria-invalid={Boolean(errores.horaInicio)}
                   onChange={(e) => actualizarHoraInicioAvanzada(e.target.value)}
@@ -804,7 +807,7 @@ export default function ReservarMaterial() {
                   type="time"
                   value={horaFin}
                   min={obtenerMinimaHoraFinReserva(horaInicio)}
-                  max={`${String(HORA_RESERVA_MAXIMO_FIN).padStart(2, '0')}:00`}
+                  max={TEXTO_HORA_RESERVA_MAXIMO_FIN}
                   step="60"
                   disabled={!inicioValidoParaFin}
                   aria-invalid={Boolean(errores.horaFin)}
@@ -816,7 +819,7 @@ export default function ReservarMaterial() {
                 )}
               </div>
               <p className="text-xs text-texto-suave col-span-3">
-                Elige un día laborable futuro (lunes a viernes). Para materiales avanzados, inicio y fin deben ser el mismo día, entre {HORA_RESERVA_MINIMO_INICIO}:00 y {HORA_RESERVA_MAXIMO_FIN}:00.
+                El recojo y la devolución pactados son de lunes a viernes, entre 08:00 y {TEXTO_HORA_RESERVA_MAXIMO_FIN}. La tolerancia de recojo dura 30 minutos.
               </p>
             </div>
           ) : (
@@ -844,7 +847,7 @@ export default function ReservarMaterial() {
                 />
               </div>
               <p className="text-xs text-texto-suave col-span-2">
-                Selecciona primero el inicio. El recojo y la devolución deben ser de lunes a viernes entre {HORA_RESERVA_MINIMO_INICIO}:00 y {HORA_RESERVA_MAXIMO_FIN}:00 (mínimo 1 hora{materialSeleccionado?.tiempo_maximo_prestamo ? `, máximo ${formatearDuracionMinutos(materialSeleccionado.tiempo_maximo_prestamo)}` : ''}). Cuentan todos los días en medio (incluyendo fines de semana).
+                Selecciona primero el inicio. El recojo y la devolución pactados son de lunes a viernes entre 08:00 y {TEXTO_HORA_RESERVA_MAXIMO_FIN}; la tolerancia de recojo llega hasta las 18:00. Debe quedar al menos 1 hora entre el límite de recojo y la devolución.
               </p>
               {cruzaFinDeSemana(fechaInicio, fechaFin) && (
                 <div
@@ -857,7 +860,7 @@ export default function ReservarMaterial() {
                   <p>
                     Tu reserva incluye días de fin de semana intermedios (duración total contabilizada:{' '}
                     <strong>{formatearDuracionMinutos(calcularMinutosHabilesReserva(fechaInicio, fechaFin))}</strong>).
-                    Recuerda que el recojo y la devolución son únicamente de lunes a viernes de {HORA_RESERVA_MINIMO_INICIO}:00 a {HORA_RESERVA_MAXIMO_FIN}:00, y todos los días intermedios se computan dentro de la duración de tu reserva.
+                    Recojo y devolución pactados: lunes a viernes de 08:00 a 17:30. La tolerancia de recojo termina a las 18:00.
                   </p>
                 </div>
               )}

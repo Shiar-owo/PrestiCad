@@ -11,6 +11,8 @@ from apps.reservas.constants import (
     DIAS_LABORABLES,
     HORA_RESERVA_MAXIMO_FIN,
     HORA_RESERVA_MINIMO_INICIO,
+    MINUTO_RESERVA_MAXIMO_FIN,
+    TOLERANCIA_RECOJO_MINUTOS,
     HORARIO_ATENCION_FIN,
     HORARIO_ATENCION_INICIO,
     MENSAJES_ERROR_RESERVA,
@@ -77,16 +79,26 @@ class CrearReservaSerializer(serializers.Serializer):
                         etiqueta: "La reserva solo puede realizarse de lunes a viernes (días laborables).",
                     })
                 minutos_dia = valor.hour * 60 + valor.minute
-                if not (HORA_RESERVA_MINIMO_INICIO * 60 <= minutos_dia <= HORA_RESERVA_MAXIMO_FIN * 60):
+                if not (
+                    HORA_RESERVA_MINIMO_INICIO * 60
+                    <= minutos_dia
+                    <= HORA_RESERVA_MAXIMO_FIN * 60 + MINUTO_RESERVA_MAXIMO_FIN
+                ):
                     raise serializers.ValidationError({
                         etiqueta: (
                             f"La reserva debe estar dentro del horario de atención "
-                            f"({HORA_RESERVA_MINIMO_INICIO}:00 a {HORA_RESERVA_MAXIMO_FIN}:00)."
+                            f"({HORA_RESERVA_MINIMO_INICIO:02d}:00 a "
+                            f"{HORA_RESERVA_MAXIMO_FIN:02d}:{MINUTO_RESERVA_MAXIMO_FIN:02d})."
                         ),
                     })
-            if calcular_minutos_habiles(fecha_inicio, fecha_fin) < MINIMO_MINUTOS_RESERVA:
+            minutos_rango = calcular_minutos_habiles(fecha_inicio, fecha_fin)
+            if minutos_rango < MINIMO_MINUTOS_RESERVA:
                 raise serializers.ValidationError({
                     "fecha_fin": "La reserva debe tener una duración mínima de 1 hora (60 minutos).",
+                })
+            if minutos_rango < MINIMO_MINUTOS_RESERVA + TOLERANCIA_RECOJO_MINUTOS:
+                raise serializers.ValidationError({
+                    "fecha_fin": "Debe haber al menos 1 hora entre el límite de recojo y la devolución pactada.",
                 })
         return attrs
 

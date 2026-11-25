@@ -17,13 +17,13 @@ import { esMaterialAltoValor } from './constantes/catalogo'
 
 export function obtenerMinutosMaximosMaterial(material) {
   if (material?.tiempo_maximo_prestamo) {
-    return Number(material.tiempo_maximo_prestamo)
+    return Math.min(Number(material.tiempo_maximo_prestamo), DURACION_MAXIMA_PRESTAMO_MINUTOS)
   }
   if (material?.tier_minimo_requerido) {
     const porTier =
       TIEMPO_MAXIMO_DEFAULT_POR_TIER[material.tier_minimo_requerido] ||
       TIEMPO_MAXIMO_DEFAULT_POR_TIER.estandar
-    return porTier.minutos
+    return Math.min(porTier.minutos, DURACION_MAXIMA_PRESTAMO_MINUTOS)
   }
   return DURACION_MAXIMA_PRESTAMO_MINUTOS
 }
@@ -43,12 +43,12 @@ export function obtenerFechaMaximaFinPrestamo(fechaInicio, material = null) {
 
 export function mensajeRangoDuracion(material = null) {
   const maximoMinutos = obtenerMinutosMaximosMaterial(material)
-  return `La duración debe ser de al menos 1 hora (60 minutos) y máximo ${formatearDuracionMinutos(maximoMinutos)}.`
+  return `La duración pactada debe ser de al menos 1 hora (60 minutos) y máximo ${formatearDuracionMinutos(maximoMinutos)}; la tolerancia de 30 minutos queda dentro del máximo total de 3 días.`
 }
 
 export function ayudaRangoDuracion(material = null) {
   const maximoMinutos = obtenerMinutosMaximosMaterial(material)
-  return `Mínimo 1 hora (60 minutos) · Máximo para este material: ${formatearDuracionMinutos(maximoMinutos)} · Incluye 30 min de tiempo de gracia en la devolución.`
+  return `Mínimo 1 hora (60 minutos) · Máximo pactado para este material: ${formatearDuracionMinutos(maximoMinutos)} · La tolerancia de 30 minutos queda dentro del máximo total de 3 días.`
 }
 
 export function validarFormularioPrestamo({
@@ -95,7 +95,7 @@ export function validarFormularioPrestamo({
   } else if (minutos < DURACION_MINIMA_PRESTAMO_MINUTOS) {
     errores.dias = 'El tiempo mínimo de préstamo es de 1 hora (60 minutos).'
   } else if (minutos > maximoMinutos) {
-    errores.dias = `El tiempo solicitado supera el máximo permitido para este material (${formatearDuracionMinutos(maximoMinutos)}).`
+    errores.dias = `El plazo pactado supera el máximo permitido para este material (${formatearDuracionMinutos(maximoMinutos)}); la tolerancia de 30 minutos queda dentro del máximo total de 3 días.`
   }
 
   if (fechaFin) {
@@ -105,8 +105,8 @@ export function validarFormularioPrestamo({
         errores.dias = 'La fecha de devolución debe ser un día laborable (lunes a viernes).'
       } else {
         const minutosFin = fin.getHours() * 60 + fin.getMinutes()
-        if (minutosFin < 9 * 60 || minutosFin > 17 * 60) {
-          errores.dias = 'El horario de devolución es de 09:00 a 17:00.'
+        if (minutosFin < 8 * 60 || minutosFin > 17 * 60 + 30) {
+          errores.dias = 'La devolución pactada debe ser de lunes a viernes entre 08:00 y 17:30.'
         }
       }
     }

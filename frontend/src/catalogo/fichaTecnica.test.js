@@ -23,6 +23,16 @@ describe('obtenerDatosFichaTecnica', () => {
     expect(obtenerDatosFichaTecnica(undefined)).toBeNull()
   })
 
+  it('incluye la tolerancia en el máximo efectivo mostrado para materiales antiguos', () => {
+    const ficha = obtenerDatosFichaTecnica({
+      tiempo_maximo_prestamo: 10080,
+      tier_minimo_requerido: 'avanzado',
+    })
+
+    expect(ficha.tiempoMaximoPrestamoMinutos).toBe(4290)
+    expect(ficha.tiempoMaximoPrestamoLegible).toBe('2 días, 23 horas y 30 minutos')
+  })
+
   it('extrae las especificaciones completas de hardware del material', () => {
     const material = {
       id: 'abc-123',

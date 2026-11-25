@@ -112,7 +112,10 @@ class RegistrarPrestamoSerializer(
         max_value=MAXIMO_MINUTOS_PRESTAMO,
         error_messages={
             "min_value": "El tiempo mínimo de préstamo es de 1 h (60 min).",
-            "max_value": "La duración máxima del préstamo es de 15 días (21600 minutos).",
+            "max_value": (
+                "El plazo pactado máximo es de 2 días, 23 horas y 30 minutos; "
+                "con la tolerancia de 30 minutos, el total es de 3 días."
+            ),
             "invalid": "Ingresa un tiempo de préstamo numérico válido.",
         },
     )

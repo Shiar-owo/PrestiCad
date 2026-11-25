@@ -1,7 +1,7 @@
 """Pruebas de reglas y API para HU09 — registrar la entrega de un préstamo."""
 import atexit
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 import json
 import tempfile
 import unittest
@@ -85,12 +85,20 @@ def registrar_prestamo(**datos):
         "fotos_checklist",
         [crear_foto_checklist() for _ in datos.get("checklist_inicial", [])],
     )
-    with patch.object(
-        FotoChecklist._meta.get_field("imagen"),
-        "storage",
-        _ALMACENAMIENTO_FOTOS_TEST,
-    ):
-        return registrar_prestamo_real(**datos)
+    ahora = timezone.localtime(timezone.now())
+    contexto_hora = nullcontext()
+    if ahora.hour < 8 or ahora.hour > 18:
+        contexto_hora = patch(
+            "apps.prestamos.services.timezone.now",
+            return_value=ahora.replace(hour=10, minute=0, second=0, microsecond=0),
+        )
+    with contexto_hora:
+        with patch.object(
+            FotoChecklist._meta.get_field("imagen"),
+            "storage",
+            _ALMACENAMIENTO_FOTOS_TEST,
+        ):
+            return registrar_prestamo_real(**datos)
 
 
 def crear_pdf(nombre):
@@ -232,8 +240,8 @@ class AlmacenamientoGarantiaTestCase(SimpleTestCase):
         datos = {
             "dni_prestatario": "12345678",
             "material_id": "00000000-0000-0000-0000-000000000001",
-            "tiempo_prestamo_dias": "5",
-            "fecha_fin": (timezone.now() + timedelta(days=5)).isoformat(),
+            "tiempo_prestamo_dias": "3",
+            "fecha_fin": (timezone.now() + timedelta(days=3)).isoformat(),
             "checklist_inicial": json.dumps(CHECKLIST),
             "foto_checklist_0": crear_foto_checklist(),
             "foto_checklist_1": crear_foto_checklist(),
@@ -250,8 +258,8 @@ class AlmacenamientoGarantiaTestCase(SimpleTestCase):
         datos = {
             "dni_prestatario": "12345678",
             "material_id": "00000000-0000-0000-0000-000000000001",
-            "tiempo_prestamo_dias": "5",
-            "fecha_fin": (timezone.now() + timedelta(days=5)).isoformat(),
+            "tiempo_prestamo_dias": "3",
+            "fecha_fin": (timezone.now() + timedelta(days=3)).isoformat(),
             "checklist_inicial": json.dumps(CHECKLIST),
             "foto_checklist_0": crear_foto_checklist(),
             "foto_checklist_1": crear_foto_checklist(),
@@ -272,7 +280,7 @@ class AlmacenamientoGarantiaTestCase(SimpleTestCase):
         datos = {
             "dni_prestatario": "12345678",
             "material_id": "00000000-0000-0000-0000-000000000001",
-            "tiempo_prestamo_dias": "5",
+            "tiempo_prestamo_dias": "3",
             "checklist_inicial": json.dumps([
                 {"elemento": "Equipo", "condicion": "Dato antiguo", "observacion": ""},
             ]),
@@ -356,7 +364,9 @@ class RegistrarPrestamoServiceTestCase(TestCase):
         self.assertEqual(prestamo.garantia, garantia)
 
     def test_registra_prestamo_activo_con_fecha_limite_y_checklist(self):
-        antes = timezone.now()
+        antes = timezone.localtime(timezone.now())
+        if antes.hour < 8 or antes.hour > 18:
+            antes = antes.replace(hour=10, minute=0, second=0, microsecond=0)
 
         prestamo = self._registrar()
 
@@ -364,7 +374,7 @@ class RegistrarPrestamoServiceTestCase(TestCase):
         self.assertEqual(prestamo.usuario, self.prestatario)
         self.assertEqual(prestamo.registrado_por, self.gestor)
         self.assertEqual(prestamo.checklist_inicial, CHECKLIST)
-        self.assertEqual(prestamo.fecha_limite - prestamo.fecha_entrega, timedelta(days=3))
+        self.assertEqual(prestamo.fecha_limite - prestamo.fecha_entrega, timedelta(minutes=4290))
         self.assertGreaterEqual(prestamo.fecha_entrega, antes)
         self.assertEqual(Material.objects.get(pk=self.material.pk).estado, "prestado")
         instancia = self.material.instancias.get()
@@ -386,21 +396,21 @@ class RegistrarPrestamoServiceTestCase(TestCase):
 
     def test_rechaza_duracion_superior_al_maximo_global(self):
         with self.assertRaises(PrestamoError) as contexto:
-            self._registrar(tiempo_prestamo_dias=16)
+            self._registrar(tiempo_prestamo_dias=4)
 
         self.assertEqual(contexto.exception.campo, "tiempo_prestamo_dias")
         self.assertEqual(Prestamo.objects.count(), 0)
 
-    def test_limita_duracion_minima_1_hora_y_permite_tier_avanzado_hasta_15_dias(self):
+    def test_limita_duracion_minima_1_hora_y_tier_avanzado_hasta_3_dias(self):
         gafas_vr = crear_material(
             codigo_material="EQ-VR-01",
             nombre="Gafas VR",
             tipo="equipo",
             tier_minimo_requerido="avanzado",
-            tiempo_maximo_prestamo=21600,
+            tiempo_maximo_prestamo=4320,
             stock=2,
         )
-        self.assertEqual(gafas_vr.tiempo_maximo_prestamo, 21600)
+        self.assertEqual(gafas_vr.tiempo_maximo_prestamo, 4320)
         avanzado = crear_usuario(
             "avanzado@unsa.edu.pe",
             "10000011",
@@ -1570,6 +1580,14 @@ class RegistrarPrestamoAPITestCase(APITestCase):
     URL = "/api/prestamos/"
 
     def setUp(self):
+        parche_hora_laboral = patch(
+            "apps.prestamos.services.timezone.now",
+            return_value=timezone.localtime(timezone.now()).replace(
+                hour=10, minute=0, second=0, microsecond=0,
+            ),
+        )
+        parche_hora_laboral.start()
+        self.addCleanup(parche_hora_laboral.stop)
         self.gestor = crear_usuario("gestor-api@unsa.edu.pe", "20000001", rol="gestor")
         self.prestatario = crear_usuario("prestatario-api@unsa.edu.pe", "20000002")
         self.material = crear_material(codigo_material="API-001")
@@ -1581,9 +1599,10 @@ class RegistrarPrestamoAPITestCase(APITestCase):
         sesion.save()
 
     def _calcular_fecha_fin_valida(self, dias=2):
-        fecha = timezone.localtime(timezone.now()).replace(hour=14, minute=0, second=0, microsecond=0) + timedelta(days=dias)
+        inicio = timezone.localtime(timezone.now()).replace(hour=10, minute=0, second=0, microsecond=0)
+        fecha = inicio + timedelta(minutes=dias * 1440 - 30)
         while fecha.weekday() not in (0, 1, 2, 3, 4):
-            fecha += timedelta(days=1)
+            fecha -= timedelta(days=1)
         return fecha.isoformat()
 
     def _payload(self, **cambios):
@@ -1721,7 +1740,7 @@ class RegistrarPrestamoAPITestCase(APITestCase):
         material = crear_material(
             codigo_material="API-AVANZADO-01",
             tier_minimo_requerido="avanzado",
-            tiempo_maximo_prestamo=21600,
+            tiempo_maximo_prestamo=4320,
         )
         self._iniciar_sesion(self.gestor)
 
@@ -2091,7 +2110,7 @@ class RegistrarPrestamoAPITestCase(APITestCase):
             reserva_id=str(reserva.id),
             instancia_id=str(instancia.id),
             material_id=str(self.material.id),
-            tiempo_prestamo_minutos=4320,
+            tiempo_prestamo_minutos=4290,
         )
 
         respuesta = self.client.post(self.URL, datos, format="multipart")
@@ -2111,7 +2130,7 @@ class RegistrarPrestamoAPITestCase(APITestCase):
             reserva_id=str(reserva.id),
             instancia_id=str(instancia.id),
             material_id=str(self.material.id),
-            tiempo_prestamo_minutos=4320,
+            tiempo_prestamo_minutos=4290,
         )
 
         with storage_garantias_temporal():

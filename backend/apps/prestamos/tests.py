@@ -1357,6 +1357,29 @@ class HistorialPrestamosAPITestCase(APITestCase):
         self.assertEqual(fila["entregado_por"]["dni"], self.gestor.dni)
         self.assertEqual(fila["recibido_por"]["dni"], self.administrador.dni)
 
+    def test_historial_filtra_por_nombre_y_apellido_de_prestatario(self):
+        self.prestatario.nombre = "Valeria"
+        self.prestatario.apellido = "Caceres"
+        self.prestatario.save(update_fields=["nombre", "apellido"])
+        self.otro_prestatario.nombre = "Diego"
+        self.otro_prestatario.apellido = "Paredes"
+        self.otro_prestatario.save(update_fields=["nombre", "apellido"])
+
+        prestamo_valeria = self._crear_prestamo(self.prestatario, "HIST-NOMBRE-001")
+        self._crear_prestamo(self.otro_prestatario, "HIST-NOMBRE-002")
+        self._iniciar_sesion(self.gestor)
+
+        for consulta in ("valeria", "caceres", "valeria caceres", "CACERES val"):
+            with self.subTest(consulta=consulta):
+                respuesta = self.client.get(self.URL, {"nombre": consulta})
+                self.assertEqual(respuesta.status_code, 200)
+                ids = [item["id"] for item in respuesta.json()["results"]]
+                self.assertEqual(ids, [prestamo_valeria.id])
+
+        sin_coincidencia = self.client.get(self.URL, {"nombre": "Inexistente"})
+        self.assertEqual(sin_coincidencia.status_code, 200)
+        self.assertEqual(sin_coincidencia.json()["count"], 0)
+
 
 class HistorialMaterialAPITestCase(APITestCase):
     URL = "/api/materiales/{material_id}/historial/"

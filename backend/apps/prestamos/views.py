@@ -145,6 +145,8 @@ class HistorialPrestamosView(GenericAPIView):
         else:
             dni = None
 
+        nombre = request.query_params.get("nombre", "").strip() or None
+
         estado = request.query_params.get("estado")
         estados_validos = set(dict(ESTADOS_PRESTAMO)) | {"devoluble"}
         if estado is not None and estado not in estados_validos:
@@ -153,7 +155,7 @@ class HistorialPrestamosView(GenericAPIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        prestamos = consultar_historial_prestamos(estado=estado, dni=dni)
+        prestamos = consultar_historial_prestamos(estado=estado, dni=dni, nombre=nombre)
         pagina = self.paginate_queryset(prestamos)
         serializer = self.get_serializer(pagina, many=True)
         return self.get_paginated_response(serializer.data)

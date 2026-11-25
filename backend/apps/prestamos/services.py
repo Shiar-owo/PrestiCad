@@ -4,7 +4,7 @@ from pathlib import Path
 
 from django.core.files.base import ContentFile
 from django.core.exceptions import ValidationError
-from django.db.models import Case, CharField, Count, DateTimeField, F, IntegerField, Value, When
+from django.db.models import Case, CharField, Count, DateTimeField, F, IntegerField, Q, Value, When
 from django.db import transaction
 from django.utils import timezone
 
@@ -148,7 +148,7 @@ def consultar_prestamos_usuario(usuario_id, ahora=None):
     return _consultar_prestamos_con_estado(ahora=ahora).filter(usuario_id=usuario_id)
 
 
-def consultar_historial_prestamos(ahora=None, estado=None, dni=None):
+def consultar_historial_prestamos(ahora=None, estado=None, dni=None, nombre=None):
     """Lista global de préstamos para consulta histórica de gestión."""
     prestamos = _consultar_prestamos_con_estado(ahora=ahora).select_related(
         "usuario",
@@ -164,6 +164,12 @@ def consultar_historial_prestamos(ahora=None, estado=None, dni=None):
         prestamos = prestamos.filter(estado_consulta=estado)
     if dni is not None:
         prestamos = prestamos.filter(usuario__dni=dni)
+    if nombre:
+        for termino in nombre.strip().split():
+            prestamos = prestamos.filter(
+                Q(usuario__nombre__icontains=termino)
+                | Q(usuario__apellido__icontains=termino)
+            )
     return prestamos
 
 

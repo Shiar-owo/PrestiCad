@@ -1,7 +1,9 @@
 const TAMANO_PREDETERMINADO = 4 * 1024 * 1024
 
 export const DURACION_MINIMA_PRESTAMO_MINUTOS = 60
-export const DURACION_MAXIMA_PRESTAMO_DIAS = 3
+export const DURACION_DEFECTO_PRESTAMO_DIAS = 3
+export const DURACION_DEFECTO_PRESTAMO_MINUTOS = DURACION_DEFECTO_PRESTAMO_DIAS * 24 * 60
+export const DURACION_MAXIMA_PRESTAMO_DIAS = 15
 export const DURACION_MAXIMA_TOTAL_MINUTOS = DURACION_MAXIMA_PRESTAMO_DIAS * 24 * 60
 export const TIEMPO_TOLERANCIA_DEVOLUCION_MINUTOS = 30
 export const DURACION_MAXIMA_PRESTAMO_MINUTOS = (
@@ -15,9 +17,9 @@ export const TIEMPO_GRACIA_MINUTOS = TIEMPO_TOLERANCIA_DEVOLUCION_MINUTOS
 export const DURACION_MINIMA_PRESTAMO_DIAS = 1
 
 export const TIEMPO_MAXIMO_DEFAULT_POR_TIER = {
-  avanzado: { valor: 6, unidad: 'horas', minutos: 360 },
-  estandar: { valor: 24, unidad: 'horas', minutos: 1440 },
-  restringido: { valor: 3, unidad: 'dias', minutos: 4320 },
+  avanzado: { valor: DURACION_DEFECTO_PRESTAMO_DIAS, unidad: 'dias', minutos: DURACION_DEFECTO_PRESTAMO_MINUTOS },
+  estandar: { valor: DURACION_DEFECTO_PRESTAMO_DIAS, unidad: 'dias', minutos: DURACION_DEFECTO_PRESTAMO_MINUTOS },
+  restringido: { valor: DURACION_DEFECTO_PRESTAMO_DIAS, unidad: 'dias', minutos: DURACION_DEFECTO_PRESTAMO_MINUTOS },
 }
 
 const UNIDADES_TIEMPO_PRESTAMO = [

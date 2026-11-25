@@ -257,28 +257,28 @@ class ReservasServiceTestCase(TestCase):
         self.assertEqual(Reserva.objects.filter(material=material).count(), 0)
         self.assertEqual(prestamo.estado, "activo")
 
-    def test_reserva_respeta_maximo_de_tres_dias_aunque_el_material_tenga_un_limite_antiguo_mayor(self):
+    def test_reserva_respeta_maximo_de_quince_dias_aunque_el_material_tenga_un_limite_antiguo_mayor(self):
         material = crear_material(codigo_material="EQ-RES-MAX-LEGACY")
-        # Simula un registro histórico que conserva el límite anterior a la regla.
-        Material.objects.filter(pk=material.pk).update(tiempo_maximo_prestamo=7 * 1440)
+        # Simula un registro histórico que conserva un límite superior al tope global de 15 días.
+        Material.objects.filter(pk=material.pk).update(tiempo_maximo_prestamo=20 * 1440)
         material.refresh_from_db()
         ahora = timezone.now()
         inicio = timezone.localtime(ahora).replace(hour=9, minute=0, second=0, microsecond=0)
         while inicio <= timezone.localtime(ahora) or inicio.weekday() != 0:
             inicio += timedelta(days=1)
-        fin = inicio + timedelta(days=3, hours=1)
+        fin = inicio + timedelta(days=15, hours=1)
 
         with self.assertRaises(ReservaError) as error:
             crear_reserva(
                 usuario=self.prestatario_estandar,
                 material_id=material.id,
-                justificacion="Supera el máximo universal de tres días",
+                justificacion="Supera el máximo configurable global de quince días",
                 fecha_inicio=inicio,
                 fecha_fin=fin,
                 ahora=ahora,
             )
 
-        self.assertIn("2 días, 23 horas y 30 minutos", error.exception.mensaje)
+        self.assertIn("14 días, 23 horas y 30 minutos", error.exception.mensaje)
 
     def test_solicitud_sin_disponibilidad_se_rechaza_sin_penalizacion(self):
         material = crear_material(
@@ -604,7 +604,7 @@ class ReservasAPITestCase(APITestCase):
 
     def test_api_reserva_permite_cruzar_fin_de_semana_y_cuenta_todos_los_dias_intermedios(self):
         self._autenticar(self.prestatario)
-        # Aunque el material conserve un máximo antiguo de 4 días, el tope efectivo es 3 días.
+        # Material configurado a 4 días (dentro del máximo configurable de 15 días).
         self.material.tiempo_maximo_prestamo = 5760
         self.material.save(update_fields=["tiempo_maximo_prestamo", "updated_at"])
 
@@ -640,7 +640,7 @@ class ReservasAPITestCase(APITestCase):
                 checklist_inicial=CHECKLIST,
                 registrado_por=self.gestor,
             )
-        # Los días intermedios cuentan; la tolerancia completa el máximo total de 3 días.
+        # Los días intermedios cuentan (viernes 14:10 a lunes 13:30 = 4280 minutos).
         self.assertEqual(prestamo.tiempo_prestamo_minutos, 4280)
         self.assertEqual(prestamo.fecha_entrega, viernes + timedelta(minutes=10))
         self.assertEqual(prestamo.fecha_limite, lunes)

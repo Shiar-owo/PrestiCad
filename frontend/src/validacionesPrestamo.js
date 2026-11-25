@@ -3,6 +3,7 @@ import {
   TAMANO_MAXIMO_GARANTIA_MB,
 } from './constantes/garantia'
 import {
+  DURACION_MAXIMA_PRESTAMO_DIAS,
   DURACION_MAXIMA_PRESTAMO_MINUTOS,
   DURACION_MINIMA_PRESTAMO_MINUTOS,
   EXTENSIONES_FOTO_CHECKLIST,
@@ -44,12 +45,12 @@ export function obtenerFechaMaximaFinPrestamo(fechaInicio, material = null) {
 
 export function mensajeRangoDuracion(material = null) {
   const maximoMinutos = obtenerMinutosMaximosMaterial(material)
-  return `La duración pactada debe ser de al menos 1 hora (60 minutos) y máximo ${formatearDuracionMinutos(maximoMinutos)}; la tolerancia de 30 minutos queda dentro del máximo total de 3 días.`
+  return `La duración pactada debe ser de al menos 1 hora (60 minutos) y máximo ${formatearDuracionMinutos(maximoMinutos)}; la tolerancia de 30 minutos queda dentro del máximo total de ${DURACION_MAXIMA_PRESTAMO_DIAS} días.`
 }
 
 export function ayudaRangoDuracion(material = null) {
   const maximoMinutos = obtenerMinutosMaximosMaterial(material)
-  return `Mínimo 1 hora (60 minutos) · Máximo pactado para este material: ${formatearDuracionMinutos(maximoMinutos)} · La tolerancia de 30 minutos queda dentro del máximo total de 3 días.`
+  return `Mínimo 1 hora (60 minutos) · Máximo pactado para este material: ${formatearDuracionMinutos(maximoMinutos)} · La tolerancia de 30 minutos queda dentro del máximo total de ${DURACION_MAXIMA_PRESTAMO_DIAS} días.`
 }
 
 export function validarFormularioPrestamo({
@@ -97,7 +98,7 @@ export function validarFormularioPrestamo({
   } else if (minutos < DURACION_MINIMA_PRESTAMO_MINUTOS) {
     errores.dias = 'El tiempo mínimo de préstamo es de 1 hora (60 minutos).'
   } else if (minutos > maximoMinutos) {
-    errores.dias = `El plazo pactado supera el máximo permitido para este material (${formatearDuracionMinutos(maximoMinutos)}); la tolerancia de 30 minutos queda dentro del máximo total de 3 días.`
+    errores.dias = `El plazo pactado supera el máximo permitido para este material (${formatearDuracionMinutos(maximoMinutos)}); la tolerancia de 30 minutos queda dentro del máximo total de ${DURACION_MAXIMA_PRESTAMO_DIAS} días.`
   }
 
   if (fechaFin) {

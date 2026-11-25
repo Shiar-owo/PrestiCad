@@ -13,6 +13,8 @@ from apps.prestamos.constants import (
     MINIMO_DIGITOS_BUSQUEDA_PRESTATARIO,
     MINIMO_MINUTOS_PRESTAMO,
     TAMANO_MAXIMO_SOLICITUD_BYTES,
+    TIEMPO_GRACIA_MINUTOS,
+    formatear_duracion_minutos,
 )
 from apps.prestamos.models import Devolucion, Garantia, Prestamo
 from apps.prestamos.validators import validar_foto_checklist, validar_pdf_garantia
@@ -113,8 +115,8 @@ class RegistrarPrestamoSerializer(
         error_messages={
             "min_value": "El tiempo mínimo de préstamo es de 1 h (60 min).",
             "max_value": (
-                "El plazo pactado máximo es de 2 días, 23 horas y 30 minutos; "
-                "con la tolerancia de 30 minutos, el total es de 3 días."
+                f"El plazo pactado máximo es de {formatear_duracion_minutos(MAXIMO_MINUTOS_PRESTAMO)}; "
+                f"con la tolerancia de {TIEMPO_GRACIA_MINUTOS} minutos, el total es de {MAXIMO_DIAS_PRESTAMO} días."
             ),
             "invalid": "Ingresa un tiempo de préstamo numérico válido.",
         },

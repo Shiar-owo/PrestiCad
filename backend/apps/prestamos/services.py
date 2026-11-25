@@ -327,7 +327,7 @@ def _validar_elegibilidad(usuario, material, *, es_excepcion=False):
 def _resolver_duracion_prestamo(tiempo_prestamo_minutos, tiempo_prestamo_dias):
     """Normaliza la duración del préstamo en minutos y días equivalentes.
 
-    Acepta `tiempo_prestamo_minutos` (mínimo 1 hora, máximo 2 días, 23 horas y 30 minutos) o
+    Acepta `tiempo_prestamo_minutos` (mínimo 1 hora, máximo 14 días, 23 horas y 30 minutos) o
     `tiempo_prestamo_dias` por compatibilidad, devolviendo `(minutos, dias, campo_error)`.
     """
     if tiempo_prestamo_minutos is not None:
@@ -347,8 +347,8 @@ def _resolver_duracion_prestamo(tiempo_prestamo_minutos, tiempo_prestamo_dias):
         if tiempo_prestamo_minutos > MAXIMO_MINUTOS_PRESTAMO:
             raise PrestamoError(
                 "tiempo_prestamo_minutos",
-                "El plazo pactado máximo es de 2 días, 23 horas y 30 minutos; "
-                "con la tolerancia de 30 minutos, el total es de 3 días.",
+                f"El plazo pactado máximo es de {formatear_duracion_minutos(MAXIMO_MINUTOS_PRESTAMO)}; "
+                f"con la tolerancia de {TIEMPO_GRACIA_MINUTOS} minutos, el total es de {MAXIMO_DIAS_PRESTAMO} días.",
             )
         dias = max(1, math.ceil(tiempo_prestamo_minutos / 1440))
         return tiempo_prestamo_minutos, dias, "tiempo_prestamo_minutos"

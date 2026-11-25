@@ -106,7 +106,7 @@ def obtener_tiempo_maximo_por_defecto_tier(tier):
 
 
 def _validar_tiempo_maximo_prestamo(valor):
-    """Valida que el tiempo máximo de préstamo del material esté entre 1 hora y 3 días."""
+    """Valida que el tiempo máximo de préstamo del material esté entre 1 hora y 15 días."""
     if isinstance(valor, bool):
         raise InventarioError(
             "tiempo_maximo_prestamo",

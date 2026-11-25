@@ -374,7 +374,7 @@ class RegistrarPrestamoServiceTestCase(TestCase):
         self.assertEqual(prestamo.usuario, self.prestatario)
         self.assertEqual(prestamo.registrado_por, self.gestor)
         self.assertEqual(prestamo.checklist_inicial, CHECKLIST)
-        self.assertEqual(prestamo.fecha_limite - prestamo.fecha_entrega, timedelta(minutes=4290))
+        self.assertEqual(prestamo.fecha_limite - prestamo.fecha_entrega, timedelta(days=3))
         self.assertGreaterEqual(prestamo.fecha_entrega, antes)
         self.assertEqual(Material.objects.get(pk=self.material.pk).estado, "prestado")
         instancia = self.material.instancias.get()
@@ -396,9 +396,16 @@ class RegistrarPrestamoServiceTestCase(TestCase):
 
     def test_rechaza_duracion_superior_al_maximo_global(self):
         with self.assertRaises(PrestamoError) as contexto:
-            self._registrar(tiempo_prestamo_dias=4)
+            self._registrar(tiempo_prestamo_dias=16)
 
         self.assertEqual(contexto.exception.campo, "tiempo_prestamo_dias")
+        self.assertIn("15 días", contexto.exception.mensaje)
+
+        with self.assertRaises(PrestamoError) as contexto_minutos:
+            self._registrar(tiempo_prestamo_minutos=21571, tiempo_prestamo_dias=None)
+
+        self.assertEqual(contexto_minutos.exception.campo, "tiempo_prestamo_minutos")
+        self.assertIn("14 días, 23 horas y 30 minutos", contexto_minutos.exception.mensaje)
         self.assertEqual(Prestamo.objects.count(), 0)
 
     def test_limita_duracion_minima_1_hora_y_tier_avanzado_hasta_3_dias(self):
@@ -798,17 +805,21 @@ class RegistrarPrestamoConcurrenciaTestCase(TransactionTestCase):
         material = crear_material(codigo_material="EQ-CONCURRENCIA")
         instancia_id = material.instancias.get().id
         barrera = Barrier(2)
+        ahora_laborable = timezone.localtime(timezone.now()).replace(
+            hour=10, minute=0, second=0, microsecond=0
+        )
 
         def registrar(dni):
             close_old_connections()
             try:
                 barrera.wait(timeout=10)
-                prestamo = registrar_prestamo(
+                prestamo = registrar_prestamo_real(
                     dni_prestatario=dni,
                     material_id=material.id,
                     instancia_id=instancia_id,
                     tiempo_prestamo_dias=3,
                     checklist_inicial=CHECKLIST,
+                    fotos_checklist=[crear_foto_checklist() for _ in CHECKLIST],
                     registrado_por=gestor,
                 )
                 return ("registrado", prestamo.id)
@@ -817,10 +828,21 @@ class RegistrarPrestamoConcurrenciaTestCase(TransactionTestCase):
             finally:
                 close_old_connections()
 
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            resultados = list(
-                executor.map(registrar, [usuario.dni for usuario in prestatarios])
-            )
+        with (
+            patch(
+                "apps.prestamos.services.timezone.now",
+                return_value=ahora_laborable,
+            ),
+            patch.object(
+                FotoChecklist._meta.get_field("imagen"),
+                "storage",
+                _ALMACENAMIENTO_FOTOS_TEST,
+            ),
+        ):
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                resultados = list(
+                    executor.map(registrar, [usuario.dni for usuario in prestatarios])
+                )
 
         self.assertEqual(sum(resultado[0] == "registrado" for resultado in resultados), 1)
         self.assertEqual(resultados.count(("rechazado", 409)), 1)

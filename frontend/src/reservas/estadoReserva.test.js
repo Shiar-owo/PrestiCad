@@ -179,15 +179,15 @@ describe('presentación de motivos y fechas', () => {
     const ahora = new Date(2026, 5, 17, 10, 20, 35)
     expect(obtenerMinimoInicioReserva(ahora)).toBe('2026-06-17T10:21')
     expect(obtenerMinimoFinReserva('2026-06-17T10:30')).toBe('2026-06-17T12:00')
-    // Máximo pactado de 2 días, 23 horas y 30 minutos: viernes 14:00 a lunes 13:30.
+    // Por defecto (3 días = 4320 min): viernes 14:00 a lunes 14:00.
     expect(
       obtenerMaximoFinReserva('2026-12-18T14:00', { tiempo_maximo_prestamo: 4320 }),
-    ).toBe('2026-12-21T13:30')
-    // Un límite guardado antiguo superior a 3 días también se recorta al máximo universal.
+    ).toBe('2026-12-21T14:00')
+    // Un material en el tope configurable (15 días = 21600 min) reserva los 30 min de tolerancia (14d 23h 30m).
     expect(
-      obtenerMaximoFinReserva('2026-12-18T14:00', { tiempo_maximo_prestamo: 10080 }),
-    ).toBe('2026-12-21T13:30')
-    // Viernes 14:00 con 1 día (1440 min) caería en sábado -> se ajusta a viernes 17:00
+      obtenerMaximoFinReserva('2026-12-07T14:00', { tiempo_maximo_prestamo: 21600 }),
+    ).toBe('2026-12-22T13:30')
+    // Viernes 14:00 con 1 día (1440 min) caería en sábado -> se ajusta a viernes 17:30
     expect(
       obtenerMaximoFinReserva('2026-12-18T14:00', { tiempo_maximo_prestamo: 1440 }),
     ).toBe('2026-12-18T17:30')
@@ -200,26 +200,25 @@ describe('presentación de motivos y fechas', () => {
     // Viernes a lunes = 72 horas corridas = 4320 minutos
     expect(calcularMinutosHabilesReserva('2026-12-18T14:00', '2026-12-21T14:00')).toBe(4320)
 
-    // El rango pactado debe dejar los 30 minutos de tolerancia dentro del máximo total.
     const erroresValidos = validarFormularioReserva({
       materialId: 'mat-1',
       justificacion: 'Préstamo de viernes a lunes con material de 3 días',
       esAvanzado: false,
       material: { tiempo_maximo_prestamo: 4320 },
       fechaInicio: '2026-12-18T14:00',
-      fechaFin: '2026-12-21T13:30',
+      fechaFin: '2026-12-21T14:00',
     })
     expect(erroresValidos).toEqual({})
 
     const excedePorTolerancia = validarFormularioReserva({
       materialId: 'mat-1',
-      justificacion: 'El rango pactado completo excede tres días con tolerancia',
+      justificacion: 'El rango pactado completo excede 15 días con tolerancia',
       esAvanzado: false,
-      material: { tiempo_maximo_prestamo: 10080 },
-      fechaInicio: '2026-12-18T14:00',
-      fechaFin: '2026-12-21T14:00',
+      material: { tiempo_maximo_prestamo: 21600 },
+      fechaInicio: '2026-12-07T14:00',
+      fechaFin: '2026-12-22T14:00',
     })
-    expect(excedePorTolerancia.fechaFin).toContain('(2 días, 23 horas y 30 minutos)')
+    expect(excedePorTolerancia.fechaFin).toContain('(14 días, 23 horas y 30 minutos)')
 
     // Si el material solo permite 24 horas (1440 min), supera el máximo
     const erroresExcedeMaximo = validarFormularioReserva({
@@ -233,17 +232,17 @@ describe('presentación de motivos y fechas', () => {
     expect(erroresExcedeMaximo.fechaFin).toMatch(/tiempo máximo permitido/)
   })
 
-  it('informa el máximo universal de 3 días para un material con límite antiguo mayor', () => {
+  it('informa el máximo universal de 15 días con tolerancia cuando se supera', () => {
     const errores = validarFormularioReserva({
       materialId: 'mat-1',
-      justificacion: 'Supera el máximo universal',
+      justificacion: 'Supera el máximo universal configurable de 15 días',
       esAvanzado: false,
-      material: { tiempo_maximo_prestamo: 10080 },
-      fechaInicio: '2026-12-14T09:00',
+      material: { tiempo_maximo_prestamo: 30000 },
+      fechaInicio: '2026-12-01T09:00',
       fechaFin: '2026-12-17T10:00',
     })
 
-    expect(errores.fechaFin).toContain('(2 días, 23 horas y 30 minutos)')
+    expect(errores.fechaFin).toContain('(14 días, 23 horas y 30 minutos)')
   })
 
   it('rechaza reservas con duración menor a 1 hora (60 minutos)', () => {

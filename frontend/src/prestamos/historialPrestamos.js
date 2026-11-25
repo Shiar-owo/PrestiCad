@@ -17,7 +17,7 @@ export function obtenerPrestamoAdyacente(prestamos, prestamoId, direccion) {
   return prestamos[indiceAdyacente] || null
 }
 
-export function construirRutaHistorial({ estado = 'todos', pagina = 1, dni = '' } = {}) {
+export function construirRutaHistorial({ estado = 'todos', pagina = 1, dni = '', nombre = '' } = {}) {
   const parametros = new URLSearchParams({
     page: String(pagina),
     page_size: String(TAMANO_PAGINA_HISTORIAL),
@@ -25,6 +25,8 @@ export function construirRutaHistorial({ estado = 'todos', pagina = 1, dni = '' 
 
   if (estado && estado !== 'todos') parametros.set('estado', estado)
   if (dni) parametros.set('dni', dni)
+  const nombreLimpio = String(nombre || '').trim()
+  if (nombreLimpio) parametros.set('nombre', nombreLimpio)
 
   return `/prestamos/historial/?${parametros.toString()}`
 }

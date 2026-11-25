@@ -257,28 +257,28 @@ class ReservasServiceTestCase(TestCase):
         self.assertEqual(Reserva.objects.filter(material=material).count(), 0)
         self.assertEqual(prestamo.estado, "activo")
 
-    def test_reserva_respeta_maximo_de_tres_dias_aunque_el_material_tenga_un_limite_antiguo_mayor(self):
+    def test_reserva_respeta_maximo_de_quince_dias_aunque_el_material_tenga_un_limite_antiguo_mayor(self):
         material = crear_material(codigo_material="EQ-RES-MAX-LEGACY")
-        # Simula un registro histórico que conserva el límite anterior a la regla.
-        Material.objects.filter(pk=material.pk).update(tiempo_maximo_prestamo=7 * 1440)
+        # Simula un registro histórico que conserva un límite superior al tope global de 15 días.
+        Material.objects.filter(pk=material.pk).update(tiempo_maximo_prestamo=20 * 1440)
         material.refresh_from_db()
         ahora = timezone.now()
         inicio = timezone.localtime(ahora).replace(hour=9, minute=0, second=0, microsecond=0)
         while inicio <= timezone.localtime(ahora) or inicio.weekday() != 0:
             inicio += timedelta(days=1)
-        fin = inicio + timedelta(days=3, hours=1)
+        fin = inicio + timedelta(days=15, hours=1)
 
         with self.assertRaises(ReservaError) as error:
             crear_reserva(
                 usuario=self.prestatario_estandar,
                 material_id=material.id,
-                justificacion="Supera el máximo universal de tres días",
+                justificacion="Supera el máximo configurable global de quince días",
                 fecha_inicio=inicio,
                 fecha_fin=fin,
                 ahora=ahora,
             )
 
-        self.assertIn("2 días, 23 horas y 30 minutos", error.exception.mensaje)
+        self.assertIn("14 días, 23 horas y 30 minutos", error.exception.mensaje)
 
     def test_solicitud_sin_disponibilidad_se_rechaza_sin_penalizacion(self):
         material = crear_material(
@@ -604,7 +604,7 @@ class ReservasAPITestCase(APITestCase):
 
     def test_api_reserva_permite_cruzar_fin_de_semana_y_cuenta_todos_los_dias_intermedios(self):
         self._autenticar(self.prestatario)
-        # Aunque el material conserve un máximo antiguo de 4 días, el tope efectivo es 3 días.
+        # Material configurado a 4 días (dentro del máximo configurable de 15 días).
         self.material.tiempo_maximo_prestamo = 5760
         self.material.save(update_fields=["tiempo_maximo_prestamo", "updated_at"])
 
@@ -640,7 +640,7 @@ class ReservasAPITestCase(APITestCase):
                 checklist_inicial=CHECKLIST,
                 registrado_por=self.gestor,
             )
-        # Los días intermedios cuentan; la tolerancia completa el máximo total de 3 días.
+        # Los días intermedios cuentan (viernes 14:10 a lunes 13:30 = 4280 minutos).
         self.assertEqual(prestamo.tiempo_prestamo_minutos, 4280)
         self.assertEqual(prestamo.fecha_entrega, viernes + timedelta(minutes=10))
         self.assertEqual(prestamo.fecha_limite, lunes)
@@ -906,7 +906,7 @@ class ReservasCalendarioTestCase(APITestCase):
         self.prestatario_1 = crear_usuario("cal1@unsa.edu.pe", "45000001", reputacion_tier="estandar")
         self.prestatario_2 = crear_usuario("cal2@unsa.edu.pe", "45000002", reputacion_tier="estandar")
         self.prestatario_3 = crear_usuario("cal3@unsa.edu.pe", "45000003", reputacion_tier="estandar")
-        self.gestor = crear_usuario("gestor_cal@unsa.edu.pe", "45000004", rol_nombre="gestor")
+        self.gestor = crear_usuario("gestor_cal@unsa.edu.pe", "45000004", rol="gestor")
         self.material = crear_material(
             codigo_material="CAL-01",
             stock=1,
@@ -1038,3 +1038,169 @@ class ReservasCalendarioTestCase(APITestCase):
         self.assertIn("fecha", primer_dia)
         self.assertIn("disponible", primer_dia)
         self.assertIn("ejemplares_libres", primer_dia)
+
+    def test_api_disponibilidad_expone_reservas_futuras_y_prestatario_solo_a_gestion(self):
+        hoy = timezone.localtime(timezone.now()).replace(second=0, microsecond=0)
+        lunes = hoy + timedelta(days=1)
+        while lunes.weekday() != 0:
+            lunes += timedelta(days=1)
+        inicio = lunes.replace(hour=10, minute=0)
+        fin = lunes.replace(hour=13, minute=0)
+
+        crear_reserva(
+            usuario=self.prestatario_1,
+            material_id=self.material.id,
+            justificacion="Reserva futura de prueba",
+            fecha_inicio=inicio,
+            fecha_fin=fin,
+        )
+
+        url = f"/api/materiales/{self.material.id}/disponibilidad/"
+        params = {"desde": lunes.date().isoformat(), "hasta": lunes.date().isoformat()}
+
+        # Consulta pública/prestatario: muestra franja reservada sin exponer nombre del prestatario
+        resp_publica = self.client.get(url, params)
+        self.assertEqual(resp_publica.status_code, 200)
+        ocupaciones_pub = resp_publica.json()["dias"][0]["ocupaciones"]
+        self.assertEqual(len(ocupaciones_pub), 1)
+        self.assertEqual(ocupaciones_pub[0]["tipo"], "reserva")
+        self.assertNotIn("prestatario", ocupaciones_pub[0])
+
+        # Consulta como gestor: incluye el nombre del prestatario en las ocupaciones
+        sesion = self.client.session
+        sesion[CLAVE_SESION_USUARIO_ID] = self.gestor.id
+        sesion[CLAVE_SESION_ULTIMA_ACTIVIDAD] = timezone.now().isoformat()
+        sesion.save()
+
+        resp_gestor = self.client.get(url, params)
+        self.assertEqual(resp_gestor.status_code, 200)
+        ocupaciones_gestor = resp_gestor.json()["dias"][0]["ocupaciones"]
+        self.assertEqual(len(ocupaciones_gestor), 1)
+        self.assertEqual(
+            ocupaciones_gestor[0]["prestatario"],
+            f"{self.prestatario_1.nombre} {self.prestatario_1.apellido}".strip(),
+        )
+
+
+class DiasNoLaborablesAPITestCase(APITestCase):
+    """Pruebas de gestión administrativa y validación de días no laborables (PRTCAD-216)."""
+
+    URL = "/api/dias-no-laborables/"
+
+    def setUp(self):
+        self.admin = crear_usuario("admin_feriados@unsa.edu.pe", "46000001", rol="administrador")
+        self.gestor = crear_usuario("gestor_feriados@unsa.edu.pe", "46000002", rol="gestor")
+        self.prestatario = crear_usuario("prest_feriados@unsa.edu.pe", "46000003", reputacion_tier="estandar")
+        self.material = crear_material(
+            codigo_material="FER-01",
+            stock=1,
+            tier_minimo_requerido="estandar",
+            tiempo_maximo_prestamo=1440 * 3,
+        )
+
+    def _iniciar_sesion(self, usuario):
+        sesion = self.client.session
+        sesion[CLAVE_SESION_USUARIO_ID] = usuario.id
+        sesion[CLAVE_SESION_ULTIMA_ACTIVIDAD] = timezone.now().isoformat()
+        sesion.save()
+
+    def _proximo_lunes(self):
+        hoy = timezone.localtime(timezone.now()).date()
+        cursor = hoy + timedelta(days=1)
+        while cursor.weekday() != 0:
+            cursor += timedelta(days=1)
+        return cursor
+
+    def test_solo_admin_puede_crear_y_eliminar_dias_no_laborables(self):
+        lunes = self._proximo_lunes()
+
+        for usuario in (self.prestatario, self.gestor):
+            self._iniciar_sesion(usuario)
+            resp = self.client.post(
+                self.URL,
+                {"fecha": lunes.isoformat(), "motivo": "Feriado"},
+                format="json",
+            )
+            self.assertEqual(resp.status_code, 403)
+
+        self._iniciar_sesion(self.admin)
+        creado = self.client.post(
+            self.URL,
+            {"fecha": lunes.isoformat(), "motivo": "Feriado institucional"},
+            format="json",
+        )
+        self.assertEqual(creado.status_code, 201)
+        self.assertEqual(creado.json()["fecha"], lunes.isoformat())
+        self.assertEqual(creado.json()["motivo"], "Feriado institucional")
+        self.assertEqual(creado.json()["reservas_afectadas"], 0)
+
+        duplicado = self.client.post(
+            self.URL,
+            {"fecha": lunes.isoformat(), "motivo": "Otro"},
+            format="json",
+        )
+        self.assertEqual(duplicado.status_code, 409)
+
+        sabado = lunes + timedelta(days=5)
+        fin_semana = self.client.post(
+            self.URL,
+            {"fecha": sabado.isoformat(), "motivo": "Sábado"},
+            format="json",
+        )
+        self.assertEqual(fin_semana.status_code, 400)
+
+        listado = self.client.get(self.URL)
+        self.assertEqual(listado.status_code, 200)
+        self.assertEqual(len(listado.json()), 1)
+
+        eliminado = self.client.delete(f"{self.URL}{creado.json()['id']}/")
+        self.assertEqual(eliminado.status_code, 204)
+        self.assertEqual(len(self.client.get(self.URL).json()), 0)
+
+    def test_dia_inhabilitado_bloquea_reservas_prestamos_y_aparece_en_disponibilidad(self):
+        from datetime import datetime, time
+        from apps.prestamos.services import PrestamoError
+
+        lunes = self._proximo_lunes()
+        self._iniciar_sesion(self.admin)
+        self.client.post(
+            self.URL,
+            {"fecha": lunes.isoformat(), "motivo": "Mantenimiento eléctrico"},
+            format="json",
+        )
+
+        tz = timezone.get_current_timezone()
+        inicio_lunes = timezone.make_aware(datetime.combine(lunes, time(10, 0)), tz)
+        fin_lunes = timezone.make_aware(datetime.combine(lunes, time(14, 0)), tz)
+
+        with self.assertRaises(ReservaError) as error_reserva:
+            crear_reserva(
+                usuario=self.prestatario,
+                material_id=self.material.id,
+                justificacion="Prueba en feriado",
+                fecha_inicio=inicio_lunes,
+                fecha_fin=fin_lunes,
+            )
+        self.assertIn("Mantenimiento eléctrico", error_reserva.exception.mensaje)
+
+        with self.assertRaises(PrestamoError) as error_prestamo:
+            registrar_prestamo(
+                dni_prestatario=self.prestatario.dni,
+                material_id=self.material.id,
+                tiempo_prestamo_minutos=120,
+                fecha_fin=fin_lunes,
+                checklist_inicial=[{"elemento": "Equipo", "observacion": "OK"}],
+                registrado_por=self.gestor,
+            )
+        self.assertIn("Mantenimiento eléctrico", error_prestamo.exception.mensaje)
+
+        disp = self.client.get(
+            f"/api/materiales/{self.material.id}/disponibilidad/",
+            {"desde": lunes.isoformat(), "hasta": lunes.isoformat()},
+        )
+        self.assertEqual(disp.status_code, 200)
+        dia_info = disp.json()["dias"][0]
+        self.assertFalse(dia_info["es_laborable"])
+        self.assertTrue(dia_info["es_dia_inhabilitado"])
+        self.assertEqual(dia_info["motivo_inhabilitado"], "Mantenimiento eléctrico")
+        self.assertFalse(dia_info["disponible"])

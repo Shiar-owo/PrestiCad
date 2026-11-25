@@ -227,14 +227,14 @@ class RegistrarMaterialServiceTestCase(TestCase):
         self.assertEqual(material_estandar.tiempo_maximo_prestamo, 4320)
         self.assertEqual(material_avanzado.tiempo_maximo_prestamo, 4320)
 
-        material_avanzado_tres_dias = registrar_material(
+        material_avanzado_quince_dias = registrar_material(
             **self._datos_validos(
-                codigo_material="INV-TIER-A-3D",
+                codigo_material="INV-TIER-A-15D",
                 tier_minimo_requerido="avanzado",
-                tiempo_maximo_prestamo=4320,
+                tiempo_maximo_prestamo=21600,
             )
         )
-        self.assertEqual(material_avanzado_tres_dias.tiempo_maximo_prestamo, 4320)
+        self.assertEqual(material_avanzado_quince_dias.tiempo_maximo_prestamo, 21600)
 
         material_personalizado = registrar_material(
             **self._datos_validos(
@@ -258,7 +258,7 @@ class RegistrarMaterialServiceTestCase(TestCase):
             registrar_material(
                 **self._datos_validos(
                     codigo_material="INV-MAX-ERR",
-                    tiempo_maximo_prestamo=4321,
+                    tiempo_maximo_prestamo=21601,
                 )
             )
         self.assertEqual(error_maximo.exception.campo, "tiempo_maximo_prestamo")
@@ -663,14 +663,14 @@ class MaterialSerializerContratoTestCase(SimpleTestCase):
         self.assertFalse(serializer.is_valid())
         self.assertIn("bonificacion_tiempo", serializer.errors)
 
-    def test_alta_permite_hasta_3_dias_para_tier_avanzado(self):
+    def test_alta_permite_hasta_15_dias_para_tier_avanzado(self):
         serializer = MaterialRegistroSerializer(
             data={
                 "nombre": "Cable",
                 "codigo_material": "OBJ-1",
                 "tipo": "objeto",
                 "tier_minimo_requerido": "avanzado",
-                "tiempo_maximo_prestamo": 4320,
+                "tiempo_maximo_prestamo": 21600,
             }
         )
 
@@ -682,21 +682,21 @@ class MaterialSerializerContratoTestCase(SimpleTestCase):
                 "codigo_material": "OBJ-2",
                 "tipo": "objeto",
                 "tier_minimo_requerido": "avanzado",
-                "tiempo_maximo_prestamo": 4321,
+                "tiempo_maximo_prestamo": 21601,
             }
         )
 
         self.assertFalse(serializer.is_valid())
         self.assertIn("tiempo_maximo_prestamo", serializer.errors)
 
-    def test_edicion_permite_hasta_3_dias_para_tier_avanzado(self):
+    def test_edicion_permite_hasta_15_dias_para_tier_avanzado(self):
         material = Material(
             tier_minimo_requerido="avanzado",
             tiempo_maximo_prestamo=480,
         )
         serializer = MaterialActualizacionSerializer(
             instance=material,
-            data={"tiempo_maximo_prestamo": 4320},
+            data={"tiempo_maximo_prestamo": 21600},
             partial=True,
         )
 
@@ -704,7 +704,7 @@ class MaterialSerializerContratoTestCase(SimpleTestCase):
 
         serializer = MaterialActualizacionSerializer(
             instance=material,
-            data={"tiempo_maximo_prestamo": 4321},
+            data={"tiempo_maximo_prestamo": 21601},
             partial=True,
         )
 

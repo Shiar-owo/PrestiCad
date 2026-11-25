@@ -1291,7 +1291,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
                 />
               </div>
               <p className="text-xs text-texto-suave">
-                Ingresa cualquier duración entre 1 hora y {DURACION_MAXIMA_PRESTAMO_DIAS} días. El valor predeterminado para todos los tiers es 3 días.
+                Ingresa cualquier duración entre 1 hora y {DURACION_MAXIMA_PRESTAMO_DIAS} días. Valor predeterminado para todos los Tiers: 3 días.
               </p>
             </div>
             {CAMPOS_PUNTOS.map(({ campo, etiqueta }) => (

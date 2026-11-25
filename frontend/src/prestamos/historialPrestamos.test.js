@@ -69,6 +69,15 @@ describe('construirRutaHistorial', () => {
     )
   })
 
+  it('incluye el nombre del prestatario recortado al filtrar el historial', () => {
+    expect(construirRutaHistorial({ estado: 'activo', pagina: 1, nombre: '  Ana Quispe  ' })).toBe(
+      '/prestamos/historial/?page=1&page_size=25&estado=activo&nombre=Ana+Quispe',
+    )
+    expect(construirRutaHistorial({ nombre: '   ' })).toBe(
+      '/prestamos/historial/?page=1&page_size=25',
+    )
+  })
+
   it('omite el filtro para todos los estados', () => {
     expect(construirRutaHistorial({ estado: 'todos' })).toBe(
       '/prestamos/historial/?page=1&page_size=25',

@@ -4,7 +4,7 @@ from pathlib import Path
 
 from django.core.files.base import ContentFile
 from django.core.exceptions import ValidationError
-from django.db.models import Case, CharField, Count, DateTimeField, F, IntegerField, Value, When
+from django.db.models import Case, CharField, Count, DateTimeField, F, IntegerField, Q, Value, When
 from django.db import transaction
 from django.utils import timezone
 
@@ -148,15 +148,28 @@ def consultar_prestamos_usuario(usuario_id, ahora=None):
     return _consultar_prestamos_con_estado(ahora=ahora).filter(usuario_id=usuario_id)
 
 
-def consultar_historial_prestamos(ahora=None, estado=None, dni=None):
+def consultar_historial_prestamos(ahora=None, estado=None, dni=None, nombre=None):
     """Lista global de préstamos para consulta histórica de gestión."""
-    prestamos = _consultar_prestamos_con_estado(ahora=ahora).select_related("usuario")
+    prestamos = _consultar_prestamos_con_estado(ahora=ahora).select_related(
+        "usuario",
+        "registrado_por",
+        "registrado_por__rol",
+        "devolucion",
+        "devolucion__realizado_por",
+        "devolucion__realizado_por__rol",
+    )
     if estado == "devoluble":
         prestamos = prestamos.filter(estado_consulta__in=("activo", "vencido"))
     elif estado is not None:
         prestamos = prestamos.filter(estado_consulta=estado)
     if dni is not None:
         prestamos = prestamos.filter(usuario__dni=dni)
+    if nombre:
+        for termino in nombre.strip().split():
+            prestamos = prestamos.filter(
+                Q(usuario__nombre__icontains=termino)
+                | Q(usuario__apellido__icontains=termino)
+            )
     return prestamos
 
 
@@ -314,7 +327,7 @@ def _validar_elegibilidad(usuario, material, *, es_excepcion=False):
 def _resolver_duracion_prestamo(tiempo_prestamo_minutos, tiempo_prestamo_dias):
     """Normaliza la duración del préstamo en minutos y días equivalentes.
 
-    Acepta `tiempo_prestamo_minutos` (mínimo 1 hora, máximo 2 días, 23 horas y 30 minutos) o
+    Acepta `tiempo_prestamo_minutos` (mínimo 1 hora, máximo 14 días, 23 horas y 30 minutos) o
     `tiempo_prestamo_dias` por compatibilidad, devolviendo `(minutos, dias, campo_error)`.
     """
     if tiempo_prestamo_minutos is not None:
@@ -334,8 +347,8 @@ def _resolver_duracion_prestamo(tiempo_prestamo_minutos, tiempo_prestamo_dias):
         if tiempo_prestamo_minutos > MAXIMO_MINUTOS_PRESTAMO:
             raise PrestamoError(
                 "tiempo_prestamo_minutos",
-                "El plazo pactado máximo es de 2 días, 23 horas y 30 minutos; "
-                "con la tolerancia de 30 minutos, el total es de 3 días.",
+                f"El plazo pactado máximo es de {formatear_duracion_minutos(MAXIMO_MINUTOS_PRESTAMO)}; "
+                f"con la tolerancia de {TIEMPO_GRACIA_MINUTOS} minutos, el total es de {MAXIMO_DIAS_PRESTAMO} días.",
             )
         dias = max(1, math.ceil(tiempo_prestamo_minutos / 1440))
         return tiempo_prestamo_minutos, dias, "tiempo_prestamo_minutos"
@@ -614,6 +627,12 @@ def actualizar_documento_garantia(*, prestamo_id, tipo, archivo=None, eliminar=F
             "No existe el préstamo indicado.",
             status_code=404,
         ) from error
+    if prestamo.estado == "devuelto":
+        raise PrestamoError(
+            "prestamo_id",
+            "No se pueden modificar ni eliminar datos o documentos de un préstamo ya finalizado.",
+            status_code=409,
+        )
     try:
         garantia = Garantia.objects.select_for_update().get(prestamo=prestamo)
     except Garantia.DoesNotExist as error:
@@ -674,7 +693,17 @@ def consultar_detalle_historial_prestamo(prestamo_id, ahora=None):
     try:
         return (
             _consultar_prestamos_con_estado(ahora=ahora)
-            .select_related("usuario", "material", "instancia", "garantia")
+            .select_related(
+                "usuario",
+                "registrado_por",
+                "registrado_por__rol",
+                "devolucion",
+                "devolucion__realizado_por",
+                "devolucion__realizado_por__rol",
+                "material",
+                "instancia",
+                "garantia",
+            )
             .get(pk=prestamo_id)
         )
     except (Prestamo.DoesNotExist, ValueError, TypeError) as error:
@@ -780,12 +809,19 @@ def registrar_prestamo(
             HORA_RESERVA_MINIMO_INICIO,
             MINUTO_RESERVA_MAXIMO_FIN,
         )
+        from apps.reservas.disponibilidad import obtener_dia_no_laborable
 
         fin_local = timezone.localtime(fecha_fin) if timezone.is_aware(fecha_fin) else fecha_fin
         if fin_local.weekday() not in DIAS_LABORABLES:
             raise PrestamoError(
                 "fecha_fin",
                 "La fecha de devolución debe ser un día laborable (lunes a viernes).",
+            )
+        dia_fin_inhabilitado = obtener_dia_no_laborable(fin_local)
+        if dia_fin_inhabilitado is not None:
+            raise PrestamoError(
+                "fecha_fin",
+                f"El día {fin_local.strftime('%d/%m/%Y')} está inhabilitado ({dia_fin_inhabilitado.motivo}). La devolución debe ser un día laborable.",
             )
         minutos_fin = fin_local.hour * 60 + fin_local.minute
         if not (
@@ -973,7 +1009,15 @@ def registrar_prestamo(
         )
 
     if reserva is None:
+        from apps.reservas.disponibilidad import obtener_dia_no_laborable
+
         hora_entrega_local = timezone.localtime(ahora_entrega)
+        dia_hoy_inhabilitado = obtener_dia_no_laborable(hora_entrega_local)
+        if dia_hoy_inhabilitado is not None:
+            raise PrestamoError(
+                "fecha_entrega",
+                f"Hoy ({hora_entrega_local.strftime('%d/%m/%Y')}) está inhabilitado ({dia_hoy_inhabilitado.motivo}). No se pueden registrar entregas en días no laborables.",
+            )
         cierre_local = hora_entrega_local.replace(hour=18, minute=0, second=0, microsecond=0)
         if hora_entrega_local > cierre_local:
             raise PrestamoError(

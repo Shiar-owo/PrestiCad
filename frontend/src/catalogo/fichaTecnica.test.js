@@ -23,14 +23,14 @@ describe('obtenerDatosFichaTecnica', () => {
     expect(obtenerDatosFichaTecnica(undefined)).toBeNull()
   })
 
-  it('incluye la tolerancia en el máximo efectivo mostrado para materiales antiguos', () => {
+  it('incluye la tolerancia en el máximo efectivo mostrado cuando el material alcanza el tope de 15 días', () => {
     const ficha = obtenerDatosFichaTecnica({
-      tiempo_maximo_prestamo: 10080,
+      tiempo_maximo_prestamo: 21600,
       tier_minimo_requerido: 'avanzado',
     })
 
-    expect(ficha.tiempoMaximoPrestamoMinutos).toBe(4290)
-    expect(ficha.tiempoMaximoPrestamoLegible).toBe('2 días, 23 horas y 30 minutos')
+    expect(ficha.tiempoMaximoPrestamoMinutos).toBe(21570)
+    expect(ficha.tiempoMaximoPrestamoLegible).toBe('14 días, 23 horas y 30 minutos')
   })
 
   it('extrae las especificaciones completas de hardware del material', () => {
@@ -80,8 +80,8 @@ describe('obtenerDatosFichaTecnica', () => {
       color: 'Gris oscuro',
       tierMinimo: 'avanzado',
       tierMinimoLegible: 'Avanzado',
-      tiempoMaximoPrestamoMinutos: 4290,
-      tiempoMaximoPrestamoLegible: '2 días, 23 horas y 30 minutos',
+      tiempoMaximoPrestamoMinutos: 4320,
+      tiempoMaximoPrestamoLegible: '3 días',
       bonificacionTiempo: 8,
       deduccionTardanza: 15,
       deduccionDanoParcial: 40,

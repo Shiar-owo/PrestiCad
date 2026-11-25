@@ -18,6 +18,7 @@ from apps.usuarios.models import Usuario
 from apps.usuarios.permissions import EsAdministrador, EsGestorAlmacen
 from apps.usuarios.serializers import (
     ActualizarPerfilSerializer,
+    CambioEstadoUsuarioSerializer,
     CambioRolSerializer,
     LoginSerializer,
     PerfilUsuarioSerializer,
@@ -161,6 +162,39 @@ class UsuarioRolView(RetrieveUpdateAPIView):
         except services.UsuarioNoEncontradoError as error:
             return Response({"detail": str(error)}, status=status.HTTP_404_NOT_FOUND)
         return Response(self.get_serializer(actualizado).data, status=status.HTTP_200_OK)
+
+
+class UsuarioEstadoView(RetrieveUpdateAPIView):
+    """Permite a un administrador activar o desactivar una cuenta de usuario."""
+
+    queryset = Usuario.objects.select_related("rol").all()
+    serializer_class = CambioEstadoUsuarioSerializer
+    authentication_classes = [AutenticacionSesionUsuario]
+    permission_classes = [EsAdministrador]
+
+    def update(self, request, *args, **kwargs):
+        usuario = self.get_object()
+        if request.user.pk == usuario.pk:
+            return Response(
+                {"detail": "No puedes cambiar el estado de tu propia cuenta."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            actualizado = services.cambiar_estado_usuario(
+                usuario.id,
+                serializer.validated_data["estado"],
+            )
+        except services.EstadoUsuarioInvalidoError as error:
+            return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+        except services.UsuarioNoEncontradoError as error:
+            return Response({"detail": str(error)}, status=status.HTTP_404_NOT_FOUND)
+
+        datos = dict(self.get_serializer(actualizado).data)
+        datos["tiene_prestamos_activos"] = services.usuario_tiene_prestamos_activos(actualizado.pk)
+        return Response(datos, status=status.HTTP_200_OK)
 
 
 class UsuarioEliminarView(APIView):

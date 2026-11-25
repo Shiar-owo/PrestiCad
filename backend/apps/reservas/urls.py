@@ -7,6 +7,8 @@ from apps.reservas.views import (
     CrearReservaExcepcionalView,
     CrearReservaView,
     DescargarDocumentoGarantiaReservaView,
+    DiaNoLaborableDetailView,
+    DiasNoLaborablesListCreateView,
     MisReservasView,
     ReservaConfirmadaConversionView,
     RechazarReservaView,
@@ -15,6 +17,12 @@ from apps.reservas.views import (
 )
 
 urlpatterns = [
+    path("dias-no-laborables/", DiasNoLaborablesListCreateView.as_view(), name="dias-no-laborables"),
+    path(
+        "dias-no-laborables/<int:dia_id>/",
+        DiaNoLaborableDetailView.as_view(),
+        name="dia-no-laborable-detalle",
+    ),
     path("materiales/<uuid:material_id>/disponibilidad/", DisponibilidadMaterialView.as_view(), name="material-disponibilidad"),
     path("reservas/disponibilidad/<uuid:material_id>/", DisponibilidadMaterialView.as_view(), name="reserva-disponibilidad"),
     path("reservas/", CrearReservaView.as_view(), name="crear-reserva"),

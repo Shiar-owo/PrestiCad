@@ -14,6 +14,7 @@ import {
 } from './historialPrestamos'
 import ListaHistorialPrestamos from './ListaHistorialPrestamos'
 import Boton from '../components/ui/Boton'
+import Campo from '../components/ui/Campo'
 import Skeleton from '../components/ui/Skeleton'
 import ErrorAlerta from '../components/ui/ErrorAlerta'
 import EstadoVacio from '../components/ui/EstadoVacio'
@@ -25,6 +26,8 @@ export default function HistorialPrestamos() {
   const { usuario } = useContext(SesionContext)
   const navigate = useNavigate()
   const [estado, setEstado] = useState('todos')
+  const [nombreEntrada, setNombreEntrada] = useState('')
+  const [nombreFiltro, setNombreFiltro] = useState('')
   const [dniEntrada, setDniEntrada] = useState('')
   const [dniFiltro, setDniFiltro] = useState('')
   const [pagina, setPagina] = useState(1)
@@ -34,10 +37,22 @@ export default function HistorialPrestamos() {
   const navegacionPendiente = useRef('')
 
   useEffect(() => {
+    const limpio = nombreEntrada.trim()
+    if (limpio === nombreFiltro) return undefined
+    const temporizador = window.setTimeout(() => {
+      setPrestamoSeleccionado(null)
+      navegacionPendiente.current = ''
+      setNombreFiltro(limpio)
+      setPagina(1)
+    }, 300)
+    return () => window.clearTimeout(temporizador)
+  }, [nombreEntrada, nombreFiltro])
+
+  useEffect(() => {
     let activa = true
     setConsulta(iniciarCargaHistorial)
 
-    api.get(construirRutaHistorial({ estado, pagina, dni: dniFiltro }))
+    api.get(construirRutaHistorial({ estado, pagina, dni: dniFiltro, nombre: nombreFiltro }))
       .then(validarRespuestaHistorial)
       .then((datos) => {
         if (activa) {
@@ -64,7 +79,7 @@ export default function HistorialPrestamos() {
     return () => {
       activa = false
     }
-  }, [estado, pagina, dniFiltro, intento])
+  }, [estado, pagina, dniFiltro, nombreFiltro, intento])
 
   function cambiarEstado(nuevoEstado) {
     setPrestamoSeleccionado(null)
@@ -126,12 +141,39 @@ export default function HistorialPrestamos() {
         </p>
       </header>
 
-      <div className="my-4 grid gap-4 sm:max-w-3xl sm:grid-cols-[15rem_minmax(0,24rem)] sm:items-start">
+      <div className="my-4 grid gap-4 md:grid-cols-[14rem_minmax(0,1fr)_minmax(0,1fr)] md:items-start">
         <FiltroPrestamos estado={estado} onCambiar={cambiarEstado} />
-        <div className="grid gap-3">
+        <div className="grid gap-2">
+          <Campo
+            etiqueta="Buscar por nombre"
+            tipo="search"
+            valor={nombreEntrada}
+            onCambio={(evento) => setNombreEntrada(evento.target.value)}
+            placeholder="Ej. Ana Quispe"
+            ayuda="Filtra el historial por nombre o apellido del prestatario."
+          />
+          {nombreFiltro && (
+            <Boton
+              variante="secundario"
+              tipo="button"
+              tamanio="pequeno"
+              className="w-fit"
+              onClick={() => {
+                setPrestamoSeleccionado(null)
+                navegacionPendiente.current = ''
+                setNombreEntrada('')
+                setNombreFiltro('')
+                setPagina(1)
+              }}
+            >
+              Limpiar búsqueda por nombre
+            </Boton>
+          )}
+        </div>
+        <div className="grid gap-2">
           <SelectorPrestatario
             valor={dniEntrada}
-            etiqueta="Buscar historial por prestatario"
+            etiqueta="Buscar historial por DNI"
             ayuda="Escribe el DNI para elegir un prestatario y filtrar sus préstamos."
             onCambio={(valor) => {
               setPrestamoSeleccionado(null)
@@ -152,6 +194,7 @@ export default function HistorialPrestamos() {
             <Boton
               variante="secundario"
               tipo="button"
+              tamanio="pequeno"
               className="w-fit"
               onClick={() => {
                 setPrestamoSeleccionado(null)
@@ -161,7 +204,7 @@ export default function HistorialPrestamos() {
                 setPagina(1)
               }}
             >
-              Quitar filtro de prestatario
+              Quitar filtro de DNI
             </Boton>
           )}
         </div>
@@ -176,11 +219,11 @@ export default function HistorialPrestamos() {
       {results.length === 0 ? (
         <div className="mt-6">
           <EstadoVacio
-            titulo={dniFiltro
-              ? 'Sin préstamos para este prestatario'
+            titulo={dniFiltro || nombreFiltro
+              ? 'Sin préstamos para esta búsqueda'
               : estado === 'todos' ? 'Aún no hay préstamos registrados' : 'Sin préstamos con este estado'}
             mensaje={
-              dniFiltro
+              dniFiltro || nombreFiltro
                 ? 'No se encontraron préstamos que coincidan con los filtros aplicados.'
                 : estado === 'todos'
                 ? 'Los préstamos del sistema aparecerán aquí al registrar una entrega.'

@@ -38,6 +38,10 @@ class RolInvalidoError(Exception):
     """El rol solicitado no existe en la taxonomía del sistema."""
 
 
+class EstadoUsuarioInvalidoError(Exception):
+    """El estado solicitado no es válido para la gestión administrativa."""
+
+
 class UsuarioNoEncontradoError(Exception):
     """No existe un usuario con el id indicado."""
 
@@ -112,6 +116,25 @@ def cambiar_rol_usuario(usuario_id, nuevo_rol):
 
     usuario.rol = rol
     usuario.save(update_fields=["rol", "updated_at"])
+    return usuario
+
+
+ESTADOS_GESTIONABLES_ADMIN = ("activo", "inactivo")
+
+
+def cambiar_estado_usuario(usuario_id, nuevo_estado):
+    """Activa o desactiva la cuenta de un usuario desde el panel administrativo."""
+    usuario = obtener_usuario_por_id(usuario_id)
+    if usuario is None:
+        raise UsuarioNoEncontradoError(f"No existe un usuario con id={usuario_id}")
+
+    if nuevo_estado not in ESTADOS_GESTIONABLES_ADMIN:
+        raise EstadoUsuarioInvalidoError(
+            f"'{nuevo_estado}' no es un estado válido. Opciones: {list(ESTADOS_GESTIONABLES_ADMIN)}"
+        )
+
+    usuario.estado = nuevo_estado
+    usuario.save(update_fields=["estado", "updated_at"])
     return usuario
 
 

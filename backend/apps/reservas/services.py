@@ -31,10 +31,11 @@ from apps.reservas.constants import (
 )
 from apps.reservas.disponibilidad import (
     hay_solapamiento,
+    obtener_dia_no_laborable,
     obtener_instancias_disponibles_en_rango,
     verificar_instancia_disponible_en_rango,
 )
-from apps.reservas.models import Reserva
+from apps.reservas.models import DiaNoLaborable, Reserva
 from apps.usuarios.models import Usuario
 from apps.usuarios.services import actualizar_reputacion
 
@@ -254,12 +255,19 @@ def _validar_horario_reserva(
     if fecha_inicio <= ahora:
         raise ReservaError("fecha_inicio", "La fecha de inicio debe ser posterior al momento actual.")
     for etiqueta, valor in (("fecha_inicio", fecha_inicio), ("fecha_fin", fecha_fin)):
-        if valor.weekday() not in DIAS_LABORABLES:
+        valor_local = timezone.localtime(valor) if timezone.is_aware(valor) else valor
+        if valor_local.weekday() not in DIAS_LABORABLES:
             raise ReservaError(
                 etiqueta,
                 "Solo se permite reservar de lunes a viernes (días laborables).",
             )
-        minutos_dia = valor.hour * 60 + valor.minute
+        dia_inhabilitado = obtener_dia_no_laborable(valor_local)
+        if dia_inhabilitado is not None:
+            raise ReservaError(
+                etiqueta,
+                f"El día {valor_local.strftime('%d/%m/%Y')} está inhabilitado ({dia_inhabilitado.motivo}). Selecciona otro día laborable.",
+            )
+        minutos_dia = valor_local.hour * 60 + valor_local.minute
         if not (HORA_RESERVA_MINIMO_INICIO * 60 <= minutos_dia <= HORA_RESERVA_MAXIMO_FIN * 60 + 30):
             raise ReservaError(
                 etiqueta,
@@ -937,3 +945,74 @@ def consultar_reservas_confirmadas(dni=None, *, ahora=None):
         if dni_limpio:
             queryset = queryset.filter(usuario__dni__startswith=dni_limpio)
     return queryset
+
+
+def listar_dias_no_laborables(desde=None, hasta=None):
+    """Lista los días inhabilitados por administración ordenados por fecha."""
+    queryset = DiaNoLaborable.objects.select_related("creado_por").all()
+    if desde is not None:
+        queryset = queryset.filter(fecha__gte=desde)
+    if hasta is not None:
+        queryset = queryset.filter(fecha__lte=hasta)
+    return queryset
+
+
+def _contar_reservas_en_fecha(fecha_objetivo):
+    """Cuenta reservas confirmadas cuyo recojo o devolución cae en `fecha_objetivo`."""
+    from datetime import datetime, time
+
+    tz = timezone.get_current_timezone()
+    inicio_dia = timezone.make_aware(datetime.combine(fecha_objetivo, time(0, 0)), tz)
+    fin_dia = timezone.make_aware(datetime.combine(fecha_objetivo, time(23, 59, 59)), tz)
+    return (
+        Reserva.objects.filter(
+            estado="reservada",
+            fecha_inicio__isnull=False,
+            fecha_fin__isnull=False,
+        )
+        .filter(
+            Q(fecha_inicio__range=(inicio_dia, fin_dia))
+            | Q(fecha_fin__range=(inicio_dia, fin_dia))
+        )
+        .count()
+    )
+
+
+@transaction.atomic
+def crear_dia_no_laborable(*, fecha, motivo, creado_por):
+    """Inhabilita un día laborable específico (feriado, cierre, mantenimiento)."""
+    motivo_limpio = str(motivo or "").strip()
+    if not motivo_limpio:
+        raise ReservaError("motivo", "El motivo de inhabilitación es obligatorio.")
+    if fecha.weekday() not in DIAS_LABORABLES:
+        raise ReservaError(
+            "fecha",
+            "Los sábados y domingos ya son días no laborables por defecto.",
+        )
+    if DiaNoLaborable.objects.filter(fecha=fecha).exists():
+        raise ReservaError(
+            "fecha",
+            f"El día {fecha.strftime('%d/%m/%Y')} ya se encuentra inhabilitado.",
+            status_code=409,
+        )
+    registro = DiaNoLaborable.objects.create(
+        fecha=fecha,
+        motivo=motivo_limpio,
+        creado_por=creado_por,
+    )
+    reservas_afectadas = _contar_reservas_en_fecha(fecha)
+    return registro, reservas_afectadas
+
+
+@transaction.atomic
+def eliminar_dia_no_laborable(dia_id):
+    """Vuelve a habilitar un día previamente marcado como no laborable."""
+    try:
+        registro = DiaNoLaborable.objects.get(pk=dia_id)
+    except (DiaNoLaborable.DoesNotExist, ValueError, TypeError) as error:
+        raise ReservaError(
+            "dia_id",
+            "No existe el día no laborable indicado.",
+            status_code=404,
+        ) from error
+    registro.delete()

@@ -67,9 +67,14 @@ function Encabezado({ tema, onAlternarTema }) {
                 </Link>
               )}
               {usuario.rol === 'administrador' && (
-                <NavLink to="/admin/roles" className={claseEnlace}>
-                  Gestionar roles
-                </NavLink>
+                <>
+                  <NavLink to="/admin/roles" className={claseEnlace}>
+                    Gestionar roles
+                  </NavLink>
+                  <NavLink to="/admin/dias-no-laborables" className={claseEnlace}>
+                    Días no laborables
+                  </NavLink>
+                </>
               )}
             </>
           )}
@@ -148,9 +153,17 @@ function Encabezado({ tema, onAlternarTema }) {
                   </EnlaceMovil>
                 )}
                 {usuario.rol === 'administrador' && (
-                  <EnlaceMovil to="/admin/roles" activo={pathname === '/admin/roles'}>
-                    Gestionar roles
-                  </EnlaceMovil>
+                  <>
+                    <EnlaceMovil to="/admin/roles" activo={pathname === '/admin/roles'}>
+                      Gestionar roles
+                    </EnlaceMovil>
+                    <EnlaceMovil
+                      to="/admin/dias-no-laborables"
+                      activo={pathname === '/admin/dias-no-laborables'}
+                    >
+                      Días no laborables
+                    </EnlaceMovil>
+                  </>
                 )}
               </>
             )}

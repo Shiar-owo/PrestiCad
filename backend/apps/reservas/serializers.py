@@ -4,6 +4,7 @@ from django.conf import settings
 from django.utils import timezone
 from rest_framework import serializers
 
+from apps.compartido.serializers import RechazarCamposNoPermitidosMixin
 from apps.inventario.models import InstanciaMaterial, Material
 from apps.prestamos.constants import TAMANO_MAXIMO_SOLICITUD_BYTES
 from apps.prestamos.validators import validar_pdf_garantia
@@ -303,3 +304,43 @@ class ColaMaterialSerializer(serializers.Serializer):
     en_espera_excepciones = ReservaDetalleSerializer(many=True, read_only=True)
     reservas_confirmadas = ReservaDetalleSerializer(many=True, read_only=True)
     instancias_disponibles = InstanciaResumenReservaSerializer(many=True, read_only=True)
+
+
+class CrearDiaNoLaborableSerializer(RechazarCamposNoPermitidosMixin, serializers.Serializer):
+    """Valida el registro administrativo de un día no laborable/feriado."""
+
+    fecha = serializers.DateField(
+        error_messages={
+            "required": "La fecha es obligatoria.",
+            "invalid": "Ingresa una fecha válida en formato AAAA-MM-DD.",
+        }
+    )
+    motivo = serializers.CharField(
+        max_length=200,
+        error_messages={
+            "required": "El motivo es obligatorio.",
+            "blank": "El motivo es obligatorio.",
+        },
+    )
+
+    def validate_motivo(self, value):
+        limpio = value.strip()
+        if not limpio:
+            raise serializers.ValidationError("El motivo es obligatorio.")
+        return limpio
+
+
+class DiaNoLaborableSerializer(serializers.Serializer):
+    """Representación JSON de un día inhabilitado por administración."""
+
+    id = serializers.IntegerField(read_only=True)
+    fecha = serializers.DateField(read_only=True)
+    motivo = serializers.CharField(read_only=True)
+    creado_por_nombre = serializers.SerializerMethodField()
+    created_at = serializers.DateTimeField(read_only=True)
+
+    def get_creado_por_nombre(self, obj):
+        usuario = getattr(obj, "creado_por", None)
+        if usuario is None:
+            return ""
+        return f"{usuario.nombre} {usuario.apellido}".strip()

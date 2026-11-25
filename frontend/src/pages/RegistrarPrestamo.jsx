@@ -54,6 +54,7 @@ import {
   formatearFechaReserva,
   puedeEntregarseReservaAhora,
 } from '../reservas/estadoReserva'
+import { useDiasNoLaborables } from '../reservas/diasNoLaborables'
 
 const FORMULARIO_INICIAL = {
   dni: '',
@@ -121,6 +122,7 @@ const OPCIONES_MATERIAL = (materiales) => [
 function RegistrarPrestamo() {
   useTituloPagina('Registrar entrega')
   const navigate = useNavigate()
+  const { diasNoLaborables } = useDiasNoLaborables()
   const [searchParams, setSearchParams] = useSearchParams()
   const dniInicial = searchParams.get('dni') || ''
   const reservaIdInicial = searchParams.get('reservaId') || ''
@@ -565,6 +567,7 @@ function RegistrarPrestamo() {
       esExcepcion: excepcionActiva,
       garantiaReutilizada,
       fechaFin: duracionBloqueadaPorReserva ? null : fechaFinPrestamo,
+      diasNoLaborables,
     }
     const validacion = validarFormularioPrestamo(datosValidacion)
     setErrores(validacion)

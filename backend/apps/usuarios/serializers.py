@@ -72,6 +72,20 @@ class CambioRolSerializer(serializers.ModelSerializer):
         read_only_fields = ("id", "nombre", "apellido", "tipo", "estado", "updated_at")
 
 
+class CambioEstadoUsuarioSerializer(serializers.ModelSerializer):
+    """Contrato de entrada/salida para activar o desactivar cuentas desde admin."""
+
+    estado = serializers.ChoiceField(
+        choices=[("activo", "Activo"), ("inactivo", "Inactivo")],
+        error_messages={"invalid_choice": "El estado debe ser 'activo' o 'inactivo'."},
+    )
+
+    class Meta:
+        model = Usuario
+        fields = ("id", "nombre", "apellido", "email", "estado", "updated_at")
+        read_only_fields = ("id", "nombre", "apellido", "email", "updated_at")
+
+
 class UsuarioRegistroSerializer(RechazarCamposNoPermitidosMixin, serializers.ModelSerializer):
     """Contrato de entrada del endpoint POST /api/usuarios.
 

@@ -11,6 +11,7 @@ import {
 import MaterialForm from '../components/MaterialForm'
 import FichaTecnicaModal from '../components/FichaTecnicaModal'
 import ConfirmacionDobleEliminacion from '../components/ConfirmacionDobleEliminacion'
+import CalendarioDisponibilidad from '../components/reservas/CalendarioDisponibilidad'
 import ExitoModal from '../components/ui/ExitoModal'
 import Boton from '../components/ui/Boton'
 import Tarjeta from '../components/ui/Tarjeta'
@@ -48,6 +49,7 @@ function Materiales() {
   const [materialEnEdicion, setMaterialEnEdicion] = useState(null)
   const [resumenRegistro, setResumenRegistro] = useState(null)
   const [materialFicha, setMaterialFicha] = useState(null)
+  const [materialCalendario, setMaterialCalendario] = useState(null)
   const [registroAEliminar, setRegistroAEliminar] = useState(null)
   const [mensajePopupExito, setMensajePopupExito] = useState('')
 
@@ -316,7 +318,15 @@ function Materiales() {
                       {ETIQUETAS_TIER[material.tier_minimo_requerido] || material.tier_minimo_requerido}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Boton
+                          variante="fantasma"
+                          tamanio="pequeno"
+                          tipo="button"
+                          onClick={() => setMaterialCalendario(material)}
+                        >
+                          Calendario
+                        </Boton>
                         <Boton
                           variante="fantasma"
                           tamanio="pequeno"
@@ -357,6 +367,48 @@ function Materiales() {
             </table>
           </div>
         </Tarjeta>
+      )}
+
+      {materialCalendario && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onMouseDown={(evento) => {
+            if (evento.target === evento.currentTarget) setMaterialCalendario(null)
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="calendario-material-titulo"
+            className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-borde bg-white p-6 shadow-2xl dark:bg-superficie"
+          >
+            <header className="mb-4 flex items-start justify-between gap-4 border-b border-borde pb-3">
+              <div>
+                <h3 id="calendario-material-titulo" className="text-lg font-bold text-texto">
+                  Calendario de reservas futuras
+                </h3>
+                <p className="mt-0.5 text-sm text-texto-suave">
+                  <strong className="text-texto">{materialCalendario.nombre}</strong> · Código:{' '}
+                  <code className="font-mono">{materialCalendario.codigo_material || materialCalendario.codigo_inventario}</code>
+                </p>
+              </div>
+              <Boton
+                variante="secundario"
+                tamanio="pequeno"
+                tipo="button"
+                onClick={() => setMaterialCalendario(null)}
+              >
+                Cerrar
+              </Boton>
+            </header>
+
+            <CalendarioDisponibilidad
+              materialId={materialCalendario.id}
+              soloLectura
+              mostrarResumenReservas
+            />
+          </section>
+        </div>
       )}
 
       {materialFicha && (

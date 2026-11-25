@@ -242,7 +242,7 @@ export default function ReservarMaterial() {
       ...actuales,
       fechaInicio: validacion.fechaInicio || '',
       fechaFin: finDebeLimpiarse
-        ? 'El inicio cambió. Selecciona un fin válido (mínimo 1 hora después, dentro del tiempo máximo del material).'
+        ? `El inicio cambió. Selecciona un fin válido de mínimo 1 hora y máximo ${formatearDuracionMinutos(obtenerMaximoMinutosReserva(materialSeleccionado))} para este material.`
         : validacion.fechaFin || '',
     }))
   }
@@ -819,7 +819,7 @@ export default function ReservarMaterial() {
                 )}
               </div>
               <p className="text-xs text-texto-suave col-span-3">
-                El recojo y la devolución pactados son de lunes a viernes, entre 08:00 y {TEXTO_HORA_RESERVA_MAXIMO_FIN}. La tolerancia de recojo dura 30 minutos.
+                El recojo y la devolución son de lunes a viernes, entre 08:00 y {TEXTO_HORA_RESERVA_MAXIMO_FIN}. La tolerancia dura 30 minutos.
               </p>
             </div>
           ) : (
@@ -847,7 +847,7 @@ export default function ReservarMaterial() {
                 />
               </div>
               <p className="text-xs text-texto-suave col-span-2">
-                Selecciona primero el inicio. El recojo y la devolución pactados son de lunes a viernes entre 08:00 y {TEXTO_HORA_RESERVA_MAXIMO_FIN}; la tolerancia de recojo llega hasta las 18:00. Debe quedar al menos 1 hora entre el límite de recojo y la devolución.
+                Selecciona primero el inicio. El recojo y la devolución son de lunes a viernes entre 08:00 y {TEXTO_HORA_RESERVA_MAXIMO_FIN}. La tolerancia llega hasta las 18:00. Debe haber al menos 1 hora entre el recojo y la devolución.
               </p>
               {cruzaFinDeSemana(fechaInicio, fechaFin) && (
                 <div

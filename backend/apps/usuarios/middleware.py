@@ -21,6 +21,9 @@ class SesionAutenticadaMiddleware:
             usuario_id = session.get(CLAVE_SESION_USUARIO_ID)
             if usuario_id:
                 usuario = obtener_usuario_por_id(usuario_id)
+                if usuario is not None and usuario.estado != "activo":
+                    session.flush()
+                    usuario = None
 
         request.usuario_autenticado = usuario
         return self.get_response(request)

@@ -517,6 +517,112 @@ class CambioRolUsuarioAPITestCase(APITestCase):
         self.assertEqual(self.otro_usuario.rol.nombre, "gestor")
 
 
+class CambioEstadoUsuarioAPITestCase(APITestCase):
+    """Permite al administrador desactivar y reactivar usuarios (PRTCAD-218)."""
+
+    URL = "/api/usuarios/{}/estado/"
+
+    def setUp(self):
+        self.administrador = registrar_usuario(
+            nombre="Ada",
+            apellido="Admin",
+            email="ada.estado@unsa.edu.pe",
+            dni="71000001",
+            tipo="administrativo",
+            facultad="Administración",
+            password="ClaveSegura123",
+        )
+        self.administrador.rol = Rol.objects.get_or_create(nombre="administrador")[0]
+        self.administrador.save(update_fields=["rol"])
+
+        self.usuario_objetivo = registrar_usuario(
+            nombre="Mario",
+            apellido="Paredes",
+            email="mario.estado@unsa.edu.pe",
+            dni="71000002",
+            tipo="alumno",
+            facultad="Ingeniería",
+            password="ClaveSegura123",
+        )
+
+        respuesta = self.client.post(
+            "/api/auth/login/",
+            {"email": "ada.estado@unsa.edu.pe", "password": "ClaveSegura123"},
+            format="json",
+        )
+        self.assertEqual(respuesta.status_code, status.HTTP_200_OK)
+
+    def test_no_permite_desactivar_la_propia_cuenta(self):
+        respuesta = self.client.patch(
+            self.URL.format(self.administrador.pk),
+            {"estado": "inactivo"},
+            format="json",
+        )
+        self.administrador.refresh_from_db()
+
+        self.assertEqual(respuesta.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(respuesta.json()["detail"], "No puedes cambiar el estado de tu propia cuenta.")
+        self.assertEqual(self.administrador.estado, "activo")
+
+    def test_admin_desactiva_y_reactiva_otro_usuario_y_bloquea_su_login(self):
+        desactivar = self.client.patch(
+            self.URL.format(self.usuario_objetivo.pk),
+            {"estado": "inactivo"},
+            format="json",
+        )
+        self.usuario_objetivo.refresh_from_db()
+
+        self.assertEqual(desactivar.status_code, status.HTTP_200_OK)
+        self.assertEqual(desactivar.json()["estado"], "inactivo")
+        self.assertEqual(self.usuario_objetivo.estado, "inactivo")
+
+        cliente_usuario = self.client_class()
+        login_bloqueado = cliente_usuario.post(
+            "/api/auth/login/",
+            {"email": "mario.estado@unsa.edu.pe", "password": "ClaveSegura123"},
+            format="json",
+        )
+        self.assertEqual(login_bloqueado.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        reactivar = self.client.patch(
+            self.URL.format(self.usuario_objetivo.pk),
+            {"estado": "activo"},
+            format="json",
+        )
+        self.usuario_objetivo.refresh_from_db()
+
+        self.assertEqual(reactivar.status_code, status.HTTP_200_OK)
+        self.assertEqual(self.usuario_objetivo.estado, "activo")
+
+        login_ok = cliente_usuario.post(
+            "/api/auth/login/",
+            {"email": "mario.estado@unsa.edu.pe", "password": "ClaveSegura123"},
+            format="json",
+        )
+        self.assertEqual(login_ok.status_code, status.HTTP_200_OK)
+
+    def test_rechaza_estado_invalido_y_bloquea_a_no_administradores(self):
+        invalido = self.client.patch(
+            self.URL.format(self.usuario_objetivo.pk),
+            {"estado": "eliminado"},
+            format="json",
+        )
+        self.assertEqual(invalido.status_code, status.HTTP_400_BAD_REQUEST)
+
+        cliente_prestatario = self.client_class()
+        cliente_prestatario.post(
+            "/api/auth/login/",
+            {"email": "mario.estado@unsa.edu.pe", "password": "ClaveSegura123"},
+            format="json",
+        )
+        prohibido = cliente_prestatario.patch(
+            self.URL.format(self.administrador.pk),
+            {"estado": "inactivo"},
+            format="json",
+        )
+        self.assertEqual(prohibido.status_code, status.HTTP_403_FORBIDDEN)
+
+
 class AutenticacionServiceTestCase(TestCase):
     """Pruebas del servicio base de autenticación de HU03."""
 
@@ -977,3 +1083,13 @@ class SesionAutenticadaMiddlewareTestCase(TestCase):
         self.middleware(request)
 
         self.assertIsNone(request.usuario_autenticado)
+
+    def test_invalida_sesion_si_el_usuario_fue_desactivado(self):
+        self.usuario.estado = "inactivo"
+        self.usuario.save(update_fields=["estado"])
+        request = self._crear_request(usuario_id=self.usuario.id)
+
+        self.middleware(request)
+
+        self.assertIsNone(request.usuario_autenticado)
+        self.assertNotIn(CLAVE_SESION_USUARIO_ID, request.session)

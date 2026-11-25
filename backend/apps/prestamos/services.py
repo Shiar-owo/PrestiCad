@@ -314,7 +314,7 @@ def _validar_elegibilidad(usuario, material, *, es_excepcion=False):
 def _resolver_duracion_prestamo(tiempo_prestamo_minutos, tiempo_prestamo_dias):
     """Normaliza la duración del préstamo en minutos y días equivalentes.
 
-    Acepta `tiempo_prestamo_minutos` (mínimo 1 hora, máximo 15 días) o
+    Acepta `tiempo_prestamo_minutos` (mínimo 1 hora, máximo 2 días, 23 horas y 30 minutos) o
     `tiempo_prestamo_dias` por compatibilidad, devolviendo `(minutos, dias, campo_error)`.
     """
     if tiempo_prestamo_minutos is not None:
@@ -334,8 +334,8 @@ def _resolver_duracion_prestamo(tiempo_prestamo_minutos, tiempo_prestamo_dias):
         if tiempo_prestamo_minutos > MAXIMO_MINUTOS_PRESTAMO:
             raise PrestamoError(
                 "tiempo_prestamo_minutos",
-                f"La duración máxima del préstamo es de {MAXIMO_DIAS_PRESTAMO} días "
-                f"({MAXIMO_MINUTOS_PRESTAMO} minutos).",
+                "El plazo pactado máximo es de 2 días, 23 horas y 30 minutos; "
+                "con la tolerancia de 30 minutos, el total es de 3 días.",
             )
         dias = max(1, math.ceil(tiempo_prestamo_minutos / 1440))
         return tiempo_prestamo_minutos, dias, "tiempo_prestamo_minutos"
@@ -350,13 +350,19 @@ def _resolver_duracion_prestamo(tiempo_prestamo_minutos, tiempo_prestamo_dias):
             "tiempo_prestamo_dias",
             f"El tiempo de préstamo debe estar entre {MINIMO_DIAS_PRESTAMO} y {MAXIMO_DIAS_PRESTAMO} días.",
         )
-    return tiempo_prestamo_dias * 1440, tiempo_prestamo_dias, "tiempo_prestamo_dias"
+    minutos_pactados = min(
+        tiempo_prestamo_dias * 1440,
+        MAXIMO_MINUTOS_PRESTAMO,
+    )
+    return minutos_pactados, tiempo_prestamo_dias, "tiempo_prestamo_dias"
 
 
 def _validar_duracion_material(material, tiempo_prestamo_minutos, campo_duracion):
     """Verifica que el préstamo no supere el tiempo máximo configurado en el material."""
-    maximo_material = (
-        getattr(material, "tiempo_maximo_prestamo", None) or MAXIMO_MINUTOS_PRESTAMO
+    maximo_configurado = getattr(material, "tiempo_maximo_prestamo", None)
+    maximo_material = min(
+        maximo_configurado or MAXIMO_MINUTOS_PRESTAMO,
+        MAXIMO_MINUTOS_PRESTAMO,
     )
     if tiempo_prestamo_minutos > maximo_material:
         limite_legible = formatear_duracion_minutos(maximo_material)

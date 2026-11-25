@@ -16,6 +16,7 @@ from apps.inventario.constants import (
     ESTADOS_INSTANCIA,
     ESTADOS_MATERIAL,
     MAXIMO_EJEMPLARES_REGISTRO,
+    MAXIMO_TIEMPO_MAXIMO_PRESTAMO_DIAS,
     MAXIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS,
     MINIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS,
     TIEMPO_MAXIMO_DEFAULT_POR_TIER,
@@ -105,7 +106,7 @@ def obtener_tiempo_maximo_por_defecto_tier(tier):
 
 
 def _validar_tiempo_maximo_prestamo(valor):
-    """Valida que el tiempo máximo de préstamo del material esté entre 1 hora y 15 días."""
+    """Valida que el tiempo máximo de préstamo del material esté entre 1 hora y 3 días."""
     if isinstance(valor, bool):
         raise InventarioError(
             "tiempo_maximo_prestamo",
@@ -125,7 +126,8 @@ def _validar_tiempo_maximo_prestamo(valor):
         raise InventarioError(
             "tiempo_maximo_prestamo",
             f"El tiempo máximo de préstamo del material debe estar entre "
-            f"{MINIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS} minutos y 15 días "
+            f"{MINIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS} minutos y "
+            f"{MAXIMO_TIEMPO_MAXIMO_PRESTAMO_DIAS} días "
             f"({MAXIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS} minutos).",
         )
     return minutos

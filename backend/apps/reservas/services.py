@@ -7,6 +7,7 @@ from django.db import transaction
 from django.db.models import Case, IntegerField, Q, Value, When
 from django.utils import timezone
 
+from apps.compartido.constants import MAXIMO_DURACION_PACTADA_MINUTOS
 from apps.inventario import services as servicios_inventario
 from apps.inventario.constants import TIERS_ACCESIBLES
 from apps.inventario.models import InstanciaMaterial, Material
@@ -290,10 +291,12 @@ def _validar_horario_reserva(
                 "Para materiales de Tier avanzado, el inicio y el fin deben ser el mismo día.",
             )
 
-    if maximo_minutos is not None and minutos_habiles > maximo_minutos:
+    maximo_configurado = maximo_minutos or MAXIMO_DURACION_PACTADA_MINUTOS
+    maximo_efectivo = min(maximo_configurado, MAXIMO_DURACION_PACTADA_MINUTOS)
+    if minutos_habiles > maximo_efectivo:
         from apps.prestamos.constants import formatear_duracion_minutos
 
-        limite_legible = formatear_duracion_minutos(maximo_minutos)
+        limite_legible = formatear_duracion_minutos(maximo_efectivo)
         raise ReservaError(
             "fecha_fin",
             f"La duración de la reserva supera el tiempo máximo permitido para este material ({limite_legible}).",

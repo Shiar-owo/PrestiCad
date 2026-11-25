@@ -1,13 +1,18 @@
 const TAMANO_PREDETERMINADO = 4 * 1024 * 1024
 
 export const DURACION_MINIMA_PRESTAMO_MINUTOS = 60
-export const DURACION_MAXIMA_PRESTAMO_MINUTOS = 15 * 24 * 60
+export const DURACION_MAXIMA_PRESTAMO_DIAS = 3
+export const DURACION_MAXIMA_TOTAL_MINUTOS = DURACION_MAXIMA_PRESTAMO_DIAS * 24 * 60
+export const TIEMPO_TOLERANCIA_DEVOLUCION_MINUTOS = 30
+export const DURACION_MAXIMA_PRESTAMO_MINUTOS = (
+  DURACION_MAXIMA_TOTAL_MINUTOS - TIEMPO_TOLERANCIA_DEVOLUCION_MINUTOS
+)
+export const DURACION_MAXIMA_RESERVA_MINUTOS = DURACION_MAXIMA_PRESTAMO_MINUTOS
 export const DURACION_MINIMA_MATERIAL_MINUTOS = 60
-export const DURACION_MAXIMA_MATERIAL_MINUTOS = 15 * 24 * 60
-export const TIEMPO_GRACIA_MINUTOS = 30
+export const DURACION_MAXIMA_MATERIAL_MINUTOS = DURACION_MAXIMA_TOTAL_MINUTOS
+export const TIEMPO_GRACIA_MINUTOS = TIEMPO_TOLERANCIA_DEVOLUCION_MINUTOS
 
 export const DURACION_MINIMA_PRESTAMO_DIAS = 1
-export const DURACION_MAXIMA_PRESTAMO_DIAS = 15
 
 export const TIEMPO_MAXIMO_DEFAULT_POR_TIER = {
   avanzado: { valor: 6, unidad: 'horas', minutos: 360 },
@@ -38,19 +43,19 @@ export function calcularMinutosDuracionPersonalizada(dias, horas, minutos) {
     || !Number.isInteger(cantidadHoras)
     || !Number.isInteger(cantidadMinutos)
     || cantidadDias < 0
-    || cantidadDias > 15
+    || cantidadDias > DURACION_MAXIMA_PRESTAMO_DIAS
     || cantidadHoras < 0
     || cantidadHoras > 23
     || cantidadMinutos < 0
     || cantidadMinutos > 59
   ) return NaN
   const totalMinutos = cantidadDias * 1440 + cantidadHoras * 60 + cantidadMinutos
-  return totalMinutos <= DURACION_MAXIMA_MATERIAL_MINUTOS ? totalMinutos : NaN
+  return totalMinutos <= DURACION_MAXIMA_TOTAL_MINUTOS ? totalMinutos : NaN
 }
 
 export function limitarValorCampoDuracion(campo, valor) {
   const limites = {
-    tiempo_maximo_dias: 15,
+    tiempo_maximo_dias: DURACION_MAXIMA_PRESTAMO_DIAS,
     tiempo_maximo_horas: 23,
     tiempo_maximo_minutos: 59,
   }

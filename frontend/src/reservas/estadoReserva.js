@@ -1,4 +1,8 @@
 import { validarTamanoSolicitud } from '../prestamos/tamanoSolicitud'
+import {
+  DURACION_MAXIMA_RESERVA_MINUTOS,
+  formatearDuracionMinutos,
+} from '../constantes/checklistPrestamo'
 
 export const MAXIMO_RESERVAS_ACTIVAS = 3
 
@@ -285,9 +289,7 @@ export function obtenerMaximoFinReserva(fechaInicio, material = null) {
   if (!fechaInicio) return ''
   const inicio = new Date(fechaInicio)
   if (Number.isNaN(inicio.getTime())) return ''
-  const maximoMinutos = Number(material?.tiempo_maximo_prestamo) > 0
-    ? Number(material.tiempo_maximo_prestamo)
-    : 15 * 24 * 60
+  const maximoMinutos = obtenerMaximoMinutosReserva(material)
 
   const maximo = new Date(inicio.getTime() + maximoMinutos * 60000)
   // Si maximo cae en fin de semana, ajustar al viernes anterior a las 17:00
@@ -305,6 +307,13 @@ export function obtenerMaximoFinReserva(fechaInicio, material = null) {
     maximo.setHours(HORA_RESERVA_MINIMO_INICIO, 0, 0, 0)
   }
   return formatearFechaHoraInput(maximo)
+}
+
+export function obtenerMaximoMinutosReserva(material = null) {
+  const maximoConfigurado = Number(material?.tiempo_maximo_prestamo)
+  return maximoConfigurado > 0
+    ? Math.min(maximoConfigurado, DURACION_MAXIMA_RESERVA_MINUTOS)
+    : DURACION_MAXIMA_RESERVA_MINUTOS
 }
 
 export function obtenerFechaLocal(fecha = new Date()) {
@@ -363,9 +372,7 @@ export function validarHorarioReserva(
   material = null,
 ) {
   const errores = {}
-  const maximoMinutosMaterial = Number(material?.tiempo_maximo_prestamo) > 0
-    ? Number(material.tiempo_maximo_prestamo)
-    : null
+  const maximoMinutosMaterial = material ? obtenerMaximoMinutosReserva(material) : null
   if (esAvanzado) {
     // Validar fecha de forma independiente
     if (!fechaSeleccionada) {
@@ -416,7 +423,7 @@ export function validarHorarioReserva(
       } else if (minutosReserva < MINIMO_MINUTOS_RESERVA) {
         errores.horaFin = 'La reserva debe tener una duración mínima de 1 hora (60 minutos).'
       } else if (maximoMinutosMaterial && minutosReserva > maximoMinutosMaterial) {
-        errores.horaFin = 'La duración de la reserva supera el tiempo máximo permitido para este material.'
+        errores.horaFin = `La duración de la reserva supera el tiempo máximo permitido para este material (${formatearDuracionMinutos(maximoMinutosMaterial)}).`
       }
     }
   } else {
@@ -479,7 +486,7 @@ export function validarHorarioReserva(
         } else if (maximoMinutosMaterial && minutosHabiles > maximoMinutosMaterial) {
           errores.fechaFin =
             (errores.fechaFin ? errores.fechaFin + ' ' : '') +
-            'La duración de la reserva supera el tiempo máximo permitido para este material.'
+            `La duración de la reserva supera el tiempo máximo permitido para este material (${formatearDuracionMinutos(maximoMinutosMaterial)}).`
         }
       }
     }

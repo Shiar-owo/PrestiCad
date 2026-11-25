@@ -15,6 +15,7 @@ import {
 } from '../constantes/catalogo'
 import {
   DURACION_MAXIMA_MATERIAL_MINUTOS,
+  DURACION_MAXIMA_PRESTAMO_DIAS,
   DURACION_MINIMA_MATERIAL_MINUTOS,
   TIEMPO_MAXIMO_DEFAULT_POR_TIER,
   calcularMinutosDuracionPersonalizada,
@@ -163,7 +164,10 @@ function crearDatosIniciales(material) {
   const tierInicial = material?.tier_minimo_requerido || 'estandar'
   const defaultTier =
     TIEMPO_MAXIMO_DEFAULT_POR_TIER[tierInicial] || TIEMPO_MAXIMO_DEFAULT_POR_TIER.estandar
-  const minutosIniciales = Number(material?.tiempo_maximo_prestamo || defaultTier.minutos)
+  const minutosIniciales = Math.min(
+    Number(material?.tiempo_maximo_prestamo || defaultTier.minutos),
+    DURACION_MAXIMA_MATERIAL_MINUTOS,
+  )
   return {
     ...DATOS_INICIALES,
     ...Object.fromEntries(
@@ -213,7 +217,7 @@ function validar(datos) {
       || minutos > DURACION_MAXIMA_MATERIAL_MINUTOS
     ) {
       errores.tiempo_maximo_prestamo =
-        'El tiempo máximo de préstamo del material debe estar entre 1 hora (60 minutos) y 15 días (21600 minutos).'
+        `El tiempo máximo de préstamo del material debe estar entre 1 hora (60 minutos) y ${DURACION_MAXIMA_PRESTAMO_DIAS} días (${DURACION_MAXIMA_MATERIAL_MINUTOS} minutos).`
     }
   }
 
@@ -1252,7 +1256,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
                   etiqueta="Días"
                   tipo="number"
                   min="0"
-                  max="15"
+                  max={DURACION_MAXIMA_PRESTAMO_DIAS}
                   step="1"
                   valor={datos.tiempo_maximo_dias}
                   onCambio={(evento) => actualizar(
@@ -1287,7 +1291,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
                 />
               </div>
               <p className="text-xs text-texto-suave">
-                Ingresa cualquier duración entre 1 hora y 15 días. Valores predeterminados según Tier: Avanzado 6 h, Estándar 24 h, Restringido 3 días.
+                Ingresa cualquier duración entre 1 hora y {DURACION_MAXIMA_PRESTAMO_DIAS} días. Valores predeterminados según Tier: Avanzado 6 h, Estándar 24 h, Restringido 3 días.
               </p>
             </div>
             {CAMPOS_PUNTOS.map(({ campo, etiqueta }) => (

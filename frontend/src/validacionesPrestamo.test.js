@@ -23,7 +23,8 @@ const formularioValido = {
   dni: '12345678',
   material: { id: 'mat-1', es_alto_valor: false },
   instanciaId: 'instancia-1',
-  dias: '5',
+  duracionValor: '4290',
+  duracionUnidad: 'minutos',
   checklist: [{ elemento: 'Pantalla', observacion: '', foto: { name: 'pantalla.jpg', type: 'image/jpeg', size: 100 } }],
 }
 
@@ -47,15 +48,15 @@ describe('validarFormularioPrestamo', () => {
 
   it('convierte cualquier duración personalizada en horas y minutos dentro del rango', () => {
     expect(calcularMinutosDuracionPersonalizada('0', '7', '23')).toBe(443)
-    expect(calcularMinutosDuracionPersonalizada('15', '0', '0')).toBe(21600)
-    expect(calcularMinutosDuracionPersonalizada('16', '0', '0')).toBeNaN()
-    expect(calcularMinutosDuracionPersonalizada('15', '0', '1')).toBeNaN()
+    expect(calcularMinutosDuracionPersonalizada('3', '0', '0')).toBe(4320)
+    expect(calcularMinutosDuracionPersonalizada('4', '0', '0')).toBeNaN()
+    expect(calcularMinutosDuracionPersonalizada('3', '0', '1')).toBeNaN()
     expect(calcularMinutosDuracionPersonalizada('0', '24', '0')).toBeNaN()
     expect(calcularMinutosDuracionPersonalizada('0', '1', '60')).toBeNaN()
   })
 
   it('limita cada campo editable a su máximo lógico al escribir', () => {
-    expect(limitarValorCampoDuracion('tiempo_maximo_dias', '50')).toBe('15')
+    expect(limitarValorCampoDuracion('tiempo_maximo_dias', '50')).toBe('3')
     expect(limitarValorCampoDuracion('tiempo_maximo_horas', '50')).toBe('23')
     expect(limitarValorCampoDuracion('tiempo_maximo_minutos', '60')).toBe('59')
   })
@@ -70,7 +71,7 @@ describe('validarFormularioPrestamo', () => {
       dni: 'abc',
       material: null,
       instanciaId: '',
-      dias: 0,
+      duracionValor: '',
       checklist: [{ elemento: '', observacion: '', foto: formularioValido.checklist[0].foto }],
     })
 
@@ -200,9 +201,24 @@ describe('validarFormularioPrestamo', () => {
   it('limita la duración mínima a 1 hora y la máxima según el material (defaults por Tier)', () => {
     expect(obtenerMinutosMaximosMaterial({ tier_minimo_requerido: 'avanzado' })).toBe(360)
     expect(obtenerMinutosMaximosMaterial({ tier_minimo_requerido: 'estandar' })).toBe(1440)
-    expect(obtenerMinutosMaximosMaterial({ tier_minimo_requerido: 'restringido' })).toBe(4320)
+    expect(obtenerMinutosMaximosMaterial({ tier_minimo_requerido: 'restringido' })).toBe(4290)
     expect(obtenerMinutosMaximosMaterial({ tiempo_maximo_prestamo: 180 })).toBe(180)
-    expect(obtenerMinutosMaximosMaterial({ tier_minimo_requerido: 'avanzado', tiempo_maximo_prestamo: 21600 })).toBe(21600)
+    expect(obtenerMinutosMaximosMaterial({ tier_minimo_requerido: 'avanzado', tiempo_maximo_prestamo: 21600 })).toBe(4290)
+
+    const excedePorTolerancia = validarFormularioPrestamo({
+      ...formularioValido,
+      duracionValor: '4320',
+      duracionUnidad: 'minutos',
+    })
+    expect(excedePorTolerancia.dias).toContain('tolerancia de 30 minutos')
+
+    const excesoSobreLimiteUniversal = validarFormularioPrestamo({
+      ...formularioValido,
+      material: { id: 'legado', tiempo_maximo_prestamo: 10080 },
+      duracionValor: '4',
+      duracionUnidad: 'dias',
+    })
+    expect(excesoSobreLimiteUniversal.dias).toContain('2 días, 23 horas y 30 minutos')
 
     expect(
       validarFormularioPrestamo({
@@ -231,7 +247,7 @@ describe('validarFormularioPrestamo', () => {
     ).toEqual({})
 
     expect(ayudaRangoDuracion({ tier_minimo_requerido: 'avanzado' })).toMatch(/6 horas/)
-    expect(ayudaRangoDuracion({ tier_minimo_requerido: 'avanzado' })).toMatch(/30 min de tiempo de gracia/)
+    expect(ayudaRangoDuracion({ tier_minimo_requerido: 'avanzado' })).toMatch(/tolerancia de 30 minutos/)
   })
 
   it('conserva el último valor válido y avisa ante duraciones fuera del rango permitido', () => {
@@ -246,15 +262,15 @@ describe('validarFormularioPrestamo', () => {
     })
     expect(evaluarCambioDuracion('-1', '3', 'horas', materialVr)).toEqual({
       valor: '3',
-      error: 'La duración debe ser de al menos 1 hora (60 minutos) y máximo 6 horas.',
+      error: 'La duración pactada debe ser de al menos 1 hora (60 minutos) y máximo 6 horas; la tolerancia de 30 minutos queda dentro del máximo total de 3 días.',
     })
     expect(evaluarCambioDuracion('0', '3', 'horas', materialVr)).toEqual({
       valor: '3',
-      error: 'La duración debe ser de al menos 1 hora (60 minutos) y máximo 6 horas.',
+      error: 'La duración pactada debe ser de al menos 1 hora (60 minutos) y máximo 6 horas; la tolerancia de 30 minutos queda dentro del máximo total de 3 días.',
     })
     expect(evaluarCambioDuracion('1.5', '3', 'horas', materialVr)).toEqual({
       valor: '3',
-      error: 'La duración debe ser de al menos 1 hora (60 minutos) y máximo 6 horas.',
+      error: 'La duración pactada debe ser de al menos 1 hora (60 minutos) y máximo 6 horas; la tolerancia de 30 minutos queda dentro del máximo total de 3 días.',
     })
     expect(evaluarCambioDuracion('6', '3', 'horas', materialVr)).toEqual({ valor: '6', error: '' })
     expect(evaluarCambioDuracion('60', '30', 'minutos', materialVr)).toEqual({ valor: '60', error: '' })

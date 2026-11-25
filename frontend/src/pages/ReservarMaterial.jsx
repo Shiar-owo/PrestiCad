@@ -31,6 +31,7 @@ import {
   obtenerMinimaHoraInicioReserva,
   obtenerMinimoFinReserva,
   obtenerMinimoInicioReserva,
+  obtenerMaximoMinutosReserva,
   HORA_RESERVA_MAXIMO_FIN,
   HORA_RESERVA_MINIMO_INICIO,
   requiereExcepcionAcademica,
@@ -844,7 +845,7 @@ export default function ReservarMaterial() {
                 />
               </div>
               <p className="text-xs text-texto-suave col-span-2">
-                Selecciona primero el inicio. El recojo y la devolución deben ser de lunes a viernes entre {HORA_RESERVA_MINIMO_INICIO}:00 y {HORA_RESERVA_MAXIMO_FIN}:00 (mínimo 1 hora{materialSeleccionado?.tiempo_maximo_prestamo ? `, máximo ${formatearDuracionMinutos(materialSeleccionado.tiempo_maximo_prestamo)}` : ''}). Cuentan todos los días en medio (incluyendo fines de semana).
+                Selecciona primero el inicio. El recojo y la devolución deben ser de lunes a viernes entre {HORA_RESERVA_MINIMO_INICIO}:00 y {HORA_RESERVA_MAXIMO_FIN}:00 (mínimo 1 hora{materialSeleccionado ? `, máximo ${formatearDuracionMinutos(obtenerMaximoMinutosReserva(materialSeleccionado))}` : ''}). Cuentan todos los días en medio (incluyendo fines de semana).
               </p>
               {cruzaFinDeSemana(fechaInicio, fechaFin) && (
                 <div

@@ -16,7 +16,7 @@ from django.utils import timezone
 from PIL import Image
 from rest_framework.test import APITestCase
 
-from apps.inventario.models import InstanciaMaterial
+from apps.inventario.models import InstanciaMaterial, Material
 from apps.inventario.services import (
     actualizar_instancia_material,
     crear_instancia_material,
@@ -248,6 +248,29 @@ class ReservasServiceTestCase(TestCase):
         self.assertEqual(error.exception.status_code, 409)
         self.assertEqual(Reserva.objects.filter(material=material).count(), 0)
         self.assertEqual(prestamo.estado, "activo")
+
+    def test_reserva_respeta_maximo_de_tres_dias_aunque_el_material_tenga_un_limite_antiguo_mayor(self):
+        material = crear_material(codigo_material="EQ-RES-MAX-LEGACY")
+        # Simula un registro histórico que conserva el límite anterior a la regla.
+        Material.objects.filter(pk=material.pk).update(tiempo_maximo_prestamo=7 * 1440)
+        material.refresh_from_db()
+        ahora = timezone.now()
+        inicio = timezone.localtime(ahora).replace(hour=9, minute=0, second=0, microsecond=0)
+        while inicio <= timezone.localtime(ahora) or inicio.weekday() != 0:
+            inicio += timedelta(days=1)
+        fin = inicio + timedelta(days=3, hours=1)
+
+        with self.assertRaises(ReservaError) as error:
+            crear_reserva(
+                usuario=self.prestatario_estandar,
+                material_id=material.id,
+                justificacion="Supera el máximo universal de tres días",
+                fecha_inicio=inicio,
+                fecha_fin=fin,
+                ahora=ahora,
+            )
+
+        self.assertIn("2 días, 23 horas y 30 minutos", error.exception.mensaje)
 
     def test_solicitud_sin_disponibilidad_se_rechaza_sin_penalizacion(self):
         material = crear_material(
@@ -572,7 +595,7 @@ class ReservasAPITestCase(APITestCase):
 
     def test_api_reserva_permite_cruzar_fin_de_semana_y_cuenta_todos_los_dias_intermedios(self):
         self._autenticar(self.prestatario)
-        # Configurar tiempo máximo de al menos 4 días (5760 min) para permitir 72h
+        # Aunque el material conserve un máximo antiguo de 4 días, el tope efectivo es 3 días.
         self.material.tiempo_maximo_prestamo = 5760
         self.material.save(update_fields=["tiempo_maximo_prestamo", "updated_at"])
 
@@ -581,7 +604,7 @@ class ReservasAPITestCase(APITestCase):
         ) + timedelta(days=1)
         while viernes.weekday() != 4:
             viernes += timedelta(days=1)
-        lunes = viernes + timedelta(days=3)
+        lunes = viernes + timedelta(days=3, minutes=-30)
 
         respuesta = self.client.post(
             "/api/reservas/",
@@ -604,12 +627,12 @@ class ReservasAPITestCase(APITestCase):
                 dni_prestatario=self.prestatario.dni,
                 material_id=self.material.id,
                 reserva_id=reserva_id,
-                tiempo_prestamo_minutos=4320,
+                tiempo_prestamo_minutos=4290,
                 checklist_inicial=CHECKLIST,
                 registrado_por=self.gestor,
             )
-        # Los días intermedios (sábado y domingo) sí cuentan en la duración total (72 h = 4320 min)
-        self.assertEqual(prestamo.tiempo_prestamo_minutos, 4320)
+        # Los días intermedios cuentan; la tolerancia completa el máximo total de 3 días.
+        self.assertEqual(prestamo.tiempo_prestamo_minutos, 4290)
         self.assertEqual(prestamo.fecha_entrega, viernes)
         self.assertEqual(prestamo.fecha_limite, lunes)
 
@@ -879,7 +902,7 @@ class ReservasCalendarioTestCase(APITestCase):
             codigo_material="CAL-01",
             stock=1,
             tier_minimo_requerido="estandar",
-            tiempo_maximo_prestamo=1440 * 7,
+            tiempo_maximo_prestamo=1440 * 3,
         )
 
     def test_multiples_reservas_en_distintas_fechas_confirman_sin_bloquearse(self):
@@ -982,13 +1005,13 @@ class ReservasCalendarioTestCase(APITestCase):
             fecha_fin=reserva_fin,
         )
 
-        # Intento de préstamo por 5 días (sobrepasaría el inicio de la reserva)
+        # Intento de préstamo por 3 días (sobrepasaría el inicio de la reserva)
         checklist = [{"elemento": "Pantalla", "observacion": "OK"}]
         with self.assertRaises(PrestamoError) as ctx:
             registrar_prestamo(
                 dni_prestatario=self.prestatario_2.dni,
                 material_id=self.material.id,
-                tiempo_prestamo_minutos=1440 * 5,
+                tiempo_prestamo_minutos=4290,
                 checklist_inicial=checklist,
                 registrado_por=self.gestor,
             )

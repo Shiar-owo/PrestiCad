@@ -1,5 +1,7 @@
 # constants.py — Enums/choices del dominio de inventario (tipo, estado)
 
+from apps.compartido.constants import MAXIMO_DURACION_DIAS, MAXIMO_DURACION_MINUTOS
+
 TIPOS_MATERIAL = [
     ("equipo", "Equipo"),
     ("libro", "Libro"),
@@ -47,12 +49,13 @@ MODOS_REGISTRO_MATERIAL = [
 ]
 
 # Rango permitido para el parámetro configurable de tiempo máximo de préstamo
-# de un material (en minutos): mínimo 1 hora (60 min) y máximo 15 días (21600 minutos).
+# de un material (en minutos): mínimo 1 hora y máximo 3 días.
 MINIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS = 60
-MAXIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS = 15 * 24 * 60
+MAXIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS = MAXIMO_DURACION_MINUTOS
+MAXIMO_TIEMPO_MAXIMO_PRESTAMO_DIAS = MAXIMO_DURACION_DIAS
 
 # Tiempo máximo de préstamo por defecto (en minutos) según el Tier mínimo del material:
-# - Avanzado: 6 horas (360 min) por defecto, configurable entre 1 hora y 15 días
+# - Avanzado: 6 horas (360 min) por defecto
 # - Estándar: 24 horas / 1 día (1440 min)
 # - Restringido: 3 días (4320 min)
 TIEMPO_MAXIMO_DEFAULT_POR_TIER = {

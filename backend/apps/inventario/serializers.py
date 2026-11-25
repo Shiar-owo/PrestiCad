@@ -13,6 +13,7 @@ from apps.inventario.constants import (
     ESTADOS_INICIALES_INSTANCIA,
     ESTADOS_INSTANCIA,
     ESTADOS_MATERIAL,
+    MAXIMO_TIEMPO_MAXIMO_PRESTAMO_DIAS,
     MAXIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS,
     MINIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS,
     MODOS_REGISTRO_MATERIAL,
@@ -43,12 +44,14 @@ MENSAJES_STOCK = {
 MENSAJES_TIEMPO_MAXIMO_PRESTAMO = {
     "min_value": (
         f"El tiempo máximo de préstamo del material debe estar entre "
-        f"{MINIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS} minutos y 15 días "
+        f"{MINIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS} minutos y "
+        f"{MAXIMO_TIEMPO_MAXIMO_PRESTAMO_DIAS} días "
         f"({MAXIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS} minutos)."
     ),
     "max_value": (
         f"El tiempo máximo de préstamo del material debe estar entre "
-        f"{MINIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS} minutos y 15 días "
+        f"{MINIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS} minutos y "
+        f"{MAXIMO_TIEMPO_MAXIMO_PRESTAMO_DIAS} días "
         f"({MAXIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS} minutos)."
     ),
     "invalid": "El tiempo máximo de préstamo debe ser un número entero de minutos.",

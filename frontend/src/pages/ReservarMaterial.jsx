@@ -505,10 +505,10 @@ export default function ReservarMaterial() {
               </div>
               <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3 dark:border-amber-800 dark:bg-marca-950/30">
                 <dt className="text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-300">
-                  Límite de recojo (30 min de tolerancia)
+                  Devolución
                 </dt>
                 <dd className="mt-1 font-bold text-texto">
-                  {formatearFechaReserva(reservaCreada.fecha_limite_recojo)}
+                  {formatearFechaReserva(reservaCreada.fecha_fin)}
                 </dd>
               </div>
             </>

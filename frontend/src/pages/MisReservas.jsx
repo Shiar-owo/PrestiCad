@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
-import { CalendarClock, FileText, Plus, RefreshCw, ShieldAlert } from 'lucide-react'
+import { FileText, Plus, RefreshCw, ShieldAlert } from 'lucide-react'
 
 import { api } from '../api/client'
 import BadgeEstado from '../components/ui/BadgeEstado'
@@ -285,8 +285,8 @@ export default function MisReservas() {
                           Rango reservado
                         </dt>
                         <dd className="mt-1 grid gap-1 font-medium text-texto sm:grid-cols-2">
-                          <span>Recojo pactado: {formatearFechaReserva(reserva.fecha_inicio)}</span>
-                          <span>Devolución pactada: {formatearFechaReserva(reserva.fecha_fin)}</span>
+                          <span>Recojo: {formatearFechaReserva(reserva.fecha_inicio)}</span>
+                          <span>Devolución: {formatearFechaReserva(reserva.fecha_fin)}</span>
                         </dd>
                       </div>
                     )}
@@ -313,15 +313,6 @@ export default function MisReservas() {
                             />
                           )}
                         </div>
-                        <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3 dark:border-amber-800 dark:bg-amber-950/30">
-                          <dt className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-300">
-                            <CalendarClock aria-hidden="true" className="size-3.5" />
-                            Límite de recojo (30 min de tolerancia)
-                          </dt>
-                          <dd className="mt-1 font-bold text-texto">
-                            {formatearFechaReserva(reserva.fecha_limite_recojo)}
-                          </dd>
-                        </div>
                       </>
                     )}
 
@@ -346,7 +337,7 @@ export default function MisReservas() {
 
                   {reserva.estado === 'reservada' && (
                     <p className="mt-3 text-xs text-texto-suave">
-                      Acércate al almacén antes de la fecha límite de recojo. Si la reserva confirmada vence sin ser recogida, se liberará el ejemplar y se aplicará la deducción de reputación correspondiente.
+                      Acércate al almacén en la fecha de recojo indicada. Tienes 30 minutos de tolerancia para el recojo y la devolución. Si la reserva vence sin ser recogida, se liberará el ejemplar y se aplicará la deducción de reputación correspondiente.
                     </p>
                   )}
 

@@ -114,14 +114,29 @@ def generar_reporte_dano(devolucion):
     prestamo = devolucion.prestamo
     material = prestamo.material
     prestatario = prestamo.usuario
+    entregador = prestamo.registrado_por
     gestor = devolucion.realizado_por
     resultado = devolucion.resultado
     estilos = _estilos()
 
+    def _formatear_actor(actor):
+        if actor is None:
+            return "—"
+        nombre = f"{actor.nombre} {actor.apellido}".strip()
+        rol_obj = getattr(actor, "rol", None)
+        rol_texto = rol_obj.get_nombre_display() if rol_obj else ""
+        partes = [nombre]
+        if getattr(actor, "dni", None):
+            partes.append(f"DNI {actor.dni}")
+        if rol_texto:
+            partes.append(rol_texto)
+        return " · ".join(partes)
+
     nombre_prestatario = (
         f"{prestatario.nombre} {prestatario.apellido}".strip()
     )
-    nombre_gestor = f"{gestor.nombre} {gestor.apellido}".strip()
+    entregado_por_texto = _formatear_actor(entregador)
+    recibido_por_texto = _formatear_actor(gestor)
 
     buffer = BytesIO()
     documento = SimpleDocTemplate(
@@ -175,8 +190,12 @@ def generar_reporte_dano(devolucion):
             f"{nombre_prestatario} · DNI {prestatario.dni}",
         ),
         (
-            Paragraph("Registrado por", estilos["celda_negrita"]),
-            nombre_gestor,
+            Paragraph("Entregado por", estilos["celda_negrita"]),
+            entregado_por_texto,
+        ),
+        (
+            Paragraph("Recibido por", estilos["celda_negrita"]),
+            recibido_por_texto,
         ),
         (
             Paragraph("Tipo de daño", estilos["celda_negrita"]),

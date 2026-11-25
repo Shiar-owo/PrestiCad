@@ -5,6 +5,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.reservas.permissions import (
+    EsAdministradorReservas,
     EsGestorDeAlmacen,
     EsGestorOAdministrador,
     EsGestorOPrestatarioTitularReserva,
@@ -12,8 +13,10 @@ from apps.reservas.permissions import (
 )
 from apps.reservas.serializers import (
     ColaMaterialSerializer,
+    CrearDiaNoLaborableSerializer,
     CrearReservaExcepcionalSerializer,
     CrearReservaSerializer,
+    DiaNoLaborableSerializer,
     MotivoAccionReservaSerializer,
     ReservaDetalleSerializer,
 )
@@ -25,6 +28,9 @@ from apps.reservas.services import (
     consultar_cola_material,
     consultar_mis_reservas,
     consultar_reservas_confirmadas,
+    crear_dia_no_laborable,
+    eliminar_dia_no_laborable,
+    listar_dias_no_laborables,
     obtener_reserva_confirmada_para_conversion,
     crear_reserva,
     crear_reserva_excepcional,
@@ -253,3 +259,93 @@ class RechazarReservaView(APIView):
             )
 
         return Response(ReservaDetalleSerializer(reserva).data)
+
+
+class DisponibilidadMaterialView(APIView):
+    """Consulta la disponibilidad de un material en un rango de fechas para el calendario: GET /api/materiales/<id>/disponibilidad/."""
+
+    permission_classes = []
+
+    def get(self, request, material_id):
+        from apps.inventario.models import Material
+        from apps.reservas.disponibilidad import consultar_disponibilidad_calendario
+
+        desde = request.query_params.get("desde")
+        hasta = request.query_params.get("hasta")
+        usuario = getattr(request, "usuario_autenticado", None)
+        rol = getattr(getattr(usuario, "rol", None), "nombre", None)
+        incluir_prestatario = rol in ("gestor", "administrador")
+        try:
+            datos = consultar_disponibilidad_calendario(
+                material_id,
+                desde=desde,
+                hasta=hasta,
+                incluir_prestatario=incluir_prestatario,
+            )
+            return Response(datos, status=status.HTTP_200_OK)
+        except Material.DoesNotExist:
+            return Response(
+                {"detail": "No existe el material indicado."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except ValueError as error:
+            return Response(
+                {"detail": f"Formato de fecha inválido: {error}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+
+class DiasNoLaborablesListCreateView(APIView):
+    """Consulta abierta y registro administrativo de días no laborables: /api/dias-no-laborables/."""
+
+    parser_classes = [JSONParser, FormParser]
+
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [EsAdministradorReservas()]
+        return []
+
+    def get(self, request):
+        from datetime import datetime
+
+        desde_str = request.query_params.get("desde")
+        hasta_str = request.query_params.get("hasta")
+        try:
+            desde = datetime.strptime(desde_str, "%Y-%m-%d").date() if desde_str else None
+            hasta = datetime.strptime(hasta_str, "%Y-%m-%d").date() if hasta_str else None
+        except ValueError as error:
+            return Response(
+                {"detail": f"Formato de fecha inválido: {error}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        dias = listar_dias_no_laborables(desde=desde, hasta=hasta)
+        return Response(DiaNoLaborableSerializer(dias, many=True).data, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        serializer = CrearDiaNoLaborableSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            registro, reservas_afectadas = crear_dia_no_laborable(
+                fecha=serializer.validated_data["fecha"],
+                motivo=serializer.validated_data["motivo"],
+                creado_por=request.usuario_autenticado,
+            )
+        except ReservaError as error:
+            return Response({error.campo: [error.mensaje]}, status=error.status_code)
+
+        datos = dict(DiaNoLaborableSerializer(registro).data)
+        datos["reservas_afectadas"] = reservas_afectadas
+        return Response(datos, status=status.HTTP_201_CREATED)
+
+
+class DiaNoLaborableDetailView(APIView):
+    """Rehabilita un día no laborable: DELETE /api/dias-no-laborables/<int:dia_id>/."""
+
+    permission_classes = [EsAdministradorReservas]
+
+    def delete(self, request, dia_id):
+        try:
+            eliminar_dia_no_laborable(dia_id)
+        except ReservaError as error:
+            return Response({error.campo: [error.mensaje]}, status=error.status_code)
+        return Response(status=status.HTTP_204_NO_CONTENT)

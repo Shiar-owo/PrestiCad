@@ -3,6 +3,7 @@ import { Link } from 'react-router'
 import {
   ArrowUpRight,
   CalendarClock,
+  CalendarOff,
   ClipboardList,
   Gauge,
   History,
@@ -14,7 +15,7 @@ import {
 
 import SesionContext from '../contextos/SesionContext'
 import useTituloPagina from '../hooks/useTituloPagina'
-import { ETIQUETAS_ROL, ETIQUETAS_TIER } from '../constantes/roles'
+import { ETIQUETAS_ROL } from '../constantes/roles'
 import Tarjeta from '../components/ui/Tarjeta'
 import TarjetaReputacion from '../components/ui/TarjetaReputacion'
 
@@ -91,10 +92,16 @@ const ACCESOS = {
       icono: Package,
     },
     {
-      etiqueta: 'Gestionar roles',
+      etiqueta: 'Gestionar usuarios y roles',
       a: '/admin/roles',
-      descripcion: 'Asignación de roles y permisos del sistema',
+      descripcion: 'Asignación de roles, perfiles y activación o desactivación de cuentas',
       icono: ShieldCheck,
+    },
+    {
+      etiqueta: 'Días no laborables',
+      a: '/admin/dias-no-laborables',
+      descripcion: 'Inhabilitar feriados, cierres o días sin atención en el calendario',
+      icono: CalendarOff,
     },
     {
       etiqueta: 'Vista catálogo',
@@ -114,7 +121,6 @@ function PanelInicio() {
   }
 
   const nombreRol = ETIQUETAS_ROL[usuario.rol] || usuario.rol
-  const tier = ETIQUETAS_TIER[usuario.reputacion_tier] || usuario.reputacion_tier
   const accesos = ACCESOS[usuario.rol] || []
 
   return (
@@ -138,7 +144,7 @@ function PanelInicio() {
               <p className="mt-1 text-lg font-bold text-texto">{usuario.estado}</p>
             )}
           </Tarjeta>
-          {usuario.reputacion_tier && (
+          {!['gestor', 'administrador'].includes(usuario.rol) && usuario.reputacion_tier && (
             <TarjetaReputacion
               tier={usuario.reputacion_tier}
               puntaje={usuario.reputacion_puntaje}

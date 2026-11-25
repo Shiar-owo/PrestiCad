@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
-import { CalendarClock, FileText, Plus, RefreshCw, ShieldAlert } from 'lucide-react'
+import { FileText, Plus, RefreshCw, ShieldAlert } from 'lucide-react'
 
 import { api } from '../api/client'
 import BadgeEstado from '../components/ui/BadgeEstado'
 import Boton from '../components/ui/Boton'
 import ErrorAlerta from '../components/ui/ErrorAlerta'
+import ExitoModal from '../components/ui/ExitoModal'
 import EstadoVacio from '../components/ui/EstadoVacio'
 import Skeleton from '../components/ui/Skeleton'
 import Tarjeta from '../components/ui/Tarjeta'
@@ -47,6 +48,7 @@ export default function MisReservas() {
   const [reservaACancelar, setReservaACancelar] = useState(null)
   const [cancelando, setCancelando] = useState(false)
   const [errorCancelacion, setErrorCancelacion] = useState('')
+  const [exitoCancelacion, setExitoCancelacion] = useState('')
 
   async function confirmarCancelacion() {
     if (!reservaACancelar) return
@@ -56,8 +58,8 @@ export default function MisReservas() {
       await api.post(`/reservas/${reservaACancelar.id}/cancelar/`, {
         motivo: 'Cancelada por el prestatario.',
       })
+      setExitoCancelacion(`La reserva de ${reservaACancelar.material?.nombre || 'material'} fue cancelada correctamente.`)
       setReservaACancelar(null)
-      setIntento((v) => v + 1)
     } catch (err) {
       const datos = err?.datos
       const mensaje = datos?.detail || (datos && Object.values(datos).flat()[0]) || 'No se pudo cancelar la reserva.'
@@ -124,6 +126,14 @@ export default function MisReservas() {
 
   return (
     <section aria-labelledby="titulo-mis-reservas" className="space-y-5">
+      <ExitoModal
+        titulo="Reserva cancelada"
+        mensaje={exitoCancelacion}
+        onCerrar={() => {
+          setExitoCancelacion('')
+          setIntento((actual) => actual + 1)
+        }}
+      />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 id="titulo-mis-reservas" className="text-xl font-bold text-texto">
@@ -193,7 +203,7 @@ export default function MisReservas() {
           }
           mensaje={
             reservas.length === 0
-              ? 'Puedes reservar un material disponible por 24 horas o unirte a la lista de espera desde el catálogo.'
+              ? 'Puedes elegir el rango de fecha y hora para reservar un material disponible o unirte a la lista de espera desde el catálogo.'
               : 'Prueba seleccionando otro filtro de estado.'
           }
         />
@@ -269,6 +279,18 @@ export default function MisReservas() {
                       </>
                     )}
 
+                    {reserva.fecha_inicio && reserva.fecha_fin && (
+                      <div className="rounded-lg border border-borde bg-superficie-alta/40 p-3 sm:col-span-2 lg:col-span-3">
+                        <dt className="text-xs font-semibold uppercase tracking-wide text-texto-suave">
+                          Rango reservado
+                        </dt>
+                        <dd className="mt-1 grid gap-1 font-medium text-texto sm:grid-cols-2">
+                          <span>Recojo: {formatearFechaReserva(reserva.fecha_inicio)}</span>
+                          <span>Devolución: {formatearFechaReserva(reserva.fecha_fin)}</span>
+                        </dd>
+                      </div>
+                    )}
+
                     {reserva.estado === 'reservada' && (
                       <>
                         <div className="rounded-lg border border-marca-200 bg-marca-50/50 p-3 dark:border-marca-800 dark:bg-marca-950/30">
@@ -290,15 +312,6 @@ export default function MisReservas() {
                               className="mt-2 h-16 w-16 rounded-lg border border-borde object-cover"
                             />
                           )}
-                        </div>
-                        <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3 dark:border-amber-800 dark:bg-amber-950/30">
-                          <dt className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-300">
-                            <CalendarClock aria-hidden="true" className="size-3.5" />
-                            Límite de recojo (24 h)
-                          </dt>
-                          <dd className="mt-1 font-bold text-texto">
-                            {formatearFechaReserva(reserva.fecha_limite_recojo)}
-                          </dd>
                         </div>
                       </>
                     )}
@@ -324,7 +337,7 @@ export default function MisReservas() {
 
                   {reserva.estado === 'reservada' && (
                     <p className="mt-3 text-xs text-texto-suave">
-                      Acércate al almacén antes de la fecha límite de recojo. Si la reserva confirmada vence sin ser recogida, se liberará el ejemplar y se aplicará la deducción de reputación correspondiente.
+                      Acércate al almacén en la fecha de recojo indicada. Tienes 30 minutos de tolerancia para el recojo y la devolución. Si la reserva vence sin ser recogida, se liberará el ejemplar y se aplicará la deducción de reputación correspondiente.
                     </p>
                   )}
 

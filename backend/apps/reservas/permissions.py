@@ -71,3 +71,18 @@ class EsGestorOPrestatarioTitularReserva(BasePermission):
         raise PermissionDenied(
             detail="Solo gestión de almacén, administración o el prestatario titular pueden consultar esta garantía."
         )
+
+
+class EsAdministradorReservas(BasePermission):
+    """Permite gestionar días no laborables únicamente a administradores autenticados."""
+
+    message_sin_sesion = "Inicia sesión como administrador para gestionar días no laborables."
+    message_rol = "Solo un administrador puede gestionar días no laborables."
+
+    def has_permission(self, request, view):
+        usuario = getattr(request, "usuario_autenticado", None)
+        if usuario is None:
+            raise PermissionDenied(detail=self.message_sin_sesion)
+        if usuario.rol.nombre != "administrador":
+            raise PermissionDenied(detail=self.message_rol)
+        return True

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useContext, useEffect, useRef, useState } from 'react'
 import {
   AlertTriangle,
   Building,
@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 
 import { api, ErrorApi } from '../api/client'
+import SesionContext from '../contextos/SesionContext'
 import { validarEmailSecundario, validarTelefono } from '../validaciones'
 import useTituloPagina from '../hooks/useTituloPagina'
 import Campo from '../components/ui/Campo'
@@ -28,6 +29,7 @@ import Skeleton from '../components/ui/Skeleton'
 import ErrorAlerta from '../components/ui/ErrorAlerta'
 import TarjetaReputacion from '../components/ui/TarjetaReputacion'
 import { ETIQUETAS_ROL } from '../constantes/roles'
+import ExitoModal from '../components/ui/ExitoModal'
 
 const ETIQUETAS_TIPO = {
   alumno: 'Alumno',
@@ -54,7 +56,7 @@ function FilaDatoInstitucional({ icono: Icono, etiqueta, valor, badge }) {
   )
 }
 
-function FormularioPerfil({ perfil, onGuardar, onGuardarFoto, onEliminarFoto, guardando = false, mensajeExito }) {
+function FormularioPerfil({ perfil, onGuardar, onGuardarFoto, onEliminarFoto, guardando = false }) {
   // Teléfonos (hasta 3 en total)
   const [telefonoPrincipal, setTelefonoPrincipal] = useState(perfil.telefono || '')
   const [telefonoSecundario, setTelefonoSecundario] = useState(perfil.telefono_secundario || '')
@@ -118,12 +120,6 @@ function FormularioPerfil({ perfil, onGuardar, onGuardarFoto, onEliminarFoto, gu
       if (timerNotifRef.current) clearTimeout(timerNotifRef.current)
     }
   }, [])
-
-  useEffect(() => {
-    if (mensajeExito) {
-      mostrarNotificacion('exito', mensajeExito)
-    }
-  }, [mensajeExito])
 
   useEffect(() => {
     setTelefonoPrincipal(perfil.telefono || '')
@@ -667,14 +663,15 @@ function FormularioPerfil({ perfil, onGuardar, onGuardarFoto, onEliminarFoto, gu
         </div>
       )}
 
-      {/* Bloque Destacado de Reputación */}
-      <section aria-labelledby="titulo-reputacion">
-        <h2 id="titulo-reputacion" className="sr-only">Nivel de Reputación</h2>
-        <TarjetaReputacion
-          tier={perfil.reputacion_tier}
-          puntaje={perfil.reputacion_puntaje}
-        />
-      </section>
+      {!['gestor', 'administrador'].includes(perfil.rol) && (
+        <section aria-labelledby="titulo-reputacion">
+          <h2 id="titulo-reputacion" className="sr-only">Nivel de Reputación</h2>
+          <TarjetaReputacion
+            tier={perfil.reputacion_tier}
+            puntaje={perfil.reputacion_puntaje}
+          />
+        </section>
+      )}
 
       {/* Las dos secciones principales organizadas limpiamente */}
       <div className="grid gap-8 lg:grid-cols-2">
@@ -912,20 +909,13 @@ function mensajeErrorApi(error, mensajePredeterminado) {
 
 function PerfilUsuario({ onPerfilActualizado }) {
   useTituloPagina('Mi perfil')
+  const { usuario } = useContext(SesionContext) || {}
   const [perfil, setPerfil] = useState(null)
   const [cargando, setCargando] = useState(true)
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
   const [mensajeExito, setMensajeExito] = useState('')
   const [intentoCarga, setIntentoCarga] = useState(0)
-  const timerMensajeRef = useRef(null)
-
-  useEffect(() => {
-    return () => {
-      if (timerMensajeRef.current) clearTimeout(timerMensajeRef.current)
-    }
-  }, [])
-
   useEffect(() => {
     let activo = true
     setCargando(true)
@@ -960,10 +950,6 @@ function PerfilUsuario({ onPerfilActualizado }) {
       setPerfil(perfilActualizado)
       onPerfilActualizado?.(perfilActualizado)
       setMensajeExito('Los cambios se guardaron correctamente.')
-      if (timerMensajeRef.current) clearTimeout(timerMensajeRef.current)
-      timerMensajeRef.current = setTimeout(() => {
-        setMensajeExito('')
-      }, 3000)
     } catch (fallo) {
       setError(mensajeErrorApi(fallo, 'No se pudieron guardar los cambios.'))
     } finally {
@@ -977,10 +963,6 @@ function PerfilUsuario({ onPerfilActualizado }) {
       setPerfil(perfilActualizado)
       onPerfilActualizado?.(perfilActualizado)
       setMensajeExito('Foto de perfil actualizada correctamente.')
-      if (timerMensajeRef.current) clearTimeout(timerMensajeRef.current)
-      timerMensajeRef.current = setTimeout(() => {
-        setMensajeExito('')
-      }, 3000)
     } catch (fallo) {
       setError(mensajeErrorApi(fallo, 'No se pudo guardar la foto de perfil.'))
       throw fallo
@@ -993,10 +975,6 @@ function PerfilUsuario({ onPerfilActualizado }) {
       setPerfil(perfilActualizado)
       onPerfilActualizado?.(perfilActualizado)
       setMensajeExito('Foto de perfil eliminada correctamente.')
-      if (timerMensajeRef.current) clearTimeout(timerMensajeRef.current)
-      timerMensajeRef.current = setTimeout(() => {
-        setMensajeExito('')
-      }, 3000)
     } catch (fallo) {
       setError(mensajeErrorApi(fallo, 'No se pudo eliminar la foto de perfil.'))
       throw fallo
@@ -1029,14 +1007,14 @@ function PerfilUsuario({ onPerfilActualizado }) {
 
   return (
     <>
+      <ExitoModal mensaje={mensajeExito} onCerrar={() => setMensajeExito('')} />
       {error && <ErrorAlerta mensaje={error} className="mb-6" />}
       <FormularioPerfil
-        perfil={perfil}
+        perfil={{ ...perfil, rol: perfil.rol || usuario?.rol }}
         onGuardar={guardarPerfil}
         onGuardarFoto={guardarFotoPerfil}
         onEliminarFoto={eliminarFotoPerfil}
         guardando={guardando}
-        mensajeExito={mensajeExito}
       />
     </>
   )

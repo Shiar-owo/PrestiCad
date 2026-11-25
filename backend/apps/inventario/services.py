@@ -16,9 +16,9 @@ from apps.inventario.constants import (
     ESTADOS_INSTANCIA,
     ESTADOS_MATERIAL,
     MAXIMO_EJEMPLARES_REGISTRO,
+    MAXIMO_TIEMPO_MAXIMO_PRESTAMO_DIAS,
     MAXIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS,
     MINIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS,
-    TIEMPO_MAXIMO_AVANZADO_MINUTOS,
     TIEMPO_MAXIMO_DEFAULT_POR_TIER,
     UMBRAL_PRECIO_ALTO_VALOR,
 )
@@ -106,7 +106,7 @@ def obtener_tiempo_maximo_por_defecto_tier(tier):
 
 
 def _validar_tiempo_maximo_prestamo(valor):
-    """Valida que el tiempo máximo de préstamo del material esté entre 30 minutos y 15 días."""
+    """Valida que el tiempo máximo de préstamo del material esté entre 1 hora y 15 días."""
     if isinstance(valor, bool):
         raise InventarioError(
             "tiempo_maximo_prestamo",
@@ -126,20 +126,11 @@ def _validar_tiempo_maximo_prestamo(valor):
         raise InventarioError(
             "tiempo_maximo_prestamo",
             f"El tiempo máximo de préstamo del material debe estar entre "
-            f"{MINIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS} minutos y 15 días "
+            f"{MINIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS} minutos y "
+            f"{MAXIMO_TIEMPO_MAXIMO_PRESTAMO_DIAS} días "
             f"({MAXIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS} minutos).",
         )
     return minutos
-
-
-def _validar_limite_tiempo_avanzado(tier, minutos):
-    """Valida que un material de Tier avanzado no exceda 480 minutos (8 h)."""
-    if tier == "avanzado" and minutos > TIEMPO_MAXIMO_AVANZADO_MINUTOS:
-        raise InventarioError(
-            "tiempo_maximo_prestamo",
-            f"Un material de Tier avanzado no puede exceder "
-            f"{TIEMPO_MAXIMO_AVANZADO_MINUTOS} minutos (8 h) de tiempo máximo de préstamo.",
-        )
 
 
 def obtener_material(material_id):
@@ -441,7 +432,6 @@ def registrar_material(
         defaults["tiempo_maximo_prestamo"] = obtener_tiempo_maximo_por_defecto_tier(tier_efectivo)
     else:
         defaults["tiempo_maximo_prestamo"] = _validar_tiempo_maximo_prestamo(tiempo_maximo_prestamo)
-    _validar_limite_tiempo_avanzado(tier_efectivo, defaults["tiempo_maximo_prestamo"])
     campos.update(defaults)
 
     archivos_guardados = []
@@ -577,8 +567,6 @@ def actualizar_material(material_id, **campos):
         campos["tiempo_maximo_prestamo"] = _validar_tiempo_maximo_prestamo(
             campos["tiempo_maximo_prestamo"]
         )
-        tier_efectivo = campos.get("tier_minimo_requerido", material.tier_minimo_requerido)
-        _validar_limite_tiempo_avanzado(tier_efectivo, campos["tiempo_maximo_prestamo"])
 
     if "stock" in campos and campos["stock"] > material.stock:
         conteo_actual = material.instancias.count()

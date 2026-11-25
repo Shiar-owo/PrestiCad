@@ -23,6 +23,16 @@ describe('obtenerDatosFichaTecnica', () => {
     expect(obtenerDatosFichaTecnica(undefined)).toBeNull()
   })
 
+  it('incluye la tolerancia en el máximo efectivo mostrado cuando el material alcanza el tope de 15 días', () => {
+    const ficha = obtenerDatosFichaTecnica({
+      tiempo_maximo_prestamo: 21600,
+      tier_minimo_requerido: 'avanzado',
+    })
+
+    expect(ficha.tiempoMaximoPrestamoMinutos).toBe(21570)
+    expect(ficha.tiempoMaximoPrestamoLegible).toBe('14 días, 23 horas y 30 minutos')
+  })
+
   it('extrae las especificaciones completas de hardware del material', () => {
     const material = {
       id: 'abc-123',
@@ -70,8 +80,8 @@ describe('obtenerDatosFichaTecnica', () => {
       color: 'Gris oscuro',
       tierMinimo: 'avanzado',
       tierMinimoLegible: 'Avanzado',
-      tiempoMaximoPrestamoMinutos: 360,
-      tiempoMaximoPrestamoLegible: '6 horas',
+      tiempoMaximoPrestamoMinutos: 4320,
+      tiempoMaximoPrestamoLegible: '3 días',
       bonificacionTiempo: 8,
       deduccionTardanza: 15,
       deduccionDanoParcial: 40,

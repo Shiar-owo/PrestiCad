@@ -4,7 +4,7 @@ from pathlib import Path
 
 from django.core.files.base import ContentFile
 from django.core.exceptions import ValidationError
-from django.db.models import Case, CharField, Count, DateTimeField, F, IntegerField, Value, When
+from django.db.models import Case, CharField, Count, DateTimeField, F, IntegerField, Q, Value, When
 from django.db import transaction
 from django.utils import timezone
 
@@ -148,15 +148,28 @@ def consultar_prestamos_usuario(usuario_id, ahora=None):
     return _consultar_prestamos_con_estado(ahora=ahora).filter(usuario_id=usuario_id)
 
 
-def consultar_historial_prestamos(ahora=None, estado=None, dni=None):
+def consultar_historial_prestamos(ahora=None, estado=None, dni=None, nombre=None):
     """Lista global de préstamos para consulta histórica de gestión."""
-    prestamos = _consultar_prestamos_con_estado(ahora=ahora).select_related("usuario")
+    prestamos = _consultar_prestamos_con_estado(ahora=ahora).select_related(
+        "usuario",
+        "registrado_por",
+        "registrado_por__rol",
+        "devolucion",
+        "devolucion__realizado_por",
+        "devolucion__realizado_por__rol",
+    )
     if estado == "devoluble":
         prestamos = prestamos.filter(estado_consulta__in=("activo", "vencido"))
     elif estado is not None:
         prestamos = prestamos.filter(estado_consulta=estado)
     if dni is not None:
         prestamos = prestamos.filter(usuario__dni=dni)
+    if nombre:
+        for termino in nombre.strip().split():
+            prestamos = prestamos.filter(
+                Q(usuario__nombre__icontains=termino)
+                | Q(usuario__apellido__icontains=termino)
+            )
     return prestamos
 
 
@@ -314,7 +327,7 @@ def _validar_elegibilidad(usuario, material, *, es_excepcion=False):
 def _resolver_duracion_prestamo(tiempo_prestamo_minutos, tiempo_prestamo_dias):
     """Normaliza la duración del préstamo en minutos y días equivalentes.
 
-    Acepta `tiempo_prestamo_minutos` (mínimo 1 hora, máximo 15 días) o
+    Acepta `tiempo_prestamo_minutos` (mínimo 1 hora, máximo 14 días, 23 horas y 30 minutos) o
     `tiempo_prestamo_dias` por compatibilidad, devolviendo `(minutos, dias, campo_error)`.
     """
     if tiempo_prestamo_minutos is not None:
@@ -334,8 +347,8 @@ def _resolver_duracion_prestamo(tiempo_prestamo_minutos, tiempo_prestamo_dias):
         if tiempo_prestamo_minutos > MAXIMO_MINUTOS_PRESTAMO:
             raise PrestamoError(
                 "tiempo_prestamo_minutos",
-                f"La duración máxima del préstamo es de {MAXIMO_DIAS_PRESTAMO} días "
-                f"({MAXIMO_MINUTOS_PRESTAMO} minutos).",
+                f"El plazo pactado máximo es de {formatear_duracion_minutos(MAXIMO_MINUTOS_PRESTAMO)}; "
+                f"con la tolerancia de {TIEMPO_GRACIA_MINUTOS} minutos, el total es de {MAXIMO_DIAS_PRESTAMO} días.",
             )
         dias = max(1, math.ceil(tiempo_prestamo_minutos / 1440))
         return tiempo_prestamo_minutos, dias, "tiempo_prestamo_minutos"
@@ -350,13 +363,19 @@ def _resolver_duracion_prestamo(tiempo_prestamo_minutos, tiempo_prestamo_dias):
             "tiempo_prestamo_dias",
             f"El tiempo de préstamo debe estar entre {MINIMO_DIAS_PRESTAMO} y {MAXIMO_DIAS_PRESTAMO} días.",
         )
-    return tiempo_prestamo_dias * 1440, tiempo_prestamo_dias, "tiempo_prestamo_dias"
+    minutos_pactados = min(
+        tiempo_prestamo_dias * 1440,
+        MAXIMO_MINUTOS_PRESTAMO,
+    )
+    return minutos_pactados, tiempo_prestamo_dias, "tiempo_prestamo_dias"
 
 
 def _validar_duracion_material(material, tiempo_prestamo_minutos, campo_duracion):
     """Verifica que el préstamo no supere el tiempo máximo configurado en el material."""
-    maximo_material = (
-        getattr(material, "tiempo_maximo_prestamo", None) or MAXIMO_MINUTOS_PRESTAMO
+    maximo_configurado = getattr(material, "tiempo_maximo_prestamo", None)
+    maximo_material = min(
+        maximo_configurado or MAXIMO_MINUTOS_PRESTAMO,
+        MAXIMO_MINUTOS_PRESTAMO,
     )
     if tiempo_prestamo_minutos > maximo_material:
         limite_legible = formatear_duracion_minutos(maximo_material)
@@ -608,6 +627,12 @@ def actualizar_documento_garantia(*, prestamo_id, tipo, archivo=None, eliminar=F
             "No existe el préstamo indicado.",
             status_code=404,
         ) from error
+    if prestamo.estado == "devuelto":
+        raise PrestamoError(
+            "prestamo_id",
+            "No se pueden modificar ni eliminar datos o documentos de un préstamo ya finalizado.",
+            status_code=409,
+        )
     try:
         garantia = Garantia.objects.select_for_update().get(prestamo=prestamo)
     except Garantia.DoesNotExist as error:
@@ -668,7 +693,17 @@ def consultar_detalle_historial_prestamo(prestamo_id, ahora=None):
     try:
         return (
             _consultar_prestamos_con_estado(ahora=ahora)
-            .select_related("usuario", "material", "instancia", "garantia")
+            .select_related(
+                "usuario",
+                "registrado_por",
+                "registrado_por__rol",
+                "devolucion",
+                "devolucion__realizado_por",
+                "devolucion__realizado_por__rol",
+                "material",
+                "instancia",
+                "garantia",
+            )
             .get(pk=prestamo_id)
         )
     except (Prestamo.DoesNotExist, ValueError, TypeError) as error:
@@ -766,18 +801,47 @@ def registrar_prestamo(
             minutos_calendario_directo = int((fecha_fin - inicio_referencia).total_seconds() // 60)
         else:
             minutos_calendario_directo = int(round((fecha_fin - fecha_entrega).total_seconds() / 60))
-        from apps.reservas.services import contar_dias_fin_de_semana
 
-        dias_fin_semana = contar_dias_fin_de_semana(fecha_entrega, fecha_fin)
-        minutos_habiles_directo = max(0, minutos_calendario_directo - dias_fin_semana * 1440)
-        if (
-            minutos_solicitados_explicitamente is not None
-            and dias_fin_semana > 0
-            and abs(minutos_solicitados_explicitamente - minutos_habiles_directo) <= 5
+        # Validación de día laborable (Lunes a Viernes) y horario de atención (09:00 a 17:00)
+        from apps.reservas.constants import (
+            DIAS_LABORABLES,
+            HORA_RESERVA_MAXIMO_FIN,
+            HORA_RESERVA_MINIMO_INICIO,
+            MINUTO_RESERVA_MAXIMO_FIN,
+        )
+        from apps.reservas.disponibilidad import obtener_dia_no_laborable
+
+        fin_local = timezone.localtime(fecha_fin) if timezone.is_aware(fecha_fin) else fecha_fin
+        if fin_local.weekday() not in DIAS_LABORABLES:
+            raise PrestamoError(
+                "fecha_fin",
+                "La fecha de devolución debe ser un día laborable (lunes a viernes).",
+            )
+        dia_fin_inhabilitado = obtener_dia_no_laborable(fin_local)
+        if dia_fin_inhabilitado is not None:
+            raise PrestamoError(
+                "fecha_fin",
+                f"El día {fin_local.strftime('%d/%m/%Y')} está inhabilitado ({dia_fin_inhabilitado.motivo}). La devolución debe ser un día laborable.",
+            )
+        minutos_fin = fin_local.hour * 60 + fin_local.minute
+        if not (
+            HORA_RESERVA_MINIMO_INICIO * 60
+            <= minutos_fin
+            <= HORA_RESERVA_MAXIMO_FIN * 60 + MINUTO_RESERVA_MAXIMO_FIN
         ):
-            minutos_prestamo = minutos_habiles_directo
+            raise PrestamoError(
+                "fecha_fin",
+                f"La devolución pactada debe respetar el horario de devolución, entre "
+                f"{HORA_RESERVA_MINIMO_INICIO:02d}:00 y "
+                f"{HORA_RESERVA_MAXIMO_FIN:02d}:{MINUTO_RESERVA_MAXIMO_FIN:02d}.",
+            )
+
+        # Cuentan todos los días en medio (sin descontar fines de semana)
+        if minutos_solicitados_explicitamente is not None:
+            minutos_prestamo = minutos_solicitados_explicitamente
         else:
             minutos_prestamo = minutos_calendario_directo
+
         if minutos_prestamo < MINIMO_MINUTOS_PRESTAMO:
             raise PrestamoError("fecha_fin", "El préstamo debe durar al menos 1 h (60 min).")
         dias_prestamo = max(1, math.ceil(minutos_prestamo / 1440))
@@ -810,9 +874,7 @@ def registrar_prestamo(
                 "reserva_id",
                 "La reserva indicada no corresponde al material seleccionado.",
             )
-        limite_conversion = reserva.fecha_limite_recojo + timedelta(
-            minutes=TOLERANCIA_RECOJO_MINUTOS
-        ) if reserva.fecha_limite_recojo else None
+        limite_conversion = reserva.fecha_limite_recojo
         if (
             reserva.estado != "reservada"
             or limite_conversion is None
@@ -847,7 +909,17 @@ def registrar_prestamo(
                 "No se puede entregar el ejemplar antes de la fecha de inicio reservada.",
                 status_code=409,
             )
-        minutos_prestamo = calcular_minutos_habiles(reserva.fecha_inicio, reserva.fecha_fin)
+        # Solo se puede convertir la reserva el mismo día calendario de fecha_inicio
+        entrega_local = timezone.localtime(ahora_entrega) if timezone.is_aware(ahora_entrega) else ahora_entrega
+        inicio_local = timezone.localtime(reserva.fecha_inicio) if timezone.is_aware(reserva.fecha_inicio) else reserva.fecha_inicio
+        if entrega_local.date() != inicio_local.date():
+            raise PrestamoError(
+                "reserva_id",
+                f"La reserva solo puede convertirse a préstamo el día de inicio reservado "
+                f"({inicio_local.strftime('%d/%m/%Y')}). Hoy es {entrega_local.strftime('%d/%m/%Y')}.",
+                status_code=409,
+            )
+        minutos_prestamo = max(0, int((reserva.fecha_fin - ahora_entrega).total_seconds() // 60))
         if minutos_prestamo < MINIMO_MINUTOS_PRESTAMO:
             raise PrestamoError(
                 "reserva_id",
@@ -872,18 +944,86 @@ def registrar_prestamo(
     _validar_duracion_material(material, minutos_prestamo, campo_duracion)
 
     if reserva is None:
-        if material.estado in ("en_mantenimiento", "reservado"):
+        if material.estado == "en_mantenimiento":
             raise PrestamoError(
                 "material_id",
                 "El material no está disponible para entrega.",
                 status_code=409,
             )
+        from apps.reservas.models import Reserva
+
+        if material.estado == "reservado":
+            tiene_reservas_sistema = Reserva.objects.filter(
+                material_id=material.id, estado="reservada"
+            ).exists()
+            if not tiene_reservas_sistema:
+                raise PrestamoError(
+                    "material_id",
+                    "El material no está disponible para entrega.",
+                    status_code=409,
+                )
+        fecha_fin_estimada = fecha_entrega + timedelta(minutes=minutos_prestamo + TOLERANCIA_RECOJO_MINUTOS)
+
+        if instancia_id is not None:
+            reserva_solapada = Reserva.objects.filter(
+                instancia_id=instancia_id,
+                estado="reservada",
+                fecha_inicio__isnull=False,
+                fecha_fin__isnull=False,
+                fecha_inicio__lt=fecha_fin_estimada,
+                fecha_fin__gt=fecha_entrega,
+            ).first()
+            if reserva_solapada:
+                raise PrestamoError(
+                    "tiempo_prestamo",
+                    f"El ejemplar seleccionado tiene una reserva confirmada a partir de {timezone.localtime(reserva_solapada.fecha_inicio).strftime('%d/%m/%Y %H:%M')}. La entrega debe devolverse antes de ese horario.",
+                    status_code=409,
+                )
+        else:
+            from apps.reservas.disponibilidad import obtener_instancias_disponibles_en_rango
+
+            libres = obtener_instancias_disponibles_en_rango(
+                material.id, fecha_entrega, fecha_fin_estimada, bloquear_filas=True
+            )
+            candidata = libres.first()
+            if candidata:
+                instancia_id = candidata.id
+            else:
+                proxima_reserva = Reserva.objects.filter(
+                    material_id=material.id,
+                    estado="reservada",
+                    fecha_inicio__gt=fecha_entrega,
+                    fecha_inicio__lt=fecha_fin_estimada,
+                ).order_by("fecha_inicio").first()
+                if proxima_reserva:
+                    raise PrestamoError(
+                        "tiempo_prestamo",
+                        f"Los ejemplares tienen una reserva programada a partir de {proxima_reserva.fecha_inicio.strftime('%d/%m/%Y %H:%M')}. La entrega debe finalizar antes de ese horario.",
+                        status_code=409,
+                    )
     elif material.estado == "en_mantenimiento":
         raise PrestamoError(
             "material_id",
             "El material no está disponible para entrega.",
             status_code=409,
         )
+
+    if reserva is None:
+        from apps.reservas.disponibilidad import obtener_dia_no_laborable
+
+        hora_entrega_local = timezone.localtime(ahora_entrega)
+        dia_hoy_inhabilitado = obtener_dia_no_laborable(hora_entrega_local)
+        if dia_hoy_inhabilitado is not None:
+            raise PrestamoError(
+                "fecha_entrega",
+                f"Hoy ({hora_entrega_local.strftime('%d/%m/%Y')}) está inhabilitado ({dia_hoy_inhabilitado.motivo}). No se pueden registrar entregas en días no laborables.",
+            )
+        cierre_local = hora_entrega_local.replace(hour=18, minute=0, second=0, microsecond=0)
+        if hora_entrega_local > cierre_local:
+            raise PrestamoError(
+                "fecha_entrega",
+                "Los préstamos se otorgan hasta las 18:00; después se atienden el siguiente día laborable.",
+            )
 
     requiere_garantia = es_excepcion or material.requiere_garantia()
     if garantia_reserva_reutilizable is not None and documento_identidad is None and compromiso_responsabilidad is None:
@@ -900,7 +1040,7 @@ def registrar_prestamo(
         instancia_elegida = servicios_inventario.marcar_instancia_prestada(
             material.id,
             instancia_id=instancia_id,
-            permitir_reservada=reserva is not None,
+            permitir_reservada=bool(instancia_id is not None or reserva is not None),
         )
     except servicios_inventario.InventarioError as error:
         raise PrestamoError(
@@ -962,7 +1102,7 @@ def registrar_prestamo(
         usuario=prestatario,
         material=material,
         registrado_por=registrado_por,
-        fecha_entrega=reserva.fecha_inicio if reserva is not None else fecha_entrega,
+        fecha_entrega=ahora_entrega,
         fecha_limite=(
             reserva.fecha_fin
             if reserva is not None

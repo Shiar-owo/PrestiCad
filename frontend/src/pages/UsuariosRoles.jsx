@@ -11,6 +11,7 @@ import EstadoVacio from '../components/ui/EstadoVacio'
 import BadgeEstado from '../components/ui/BadgeEstado'
 import ResumenTier from '../components/ui/ResumenTier'
 import Boton from '../components/ui/Boton'
+import ExitoModal from '../components/ui/ExitoModal'
 
 const OPCIONES_ROL = [
   { valor: 'gestor', etiqueta: 'Gestor de Almacén' },
@@ -33,8 +34,11 @@ function UsuariosRoles() {
   const [usuarios, setUsuarios] = useState([])
   const [cargando, setCargando] = useState(true)
   const [guardandoId, setGuardandoId] = useState(null)
+  const [cambiandoEstadoId, setCambiandoEstadoId] = useState(null)
+  const [confirmacionEstado, setConfirmacionEstado] = useState(null)
   const [perfilSeleccionado, setPerfilSeleccionado] = useState(null)
   const [error, setError] = useState('')
+  const [mensajeExito, setMensajeExito] = useState('')
 
   useEffect(() => {
     cargarUsuarios()
@@ -63,6 +67,8 @@ function UsuariosRoles() {
       setUsuarios((actuales) => actuales.map((usuario) =>
         usuario.id === usuarioId ? { ...usuario, rol: actualizado.rol } : usuario,
       ))
+      const nombre = usuarios.find((usuario) => usuario.id === usuarioId)?.nombre || 'El usuario'
+      setMensajeExito(`El rol de ${nombre} se actualizó correctamente.`)
     } catch (fallo) {
       setError(
         (typeof fallo.datos?.detail === 'string' && fallo.datos.detail)
@@ -73,12 +79,47 @@ function UsuariosRoles() {
     }
   }
 
+  async function confirmarCambioEstado() {
+    if (!confirmacionEstado) return
+    const { usuario, nuevoEstado } = confirmacionEstado
+    setError('')
+    setCambiandoEstadoId(usuario.id)
+    try {
+      const actualizado = await api.patch(`/usuarios/${usuario.id}/estado/`, { estado: nuevoEstado })
+      setUsuarios((actuales) => actuales.map((item) =>
+        item.id === usuario.id ? { ...item, estado: actualizado.estado } : item,
+      ))
+      setPerfilSeleccionado((actual) => (
+        actual && actual.id === usuario.id ? { ...actual, estado: actualizado.estado } : actual
+      ))
+      const nombreCompleto = `${usuario.nombre} ${usuario.apellido}`.trim()
+      const notaPrestamos = nuevoEstado === 'inactivo' && actualizado.tiene_prestamos_activos
+        ? ' El usuario tiene préstamos vigentes que podrán seguir registrándose como devueltos por gestión.'
+        : ''
+      setMensajeExito(
+        nuevoEstado === 'inactivo'
+          ? `La cuenta de ${nombreCompleto} fue desactivada correctamente.${notaPrestamos}`
+          : `La cuenta de ${nombreCompleto} fue reactivada correctamente.`,
+      )
+      setConfirmacionEstado(null)
+    } catch (fallo) {
+      setError(
+        (typeof fallo.datos?.detail === 'string' && fallo.datos.detail)
+          || 'No se pudo actualizar el estado del usuario. Inténtalo otra vez.',
+      )
+      setConfirmacionEstado(null)
+    } finally {
+      setCambiandoEstadoId(null)
+    }
+  }
+
   return (
     <section className="mx-auto w-full max-w-6xl px-4 py-8">
+      <ExitoModal mensaje={mensajeExito} onCerrar={() => setMensajeExito('')} />
       <header className="mb-5">
-        <h2 className="text-xl font-bold text-texto">Gestionar roles y permisos</h2>
+        <h2 className="text-xl font-bold text-texto">Gestionar usuarios, roles y permisos</h2>
         <p className="mt-1 text-sm text-texto-suave">
-          Asigna y actualiza los roles de los usuarios del sistema.
+          Asigna roles, consulta perfiles y activa o desactiva cuentas del sistema.
         </p>
       </header>
 
@@ -107,11 +148,14 @@ function UsuariosRoles() {
                   <th className="px-4 py-3 font-semibold">Tipo</th>
                   <th className="px-4 py-3 font-semibold">Rol actual</th>
                   <th className="px-4 py-3 font-semibold">Estado</th>
-                  <th className="px-4 py-3 font-semibold">Perfil</th>
+                  <th className="px-4 py-3 font-semibold">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-borde">
-                {usuarios.map((usuario) => (
+                {usuarios.map((usuario) => {
+                  const esCuentaPropia = usuario.id === usuarioAutenticado?.id
+                  const estaActivo = usuario.estado === 'activo'
+                  return (
                   <tr key={usuario.id} className="text-texto">
                     <td className="px-4 py-3 font-semibold">
                       {usuario.nombre} {usuario.apellido}
@@ -119,7 +163,7 @@ function UsuariosRoles() {
                     <td className="px-4 py-3">{usuario.email}</td>
                     <td className="px-4 py-3">{usuario.tipo}</td>
                     <td className="px-4 py-3">
-                      {usuario.id === usuarioAutenticado?.id || usuario.rol === 'prestatario' ? (
+                      {esCuentaPropia || usuario.rol === 'prestatario' ? (
                         <span className="text-sm font-medium">
                           {ETIQUETAS_ROL[usuario.rol] || usuario.rol}
                         </span>
@@ -134,24 +178,44 @@ function UsuariosRoles() {
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      {usuario.estado === 'activo' ? (
-                        <BadgeEstado estado="activo" />
+                      {estaActivo ? (
+                        <BadgeEstado estado="activo" texto="Activo" />
                       ) : (
-                        <span className="text-sm font-semibold text-error">{usuario.estado}</span>
+                        <span className="inline-flex rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-semibold capitalize text-rose-800 dark:bg-rose-950/50 dark:text-rose-300">
+                          {usuario.estado}
+                        </span>
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <Boton
-                        variante="secundario"
-                        tamanio="pequeno"
-                        onClick={() => setPerfilSeleccionado(usuario)}
-                        aria-label={`Ver perfil de ${usuario.nombre} ${usuario.apellido}`}
-                      >
-                        Ver perfil
-                      </Boton>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Boton
+                          variante="secundario"
+                          tamanio="pequeno"
+                          onClick={() => setPerfilSeleccionado(usuario)}
+                          aria-label={`Ver perfil de ${usuario.nombre} ${usuario.apellido}`}
+                        >
+                          Ver perfil
+                        </Boton>
+                        {!esCuentaPropia && (
+                          <Boton
+                            variante={estaActivo ? 'peligro' : 'secundario'}
+                            tamanio="pequeno"
+                            cargando={cambiandoEstadoId === usuario.id}
+                            deshabilitado={cambiandoEstadoId !== null}
+                            onClick={() => setConfirmacionEstado({
+                              usuario,
+                              nuevoEstado: estaActivo ? 'inactivo' : 'activo',
+                            })}
+                            aria-label={`${estaActivo ? 'Desactivar' : 'Reactivar'} cuenta de ${usuario.nombre} ${usuario.apellido}`}
+                          >
+                            {estaActivo ? 'Desactivar' : 'Reactivar'}
+                          </Boton>
+                        )}
+                      </div>
                     </td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           </div>
@@ -192,7 +256,9 @@ function UsuariosRoles() {
                 ['Departamento / carrera', perfilSeleccionado.departamento_carrera || 'Sin especificar'],
                 ['Rol', ETIQUETAS_ROL[perfilSeleccionado.rol] || perfilSeleccionado.rol],
                 ['Estado', perfilSeleccionado.estado],
-                ['Puntaje de reputación', perfilSeleccionado.reputacion_puntaje],
+                ...(!['gestor', 'administrador'].includes(perfilSeleccionado.rol)
+                  ? [['Puntaje de reputación', perfilSeleccionado.reputacion_puntaje]]
+                  : []),
               ].map(([etiqueta, valor]) => (
                 <div key={etiqueta} className="rounded-lg border border-borde bg-superficie p-3">
                   <dt className="text-xs font-semibold uppercase tracking-wide text-texto-suave">{etiqueta}</dt>
@@ -200,7 +266,70 @@ function UsuariosRoles() {
                 </div>
               ))}
             </dl>
-            <ResumenTier tier={perfilSeleccionado.reputacion_tier} className="mt-3" />
+            {!['gestor', 'administrador'].includes(perfilSeleccionado.rol) && (
+              <ResumenTier tier={perfilSeleccionado.reputacion_tier} className="mt-3" />
+            )}
+          </section>
+        </div>
+      )}
+
+      {confirmacionEstado && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onMouseDown={(evento) => {
+            if (evento.target === evento.currentTarget && !cambiandoEstadoId) {
+              setConfirmacionEstado(null)
+            }
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="confirmar-estado-usuario-titulo"
+            className="w-full max-w-md rounded-xl border border-borde bg-white p-6 shadow-xl dark:bg-superficie"
+          >
+            <h3 id="confirmar-estado-usuario-titulo" className="text-lg font-bold text-texto">
+              {confirmacionEstado.nuevoEstado === 'inactivo'
+                ? 'Desactivar cuenta de usuario'
+                : 'Reactivar cuenta de usuario'}
+            </h3>
+            <p className="mt-2 text-sm text-texto-suave">
+              {confirmacionEstado.nuevoEstado === 'inactivo' ? (
+                <>
+                  ¿Seguro que deseas desactivar a{' '}
+                  <strong className="text-texto">
+                    {confirmacionEstado.usuario.nombre} {confirmacionEstado.usuario.apellido}
+                  </strong>
+                  ? El usuario perderá el acceso a su sesión y no podrá solicitar nuevos préstamos ni reservas. Si mantiene préstamos vigentes, el gestor podrá seguir registrando su devolución.
+                </>
+              ) : (
+                <>
+                  ¿Deseas reactivar la cuenta de{' '}
+                  <strong className="text-texto">
+                    {confirmacionEstado.usuario.nombre} {confirmacionEstado.usuario.apellido}
+                  </strong>
+                  ? Volverá a poder iniciar sesión y operar con normalidad.
+                </>
+              )}
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <Boton
+                variante="secundario"
+                tamanio="pequeno"
+                deshabilitado={Boolean(cambiandoEstadoId)}
+                onClick={() => setConfirmacionEstado(null)}
+              >
+                Cancelar
+              </Boton>
+              <Boton
+                variante={confirmacionEstado.nuevoEstado === 'inactivo' ? 'peligro' : 'primario'}
+                tamanio="pequeno"
+                cargando={Boolean(cambiandoEstadoId)}
+                onClick={confirmarCambioEstado}
+              >
+                {confirmacionEstado.nuevoEstado === 'inactivo' ? 'Confirmar desactivación' : 'Confirmar reactivación'}
+              </Boton>
+            </div>
           </section>
         </div>
       )}

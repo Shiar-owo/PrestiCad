@@ -5,6 +5,7 @@ import {
   esMaterialAltoValor,
 } from '../constantes/catalogo'
 import {
+  DURACION_MAXIMA_PRESTAMO_MINUTOS,
   TIEMPO_MAXIMO_DEFAULT_POR_TIER,
   formatearDuracionMinutos,
 } from '../constantes/checklistPrestamo'
@@ -28,6 +29,15 @@ export function obtenerDatosFichaTecnica(material) {
 
   const unidades = material.unidades_disponibles ?? material.stock ?? 0
   const hayDisponibilidad = material.estado === 'disponible' && unidades > 0
+  const tiempoMaximoConfigurado = Number(material.tiempo_maximo_prestamo)
+  const tiempoMaximoPorTier = (
+    TIEMPO_MAXIMO_DEFAULT_POR_TIER[material.tier_minimo_requerido] ||
+    TIEMPO_MAXIMO_DEFAULT_POR_TIER.estandar
+  ).minutos
+  const tiempoMaximoPrestamoMinutos = Math.min(
+    tiempoMaximoConfigurado > 0 ? tiempoMaximoConfigurado : tiempoMaximoPorTier,
+    DURACION_MAXIMA_PRESTAMO_MINUTOS,
+  )
 
   return {
     id: material.id,
@@ -55,15 +65,8 @@ export function obtenerDatosFichaTecnica(material) {
       ETIQUETAS_TIER[material.tier_minimo_requerido] ||
       material.tier_minimo_requerido ||
       'Estándar',
-    tiempoMaximoPrestamoMinutos:
-      material.tiempo_maximo_prestamo ??
-      (TIEMPO_MAXIMO_DEFAULT_POR_TIER[material.tier_minimo_requerido] ||
-        TIEMPO_MAXIMO_DEFAULT_POR_TIER.estandar).minutos,
-    tiempoMaximoPrestamoLegible: formatearDuracionMinutos(
-      material.tiempo_maximo_prestamo ??
-        (TIEMPO_MAXIMO_DEFAULT_POR_TIER[material.tier_minimo_requerido] ||
-          TIEMPO_MAXIMO_DEFAULT_POR_TIER.estandar).minutos,
-    ),
+    tiempoMaximoPrestamoMinutos,
+    tiempoMaximoPrestamoLegible: formatearDuracionMinutos(tiempoMaximoPrestamoMinutos),
     bonificacionTiempo: material.bonificacion_tiempo ?? 5,
     deduccionTardanza: material.deduccion_tardanza ?? 10,
     deduccionDanoParcial: material.deduccion_dano_parcial ?? 30,

@@ -6,8 +6,12 @@ import { api, ErrorApi } from '../api/client'
 import BadgeEstado from '../components/ui/BadgeEstado'
 import Boton from '../components/ui/Boton'
 import ErrorAlerta from '../components/ui/ErrorAlerta'
+import ErrorModal from '../components/ui/ErrorModal'
+import ExitoModal from '../components/ui/ExitoModal'
 import Skeleton from '../components/ui/Skeleton'
 import Tarjeta from '../components/ui/Tarjeta'
+import CalendarioDisponibilidad from '../components/reservas/CalendarioDisponibilidad'
+import SelectorFechaHoraDesplegable from '../components/ui/SelectorFechaHoraDesplegable'
 import { ETIQUETAS_TIER, ETIQUETAS_TIPO } from '../constantes/catalogo'
 import SesionContext from '../contextos/SesionContext'
 import useTituloPagina from '../hooks/useTituloPagina'
@@ -27,14 +31,21 @@ import {
   obtenerMinimaHoraInicioReserva,
   obtenerMinimoFinReserva,
   obtenerMinimoInicioReserva,
+  obtenerMaximoMinutosReserva,
   HORA_RESERVA_MAXIMO_FIN,
   HORA_RESERVA_MINIMO_INICIO,
+  TEXTO_HORA_RESERVA_MAXIMO_FIN,
   requiereExcepcionAcademica,
   textoEstadoReserva,
   validarFormularioReserva,
   validarHorarioReserva,
 } from '../reservas/estadoReserva'
+import { useDiasNoLaborables } from '../reservas/diasNoLaborables'
 import { formatearDuracionMinutos } from '../constantes/checklistPrestamo'
+import {
+  NOMBRE_FORMATO_COMPROMISO_RESPONSABILIDAD,
+  URL_FORMATO_COMPROMISO_RESPONSABILIDAD,
+} from '../constantes/garantia'
 
 function extraerMensajeError(error) {
   if (error instanceof ErrorApi && error.datos) {
@@ -48,6 +59,7 @@ function extraerMensajeError(error) {
 export default function ReservarMaterial() {
   useTituloPagina('Reservar material')
   const { usuario } = useContext(SesionContext)
+  const { diasNoLaborables } = useDiasNoLaborables()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const materialIdParam = searchParams.get('materialId') || ''
@@ -68,6 +80,7 @@ export default function ReservarMaterial() {
   const [errorEnvio, setErrorEnvio] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [reservaCreada, setReservaCreada] = useState(null)
+  const [mostrarExitoReserva, setMostrarExitoReserva] = useState(false)
 
   const [instancias, setInstancias] = useState([])
   const [cargandoInstancias, setCargandoInstancias] = useState(false)
@@ -148,7 +161,8 @@ export default function ReservarMaterial() {
 
   const tierUsuario = usuario?.reputacion_tier || 'estandar'
   const tierMaterial = materialSeleccionado?.tier_minimo_requerido || 'estandar'
-  const esAvanzado = tierMaterial === 'avanzado'
+  // Todos los Tiers usan un rango de fechas; Avanzado ya puede abarcar otro día.
+  const esAvanzado = false
   const elegibleNormal = materialSeleccionado
     ? esElegiblePorTier(tierUsuario, tierMaterial)
     : true
@@ -179,8 +193,8 @@ export default function ReservarMaterial() {
     0
 
   const erroresInicioActuales = esAvanzado
-    ? validarHorarioReserva(fechaSeleccionada, horaInicio, '', true, null, null, materialSeleccionado)
-    : validarHorarioReserva(undefined, undefined, undefined, false, fechaInicio, '', materialSeleccionado)
+    ? validarHorarioReserva(fechaSeleccionada, horaInicio, '', true, null, null, materialSeleccionado, diasNoLaborables)
+    : validarHorarioReserva(undefined, undefined, undefined, false, fechaInicio, '', materialSeleccionado, diasNoLaborables)
   const inicioValidoParaFin = esAvanzado
     ? Boolean(fechaSeleccionada && horaInicio && !erroresInicioActuales.fecha && !erroresInicioActuales.horaInicio)
     : Boolean(fechaInicio && !erroresInicioActuales.fechaInicio)
@@ -200,6 +214,7 @@ export default function ReservarMaterial() {
       valor,
       fechaFin,
       materialSeleccionado,
+      diasNoLaborables,
     )
     if (validacion.fechaInicio) {
       setFechaInicio('')
@@ -230,7 +245,7 @@ export default function ReservarMaterial() {
       ...actuales,
       fechaInicio: validacion.fechaInicio || '',
       fechaFin: finDebeLimpiarse
-        ? 'El inicio cambió. Selecciona un fin válido (mínimo 1 hora después, dentro del tiempo máximo del material).'
+        ? `El inicio cambió. Selecciona un fin válido de mínimo 1 hora y máximo ${formatearDuracionMinutos(obtenerMaximoMinutosReserva(materialSeleccionado))} para este material.`
         : validacion.fechaFin || '',
     }))
   }
@@ -249,6 +264,7 @@ export default function ReservarMaterial() {
       fechaInicio,
       valor,
       materialSeleccionado,
+      diasNoLaborables,
     )
     if (validacion.fechaFin) {
       setFechaFin('')
@@ -268,7 +284,7 @@ export default function ReservarMaterial() {
       setErrores((actuales) => ({ ...actuales, fecha: '' }))
       return
     }
-    const validacion = validarHorarioReserva(valor, horaInicio, horaFin, true)
+    const validacion = validarHorarioReserva(valor, horaInicio, horaFin, true, null, null, materialSeleccionado, diasNoLaborables)
     if (validacion.fecha) {
       setFechaSeleccionada('')
       setErrores((actuales) => ({ ...actuales, fecha: validacion.fecha }))
@@ -348,10 +364,12 @@ export default function ReservarMaterial() {
       material: materialSeleccionado,
       documentoIdentidad,
       compromisoResponsabilidad,
+      diasNoLaborables,
     })
 
     if (Object.keys(nuevosErrores).length > 0) {
       setErrores(nuevosErrores)
+      setErrorEnvio(Object.values(nuevosErrores).flat().filter(Boolean).join('\n'))
       return
     }
 
@@ -392,6 +410,7 @@ export default function ReservarMaterial() {
         })
       }
       setReservaCreada(respuesta)
+      setMostrarExitoReserva(true)
     } catch (err) {
       setErrorEnvio(extraerMensajeError(err))
     } finally {
@@ -427,6 +446,15 @@ export default function ReservarMaterial() {
   if (reservaCreada) {
     const confirmada = reservaCreada.estado === 'reservada'
     return (
+      <>
+      <ExitoModal
+        titulo={confirmada ? 'Reserva confirmada' : 'Solicitud registrada'}
+        mensaje={confirmada
+          ? 'La reserva fue aceptada y el ejemplar quedó asignado.'
+          : 'La solicitud de excepción fue aceptada y quedó pendiente de evaluación.'}
+        onCerrar={() => setMostrarExitoReserva(false)}
+        abierto={mostrarExitoReserva}
+      />
       <Tarjeta className="p-6 space-y-5" aria-labelledby="titulo-reserva-exitosa">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
@@ -437,10 +465,8 @@ export default function ReservarMaterial() {
             )}
             <h2 id="titulo-reserva-exitosa" className="text-xl font-bold text-texto">
               {confirmada
-                ? 'Reserva confirmada por 24 horas'
-                : reservaCreada.es_excepcion
-                  ? 'Solicitud de excepción académica registrada'
-                  : 'Solicitud registrada en lista de espera'}
+                ? 'Reserva confirmada'
+                : 'Solicitud de excepción académica registrada'}
             </h2>
           </div>
           <BadgeEstado
@@ -452,9 +478,7 @@ export default function ReservarMaterial() {
         <p className="text-sm text-texto-suave">
           {confirmada
             ? 'Se ha bloqueado un ejemplar disponible para ti. Acércate al almacén antes de la fecha límite para concretar el préstamo.'
-            : reservaCreada.es_excepcion
-              ? 'Tu solicitud excepcional con documentos de garantía ha quedado en espera de evaluación manual por el Gestor de Almacén.'
-              : 'Actualmente no hay ejemplares libres o existen solicitudes previas. Tu solicitud entró a la cola de espera por 72 horas sin consumir inventario.'}
+            : 'Tu solicitud excepcional con documentos de garantía quedó pendiente de evaluación por el Gestor de Almacén.'}
         </p>
 
         <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm">
@@ -486,10 +510,10 @@ export default function ReservarMaterial() {
               </div>
               <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3 dark:border-amber-800 dark:bg-marca-950/30">
                 <dt className="text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-300">
-                  Límite de recojo (24 h)
+                  Devolución
                 </dt>
                 <dd className="mt-1 font-bold text-texto">
-                  {formatearFechaReserva(reservaCreada.fecha_limite_recojo)}
+                  {formatearFechaReserva(reservaCreada.fecha_fin)}
                 </dd>
               </div>
             </>
@@ -497,22 +521,10 @@ export default function ReservarMaterial() {
             <>
               <div className="rounded-lg border border-borde bg-superficie-alta/40 p-3">
                 <dt className="text-xs font-semibold uppercase tracking-wide text-texto-suave">
-                  Orden en cola
+                  Estado de revisión
                 </dt>
                 <dd className="mt-1 font-bold text-texto">
-                  {reservaCreada.es_excepcion
-                    ? 'Evaluación por gestor'
-                    : reservaCreada.posicion_cola
-                      ? `Posición #${reservaCreada.posicion_cola}`
-                      : 'En espera'}
-                </dd>
-              </div>
-              <div className="rounded-lg border border-borde bg-superficie-alta/40 p-3">
-                <dt className="text-xs font-semibold uppercase tracking-wide text-texto-suave">
-                  Vigencia en espera (72 h)
-                </dt>
-                <dd className="mt-1 font-bold text-texto">
-                  {formatearFechaReserva(reservaCreada.fecha_limite_espera)}
+                  Pendiente de evaluación por el gestor
                 </dd>
               </div>
             </>
@@ -524,7 +536,7 @@ export default function ReservarMaterial() {
             role="note"
             className="rounded-lg border border-acento-300 bg-acento-50/70 p-3.5 text-xs text-acento-900 dark:border-acento-800 dark:bg-acento-950/40 dark:text-acento-200"
           >
-            <strong>Aclaración para el trámite (cruce de fin de semana):</strong> Tu reserva cruza sábado y domingo. Como el almacén no atiende los fines de semana, esos días no se descuentan del tiempo máximo de préstamo del material; podrás conservar el ejemplar durante el fin de semana y devolverlo el día hábil indicado ({formatearFechaReserva(reservaCreada.fecha_fin)}) dentro del horario de atención (09:00 a 17:00).
+            <strong>Aclaración para el trámite:</strong> El recojo y la devolución pactados son de lunes a viernes entre 08:00 y 17:30. El recojo tiene 30 minutos de tolerancia, hasta las 18:00.
           </div>
         )}
 
@@ -535,6 +547,7 @@ export default function ReservarMaterial() {
           </Boton>
         </div>
       </Tarjeta>
+      </>
     )
   }
 
@@ -571,7 +584,13 @@ export default function ReservarMaterial() {
         />
       )}
 
-      {errorEnvio && <ErrorAlerta mensaje={errorEnvio} />}
+      {errorEnvio && (
+        <ErrorModal
+          titulo="No se pudo confirmar la reserva"
+          mensaje={errorEnvio}
+          onCerrar={() => setErrorEnvio('')}
+        />
+      )}
 
       <Tarjeta className="p-6">
         <form onSubmit={manejarSubmit} noValidate className="space-y-5">
@@ -648,7 +667,7 @@ export default function ReservarMaterial() {
                   {aplicaExcepcion
                     ? 'Solicitud excepcional en espera (72 h, sujeta a aprobación del gestor)'
                     : unidadesDisponibles > 0
-                      ? 'Reserva confirmada inmediata (24 h de vigencia)'
+                      ? 'Reserva confirmada inmediata (recojo dentro de 30 min)'
                       : 'Lista de espera sin bloquear inventario (72 h de vigencia)'}
                 </p>
               </div>
@@ -676,8 +695,8 @@ export default function ReservarMaterial() {
                   </p>
                   <p>
                     <a
-                      href="/compromiso_responsabilidad.pdf"
-                      download="compromiso_responsabilidad.pdf"
+                      href={URL_FORMATO_COMPROMISO_RESPONSABILIDAD}
+                      download={NOMBRE_FORMATO_COMPROMISO_RESPONSABILIDAD}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-1.5 font-bold text-amber-900 underline hover:text-amber-950 dark:text-amber-200"
@@ -724,32 +743,45 @@ export default function ReservarMaterial() {
             </div>
           )}
 
+          {materialSeleccionado && (
+            <div className="space-y-1.5">
+              <label className="block text-sm font-semibold text-texto">
+                Disponibilidad y agenda en calendario
+              </label>
+              <CalendarioDisponibilidad
+                materialId={materialSeleccionado.id}
+                fechaSeleccionada={esAvanzado ? fechaSeleccionada : fechaInicio ? fechaInicio.slice(0, 10) : ''}
+                onSeleccionarFecha={(fechaIso) => {
+                  if (esAvanzado) {
+                    actualizarFechaAvanzada(fechaIso)
+                  } else {
+                    const inicio = `${fechaIso}T08:00`
+                    const fin = `${fechaIso}T13:00`
+                    actualizarFechaInicioReserva(inicio)
+                    actualizarFechaFinReserva(fin)
+                  }
+                }}
+              />
+            </div>
+          )}
+
           {materialSeleccionado && esAvanzado ? (
             <div className="grid gap-4 sm:grid-cols-3">
               <div>
-                <label
-                  htmlFor="input-fecha-reserva"
-                  className="block text-sm font-semibold text-texto"
-                >
-                  Fecha *
-                </label>
-                <input
+                <SelectorFechaHoraDesplegable
                   id="input-fecha-reserva"
-                  type="date"
-                  value={fechaSeleccionada}
-                  min={obtenerFechaLocal()}
-                  aria-invalid={Boolean(errores.fecha)}
-                  onChange={(e) => actualizarFechaAvanzada(e.target.value)}
-                  className="mt-1.5 w-full rounded-lg border border-borde bg-white px-3 py-2 text-sm text-texto dark:bg-superficie"
+                  etiqueta="Fecha *"
+                  soloFecha
+                  valor={fechaSeleccionada}
+                  minFecha={obtenerFechaLocal()}
+                  error={errores.fecha}
+                  onCambio={(fechaIso) => actualizarFechaAvanzada(fechaIso)}
                 />
-                {errores.fecha && (
-                  <p className="mt-1 text-xs font-medium text-error" role="alert">{errores.fecha}</p>
-                )}
               </div>
               <div>
                 <label
                   htmlFor="input-hora-inicio-reserva"
-                  className="block text-sm font-semibold text-texto"
+                  className="block text-xs font-semibold uppercase tracking-wide text-texto-suave mb-1"
                 >
                   Hora de inicio *
                 </label>
@@ -758,11 +790,11 @@ export default function ReservarMaterial() {
                   type="time"
                   value={horaInicio}
                   min={obtenerMinimaHoraInicioReserva(fechaSeleccionada)}
-                  max={`${String(HORA_RESERVA_MAXIMO_FIN).padStart(2, '0')}:00`}
+                  max={TEXTO_HORA_RESERVA_MAXIMO_FIN}
                   step="60"
                   aria-invalid={Boolean(errores.horaInicio)}
                   onChange={(e) => actualizarHoraInicioAvanzada(e.target.value)}
-                  className="mt-1.5 w-full rounded-lg border border-borde bg-white px-3 py-2 text-sm text-texto dark:bg-superficie"
+                  className="w-full rounded-lg border border-borde bg-white px-3 py-2 text-sm text-texto dark:bg-superficie"
                 />
                 {errores.horaInicio && (
                   <p className="mt-1 text-xs font-medium text-error" role="alert">{errores.horaInicio}</p>
@@ -771,7 +803,7 @@ export default function ReservarMaterial() {
               <div>
                 <label
                   htmlFor="input-hora-fin-reserva"
-                  className="block text-sm font-semibold text-texto"
+                  className="block text-xs font-semibold uppercase tracking-wide text-texto-suave mb-1"
                 >
                   Hora de fin *
                 </label>
@@ -780,69 +812,47 @@ export default function ReservarMaterial() {
                   type="time"
                   value={horaFin}
                   min={obtenerMinimaHoraFinReserva(horaInicio)}
-                  max={`${String(HORA_RESERVA_MAXIMO_FIN).padStart(2, '0')}:00`}
+                  max={TEXTO_HORA_RESERVA_MAXIMO_FIN}
                   step="60"
                   disabled={!inicioValidoParaFin}
                   aria-invalid={Boolean(errores.horaFin)}
                   onChange={(e) => actualizarHoraFinAvanzada(e.target.value)}
-                  className="mt-1.5 w-full rounded-lg border border-borde bg-white px-3 py-2 text-sm text-texto dark:bg-superficie"
+                  className="w-full rounded-lg border border-borde bg-white px-3 py-2 text-sm text-texto dark:bg-superficie"
                 />
                 {errores.horaFin && (
                   <p className="mt-1 text-xs font-medium text-error" role="alert">{errores.horaFin}</p>
                 )}
               </div>
               <p className="text-xs text-texto-suave col-span-3">
-                Elige un día laborable futuro. Para materiales avanzados, inicio y fin deben ser el mismo día, entre {HORA_RESERVA_MINIMO_INICIO}:00 y {HORA_RESERVA_MAXIMO_FIN}:00. El fin se habilita cuando el inicio sea válido.
+                El recojo y la devolución son de lunes a viernes, entre 08:00 y {TEXTO_HORA_RESERVA_MAXIMO_FIN}. La tolerancia dura 30 minutos.
               </p>
             </div>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label
-                  htmlFor="input-fecha-inicio-reserva"
-                  className="block text-sm font-semibold text-texto"
-                >
-                  Fecha y hora de inicio *
-                </label>
-                <input
+                <SelectorFechaHoraDesplegable
                   id="input-fecha-inicio-reserva"
-                  type="datetime-local"
-                  value={fechaInicio}
-                  min={obtenerMinimoInicioReserva()}
-                  step="60"
-                  aria-invalid={Boolean(errores.fechaInicio)}
-                  onChange={(e) => actualizarFechaInicioReserva(e.target.value)}
-                  className="mt-1.5 w-full rounded-lg border border-borde bg-white px-3 py-2 text-sm text-texto dark:bg-superficie"
+                  etiqueta="Fecha y hora de inicio *"
+                  valor={fechaInicio}
+                  minFecha={obtenerMinimoInicioReserva()?.slice(0, 10)}
+                  error={errores.fechaInicio}
+                  onCambio={(nuevoValor) => actualizarFechaInicioReserva(nuevoValor)}
                 />
-                {errores.fechaInicio && (
-                  <p className="mt-1 text-xs font-medium text-error" role="alert">{errores.fechaInicio}</p>
-                )}
               </div>
               <div>
-                <label
-                  htmlFor="input-fecha-fin-reserva"
-                  className="block text-sm font-semibold text-texto"
-                >
-                  Fecha y hora de fin *
-                </label>
-                <input
+                <SelectorFechaHoraDesplegable
                   id="input-fecha-fin-reserva"
-                  type="datetime-local"
-                  value={fechaFin}
-                  min={obtenerMinimoFinReserva(fechaInicio) || undefined}
-                  max={obtenerMaximoFinReserva(fechaInicio, materialSeleccionado) || undefined}
-                  step="60"
-                  disabled={!inicioValidoParaFin}
-                  aria-invalid={Boolean(errores.fechaFin)}
-                  onChange={(e) => actualizarFechaFinReserva(e.target.value)}
-                  className="mt-1.5 w-full rounded-lg border border-borde bg-white px-3 py-2 text-sm text-texto dark:bg-superficie"
+                  etiqueta="Fecha y hora de fin *"
+                  valor={fechaFin}
+                  minFecha={fechaInicio ? fechaInicio.slice(0, 10) : obtenerMinimoInicioReserva()?.slice(0, 10)}
+                  maxFecha={obtenerMaximoFinReserva(fechaInicio, materialSeleccionado)}
+                  deshabilitado={!inicioValidoParaFin}
+                  error={errores.fechaFin}
+                  onCambio={(nuevoValor) => actualizarFechaFinReserva(nuevoValor)}
                 />
-                {errores.fechaFin && (
-                  <p className="mt-1 text-xs font-medium text-error" role="alert">{errores.fechaFin}</p>
-                )}
               </div>
               <p className="text-xs text-texto-suave col-span-2">
-                Selecciona primero el inicio. El recojo y la devolución deben ser de lunes a viernes entre {HORA_RESERVA_MINIMO_INICIO}:00 y {HORA_RESERVA_MAXIMO_FIN}:00 (mínimo 1 hora{materialSeleccionado?.tiempo_maximo_prestamo ? `, máximo ${formatearDuracionMinutos(materialSeleccionado.tiempo_maximo_prestamo)} hábiles` : ''}). Puedes cruzar sábado y domingo: los fines de semana no se descuentan del tiempo máximo de préstamo del material.
+                Selecciona primero el inicio. El recojo y la devolución son de lunes a viernes entre 08:00 y {TEXTO_HORA_RESERVA_MAXIMO_FIN}. La tolerancia llega hasta las 18:00. Debe haber al menos 1 hora entre el recojo y la devolución.
               </p>
               {cruzaFinDeSemana(fechaInicio, fechaFin) && (
                 <div
@@ -850,12 +860,12 @@ export default function ReservarMaterial() {
                   className="col-span-2 rounded-lg border border-acento-300 bg-acento-50/70 p-3 text-xs text-acento-900 dark:border-acento-800 dark:bg-acento-950/40 dark:text-acento-200 space-y-1"
                 >
                   <p className="font-bold">
-                    Aclaración sobre cruce de fin de semana (sábado y domingo):
+                    Aclaración sobre días de fin de semana intermedios:
                   </p>
                   <p>
-                    El rango seleccionado cruza el fin de semana (duración hábil contabilizada:{' '}
+                    Tu reserva incluye días de fin de semana intermedios (duración total contabilizada:{' '}
                     <strong>{formatearDuracionMinutos(calcularMinutosHabilesReserva(fechaInicio, fechaFin))}</strong>).
-                    Dado que el almacén no atiende sábados ni domingos, esos días no consumen tu tiempo máximo de préstamo y deberás devolver el ejemplar el día hábil elegido dentro del horario de atención ({HORA_RESERVA_MINIMO_INICIO}:00 a {HORA_RESERVA_MAXIMO_FIN}:00).
+                    Recojo y devolución pactados: lunes a viernes de 08:00 a 17:30. La tolerancia de recojo termina a las 18:00.
                   </p>
                 </div>
               )}
@@ -928,8 +938,8 @@ export default function ReservarMaterial() {
                       Compromiso de responsabilidad firmado (PDF) *
                     </label>
                     <a
-                      href="/compromiso_responsabilidad.pdf"
-                      download="compromiso_responsabilidad.pdf"
+                      href={URL_FORMATO_COMPROMISO_RESPONSABILIDAD}
+                      download={NOMBRE_FORMATO_COMPROMISO_RESPONSABILIDAD}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-1 text-xs font-semibold text-marca-700 hover:text-marca-800 underline dark:text-marca-400"
@@ -980,9 +990,7 @@ export default function ReservarMaterial() {
             >
               {aplicaExcepcion
                 ? 'Enviar solicitud de excepción académica'
-                : unidadesDisponibles > 0
-                  ? 'Confirmar reserva (24 h)'
-                  : 'Unirse a lista de espera (72 h)'}
+                : 'Confirmar reserva'}
             </Boton>
             <Boton
               tipo="button"

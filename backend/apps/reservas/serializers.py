@@ -4,6 +4,7 @@ from django.conf import settings
 from django.utils import timezone
 from rest_framework import serializers
 
+from apps.compartido.serializers import RechazarCamposNoPermitidosMixin
 from apps.inventario.models import InstanciaMaterial, Material
 from apps.prestamos.constants import TAMANO_MAXIMO_SOLICITUD_BYTES
 from apps.prestamos.validators import validar_pdf_garantia
@@ -11,6 +12,8 @@ from apps.reservas.constants import (
     DIAS_LABORABLES,
     HORA_RESERVA_MAXIMO_FIN,
     HORA_RESERVA_MINIMO_INICIO,
+    MINUTO_RESERVA_MAXIMO_FIN,
+    TOLERANCIA_RECOJO_MINUTOS,
     HORARIO_ATENCION_FIN,
     HORARIO_ATENCION_INICIO,
     MENSAJES_ERROR_RESERVA,
@@ -77,16 +80,26 @@ class CrearReservaSerializer(serializers.Serializer):
                         etiqueta: "La reserva solo puede realizarse de lunes a viernes (días laborables).",
                     })
                 minutos_dia = valor.hour * 60 + valor.minute
-                if not (HORA_RESERVA_MINIMO_INICIO * 60 <= minutos_dia <= HORA_RESERVA_MAXIMO_FIN * 60):
+                if not (
+                    HORA_RESERVA_MINIMO_INICIO * 60
+                    <= minutos_dia
+                    <= HORA_RESERVA_MAXIMO_FIN * 60 + MINUTO_RESERVA_MAXIMO_FIN
+                ):
                     raise serializers.ValidationError({
                         etiqueta: (
                             f"La reserva debe estar dentro del horario de atención "
-                            f"({HORA_RESERVA_MINIMO_INICIO}:00 a {HORA_RESERVA_MAXIMO_FIN}:00)."
+                            f"({HORA_RESERVA_MINIMO_INICIO:02d}:00 a "
+                            f"{HORA_RESERVA_MAXIMO_FIN:02d}:{MINUTO_RESERVA_MAXIMO_FIN:02d})."
                         ),
                     })
-            if calcular_minutos_habiles(fecha_inicio, fecha_fin) < MINIMO_MINUTOS_RESERVA:
+            minutos_rango = calcular_minutos_habiles(fecha_inicio, fecha_fin)
+            if minutos_rango < MINIMO_MINUTOS_RESERVA:
                 raise serializers.ValidationError({
                     "fecha_fin": "La reserva debe tener una duración mínima de 1 hora (60 minutos).",
+                })
+            if minutos_rango < MINIMO_MINUTOS_RESERVA + TOLERANCIA_RECOJO_MINUTOS:
+                raise serializers.ValidationError({
+                    "fecha_fin": "Debe haber al menos 1 hora entre el límite de recojo y la devolución pactada.",
                 })
         return attrs
 
@@ -291,3 +304,43 @@ class ColaMaterialSerializer(serializers.Serializer):
     en_espera_excepciones = ReservaDetalleSerializer(many=True, read_only=True)
     reservas_confirmadas = ReservaDetalleSerializer(many=True, read_only=True)
     instancias_disponibles = InstanciaResumenReservaSerializer(many=True, read_only=True)
+
+
+class CrearDiaNoLaborableSerializer(RechazarCamposNoPermitidosMixin, serializers.Serializer):
+    """Valida el registro administrativo de un día no laborable/feriado."""
+
+    fecha = serializers.DateField(
+        error_messages={
+            "required": "La fecha es obligatoria.",
+            "invalid": "Ingresa una fecha válida en formato AAAA-MM-DD.",
+        }
+    )
+    motivo = serializers.CharField(
+        max_length=200,
+        error_messages={
+            "required": "El motivo es obligatorio.",
+            "blank": "El motivo es obligatorio.",
+        },
+    )
+
+    def validate_motivo(self, value):
+        limpio = value.strip()
+        if not limpio:
+            raise serializers.ValidationError("El motivo es obligatorio.")
+        return limpio
+
+
+class DiaNoLaborableSerializer(serializers.Serializer):
+    """Representación JSON de un día inhabilitado por administración."""
+
+    id = serializers.IntegerField(read_only=True)
+    fecha = serializers.DateField(read_only=True)
+    motivo = serializers.CharField(read_only=True)
+    creado_por_nombre = serializers.SerializerMethodField()
+    created_at = serializers.DateTimeField(read_only=True)
+
+    def get_creado_por_nombre(self, obj):
+        usuario = getattr(obj, "creado_por", None)
+        if usuario is None:
+            return ""
+        return f"{usuario.nombre} {usuario.apellido}".strip()

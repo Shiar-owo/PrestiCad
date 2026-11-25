@@ -13,6 +13,7 @@ from apps.inventario.constants import (
     ESTADOS_INICIALES_INSTANCIA,
     ESTADOS_INSTANCIA,
     ESTADOS_MATERIAL,
+    MAXIMO_TIEMPO_MAXIMO_PRESTAMO_DIAS,
     MAXIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS,
     MINIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS,
     MODOS_REGISTRO_MATERIAL,
@@ -33,6 +34,8 @@ MENSAJES_CODIGO = {
     "max_length": "El Código de Material admite máximo 30 caracteres.",
 }
 
+MENSAJE_COSTO_NEGATIVO = "El costo no puede ser negativo."
+
 MENSAJES_STOCK = {
     "min_value": "El stock debe ser al menos 1 unidad.",
     "invalid": "Ingresa un stock numérico.",
@@ -41,12 +44,14 @@ MENSAJES_STOCK = {
 MENSAJES_TIEMPO_MAXIMO_PRESTAMO = {
     "min_value": (
         f"El tiempo máximo de préstamo del material debe estar entre "
-        f"{MINIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS} minutos y 15 días "
+        f"{MINIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS} minutos y "
+        f"{MAXIMO_TIEMPO_MAXIMO_PRESTAMO_DIAS} días "
         f"({MAXIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS} minutos)."
     ),
     "max_value": (
         f"El tiempo máximo de préstamo del material debe estar entre "
-        f"{MINIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS} minutos y 15 días "
+        f"{MINIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS} minutos y "
+        f"{MAXIMO_TIEMPO_MAXIMO_PRESTAMO_DIAS} días "
         f"({MAXIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS} minutos)."
     ),
     "invalid": "El tiempo máximo de préstamo debe ser un número entero de minutos.",
@@ -296,6 +301,22 @@ class MaterialRegistroSerializer(RechazarCamposNoPermitidosMixin, serializers.Mo
         required=False,
         error_messages={"required": "El precio es obligatorio.", "min_value": "El precio no puede ser negativo."},
     )
+    costo_reparacion = serializers.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        min_value=0,
+        required=False,
+        allow_null=True,
+        error_messages={"min_value": MENSAJE_COSTO_NEGATIVO},
+    )
+    costo_reposicion = serializers.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        min_value=0,
+        required=False,
+        allow_null=True,
+        error_messages={"min_value": MENSAJE_COSTO_NEGATIVO},
+    )
     estado = serializers.ChoiceField(
         choices=ESTADOS_INICIALES_INSTANCIA,
         required=False,
@@ -371,12 +392,6 @@ class MaterialRegistroSerializer(RechazarCamposNoPermitidosMixin, serializers.Mo
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
-        tier = attrs.get("tier_minimo_requerido")
-        tiempo_max = attrs.get("tiempo_maximo_prestamo")
-        if tier == "avanzado" and tiempo_max and tiempo_max > 480:
-            raise serializers.ValidationError(
-                {"tiempo_maximo_prestamo": "El tiempo máximo de préstamo para materiales de tier avanzado no puede superar 8 horas (480 minutos)."}
-            )
         modo = attrs.get("modo", "unico")
         filas = attrs.get("instancias")
         if modo in ("lote", "detalle"):
@@ -417,6 +432,22 @@ class MaterialActualizacionSerializer(RechazarCamposNoPermitidosMixin, serialize
     )
     stock = serializers.IntegerField(required=False, min_value=1, error_messages=MENSAJES_STOCK)
     precio = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=0, required=False)
+    costo_reparacion = serializers.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        min_value=0,
+        required=False,
+        allow_null=True,
+        error_messages={"min_value": MENSAJE_COSTO_NEGATIVO},
+    )
+    costo_reposicion = serializers.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        min_value=0,
+        required=False,
+        allow_null=True,
+        error_messages={"min_value": MENSAJE_COSTO_NEGATIVO},
+    )
     tiempo_maximo_prestamo = serializers.IntegerField(
         required=False,
         min_value=MINIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS,
@@ -432,18 +463,6 @@ class MaterialActualizacionSerializer(RechazarCamposNoPermitidosMixin, serialize
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
-        tier = attrs.get(
-            "tier_minimo_requerido",
-            getattr(self.instance, "tier_minimo_requerido", None),
-        )
-        tiempo_max = attrs.get(
-            "tiempo_maximo_prestamo",
-            getattr(self.instance, "tiempo_maximo_prestamo", None),
-        )
-        if tier == "avanzado" and tiempo_max and tiempo_max > 480:
-            raise serializers.ValidationError(
-                {"tiempo_maximo_prestamo": "El tiempo máximo de préstamo para materiales de tier avanzado no puede superar 8 horas (480 minutos)."}
-            )
         return attrs
 
     class Meta:

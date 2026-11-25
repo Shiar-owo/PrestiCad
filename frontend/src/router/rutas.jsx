@@ -24,6 +24,7 @@ import GestionarPrestamos, {
 import ReportesDanos from '../pages/ReportesDanos'
 import PerfilUsuario from '../pages/PerfilUsuario'
 import UsuariosRoles from '../pages/UsuariosRoles'
+import DiasNoLaborables from '../pages/DiasNoLaborables'
 import Pagina404 from '../pages/Pagina404'
 
 function RutaLogin() {
@@ -162,6 +163,16 @@ function Rutas() {
           <RequerirSesion>
             <RequerirRol roles={['administrador']}>
               <UsuariosRoles />
+            </RequerirRol>
+          </RequerirSesion>
+        }
+      />
+      <Route
+        path="/admin/dias-no-laborables"
+        element={
+          <RequerirSesion>
+            <RequerirRol roles={['administrador']}>
+              <DiasNoLaborables />
             </RequerirRol>
           </RequerirSesion>
         }

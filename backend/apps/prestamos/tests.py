@@ -1,7 +1,7 @@
 """Pruebas de reglas y API para HU09 — registrar la entrega de un préstamo."""
 import atexit
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 import json
 import tempfile
 import unittest
@@ -85,12 +85,20 @@ def registrar_prestamo(**datos):
         "fotos_checklist",
         [crear_foto_checklist() for _ in datos.get("checklist_inicial", [])],
     )
-    with patch.object(
-        FotoChecklist._meta.get_field("imagen"),
-        "storage",
-        _ALMACENAMIENTO_FOTOS_TEST,
-    ):
-        return registrar_prestamo_real(**datos)
+    ahora = timezone.localtime(timezone.now())
+    contexto_hora = nullcontext()
+    if ahora.hour < 8 or ahora.hour > 18:
+        contexto_hora = patch(
+            "apps.prestamos.services.timezone.now",
+            return_value=ahora.replace(hour=10, minute=0, second=0, microsecond=0),
+        )
+    with contexto_hora:
+        with patch.object(
+            FotoChecklist._meta.get_field("imagen"),
+            "storage",
+            _ALMACENAMIENTO_FOTOS_TEST,
+        ):
+            return registrar_prestamo_real(**datos)
 
 
 def crear_pdf(nombre):
@@ -232,8 +240,8 @@ class AlmacenamientoGarantiaTestCase(SimpleTestCase):
         datos = {
             "dni_prestatario": "12345678",
             "material_id": "00000000-0000-0000-0000-000000000001",
-            "tiempo_prestamo_dias": "5",
-            "fecha_fin": (timezone.now() + timedelta(days=5)).isoformat(),
+            "tiempo_prestamo_dias": "3",
+            "fecha_fin": (timezone.now() + timedelta(days=3)).isoformat(),
             "checklist_inicial": json.dumps(CHECKLIST),
             "foto_checklist_0": crear_foto_checklist(),
             "foto_checklist_1": crear_foto_checklist(),
@@ -250,8 +258,8 @@ class AlmacenamientoGarantiaTestCase(SimpleTestCase):
         datos = {
             "dni_prestatario": "12345678",
             "material_id": "00000000-0000-0000-0000-000000000001",
-            "tiempo_prestamo_dias": "5",
-            "fecha_fin": (timezone.now() + timedelta(days=5)).isoformat(),
+            "tiempo_prestamo_dias": "3",
+            "fecha_fin": (timezone.now() + timedelta(days=3)).isoformat(),
             "checklist_inicial": json.dumps(CHECKLIST),
             "foto_checklist_0": crear_foto_checklist(),
             "foto_checklist_1": crear_foto_checklist(),
@@ -272,7 +280,7 @@ class AlmacenamientoGarantiaTestCase(SimpleTestCase):
         datos = {
             "dni_prestatario": "12345678",
             "material_id": "00000000-0000-0000-0000-000000000001",
-            "tiempo_prestamo_dias": "5",
+            "tiempo_prestamo_dias": "3",
             "checklist_inicial": json.dumps([
                 {"elemento": "Equipo", "condicion": "Dato antiguo", "observacion": ""},
             ]),
@@ -356,7 +364,9 @@ class RegistrarPrestamoServiceTestCase(TestCase):
         self.assertEqual(prestamo.garantia, garantia)
 
     def test_registra_prestamo_activo_con_fecha_limite_y_checklist(self):
-        antes = timezone.now()
+        antes = timezone.localtime(timezone.now())
+        if antes.hour < 8 or antes.hour > 18:
+            antes = antes.replace(hour=10, minute=0, second=0, microsecond=0)
 
         prestamo = self._registrar()
 
@@ -389,18 +399,25 @@ class RegistrarPrestamoServiceTestCase(TestCase):
             self._registrar(tiempo_prestamo_dias=16)
 
         self.assertEqual(contexto.exception.campo, "tiempo_prestamo_dias")
+        self.assertIn("15 días", contexto.exception.mensaje)
+
+        with self.assertRaises(PrestamoError) as contexto_minutos:
+            self._registrar(tiempo_prestamo_minutos=21571, tiempo_prestamo_dias=None)
+
+        self.assertEqual(contexto_minutos.exception.campo, "tiempo_prestamo_minutos")
+        self.assertIn("14 días, 23 horas y 30 minutos", contexto_minutos.exception.mensaje)
         self.assertEqual(Prestamo.objects.count(), 0)
 
-    def test_limita_duracion_minima_1_hora_y_maxima_del_material(self):
+    def test_limita_duracion_minima_1_hora_y_tier_avanzado_hasta_3_dias(self):
         gafas_vr = crear_material(
             codigo_material="EQ-VR-01",
             nombre="Gafas VR",
             tipo="equipo",
             tier_minimo_requerido="avanzado",
-            tiempo_maximo_prestamo=480,
+            tiempo_maximo_prestamo=4320,
             stock=2,
         )
-        self.assertEqual(gafas_vr.tiempo_maximo_prestamo, 480)
+        self.assertEqual(gafas_vr.tiempo_maximo_prestamo, 4320)
         avanzado = crear_usuario(
             "avanzado@unsa.edu.pe",
             "10000011",
@@ -430,26 +447,16 @@ class RegistrarPrestamoServiceTestCase(TestCase):
             timedelta(hours=1),
         )
 
-        with self.assertRaises(PrestamoError) as error_maximo_vr:
-            self._registrar(
-                dni_prestatario=avanzado.dni,
-                material_id=gafas_vr.id,
-                tiempo_prestamo_minutos=481,
-                tiempo_prestamo_dias=None,
-            )
-        self.assertEqual(error_maximo_vr.exception.campo, "tiempo_prestamo_minutos")
-        self.assertIn("8 horas", error_maximo_vr.exception.mensaje)
-
-        prestamo_vr_8h = self._registrar(
+        prestamo_vr_mas_de_8h = self._registrar(
             dni_prestatario=avanzado.dni,
             material_id=gafas_vr.id,
-            tiempo_prestamo_minutos=480,
+            tiempo_prestamo_minutos=540,
             tiempo_prestamo_dias=None,
         )
-        self.assertEqual(prestamo_vr_8h.tiempo_prestamo_minutos, 480)
+        self.assertEqual(prestamo_vr_mas_de_8h.tiempo_prestamo_minutos, 540)
         self.assertEqual(
-            prestamo_vr_8h.fecha_limite - prestamo_vr_8h.fecha_entrega,
-            timedelta(hours=8),
+            prestamo_vr_mas_de_8h.fecha_limite - prestamo_vr_mas_de_8h.fecha_entrega,
+            timedelta(minutes=540),
         )
 
     def test_rechaza_alta_sin_una_foto_por_elemento(self):
@@ -798,17 +805,21 @@ class RegistrarPrestamoConcurrenciaTestCase(TransactionTestCase):
         material = crear_material(codigo_material="EQ-CONCURRENCIA")
         instancia_id = material.instancias.get().id
         barrera = Barrier(2)
+        ahora_laborable = timezone.localtime(timezone.now()).replace(
+            hour=10, minute=0, second=0, microsecond=0
+        )
 
         def registrar(dni):
             close_old_connections()
             try:
                 barrera.wait(timeout=10)
-                prestamo = registrar_prestamo(
+                prestamo = registrar_prestamo_real(
                     dni_prestatario=dni,
                     material_id=material.id,
                     instancia_id=instancia_id,
                     tiempo_prestamo_dias=3,
                     checklist_inicial=CHECKLIST,
+                    fotos_checklist=[crear_foto_checklist() for _ in CHECKLIST],
                     registrado_por=gestor,
                 )
                 return ("registrado", prestamo.id)
@@ -817,10 +828,21 @@ class RegistrarPrestamoConcurrenciaTestCase(TransactionTestCase):
             finally:
                 close_old_connections()
 
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            resultados = list(
-                executor.map(registrar, [usuario.dni for usuario in prestatarios])
-            )
+        with (
+            patch(
+                "apps.prestamos.services.timezone.now",
+                return_value=ahora_laborable,
+            ),
+            patch.object(
+                FotoChecklist._meta.get_field("imagen"),
+                "storage",
+                _ALMACENAMIENTO_FOTOS_TEST,
+            ),
+        ):
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                resultados = list(
+                    executor.map(registrar, [usuario.dni for usuario in prestatarios])
+                )
 
         self.assertEqual(sum(resultado[0] == "registrado" for resultado in resultados), 1)
         self.assertEqual(resultados.count(("rechazado", 409)), 1)
@@ -1041,6 +1063,8 @@ class HistorialPrestamosAPITestCase(APITestCase):
     CAMPOS_HISTORIAL = {
         "id",
         "prestatario_nombre",
+        "entregado_por",
+        "recibido_por",
         "material_id",
         "material_nombre",
         "material_codigo",
@@ -1308,6 +1332,75 @@ class HistorialPrestamosAPITestCase(APITestCase):
         respuesta = self.client.get(self.URL_DETALLE.format(prestamo_id=999999))
 
         self.assertEqual(respuesta.status_code, 404)
+
+    def test_historial_y_detalle_exponen_entregado_por_y_recibido_por(self):
+        prestamo = self._crear_prestamo(self.prestatario, "HIST-ACTORES-001")
+        self._iniciar_sesion(self.gestor)
+
+        detalle_activo = self.client.get(self.URL_DETALLE.format(prestamo_id=prestamo.id))
+        self.assertEqual(detalle_activo.status_code, 200)
+        datos_activo = detalle_activo.json()
+        self.assertEqual(
+            datos_activo["entregado_por"],
+            {
+                "nombre": f"{self.gestor.nombre} {self.gestor.apellido}".strip(),
+                "dni": self.gestor.dni,
+                "rol": "gestor",
+                "rol_display": "Gestor de Almacén",
+            },
+        )
+        self.assertIsNone(datos_activo["recibido_por"])
+
+        registrar_devolucion(
+            prestamo_id=prestamo.id,
+            checklist_devolucion=[
+                {"elemento": "Carcasa", "estado": "sin_cambios", "observacion": ""},
+                {"elemento": "Cable", "estado": "sin_cambios", "observacion": ""},
+            ],
+            realizado_por=self.administrador,
+        )
+
+        detalle_devuelto = self.client.get(self.URL_DETALLE.format(prestamo_id=prestamo.id))
+        self.assertEqual(detalle_devuelto.status_code, 200)
+        datos_devuelto = detalle_devuelto.json()
+        self.assertEqual(
+            datos_devuelto["recibido_por"],
+            {
+                "nombre": f"{self.administrador.nombre} {self.administrador.apellido}".strip(),
+                "dni": self.administrador.dni,
+                "rol": "administrador",
+                "rol_display": "Administrador",
+            },
+        )
+
+        listado = self.client.get(self.URL)
+        self.assertEqual(listado.status_code, 200)
+        fila = next(item for item in listado.json()["results"] if item["id"] == prestamo.id)
+        self.assertEqual(fila["entregado_por"]["dni"], self.gestor.dni)
+        self.assertEqual(fila["recibido_por"]["dni"], self.administrador.dni)
+
+    def test_historial_filtra_por_nombre_y_apellido_de_prestatario(self):
+        self.prestatario.nombre = "Valeria"
+        self.prestatario.apellido = "Caceres"
+        self.prestatario.save(update_fields=["nombre", "apellido"])
+        self.otro_prestatario.nombre = "Diego"
+        self.otro_prestatario.apellido = "Paredes"
+        self.otro_prestatario.save(update_fields=["nombre", "apellido"])
+
+        prestamo_valeria = self._crear_prestamo(self.prestatario, "HIST-NOMBRE-001")
+        self._crear_prestamo(self.otro_prestatario, "HIST-NOMBRE-002")
+        self._iniciar_sesion(self.gestor)
+
+        for consulta in ("valeria", "caceres", "valeria caceres", "CACERES val"):
+            with self.subTest(consulta=consulta):
+                respuesta = self.client.get(self.URL, {"nombre": consulta})
+                self.assertEqual(respuesta.status_code, 200)
+                ids = [item["id"] for item in respuesta.json()["results"]]
+                self.assertEqual(ids, [prestamo_valeria.id])
+
+        sin_coincidencia = self.client.get(self.URL, {"nombre": "Inexistente"})
+        self.assertEqual(sin_coincidencia.status_code, 200)
+        self.assertEqual(sin_coincidencia.json()["count"], 0)
 
 
 class HistorialMaterialAPITestCase(APITestCase):
@@ -1580,6 +1673,14 @@ class RegistrarPrestamoAPITestCase(APITestCase):
     URL = "/api/prestamos/"
 
     def setUp(self):
+        parche_hora_laboral = patch(
+            "apps.prestamos.services.timezone.now",
+            return_value=timezone.localtime(timezone.now()).replace(
+                hour=10, minute=0, second=0, microsecond=0,
+            ),
+        )
+        parche_hora_laboral.start()
+        self.addCleanup(parche_hora_laboral.stop)
         self.gestor = crear_usuario("gestor-api@unsa.edu.pe", "20000001", rol="gestor")
         self.prestatario = crear_usuario("prestatario-api@unsa.edu.pe", "20000002")
         self.material = crear_material(codigo_material="API-001")
@@ -1590,15 +1691,22 @@ class RegistrarPrestamoAPITestCase(APITestCase):
         sesion[CLAVE_SESION_ULTIMA_ACTIVIDAD] = timezone.now().isoformat()
         sesion.save()
 
+    def _calcular_fecha_fin_valida(self, dias=2):
+        inicio = timezone.localtime(timezone.now()).replace(hour=10, minute=0, second=0, microsecond=0)
+        fecha = inicio + timedelta(minutes=dias * 1440 - 30)
+        while fecha.weekday() not in (0, 1, 2, 3, 4):
+            fecha -= timedelta(days=1)
+        return fecha.isoformat()
+
     def _payload(self, **cambios):
         if "fecha_fin" in cambios:
             fecha_fin = cambios["fecha_fin"]
         elif "tiempo_prestamo_minutos" in cambios and isinstance(cambios["tiempo_prestamo_minutos"], (int, float)):
-            fecha_fin = (timezone.now() + timedelta(minutes=cambios["tiempo_prestamo_minutos"] + 1)).isoformat()
+            fecha_fin = self._calcular_fecha_fin_valida(dias=1)
         elif "tiempo_prestamo_dias" in cambios and isinstance(cambios["tiempo_prestamo_dias"], (int, float)) and cambios["tiempo_prestamo_dias"] > 0:
-            fecha_fin = (timezone.now() + timedelta(days=cambios["tiempo_prestamo_dias"])).isoformat()
+            fecha_fin = self._calcular_fecha_fin_valida(dias=int(cambios["tiempo_prestamo_dias"]))
         else:
-            fecha_fin = (timezone.now() + timedelta(days=3)).isoformat()
+            fecha_fin = self._calcular_fecha_fin_valida(dias=3)
         datos = {
             "dni_prestatario": self.prestatario.dni,
             "material_id": str(self.material.id),
@@ -1715,7 +1823,7 @@ class RegistrarPrestamoAPITestCase(APITestCase):
         self.assertIn("3 días", str(fuera_material.json()["tiempo_prestamo_minutos"]))
         self.assertEqual(Prestamo.objects.count(), 0)
 
-    def test_post_rechaza_mas_de_8_horas_para_material_avanzado(self):
+    def test_post_permite_mas_de_8_horas_para_material_avanzado(self):
         avanzado = crear_usuario(
             "avanzado-api@unsa.edu.pe",
             "20000035",
@@ -1725,6 +1833,7 @@ class RegistrarPrestamoAPITestCase(APITestCase):
         material = crear_material(
             codigo_material="API-AVANZADO-01",
             tier_minimo_requerido="avanzado",
+            tiempo_maximo_prestamo=4320,
         )
         self._iniciar_sesion(self.gestor)
 
@@ -1739,9 +1848,39 @@ class RegistrarPrestamoAPITestCase(APITestCase):
             format="multipart",
         )
 
+        self.assertEqual(respuesta.status_code, 201, respuesta.content)
+        self.assertEqual(respuesta.json()["tiempo_prestamo_minutos"], 481)
+        self.assertEqual(Prestamo.objects.count(), 1)
+
+    def test_post_rechaza_fecha_fin_en_sabado_o_domingo(self):
+        self._iniciar_sesion(self.gestor)
+        sabado = timezone.localtime(timezone.now()).replace(hour=14, minute=0, second=0, microsecond=0) + timedelta(days=1)
+        while sabado.weekday() != 5:
+            sabado += timedelta(days=1)
+
+        respuesta = self.client.post(
+            self.URL,
+            self._payload_multipart(fecha_fin=sabado.isoformat()),
+            format="multipart",
+        )
         self.assertEqual(respuesta.status_code, 400)
-        self.assertIn("8 h (480 min)", str(respuesta.json()["tiempo_prestamo_minutos"]))
-        self.assertEqual(Prestamo.objects.count(), 0)
+        self.assertIn("fecha_fin", respuesta.json())
+        self.assertIn("laborable", str(respuesta.json()["fecha_fin"]))
+
+    def test_post_rechaza_fecha_fin_fuera_de_horario_atencion(self):
+        self._iniciar_sesion(self.gestor)
+        lunes = timezone.localtime(timezone.now()).replace(hour=18, minute=30, second=0, microsecond=0) + timedelta(days=1)
+        while lunes.weekday() != 0:
+            lunes += timedelta(days=1)
+
+        respuesta = self.client.post(
+            self.URL,
+            self._payload_multipart(fecha_fin=lunes.isoformat()),
+            format="multipart",
+        )
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn("fecha_fin", respuesta.json())
+        self.assertIn("horario de devolución", str(respuesta.json()["fecha_fin"]))
 
     def test_post_multipart_registra_garantia_y_parsea_checklist_json(self):
         self._iniciar_sesion(self.gestor)
@@ -1963,6 +2102,177 @@ class RegistrarPrestamoAPITestCase(APITestCase):
         self.assertEqual(respuesta.status_code, 403)
         self.assertEqual(Prestamo.objects.count(), 0)
 
+    def _crear_reserva_confirmada_hoy(self, hora_inicio=9, hora_fin=17):
+        """Crea una reserva en estado 'reservada' cuya fecha_inicio es hoy."""
+        from datetime import datetime, time as dtime
+        from apps.reservas.models import Reserva
+
+        hoy = timezone.localtime(timezone.now()).date()
+        tz = timezone.get_current_timezone()
+        inicio = timezone.make_aware(datetime.combine(hoy, dtime(hora_inicio, 0)), tz)
+        fin = timezone.make_aware(datetime.combine(hoy, dtime(hora_fin, 0)), tz)
+        instancia = self.material.instancias.get()
+        reserva = Reserva.objects.create(
+            usuario=self.prestatario,
+            material=self.material,
+            instancia=instancia,
+            fecha_inicio=inicio,
+            fecha_fin=fin,
+            estado="reservada",
+            fecha_confirmacion=timezone.now() - timedelta(hours=1),
+            fecha_limite_recojo=max(fin, timezone.now() + timedelta(minutes=30)),
+            justificacion="Test conversión mismo día",
+        )
+        instancia.estado = "reservado"
+        instancia.save(update_fields=["estado", "updated_at"])
+        return reserva
+
+    def _crear_reserva_confirmada_manana(self):
+        """Crea una reserva en estado 'reservada' cuya fecha_inicio es mañana."""
+        from datetime import datetime, time as dtime
+        from apps.reservas.models import Reserva
+
+        manana = timezone.localtime(timezone.now()).date() + timedelta(days=1)
+        # Ajustar al primer día laborable si mañana es fin de semana
+        while manana.weekday() >= 5:
+            manana += timedelta(days=1)
+        tz = timezone.get_current_timezone()
+        inicio = timezone.make_aware(datetime.combine(manana, dtime(9, 0)), tz)
+        fin = timezone.make_aware(datetime.combine(manana, dtime(17, 0)), tz)
+        instancia = self.material.instancias.get()
+        reserva = Reserva.objects.create(
+            usuario=self.prestatario,
+            material=self.material,
+            instancia=instancia,
+            fecha_inicio=inicio,
+            fecha_fin=fin,
+            estado="reservada",
+            fecha_confirmacion=timezone.now(),
+            fecha_limite_recojo=fin,
+            justificacion="Test conversión día futuro",
+        )
+        instancia.estado = "reservado"
+        instancia.save(update_fields=["estado", "updated_at"])
+        return reserva
+
+    def _crear_reserva_confirmada_ayer(self):
+        """
+        Crea una reserva en estado 'reservada' cuya fecha_inicio fue ayer
+        pero cuyo fecha_limite_recojo sigue vigente (dentro de las próximas horas).
+        Esto permite probar la validación del mismo día: ahora > fecha_inicio (pasa),
+        pero hoy != ayer.date() → debe fallar con 409.
+        """
+        from datetime import datetime, time as dtime
+        from apps.reservas.models import Reserva
+
+        ayer = timezone.localtime(timezone.now()).date() - timedelta(days=1)
+        # Ajustar al primer día laborable si ayer fue fin de semana
+        while ayer.weekday() >= 5:
+            ayer -= timedelta(days=1)
+        tz = timezone.get_current_timezone()
+        inicio = timezone.make_aware(datetime.combine(ayer, dtime(9, 0)), tz)
+        fin = timezone.make_aware(datetime.combine(ayer, dtime(17, 0)), tz)
+        instancia = self.material.instancias.get()
+        reserva = Reserva.objects.create(
+            usuario=self.prestatario,
+            material=self.material,
+            instancia=instancia,
+            fecha_inicio=inicio,
+            fecha_fin=fin,
+            estado="reservada",
+            fecha_confirmacion=inicio - timedelta(hours=2),
+            # fecha_limite_recojo: dentro de 1 hora, así la reserva sigue "vigente"
+            fecha_limite_recojo=timezone.now() + timedelta(hours=1),
+            justificacion="Test conversión día diferente",
+        )
+        instancia.estado = "reservado"
+        instancia.save(update_fields=["estado", "updated_at"])
+        return reserva
+
+    def test_post_conversion_rechaza_si_fecha_inicio_es_dia_diferente(self):
+        """
+        No se puede convertir una reserva cuyo fecha_inicio fue en un día diferente a hoy (409).
+        La reserva sigue vigente (fecha_limite_recojo en el futuro) pero el día de inicio
+        ya pasó y no es el día de hoy.
+        """
+        self._iniciar_sesion(self.gestor)
+        reserva = self._crear_reserva_confirmada_ayer()
+        instancia = self.material.instancias.get()
+
+        datos = self._payload_multipart(
+            reserva_id=str(reserva.id),
+            instancia_id=str(instancia.id),
+            material_id=str(self.material.id),
+            tiempo_prestamo_minutos=4290,
+        )
+
+        respuesta = self.client.post(self.URL, datos, format="multipart")
+
+        self.assertEqual(respuesta.status_code, 409, respuesta.content)
+        self.assertIn("reserva_id", respuesta.json())
+        self.assertIn("día de inicio reservado", str(respuesta.json()["reserva_id"]))
+        self.assertEqual(Prestamo.objects.count(), 0)
+
+    def test_post_conversion_acepta_si_fecha_inicio_es_hoy(self):
+        """La conversión es válida cuando fecha_inicio.date() == hoy."""
+        self._iniciar_sesion(self.gestor)
+        reserva = self._crear_reserva_confirmada_hoy(hora_inicio=9, hora_fin=17)
+        instancia = self.material.instancias.get()
+
+        datos = self._payload_multipart(
+            reserva_id=str(reserva.id),
+            instancia_id=str(instancia.id),
+            material_id=str(self.material.id),
+            tiempo_prestamo_minutos=4290,
+        )
+
+        with storage_garantias_temporal():
+            respuesta = self.client.post(self.URL, datos, format="multipart")
+
+        self.assertEqual(respuesta.status_code, 201, respuesta.content)
+        self.assertEqual(Prestamo.objects.count(), 1)
+        self.assertEqual(str(respuesta.json()["reserva_id"]), str(reserva.id))
+
+    def test_post_conversion_rechaza_si_hoy_aun_no_llega_hora_de_inicio(self):
+        """Una fecha que coincide no basta: la hora reservada también debe haber llegado."""
+        from datetime import datetime, time as dtime
+        from apps.reservas.models import Reserva
+
+        self._iniciar_sesion(self.gestor)
+        hoy = timezone.localtime(timezone.now()).date()
+        tz = timezone.get_current_timezone()
+        inicio = timezone.make_aware(datetime.combine(hoy, dtime(15, 0)), tz)
+        fin = timezone.make_aware(datetime.combine(hoy, dtime(17, 0)), tz)
+        instancia = self.material.instancias.get()
+        reserva = Reserva.objects.create(
+            usuario=self.prestatario,
+            material=self.material,
+            instancia=instancia,
+            fecha_inicio=inicio,
+            fecha_fin=fin,
+            estado="reservada",
+            fecha_confirmacion=timezone.now(),
+            fecha_limite_recojo=fin,
+            justificacion="Test antes de la hora reservada",
+        )
+        instancia.estado = "reservado"
+        instancia.save(update_fields=["estado", "updated_at"])
+        with patch("apps.prestamos.services.timezone.now", return_value=inicio - timedelta(minutes=1)):
+            with self.assertRaises(PrestamoError) as error:
+                registrar_prestamo(
+                    dni_prestatario=self.prestatario.dni,
+                    material_id=self.material.id,
+                    instancia_id=instancia.id,
+                    reserva_id=reserva.id,
+                    tiempo_prestamo_minutos=120,
+                    checklist_inicial=CHECKLIST,
+                    registrado_por=self.gestor,
+                )
+
+        self.assertEqual(error.exception.status_code, 409)
+        self.assertIn("antes de la fecha de inicio", error.exception.mensaje)
+        self.assertEqual(Prestamo.objects.count(), 0)
+
 
 class DescargarGarantiaAPITestCase(APITestCase):
     URL = "/api/prestamos/{prestamo_id}/garantia/{tipo}/"
@@ -2169,6 +2479,46 @@ class DescargarGarantiaAPITestCase(APITestCase):
 
             prestamo.garantia.refresh_from_db()
             self.assertEqual(prestamo.garantia.documento_identidad.name, nombre_anterior)
+
+    def test_no_permite_modificar_ni_eliminar_datos_o_garantia_de_prestamo_finalizado(self):
+        with storage_garantias_temporal():
+            prestamo = self._registrar_prestamo_con_garantia()
+            registrar_devolucion(
+                prestamo_id=prestamo.id,
+                checklist_devolucion=[
+                    {"elemento": "Carcasa", "estado": "sin_cambios", "observacion": ""},
+                    {"elemento": "Cable", "estado": "sin_cambios", "observacion": ""},
+                ],
+                realizado_por=self.gestor,
+            )
+            url_garantia = self.URL.format(
+                prestamo_id=prestamo.id,
+                tipo="documento-identidad",
+            )
+            self._iniciar_sesion(self.administrador)
+
+            reemplazo = self.client.patch(
+                url_garantia,
+                {"archivo": crear_pdf("nuevo.pdf")},
+                format="multipart",
+            )
+            self.assertEqual(reemplazo.status_code, 409)
+
+            eliminacion = self.client.patch(
+                url_garantia,
+                {"eliminar": "true"},
+                format="multipart",
+            )
+            self.assertEqual(eliminacion.status_code, 409)
+
+            # Los endpoints de préstamo e historial no admiten DELETE/PUT/PATCH
+            self.assertEqual(self.client.delete(f"/api/prestamos/{prestamo.id}/").status_code, 405)
+            self.assertEqual(self.client.put(f"/api/prestamos/{prestamo.id}/", {}, format="json").status_code, 405)
+            self.assertEqual(self.client.delete(f"/api/prestamos/{prestamo.id}/historial/").status_code, 405)
+
+            prestamo.garantia.refresh_from_db()
+            self.assertTrue(prestamo.garantia.documento_identidad)
+            self.assertTrue(prestamo.garantia.compromiso_responsabilidad)
 
     def test_descarga_informa_prestamo_o_documento_inexistente(self):
         self._iniciar_sesion(self.gestor)

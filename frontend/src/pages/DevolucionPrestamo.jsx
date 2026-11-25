@@ -27,6 +27,7 @@ import ErrorAlerta from '../components/ui/ErrorAlerta'
 import EstadoVacio from '../components/ui/EstadoVacio'
 import BadgeEstado from '../components/ui/BadgeEstado'
 import AdvertenciaModal from '../components/ui/AdvertenciaModal'
+import ExitoModal from '../components/ui/ExitoModal'
 
 const OPCIONES_ESTADO = ESTADOS_CHECKLIST_DEVOLUCION.map((valor) => ({
   valor,
@@ -157,6 +158,7 @@ function DevolucionPrestamo() {
   const [guardando, setGuardando] = useState(false)
   const [errorEnvio, setErrorEnvio] = useState('')
   const [resultado, setResultado] = useState(null)
+  const [mensajePopupExito, setMensajePopupExito] = useState('')
   const [elementosSinFoto, setElementosSinFoto] = useState(null)
   const formularioRef = useRef(null)
   const referenciasFotos = useRef([])
@@ -322,6 +324,7 @@ function DevolucionPrestamo() {
         formulario,
       )
       setResultado(respuesta)
+      setMensajePopupExito(`La devolución del préstamo #${prestamoId} quedó registrada correctamente.`)
       setEtapa('exito')
       urlsTemporales.current.forEach((url) => URL.revokeObjectURL(url))
       urlsTemporales.current.clear()
@@ -403,6 +406,12 @@ function DevolucionPrestamo() {
 
   if (etapa === 'exito' && resultado) {
     return (
+      <>
+      <ExitoModal
+        titulo="Devolución registrada"
+        mensaje={mensajePopupExito}
+        onCerrar={() => setMensajePopupExito('')}
+      />
       <section aria-labelledby="titulo-devolucion-exito">
         <header className="mb-5">
           <h2 id="titulo-devolucion-exito" className="text-xl font-bold text-texto">
@@ -447,6 +456,7 @@ function DevolucionPrestamo() {
           </Boton>
         </div>
       </section>
+      </>
     )
   }
 

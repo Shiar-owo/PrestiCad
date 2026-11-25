@@ -15,11 +15,11 @@ import {
 } from '../constantes/catalogo'
 import {
   DURACION_MAXIMA_MATERIAL_MINUTOS,
+  DURACION_MAXIMA_PRESTAMO_DIAS,
   DURACION_MINIMA_MATERIAL_MINUTOS,
   TIEMPO_MAXIMO_DEFAULT_POR_TIER,
-  UNIDADES_TIEMPO_PRESTAMO,
-  convertirTiempoAMinutos,
-  descomponerMinutosEnUnidad,
+  calcularMinutosDuracionPersonalizada,
+  limitarValorCampoDuracion,
 } from '../constantes/checklistPrestamo'
 import {
   MAXIMO_EJEMPLARES_REGISTRO,
@@ -32,6 +32,10 @@ import {
   validarCodigosDuplicados,
   validarFotosEjemplares,
 } from '../inventario/registroMaterial'
+import {
+  validarCostoMaterial,
+  validarCostosMaterial,
+} from '../inventario/validacionCostosMaterial'
 import Campo from './ui/Campo'
 import Boton from './ui/Boton'
 import Tarjeta from './ui/Tarjeta'
@@ -82,6 +86,8 @@ const ETIQUETAS_CAMPOS_ERROR = {
   estado: 'Estado',
   estado_inicial_ejemplares: 'Estado',
   tiempo_maximo_prestamo: 'Tiempo máximo de préstamo',
+  costo_reparacion: 'Costo de reparación',
+  costo_reposicion: 'Costo de reposición',
   foto: 'Foto',
   formulario: 'Registro',
 }
@@ -111,8 +117,9 @@ const DATOS_INICIALES = {
   foto: null,
   vistaPreviaFoto: '',
   tier_minimo_requerido: 'estandar',
-  tiempo_maximo_valor: '24',
-  tiempo_maximo_unidad: 'horas',
+  tiempo_maximo_dias: '1',
+  tiempo_maximo_horas: '0',
+  tiempo_maximo_minutos: '0',
   tiempo_maximo_personalizado: false,
   bonificacion_tiempo: '15',
   deduccion_tardanza: '10',
@@ -157,17 +164,18 @@ function crearDatosIniciales(material) {
   const tierInicial = material?.tier_minimo_requerido || 'estandar'
   const defaultTier =
     TIEMPO_MAXIMO_DEFAULT_POR_TIER[tierInicial] || TIEMPO_MAXIMO_DEFAULT_POR_TIER.estandar
-  const tiempoDescompuesto = material?.tiempo_maximo_prestamo
-    ? descomponerMinutosEnUnidad(material.tiempo_maximo_prestamo)
-    : { valor: defaultTier.valor, unidad: defaultTier.unidad }
-
+  const minutosIniciales = Math.min(
+    Number(material?.tiempo_maximo_prestamo || defaultTier.minutos),
+    DURACION_MAXIMA_MATERIAL_MINUTOS,
+  )
   return {
     ...DATOS_INICIALES,
     ...Object.fromEntries(
       Object.entries(DATOS_INICIALES).map(([campo, inicial]) => [campo, material?.[campo] ?? inicial]),
     ),
-    tiempo_maximo_valor: String(tiempoDescompuesto.valor),
-    tiempo_maximo_unidad: tiempoDescompuesto.unidad,
+    tiempo_maximo_dias: String(Math.floor(minutosIniciales / 1440)),
+    tiempo_maximo_horas: String(Math.floor((minutosIniciales % 1440) / 60)),
+    tiempo_maximo_minutos: String(minutosIniciales % 60),
     tiempo_maximo_personalizado: Boolean(material?.tiempo_maximo_prestamo),
     estado: obtenerEstadoGeneralInicial(material),
     modo: 'unico',
@@ -197,21 +205,19 @@ function validar(datos) {
     errores.codigo_material = errorCodigo
   }
 
-  if (datos.tiempo_maximo_valor !== '') {
-    const cantidad = Number(datos.tiempo_maximo_valor)
-    const minutos = convertirTiempoAMinutos(datos.tiempo_maximo_valor, datos.tiempo_maximo_unidad)
+  {
+    const minutos = calcularMinutosDuracionPersonalizada(
+      datos.tiempo_maximo_dias,
+      datos.tiempo_maximo_horas,
+      datos.tiempo_maximo_minutos,
+    )
     if (
-      !Number.isInteger(cantidad)
-      || cantidad <= 0
-      || !Number.isInteger(minutos)
+      !Number.isInteger(minutos)
       || minutos < DURACION_MINIMA_MATERIAL_MINUTOS
       || minutos > DURACION_MAXIMA_MATERIAL_MINUTOS
     ) {
       errores.tiempo_maximo_prestamo =
-        'El tiempo máximo de préstamo del material debe estar entre 1 hora (60 minutos) y 15 días (21600 minutos).'
-    } else if (datos.tier_minimo_requerido === 'avanzado' && minutos > 480) {
-      errores.tiempo_maximo_prestamo =
-        'El tiempo máximo de préstamo para materiales de tier avanzado no puede superar 8 horas (480 minutos).'
+        `El tiempo máximo de préstamo del material debe estar entre 1 hora (60 minutos) y ${DURACION_MAXIMA_PRESTAMO_DIAS} días (${DURACION_MAXIMA_MATERIAL_MINUTOS} minutos).`
     }
   }
 
@@ -222,11 +228,7 @@ function validar(datos) {
     }
   }
 
-  for (const campo of ['costo_reparacion', 'costo_reposicion']) {
-    if (datos[campo] !== '' && !Number.isFinite(Number(datos[campo]))) {
-      errores[campo] = 'Ingresa un monto o déjalo vacío.'
-    }
-  }
+  Object.assign(errores, validarCostosMaterial(datos))
 
   const errorFoto = validarFoto(datos.foto)
   if (errorFoto) {
@@ -354,6 +356,12 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
           ? (tierPrevioAAltoValor.current || 'estandar')
           : datos.tier_minimo_requerido
       if (antesEsAltoValor && !ahoraEsAltoValor) tierPrevioAAltoValor.current = null
+      if (reposicionVinculadaAlPrecio) {
+        setErrores((previos) => ({
+          ...previos,
+          costo_reposicion: validarCostoMaterial(valor),
+        }))
+      }
       setDatos((previos) => {
         const cambioTier = tierAutomatico !== previos.tier_minimo_requerido
         const defaultTiempoTier =
@@ -367,8 +375,10 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
             : {}),
           ...(cambioTier && !previos.tiempo_maximo_personalizado
             ? {
-              tiempo_maximo_valor: String(defaultTiempoTier.valor),
-              tiempo_maximo_unidad: defaultTiempoTier.unidad,
+              tiempo_maximo_dias: String(Math.floor(defaultTiempoTier.minutos / 1440)),
+              tiempo_maximo_horas: String(Math.floor((defaultTiempoTier.minutos % 1440) / 60)),
+              tiempo_maximo_minutos: String(defaultTiempoTier.minutos % 60),
+              tiempo_maximo_personalizado: false,
             }
             : {}),
           ...(reposicionVinculadaAlPrecio ? { costo_reposicion: valor } : {}),
@@ -378,6 +388,12 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
     }
     if (campo === 'costo_reposicion') {
       setReposicionVinculadaAlPrecio(false)
+    }
+    if (campo === 'costo_reparacion' || campo === 'costo_reposicion') {
+      setErrores((previos) => ({
+        ...previos,
+        [campo]: validarCostoMaterial(valor),
+      }))
     }
     if (campo === 'tier_minimo_requerido' && DEFAULTS_REPUTACION_POR_TIER[valor]) {
       setDatos((previos) => {
@@ -389,8 +405,10 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
           ...DEFAULTS_REPUTACION_POR_TIER[valor],
           ...(!previos.tiempo_maximo_personalizado
             ? {
-              tiempo_maximo_valor: String(defaultTiempoTier.valor),
-              tiempo_maximo_unidad: defaultTiempoTier.unidad,
+              tiempo_maximo_dias: String(Math.floor(defaultTiempoTier.minutos / 1440)),
+              tiempo_maximo_horas: String(Math.floor((defaultTiempoTier.minutos % 1440) / 60)),
+              tiempo_maximo_minutos: String(defaultTiempoTier.minutos % 60),
+              tiempo_maximo_personalizado: false,
             }
             : {}),
         }
@@ -416,7 +434,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
     }
     setDatos((previos) => {
       const siguientes = { ...previos, [campo]: valor }
-      if (campo === 'tiempo_maximo_valor' || campo === 'tiempo_maximo_unidad') {
+      if (campo === 'tiempo_maximo_dias' || campo === 'tiempo_maximo_horas' || campo === 'tiempo_maximo_minutos') {
         siguientes.tiempo_maximo_personalizado = true
       }
       return siguientes
@@ -506,12 +524,11 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
       cuerpo.tier_minimo_requerido = datos.tier_minimo_requerido
     }
 
-    if (datos.tiempo_maximo_valor !== '') {
-      cuerpo.tiempo_maximo_prestamo = convertirTiempoAMinutos(
-        datos.tiempo_maximo_valor,
-        datos.tiempo_maximo_unidad,
-      )
-    }
+    cuerpo.tiempo_maximo_prestamo = calcularMinutosDuracionPersonalizada(
+      datos.tiempo_maximo_dias,
+      datos.tiempo_maximo_horas,
+      datos.tiempo_maximo_minutos,
+    )
 
     for (const { campo } of CAMPOS_PUNTOS) {
       if (datos[campo] !== '') {
@@ -1232,26 +1249,49 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
                 ? 'Alto valor requiere Tier Avanzado.'
                 : ''}
             />
-            <div className="grid gap-2">
-              <div className="grid grid-cols-2 gap-2">
+            <div className="grid content-start gap-2">
+              <span className="text-sm font-semibold text-texto">Tiempo máximo de préstamo</span>
+              <div className="grid grid-cols-3 gap-2">
                 <Campo
-                  etiqueta="Tiempo máximo de préstamo"
+                  etiqueta="Días"
                   tipo="number"
-                  min="1"
+                  min="0"
+                  max={DURACION_MAXIMA_PRESTAMO_DIAS}
                   step="1"
-                  valor={datos.tiempo_maximo_valor}
-                  onCambio={(evento) => actualizar('tiempo_maximo_valor', evento.target.value)}
+                  valor={datos.tiempo_maximo_dias}
+                  onCambio={(evento) => actualizar(
+                    'tiempo_maximo_dias',
+                    limitarValorCampoDuracion('tiempo_maximo_dias', evento.target.value),
+                  )}
                   error={errores.tiempo_maximo_prestamo}
                 />
                 <Campo
-                  etiqueta="Unidad de tiempo"
-                  opciones={UNIDADES_TIEMPO_PRESTAMO}
-                  valor={datos.tiempo_maximo_unidad}
-                  onCambio={(evento) => actualizar('tiempo_maximo_unidad', evento.target.value)}
+                  etiqueta="Horas"
+                  tipo="number"
+                  min="0"
+                  max="23"
+                  step="1"
+                  valor={datos.tiempo_maximo_horas}
+                  onCambio={(evento) => actualizar(
+                    'tiempo_maximo_horas',
+                    limitarValorCampoDuracion('tiempo_maximo_horas', evento.target.value),
+                  )}
+                />
+                <Campo
+                  etiqueta="Minutos"
+                  tipo="number"
+                  min="0"
+                  max="59"
+                  step="1"
+                  valor={datos.tiempo_maximo_minutos}
+                  onCambio={(evento) => actualizar(
+                    'tiempo_maximo_minutos',
+                    limitarValorCampoDuracion('tiempo_maximo_minutos', evento.target.value),
+                  )}
                 />
               </div>
               <p className="text-xs text-texto-suave">
-                Mínimo 1 hora y máximo 15 días (por defecto según Tier: Avanzado 6 h, Estándar 24 h, Restringido 3 días).
+                Ingresa cualquier duración entre 1 hora y {DURACION_MAXIMA_PRESTAMO_DIAS} días. Valor predeterminado para todos los Tiers: 3 días.
               </p>
             </div>
             {CAMPOS_PUNTOS.map(({ campo, etiqueta }) => (
@@ -1273,6 +1313,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
               min="0"
               step="0.01"
               valor={datos.costo_reparacion}
+              ayuda="No puede ser negativo."
               onCambio={(evento) => actualizar('costo_reparacion', evento.target.value)}
               error={errores.costo_reparacion}
             />
@@ -1282,7 +1323,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
               min="0"
               step="0.01"
               valor={datos.costo_reposicion}
-              ayuda="Por defecto, se completa con el Precio. Puedes cambiarlo manualmente."
+              ayuda="Por defecto, se completa con el Precio. Puedes cambiarlo manualmente; no puede ser negativo."
               onCambio={(evento) => actualizar('costo_reposicion', evento.target.value)}
               error={errores.costo_reposicion}
             />

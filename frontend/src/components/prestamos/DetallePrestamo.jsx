@@ -3,13 +3,17 @@ import { ArrowLeft, ChevronLeft, ChevronRight, ExternalLink, RotateCcw, Trash2, 
 
 import { api, ErrorApi } from '../../api/client'
 import { ETIQUETAS_ESTADO, esMaterialAltoValor } from '../../constantes/catalogo'
-import { formatearDuracionMinutos } from '../../constantes/checklistPrestamo'
+import {
+  DURACION_MAXIMA_PRESTAMO_MINUTOS,
+  formatearDuracionMinutos,
+} from '../../constantes/checklistPrestamo'
 import { textoEstadoPrestamo } from '../../prestamos/estadoPrestamo'
 import BadgeEstado from '../ui/BadgeEstado'
 import Boton from '../ui/Boton'
 import ErrorAlerta from '../ui/ErrorAlerta'
 import Skeleton from '../ui/Skeleton'
 import Tarjeta from '../ui/Tarjeta'
+import ExitoModal from '../ui/ExitoModal'
 
 function mostrarFecha(fecha) {
   const valor = new Date(fecha)
@@ -19,6 +23,15 @@ function mostrarFecha(fecha) {
     dateStyle: 'medium',
     timeStyle: 'short',
   }).format(valor)
+}
+
+function formatearActorPrestamo(actor) {
+  if (!actor) return null
+  const partes = [actor.nombre]
+  if (actor.dni) partes.push(`DNI ${actor.dni}`)
+  const rol = actor.rol_display || actor.rol
+  if (rol) partes.push(rol)
+  return partes.filter(Boolean).join(' · ')
 }
 
 const DOCUMENTOS_GARANTIA = [
@@ -63,6 +76,7 @@ export default function DetallePrestamo({
   const [accion, setAccion] = useState('')
   const [error, setError] = useState('')
   const [errorArchivos, setErrorArchivos] = useState({})
+  const [mensajeExito, setMensajeExito] = useState('')
   const fileInputRef = useRef({})
 
   useEffect(() => {
@@ -89,8 +103,9 @@ export default function DetallePrestamo({
     }
   }, [prestamo.id, intento])
 
-  async function gestionarDocumento(documento, eliminar = false) {
-    const archivo = archivos[documento.nombreArchivo]
+  async function gestionarDocumento(documento, eliminar = false, archivoDirecto = null) {
+    if (estado === 'devuelto') return
+    const archivo = archivoDirecto ?? archivos[documento.nombreArchivo]
     if (!eliminar && !archivo) {
       setErrorArchivos((actual) => ({
         ...actual,
@@ -111,6 +126,7 @@ export default function DetallePrestamo({
       else formulario.append('archivo', archivo)
       await api.patch(`/prestamos/${prestamo.id}/garantia/${documento.tipo}/`, formulario)
       setArchivos((actual) => ({ ...actual, [documento.nombreArchivo]: null }))
+      setMensajeExito(`El documento de ${documento.etiqueta.toLowerCase()} se ${eliminar ? 'eliminó' : 'actualizó'} correctamente.`)
       setIntento((actual) => actual + 1)
     } catch (errorApi) {
       setErrorArchivos((actual) => ({
@@ -123,6 +139,8 @@ export default function DetallePrestamo({
   }
 
   const estado = detalle?.estado ?? prestamo.estado_visible ?? prestamo.estado
+  const esPrestamoFinalizado = estado === 'devuelto'
+  const puedeModificarGarantia = puedeEditarGarantia && !esPrestamoFinalizado
   const esExcepcion = detalle?.es_excepcion ?? prestamo.es_excepcion
 
   // Priorizar snapshots históricos para que los cambios posteriores en catálogo o
@@ -155,7 +173,9 @@ export default function DetallePrestamo({
   )).length
 
   return (
-    <Tarjeta className="max-w-[1700px] mx-auto p-0" aria-labelledby="prestamo-detalle-titulo">
+    <>
+      <ExitoModal mensaje={mensajeExito} onCerrar={() => setMensajeExito('')} />
+      <Tarjeta className="max-w-[1700px] mx-auto p-0" aria-labelledby="prestamo-detalle-titulo">
       <header className="bg-superficie/50 border-b border-borde p-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Boton
@@ -293,9 +313,21 @@ export default function DetallePrestamo({
                   )}
                   <td className="w-1/4 p-2">
                     <span className="text-[11px] font-bold uppercase tracking-wider text-texto-suave block mb-0.5">
-                      Registrado por
+                      Entregado por
                     </span>
-                    <span className="text-lg font-bold text-texto">{detalle.prestatario_nombre}</span>
+                    <span className="text-base font-bold text-texto break-words">
+                      {formatearActorPrestamo(detalle.entregado_por) || 'No registrado'}
+                    </span>
+                  </td>
+                  <td className="w-1/4 p-2">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-texto-suave block mb-0.5">
+                      Recibido por
+                    </span>
+                    <span className="text-base font-bold text-texto break-words">
+                      {detalle.recibido_por
+                        ? formatearActorPrestamo(detalle.recibido_por)
+                        : 'Pendiente de devolución'}
+                    </span>
                   </td>
                 </tr>
               </tbody>
@@ -403,7 +435,12 @@ export default function DetallePrestamo({
                           Tiempo máximo
                         </span>
                         <span className="text-base font-semibold text-texto">
-                          {material?.tiempo_maximo_prestamo ? formatearDuracionMinutos(material.tiempo_maximo_prestamo) : 'No definido'}
+                          {material?.tiempo_maximo_prestamo
+                            ? formatearDuracionMinutos(Math.min(
+                              Number(material.tiempo_maximo_prestamo),
+                              DURACION_MAXIMA_PRESTAMO_MINUTOS,
+                            ))
+                            : 'No definido'}
                         </span>
                       </td>
                     </tr>
@@ -650,10 +687,15 @@ export default function DetallePrestamo({
 
           {/* Documentos de garantía */}
           <section className="rounded-xl border border-borde bg-white dark:bg-superficie p-3">
-            <div className="flex items-center gap-1 mb-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-marca-100 text-marca-800 dark:bg-marca-900/30 dark:text-marca-300 text-[11px] font-bold uppercase tracking-wider">
                 Documentos de garantía
               </span>
+              {puedeEditarGarantia && esPrestamoFinalizado && (
+                <span className="text-xs font-medium text-texto-suave">
+                  Préstamo finalizado · registro de solo lectura
+                </span>
+              )}
             </div>
             {!esExcepcion && !esMaterialAltoValor(material) ? (
               <p className="mt-2 text-xs text-texto-suave">
@@ -664,7 +706,6 @@ export default function DetallePrestamo({
                 {DOCUMENTOS_GARANTIA.map((documento) => {
                   const disponible = Boolean(documentos?.[documento.campo])
                   const otroDisponible = totalDocumentos > Number(disponible)
-                  const archivo = archivos[documento.nombreArchivo]
 
                   return (
                     <li key={documento.tipo} className="rounded border border-borde bg-white p-2 dark:bg-superficie">
@@ -684,7 +725,7 @@ export default function DetallePrestamo({
                             <span className="text-sm text-texto-suave">No disponible</span>
                           )}
                         </div>
-                        {puedeEditarGarantia && (
+                        {puedeModificarGarantia && (
                           <div className="flex gap-0.5">
                             <label className="cursor-pointer">
                               <input
@@ -692,13 +733,18 @@ export default function DetallePrestamo({
                                 type="file"
                                 accept="application/pdf,.pdf"
                                 className="sr-only"
-                                ref={el => (fileInputRef[documento.tipo] = el)}
+                                ref={(el) => {
+                                  fileInputRef.current[documento.tipo] = el
+                                }}
                                 onChange={(evento) => {
+                                  const archivoSeleccionado = evento.target.files?.[0] ?? null
                                   setArchivos((actual) => ({
                                     ...actual,
-                                    [documento.nombreArchivo]: evento.target.files?.[0] ?? null,
+                                    [documento.nombreArchivo]: archivoSeleccionado,
                                   }))
-                                  gestionarDocumento(documento)
+                                  if (archivoSeleccionado) {
+                                    gestionarDocumento(documento, false, archivoSeleccionado)
+                                  }
                                 }}
                               />
                             </label>
@@ -709,7 +755,7 @@ export default function DetallePrestamo({
                               icono={Upload}
                               cargando={accion === documento.tipo}
                               deshabilitado={Boolean(accion)}
-                              onClick={() => fileInputRef[documento.tipo]?.click()}
+                              onClick={() => fileInputRef.current[documento.tipo]?.click()}
                             >
                               Reemplazar
                             </Boton>
@@ -727,7 +773,7 @@ export default function DetallePrestamo({
                             )}
                           </div>
                         )}
-                        {disponible && !otroDisponible && puedeEditarGarantia && (
+                        {disponible && !otroDisponible && puedeModificarGarantia && (
                           <p className="text-sm text-texto-suave">
                             No se puede eliminar: debe quedar al menos un PDF.
                           </p>
@@ -758,5 +804,6 @@ export default function DetallePrestamo({
         </div>
       )}
     </Tarjeta>
+    </>
   )
 }

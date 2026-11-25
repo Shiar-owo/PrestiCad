@@ -7,3 +7,6 @@ export const TAMANO_MAXIMO_GARANTIA_BYTES = Number.isFinite(TAMANO_CONFIGURADO)
   : TAMANO_PREDETERMINADO
 
 export const TAMANO_MAXIMO_GARANTIA_MB = TAMANO_MAXIMO_GARANTIA_BYTES / (1024 * 1024)
+
+export const URL_FORMATO_COMPROMISO_RESPONSABILIDAD = '/compromiso_responsabilidad.pdf'
+export const NOMBRE_FORMATO_COMPROMISO_RESPONSABILIDAD = 'compromiso_responsabilidad.pdf'

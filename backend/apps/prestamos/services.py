@@ -778,6 +778,7 @@ def registrar_prestamo(
             DIAS_LABORABLES,
             HORA_RESERVA_MAXIMO_FIN,
             HORA_RESERVA_MINIMO_INICIO,
+            MINUTO_RESERVA_MAXIMO_FIN,
         )
 
         fin_local = timezone.localtime(fecha_fin) if timezone.is_aware(fecha_fin) else fecha_fin
@@ -787,10 +788,16 @@ def registrar_prestamo(
                 "La fecha de devolución debe ser un día laborable (lunes a viernes).",
             )
         minutos_fin = fin_local.hour * 60 + fin_local.minute
-        if not (HORA_RESERVA_MINIMO_INICIO * 60 <= minutos_fin <= HORA_RESERVA_MAXIMO_FIN * 60):
+        if not (
+            HORA_RESERVA_MINIMO_INICIO * 60
+            <= minutos_fin
+            <= HORA_RESERVA_MAXIMO_FIN * 60 + MINUTO_RESERVA_MAXIMO_FIN
+        ):
             raise PrestamoError(
                 "fecha_fin",
-                f"El horario de devolución es de {HORA_RESERVA_MINIMO_INICIO}:00 a {HORA_RESERVA_MAXIMO_FIN}:00.",
+                f"La devolución pactada debe respetar el horario de devolución, entre "
+                f"{HORA_RESERVA_MINIMO_INICIO:02d}:00 y "
+                f"{HORA_RESERVA_MAXIMO_FIN:02d}:{MINUTO_RESERVA_MAXIMO_FIN:02d}.",
             )
 
         # Cuentan todos los días en medio (sin descontar fines de semana)
@@ -831,9 +838,7 @@ def registrar_prestamo(
                 "reserva_id",
                 "La reserva indicada no corresponde al material seleccionado.",
             )
-        limite_conversion = reserva.fecha_limite_recojo + timedelta(
-            minutes=TOLERANCIA_RECOJO_MINUTOS
-        ) if reserva.fecha_limite_recojo else None
+        limite_conversion = reserva.fecha_limite_recojo
         if (
             reserva.estado != "reservada"
             or limite_conversion is None
@@ -878,7 +883,7 @@ def registrar_prestamo(
                 f"({inicio_local.strftime('%d/%m/%Y')}). Hoy es {entrega_local.strftime('%d/%m/%Y')}.",
                 status_code=409,
             )
-        minutos_prestamo = calcular_minutos_habiles(reserva.fecha_inicio, reserva.fecha_fin)
+        minutos_prestamo = max(0, int((reserva.fecha_fin - ahora_entrega).total_seconds() // 60))
         if minutos_prestamo < MINIMO_MINUTOS_PRESTAMO:
             raise PrestamoError(
                 "reserva_id",
@@ -921,7 +926,7 @@ def registrar_prestamo(
                     "El material no está disponible para entrega.",
                     status_code=409,
                 )
-        fecha_fin_estimada = fecha_entrega + timedelta(minutes=minutos_prestamo)
+        fecha_fin_estimada = fecha_entrega + timedelta(minutes=minutos_prestamo + TOLERANCIA_RECOJO_MINUTOS)
 
         if instancia_id is not None:
             reserva_solapada = Reserva.objects.filter(
@@ -966,6 +971,15 @@ def registrar_prestamo(
             "El material no está disponible para entrega.",
             status_code=409,
         )
+
+    if reserva is None:
+        hora_entrega_local = timezone.localtime(ahora_entrega)
+        cierre_local = hora_entrega_local.replace(hour=18, minute=0, second=0, microsecond=0)
+        if hora_entrega_local > cierre_local:
+            raise PrestamoError(
+                "fecha_entrega",
+                "Los préstamos se otorgan hasta las 18:00; después se atienden el siguiente día laborable.",
+            )
 
     requiere_garantia = es_excepcion or material.requiere_garantia()
     if garantia_reserva_reutilizable is not None and documento_identidad is None and compromiso_responsabilidad is None:
@@ -1044,7 +1058,7 @@ def registrar_prestamo(
         usuario=prestatario,
         material=material,
         registrado_por=registrado_por,
-        fecha_entrega=reserva.fecha_inicio if reserva is not None else fecha_entrega,
+        fecha_entrega=ahora_entrega,
         fecha_limite=(
             reserva.fecha_fin
             if reserva is not None

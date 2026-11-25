@@ -546,7 +546,11 @@ function RegistrarPrestamo() {
     if (bloqueadoPorElegibilidad || bloqueadoPorReservaConversion) return
     if (
       reservaSeleccionada
-      && !puedeEntregarseReservaAhora(reservaSeleccionada.fecha_inicio, new Date())
+      && !puedeEntregarseReservaAhora(
+        reservaSeleccionada.fecha_inicio,
+        new Date(),
+        reservaSeleccionada.fecha_limite_recojo,
+      )
     ) {
       setAdvertenciaFechaHoraReserva(true)
       return
@@ -1012,7 +1016,7 @@ function RegistrarPrestamo() {
                       role="note"
                       className="rounded-lg border border-acento-300 bg-acento-50/70 p-2.5 text-xs text-acento-900 dark:border-acento-800 dark:bg-acento-950/40 dark:text-acento-200"
                     >
-                      <strong>Aclaración para el trámite:</strong> Este préstamo incluye días de fin de semana intermedios. Recuerda que la entrega y la devolución se efectúan exclusivamente de lunes a viernes en horario de atención (09:00 a 17:00), y todos los días en medio computan dentro de la duración del préstamo.
+                      <strong>Aclaración para el trámite:</strong> Los préstamos se otorgan de lunes a viernes entre 08:00 y 18:00. La devolución pactada debe ser como máximo a las 17:30; su tolerancia llega hasta las 18:00.
                     </div>
                   )}
                   {errores.dias && <p className="text-xs font-medium text-error">{errores.dias}</p>}

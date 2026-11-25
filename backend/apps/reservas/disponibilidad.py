@@ -7,7 +7,13 @@ from django.utils import timezone
 from apps.inventario.models import InstanciaMaterial, Material
 from apps.prestamos.constants import ESTADOS_QUE_OCUPAN_UNIDAD
 from apps.prestamos.models import Prestamo
-from apps.reservas.constants import DIAS_LABORABLES, HORA_RESERVA_MAXIMO_FIN, HORA_RESERVA_MINIMO_INICIO
+from apps.reservas.constants import (
+    DIAS_LABORABLES,
+    HORA_RESERVA_MAXIMO_FIN,
+    HORA_RESERVA_MINIMO_INICIO,
+    MINUTO_RESERVA_MAXIMO_FIN,
+    TOLERANCIA_RECOJO_MINUTOS,
+)
 
 
 def hay_solapamiento(inicio_a, fin_a, inicio_b, fin_b):
@@ -48,7 +54,7 @@ def obtener_instancias_disponibles_en_rango(
         instancia_id__isnull=False,
         estado__in=ESTADOS_QUE_OCUPAN_UNIDAD,
         fecha_entrega__lt=fecha_fin,
-        fecha_limite__gt=fecha_inicio,
+        fecha_limite__gt=fecha_inicio - timedelta(minutes=TOLERANCIA_RECOJO_MINUTOS),
     )
     if excluir_prestamo_id:
         prestamos_ocupantes = prestamos_ocupantes.exclude(pk=excluir_prestamo_id)
@@ -64,7 +70,7 @@ def obtener_instancias_disponibles_en_rango(
         fecha_inicio__isnull=False,
         fecha_fin__isnull=False,
         fecha_inicio__lt=fecha_fin,
-        fecha_fin__gt=fecha_inicio,
+        fecha_fin__gt=fecha_inicio - timedelta(minutes=TOLERANCIA_RECOJO_MINUTOS),
     )
     if excluir_reserva_id:
         reservas_ocupantes = reservas_ocupantes.exclude(pk=excluir_reserva_id)
@@ -99,7 +105,7 @@ def verificar_instancia_disponible_en_rango(
         instancia_id=instancia.id,
         estado__in=ESTADOS_QUE_OCUPAN_UNIDAD,
         fecha_entrega__lt=fecha_fin,
-        fecha_limite__gt=fecha_inicio,
+        fecha_limite__gt=fecha_inicio - timedelta(minutes=TOLERANCIA_RECOJO_MINUTOS),
     )
     if excluir_prestamo_id:
         prestamo_choca = prestamo_choca.exclude(pk=excluir_prestamo_id)
@@ -114,7 +120,7 @@ def verificar_instancia_disponible_en_rango(
         fecha_inicio__isnull=False,
         fecha_fin__isnull=False,
         fecha_inicio__lt=fecha_fin,
-        fecha_fin__gt=fecha_inicio,
+        fecha_fin__gt=fecha_inicio - timedelta(minutes=TOLERANCIA_RECOJO_MINUTOS),
     )
     if excluir_reserva_id:
         reserva_choca = reserva_choca.exclude(pk=excluir_reserva_id)
@@ -159,7 +165,7 @@ def consultar_disponibilidad_calendario(material_id, desde=None, hasta=None):
             material_id=material.id,
             estado__in=ESTADOS_QUE_OCUPAN_UNIDAD,
             fecha_entrega__lt=fin_dt,
-            fecha_limite__gt=inicio_dt,
+            fecha_limite__gt=inicio_dt - timedelta(minutes=TOLERANCIA_RECOJO_MINUTOS),
         )
         .order_by("fecha_entrega")
     )
@@ -175,7 +181,7 @@ def consultar_disponibilidad_calendario(material_id, desde=None, hasta=None):
             fecha_inicio__isnull=False,
             fecha_fin__isnull=False,
             fecha_inicio__lt=fin_dt,
-            fecha_fin__gt=inicio_dt,
+            fecha_fin__gt=inicio_dt - timedelta(minutes=TOLERANCIA_RECOJO_MINUTOS),
         )
         .order_by("fecha_inicio")
     )
@@ -187,7 +193,7 @@ def consultar_disponibilidad_calendario(material_id, desde=None, hasta=None):
             datetime.combine(cursor, time(HORA_RESERVA_MINIMO_INICIO, 0)), tz
         )
         dia_fin_dt = timezone.make_aware(
-            datetime.combine(cursor, time(HORA_RESERVA_MAXIMO_FIN, 0)), tz
+            datetime.combine(cursor, time(HORA_RESERVA_MAXIMO_FIN, MINUTO_RESERVA_MAXIMO_FIN)), tz
         )
         es_laborable = cursor.weekday() in DIAS_LABORABLES
 
@@ -199,26 +205,26 @@ def consultar_disponibilidad_calendario(material_id, desde=None, hasta=None):
         # Franjas ocupadas este día
         franjas_dia = []
         for p in prestamos:
-            if hay_solapamiento(dia_inicio_dt, dia_fin_dt, p.fecha_entrega, p.fecha_limite):
+            if hay_solapamiento(dia_inicio_dt, dia_fin_dt, p.fecha_entrega, p.fecha_limite + timedelta(minutes=TOLERANCIA_RECOJO_MINUTOS)):
                 franjas_dia.append(
                     {
                         "tipo": "prestamo",
                         "id": str(p.id),
                         "codigo_ejemplar": p.instancia.codigo_ejemplar if p.instancia else "",
                         "inicio": p.fecha_entrega.isoformat(),
-                        "fin": p.fecha_limite.isoformat(),
+                        "fin": (p.fecha_limite + timedelta(minutes=TOLERANCIA_RECOJO_MINUTOS)).isoformat(),
                     }
                 )
 
         for r in reservas:
-            if hay_solapamiento(dia_inicio_dt, dia_fin_dt, r.fecha_inicio, r.fecha_fin):
+            if hay_solapamiento(dia_inicio_dt, dia_fin_dt, r.fecha_inicio, r.fecha_fin + timedelta(minutes=TOLERANCIA_RECOJO_MINUTOS)):
                 franjas_dia.append(
                     {
                         "tipo": "reserva",
                         "id": str(r.id),
                         "codigo_ejemplar": r.instancia.codigo_ejemplar if r.instancia else "",
                         "inicio": r.fecha_inicio.isoformat(),
-                        "fin": r.fecha_fin.isoformat(),
+                        "fin": (r.fecha_fin + timedelta(minutes=TOLERANCIA_RECOJO_MINUTOS)).isoformat(),
                     }
                 )
 

@@ -304,7 +304,7 @@ export default function MisReservas() {
                         <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3 dark:border-amber-800 dark:bg-amber-950/30">
                           <dt className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-300">
                             <CalendarClock aria-hidden="true" className="size-3.5" />
-                            Límite de recojo (24 h)
+                            Límite de recojo (30 min)
                           </dt>
                           <dd className="mt-1 font-bold text-texto">
                             {formatearFechaReserva(reserva.fecha_limite_recojo)}

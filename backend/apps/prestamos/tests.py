@@ -1,7 +1,7 @@
 """Pruebas de reglas y API para HU09 — registrar la entrega de un préstamo."""
 import atexit
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 import json
 import tempfile
 import unittest
@@ -85,12 +85,20 @@ def registrar_prestamo(**datos):
         "fotos_checklist",
         [crear_foto_checklist() for _ in datos.get("checklist_inicial", [])],
     )
-    with patch.object(
-        FotoChecklist._meta.get_field("imagen"),
-        "storage",
-        _ALMACENAMIENTO_FOTOS_TEST,
-    ):
-        return registrar_prestamo_real(**datos)
+    ahora = timezone.localtime(timezone.now())
+    contexto_hora = nullcontext()
+    if ahora.hour < 8 or ahora.hour > 18:
+        contexto_hora = patch(
+            "apps.prestamos.services.timezone.now",
+            return_value=ahora.replace(hour=10, minute=0, second=0, microsecond=0),
+        )
+    with contexto_hora:
+        with patch.object(
+            FotoChecklist._meta.get_field("imagen"),
+            "storage",
+            _ALMACENAMIENTO_FOTOS_TEST,
+        ):
+            return registrar_prestamo_real(**datos)
 
 
 def crear_pdf(nombre):
@@ -356,7 +364,9 @@ class RegistrarPrestamoServiceTestCase(TestCase):
         self.assertEqual(prestamo.garantia, garantia)
 
     def test_registra_prestamo_activo_con_fecha_limite_y_checklist(self):
-        antes = timezone.now()
+        antes = timezone.localtime(timezone.now())
+        if antes.hour < 8 or antes.hour > 18:
+            antes = antes.replace(hour=10, minute=0, second=0, microsecond=0)
 
         prestamo = self._registrar()
 
@@ -1570,6 +1580,14 @@ class RegistrarPrestamoAPITestCase(APITestCase):
     URL = "/api/prestamos/"
 
     def setUp(self):
+        parche_hora_laboral = patch(
+            "apps.prestamos.services.timezone.now",
+            return_value=timezone.localtime(timezone.now()).replace(
+                hour=10, minute=0, second=0, microsecond=0,
+            ),
+        )
+        parche_hora_laboral.start()
+        self.addCleanup(parche_hora_laboral.stop)
         self.gestor = crear_usuario("gestor-api@unsa.edu.pe", "20000001", rol="gestor")
         self.prestatario = crear_usuario("prestatario-api@unsa.edu.pe", "20000002")
         self.material = crear_material(codigo_material="API-001")
@@ -1581,11 +1599,10 @@ class RegistrarPrestamoAPITestCase(APITestCase):
         sesion.save()
 
     def _calcular_fecha_fin_valida(self, dias=2):
-        fecha = timezone.localtime(timezone.now()).replace(hour=14, minute=0, second=0, microsecond=0) + timedelta(days=dias)
-        if dias == 3:
-            fecha -= timedelta(minutes=30)
+        inicio = timezone.localtime(timezone.now()).replace(hour=10, minute=0, second=0, microsecond=0)
+        fecha = inicio + timedelta(minutes=dias * 1440 - 30)
         while fecha.weekday() not in (0, 1, 2, 3, 4):
-            fecha += timedelta(days=1)
+            fecha -= timedelta(days=1)
         return fecha.isoformat()
 
     def _payload(self, **cambios):

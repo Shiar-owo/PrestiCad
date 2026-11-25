@@ -139,7 +139,7 @@ describe('validarFormularioPrestamo', () => {
     expect(errores.compromiso_responsabilidad).toMatch(/application\/pdf/)
   })
 
-  it('valida que fechaFin sea día laborable (lunes a viernes) entre 09:00 y 17:00', () => {
+  it('valida que fechaFin sea día laborable (lunes a viernes) entre 08:00 y 17:30', () => {
     // Sábado 2026-12-19
     const errSabado = validarFormularioPrestamo({
       ...formularioValido,
@@ -159,7 +159,7 @@ describe('validarFormularioPrestamo', () => {
       ...formularioValido,
       fechaFin: '2026-12-21T18:30',
     })
-    expect(errHora.dias).toMatch(/09:00 a 17:00/)
+    expect(errHora.dias).toMatch(/08:00 y 17:30/)
 
     // Lunes 2026-12-21 a las 14:00 (válido)
     const valido = validarFormularioPrestamo({

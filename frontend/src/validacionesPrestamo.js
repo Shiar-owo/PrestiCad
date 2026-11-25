@@ -105,8 +105,8 @@ export function validarFormularioPrestamo({
         errores.dias = 'La fecha de devolución debe ser un día laborable (lunes a viernes).'
       } else {
         const minutosFin = fin.getHours() * 60 + fin.getMinutes()
-        if (minutosFin < 9 * 60 || minutosFin > 17 * 60) {
-          errores.dias = 'El horario de devolución es de 09:00 a 17:00.'
+        if (minutosFin < 8 * 60 || minutosFin > 17 * 60 + 30) {
+          errores.dias = 'La devolución pactada debe ser de lunes a viernes entre 08:00 y 17:30.'
         }
       }
     }

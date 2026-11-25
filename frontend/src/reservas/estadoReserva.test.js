@@ -286,5 +286,8 @@ describe('presentación de motivos y fechas', () => {
   it('formatea fechas válidas y maneja valores vacíos', () => {
     expect(formatearFechaReserva(null)).toBe('No disponible')
     expect(formatearFechaReserva('2026-04-12T15:30:00Z')).toEqual(expect.any(String))
+    expect(formatearFechaReserva('2026-06-17T13:00:00Z')).toContain('08:00')
+    expect(formatearFechaReserva('2026-06-17T17:00:00Z')).toContain('12:00')
+    expect(formatearFechaReserva('2026-06-17T22:00:00Z')).toContain('17:00')
   })
 })

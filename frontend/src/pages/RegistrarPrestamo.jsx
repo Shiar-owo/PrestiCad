@@ -51,6 +51,7 @@ import {
 import {
   calcularMinutosHabilesReserva,
   cruzaFinDeSemana,
+  formatearFechaReserva,
   puedeEntregarseReservaAhora,
 } from '../reservas/estadoReserva'
 
@@ -94,11 +95,7 @@ function mensajeApi(error) {
 }
 
 function fechaLegible(valor) {
-  if (!valor) return ''
-  return new Intl.DateTimeFormat('es-PE', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(new Date(valor))
+  return valor ? formatearFechaReserva(valor) : ''
 }
 
 function fechaParaCalendario(valor = new Date()) {

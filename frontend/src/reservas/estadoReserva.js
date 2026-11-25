@@ -212,6 +212,8 @@ export function formatearFechaReserva(fecha) {
   return new Intl.DateTimeFormat('es-PE', {
     dateStyle: 'medium',
     timeStyle: 'short',
+    hourCycle: 'h23',
+    timeZone: 'America/Lima',
   }).format(valor)
 }
 

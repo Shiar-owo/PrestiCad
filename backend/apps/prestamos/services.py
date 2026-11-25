@@ -940,7 +940,7 @@ def registrar_prestamo(
             if reserva_solapada:
                 raise PrestamoError(
                     "tiempo_prestamo",
-                    f"El ejemplar seleccionado tiene una reserva confirmada a partir de {reserva_solapada.fecha_inicio.strftime('%d/%m/%Y %H:%M')}. La entrega debe devolverse antes de ese horario.",
+                    f"El ejemplar seleccionado tiene una reserva confirmada a partir de {timezone.localtime(reserva_solapada.fecha_inicio).strftime('%d/%m/%Y %H:%M')}. La entrega debe devolverse antes de ese horario.",
                     status_code=409,
                 )
         else:

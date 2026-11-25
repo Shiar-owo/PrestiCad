@@ -129,3 +129,26 @@ class Reserva(models.Model):
         if self.estado == "en_espera" and self.fecha_limite_espera:
             return ahora > self.fecha_limite_espera
         return False
+
+
+class DiaNoLaborable(models.Model):
+    """Día inhabilitado por el administrador (feriados, cierres, mantenimiento)."""
+
+    fecha = models.DateField(unique=True, db_index=True)
+    motivo = models.CharField(max_length=200)
+    creado_por = models.ForeignKey(
+        "usuarios.Usuario",
+        on_delete=models.PROTECT,
+        related_name="dias_no_laborables_creados",
+        null=True,
+        blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Día no laborable"
+        verbose_name_plural = "Días no laborables"
+        ordering = ["fecha"]
+
+    def __str__(self):
+        return f"{self.fecha.isoformat()} — {self.motivo}"

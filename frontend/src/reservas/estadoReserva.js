@@ -3,6 +3,7 @@ import {
   DURACION_MAXIMA_RESERVA_MINUTOS,
   formatearDuracionMinutos,
 } from '../constantes/checklistPrestamo'
+import { buscarDiaNoLaborable, formatearFechaCortaIso } from './diasNoLaborables'
 
 export const MAXIMO_RESERVAS_ACTIVAS = 3
 
@@ -153,6 +154,7 @@ export function validarFormularioReserva({
   material = null,
   documentoIdentidad = null,
   compromisoResponsabilidad = null,
+  diasNoLaborables = [],
 }) {
   const errores = {}
 
@@ -168,6 +170,7 @@ export function validarFormularioReserva({
     fechaInicio,
     fechaFin,
     material,
+    diasNoLaborables,
   )
   if (Object.keys(erroresHorario).length > 0) {
     Object.assign(errores, erroresHorario)
@@ -379,6 +382,7 @@ export function validarHorarioReserva(
   fechaInicio = null,
   fechaFin = null,
   material = null,
+  diasNoLaborables = [],
 ) {
   const errores = {}
   const maximoMinutosMaterial = material ? obtenerMaximoMinutosReserva(material) : null
@@ -388,10 +392,13 @@ export function validarHorarioReserva(
       errores.fecha = 'La fecha es obligatoria.'
     } else {
       const soloFecha = new Date(`${fechaSeleccionada}T00:00:00`)
+      const diaInhabilitado = buscarDiaNoLaborable(fechaSeleccionada, diasNoLaborables)
       if (Number.isNaN(soloFecha.getTime())) {
         errores.fecha = 'La fecha no es válida.'
       } else if (!DIAS_LABORABLES.includes(soloFecha.getDay())) {
         errores.fecha = 'Solo se permite reservar de lunes a viernes (días laborables).'
+      } else if (diaInhabilitado) {
+        errores.fecha = `El día ${formatearFechaCortaIso(fechaSeleccionada)} está inhabilitado (${diaInhabilitado.motivo}). Selecciona otro día laborable.`
       } else if (horaInicio && new Date(`${fechaSeleccionada}T${horaInicio}:00`) <= new Date()) {
         errores.fecha = 'La fecha de inicio debe ser posterior al momento actual.'
       }
@@ -444,9 +451,12 @@ export function validarHorarioReserva(
       if (Number.isNaN(inicio.getTime())) {
         errores.fechaInicio = 'La fecha u hora de inicio no es válida.'
       } else {
+        const diaInicioInhabilitado = buscarDiaNoLaborable(inicio, diasNoLaborables)
         if (inicio <= new Date()) errores.fechaInicio = 'La fecha de inicio debe ser posterior al momento actual.'
         if (!DIAS_LABORABLES.includes(inicio.getDay())) {
           errores.fechaInicio = 'Solo se permite reservar de lunes a viernes (días laborables).'
+        } else if (diaInicioInhabilitado) {
+          errores.fechaInicio = `El día ${formatearFechaCortaIso(inicio)} está inhabilitado (${diaInicioInhabilitado.motivo}). Selecciona otro día laborable.`
         }
         const minutosInicio = inicio.getHours() * 60 + inicio.getMinutes()
         if (minutosInicio < HORA_RESERVA_MINIMO_INICIO * 60 || minutosInicio > HORA_RESERVA_MAXIMO_FIN * 60 + MINUTO_RESERVA_MAXIMO_FIN) {
@@ -465,9 +475,12 @@ export function validarHorarioReserva(
       if (Number.isNaN(fin.getTime())) {
         errores.fechaFin = 'La fecha u hora de fin no es válida.'
       } else {
+        const diaFinInhabilitado = buscarDiaNoLaborable(fin, diasNoLaborables)
         if (fin <= new Date()) errores.fechaFin = 'La fecha de fin debe ser futura.'
         if (!DIAS_LABORABLES.includes(fin.getDay())) {
           errores.fechaFin = 'Solo se permite reservar de lunes a viernes (días laborables).'
+        } else if (diaFinInhabilitado) {
+          errores.fechaFin = `El día ${formatearFechaCortaIso(fin)} está inhabilitado (${diaFinInhabilitado.motivo}). Selecciona otro día laborable.`
         }
         const minutosFin = fin.getHours() * 60 + fin.getMinutes()
         if (minutosFin < HORA_RESERVA_MINIMO_INICIO * 60 || minutosFin > HORA_RESERVA_MAXIMO_FIN * 60 + MINUTO_RESERVA_MAXIMO_FIN) {

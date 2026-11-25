@@ -40,6 +40,7 @@ import {
   validarFormularioReserva,
   validarHorarioReserva,
 } from '../reservas/estadoReserva'
+import { useDiasNoLaborables } from '../reservas/diasNoLaborables'
 import { formatearDuracionMinutos } from '../constantes/checklistPrestamo'
 import {
   NOMBRE_FORMATO_COMPROMISO_RESPONSABILIDAD,
@@ -58,6 +59,7 @@ function extraerMensajeError(error) {
 export default function ReservarMaterial() {
   useTituloPagina('Reservar material')
   const { usuario } = useContext(SesionContext)
+  const { diasNoLaborables } = useDiasNoLaborables()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const materialIdParam = searchParams.get('materialId') || ''
@@ -191,8 +193,8 @@ export default function ReservarMaterial() {
     0
 
   const erroresInicioActuales = esAvanzado
-    ? validarHorarioReserva(fechaSeleccionada, horaInicio, '', true, null, null, materialSeleccionado)
-    : validarHorarioReserva(undefined, undefined, undefined, false, fechaInicio, '', materialSeleccionado)
+    ? validarHorarioReserva(fechaSeleccionada, horaInicio, '', true, null, null, materialSeleccionado, diasNoLaborables)
+    : validarHorarioReserva(undefined, undefined, undefined, false, fechaInicio, '', materialSeleccionado, diasNoLaborables)
   const inicioValidoParaFin = esAvanzado
     ? Boolean(fechaSeleccionada && horaInicio && !erroresInicioActuales.fecha && !erroresInicioActuales.horaInicio)
     : Boolean(fechaInicio && !erroresInicioActuales.fechaInicio)
@@ -212,6 +214,7 @@ export default function ReservarMaterial() {
       valor,
       fechaFin,
       materialSeleccionado,
+      diasNoLaborables,
     )
     if (validacion.fechaInicio) {
       setFechaInicio('')
@@ -261,6 +264,7 @@ export default function ReservarMaterial() {
       fechaInicio,
       valor,
       materialSeleccionado,
+      diasNoLaborables,
     )
     if (validacion.fechaFin) {
       setFechaFin('')
@@ -280,7 +284,7 @@ export default function ReservarMaterial() {
       setErrores((actuales) => ({ ...actuales, fecha: '' }))
       return
     }
-    const validacion = validarHorarioReserva(valor, horaInicio, horaFin, true)
+    const validacion = validarHorarioReserva(valor, horaInicio, horaFin, true, null, null, materialSeleccionado, diasNoLaborables)
     if (validacion.fecha) {
       setFechaSeleccionada('')
       setErrores((actuales) => ({ ...actuales, fecha: validacion.fecha }))
@@ -360,6 +364,7 @@ export default function ReservarMaterial() {
       material: materialSeleccionado,
       documentoIdentidad,
       compromisoResponsabilidad,
+      diasNoLaborables,
     })
 
     if (Object.keys(nuevosErrores).length > 0) {

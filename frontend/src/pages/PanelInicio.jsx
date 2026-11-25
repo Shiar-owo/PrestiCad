@@ -3,6 +3,7 @@ import { Link } from 'react-router'
 import {
   ArrowUpRight,
   CalendarClock,
+  CalendarOff,
   ClipboardList,
   Gauge,
   History,
@@ -91,10 +92,16 @@ const ACCESOS = {
       icono: Package,
     },
     {
-      etiqueta: 'Gestionar roles',
+      etiqueta: 'Gestionar usuarios y roles',
       a: '/admin/roles',
-      descripcion: 'Asignación de roles y permisos del sistema',
+      descripcion: 'Asignación de roles, perfiles y activación o desactivación de cuentas',
       icono: ShieldCheck,
+    },
+    {
+      etiqueta: 'Días no laborables',
+      a: '/admin/dias-no-laborables',
+      descripcion: 'Inhabilitar feriados, cierres o días sin atención en el calendario',
+      icono: CalendarOff,
     },
     {
       etiqueta: 'Vista catálogo',

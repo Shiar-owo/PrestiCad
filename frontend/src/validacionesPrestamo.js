@@ -14,6 +14,7 @@ import {
   formatearDuracionMinutos,
 } from './constantes/checklistPrestamo'
 import { esMaterialAltoValor } from './constantes/catalogo'
+import { buscarDiaNoLaborable, formatearFechaCortaIso } from './reservas/diasNoLaborables'
 
 export function obtenerMinutosMaximosMaterial(material) {
   if (material?.tiempo_maximo_prestamo) {
@@ -64,6 +65,7 @@ export function validarFormularioPrestamo({
   esExcepcion = false,
   garantiaReutilizada = false,
   fechaFin = null,
+  diasNoLaborables = [],
 }) {
   const errores = {}
   const erroresFotos = {}
@@ -101,8 +103,11 @@ export function validarFormularioPrestamo({
   if (fechaFin) {
     const fin = new Date(fechaFin)
     if (!Number.isNaN(fin.getTime())) {
+      const diaInhabilitado = buscarDiaNoLaborable(fin, diasNoLaborables)
       if (fin.getDay() === 0 || fin.getDay() === 6) {
         errores.dias = 'La fecha de devolución debe ser un día laborable (lunes a viernes).'
+      } else if (diaInhabilitado) {
+        errores.dias = `El día ${formatearFechaCortaIso(fin)} está inhabilitado (${diaInhabilitado.motivo}). La devolución debe ser un día laborable.`
       } else {
         const minutosFin = fin.getHours() * 60 + fin.getMinutes()
         if (minutosFin < 8 * 60 || minutosFin > 17 * 60 + 30) {

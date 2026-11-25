@@ -23,6 +23,37 @@ def hay_solapamiento(inicio_a, fin_a, inicio_b, fin_b):
     return inicio_a < fin_b and fin_a > inicio_b
 
 
+def _normalizar_fecha_local(valor):
+    """Convierte date o datetime (naive o aware) a date en zona horaria local."""
+    if valor is None:
+        return None
+    if isinstance(valor, datetime):
+        if timezone.is_aware(valor):
+            return timezone.localtime(valor).date()
+        return valor.date()
+    return valor
+
+
+def obtener_dia_no_laborable(fecha_valor):
+    """Devuelve el registro `DiaNoLaborable` si la fecha fue inhabilitada por un admin."""
+    from apps.reservas.models import DiaNoLaborable
+
+    fecha_local = _normalizar_fecha_local(fecha_valor)
+    if fecha_local is None:
+        return None
+    return DiaNoLaborable.objects.filter(fecha=fecha_local).first()
+
+
+def obtener_mapa_dias_no_laborables(desde, hasta):
+    """Obtiene en una consulta el mapa `{date: DiaNoLaborable}` del rango indicado."""
+    from apps.reservas.models import DiaNoLaborable
+
+    return {
+        registro.fecha: registro
+        for registro in DiaNoLaborable.objects.filter(fecha__gte=desde, fecha__lte=hasta)
+    }
+
+
 def obtener_instancias_disponibles_en_rango(
     material_id,
     fecha_inicio,
@@ -130,14 +161,20 @@ def verificar_instancia_disponible_en_rango(
     return True
 
 
-def consultar_disponibilidad_calendario(material_id, desde=None, hasta=None):
+def consultar_disponibilidad_calendario(
+    material_id,
+    desde=None,
+    hasta=None,
+    *,
+    incluir_prestatario=False,
+):
     """Devuelve el resumen de disponibilidad día por día para visualización de calendario.
 
     Para cada día del rango, calcula cuántos ejemplares están disponibles y qué franjas
-    se encuentran ocupadas por reservas o préstamos activos.
+    se encuentran ocupadas por reservas o préstamos activos, considerando días inhabilitados.
     """
     ahora = timezone.now()
-    hoy = ahora.date()
+    hoy = timezone.localtime(ahora).date()
     if desde is None:
         desde = hoy
     elif isinstance(desde, str):
@@ -158,9 +195,11 @@ def consultar_disponibilidad_calendario(material_id, desde=None, hasta=None):
     inicio_dt = timezone.make_aware(datetime.combine(desde, time(0, 0)), tz)
     fin_dt = timezone.make_aware(datetime.combine(hasta, time(23, 59, 59)), tz)
 
+    mapa_no_laborables = obtener_mapa_dias_no_laborables(desde, hasta)
+
     # Préstamos en el rango
     prestamos = list(
-        Prestamo.objects.select_related("instancia")
+        Prestamo.objects.select_related("instancia", "usuario")
         .filter(
             material_id=material.id,
             estado__in=ESTADOS_QUE_OCUPAN_UNIDAD,
@@ -174,7 +213,7 @@ def consultar_disponibilidad_calendario(material_id, desde=None, hasta=None):
     from apps.reservas.models import Reserva
 
     reservas = list(
-        Reserva.objects.select_related("instancia")
+        Reserva.objects.select_related("instancia", "usuario")
         .filter(
             material_id=material.id,
             estado="reservada",
@@ -195,43 +234,48 @@ def consultar_disponibilidad_calendario(material_id, desde=None, hasta=None):
         dia_fin_dt = timezone.make_aware(
             datetime.combine(cursor, time(HORA_RESERVA_MAXIMO_FIN, MINUTO_RESERVA_MAXIMO_FIN)), tz
         )
-        es_laborable = cursor.weekday() in DIAS_LABORABLES
+        dia_inhabilitado = mapa_no_laborables.get(cursor)
+        es_laborable = (cursor.weekday() in DIAS_LABORABLES) and (dia_inhabilitado is None)
 
         # Ejemplares libres en el horario de atención de este día
         ejemplares_libres_dia = obtener_instancias_disponibles_en_rango(
             material.id, dia_inicio_dt, dia_fin_dt
-        ).count() if total_ejemplares > 0 else 0
+        ).count() if (total_ejemplares > 0 and es_laborable) else 0
 
         # Franjas ocupadas este día
         franjas_dia = []
         for p in prestamos:
             if hay_solapamiento(dia_inicio_dt, dia_fin_dt, p.fecha_entrega, p.fecha_limite + timedelta(minutes=TOLERANCIA_RECOJO_MINUTOS)):
-                franjas_dia.append(
-                    {
-                        "tipo": "prestamo",
-                        "id": str(p.id),
-                        "codigo_ejemplar": p.instancia.codigo_ejemplar if p.instancia else "",
-                        "inicio": p.fecha_entrega.isoformat(),
-                        "fin": (p.fecha_limite + timedelta(minutes=TOLERANCIA_RECOJO_MINUTOS)).isoformat(),
-                    }
-                )
+                entrada = {
+                    "tipo": "prestamo",
+                    "id": str(p.id),
+                    "codigo_ejemplar": p.instancia.codigo_ejemplar if p.instancia else "",
+                    "inicio": p.fecha_entrega.isoformat(),
+                    "fin": (p.fecha_limite + timedelta(minutes=TOLERANCIA_RECOJO_MINUTOS)).isoformat(),
+                }
+                if incluir_prestatario and p.usuario:
+                    entrada["prestatario"] = f"{p.usuario.nombre} {p.usuario.apellido}".strip()
+                franjas_dia.append(entrada)
 
         for r in reservas:
             if hay_solapamiento(dia_inicio_dt, dia_fin_dt, r.fecha_inicio, r.fecha_fin + timedelta(minutes=TOLERANCIA_RECOJO_MINUTOS)):
-                franjas_dia.append(
-                    {
-                        "tipo": "reserva",
-                        "id": str(r.id),
-                        "codigo_ejemplar": r.instancia.codigo_ejemplar if r.instancia else "",
-                        "inicio": r.fecha_inicio.isoformat(),
-                        "fin": (r.fecha_fin + timedelta(minutes=TOLERANCIA_RECOJO_MINUTOS)).isoformat(),
-                    }
-                )
+                entrada = {
+                    "tipo": "reserva",
+                    "id": str(r.id),
+                    "codigo_ejemplar": r.instancia.codigo_ejemplar if r.instancia else "",
+                    "inicio": r.fecha_inicio.isoformat(),
+                    "fin": (r.fecha_fin + timedelta(minutes=TOLERANCIA_RECOJO_MINUTOS)).isoformat(),
+                }
+                if incluir_prestatario and r.usuario:
+                    entrada["prestatario"] = f"{r.usuario.nombre} {r.usuario.apellido}".strip()
+                franjas_dia.append(entrada)
 
         dias_resultado.append(
             {
                 "fecha": cursor.isoformat(),
                 "es_laborable": es_laborable,
+                "es_dia_inhabilitado": dia_inhabilitado is not None,
+                "motivo_inhabilitado": dia_inhabilitado.motivo if dia_inhabilitado else "",
                 "disponible": bool(es_laborable and ejemplares_libres_dia > 0 and cursor >= hoy),
                 "ejemplares_libres": ejemplares_libres_dia if es_laborable else 0,
                 "ejemplares_totales": total_ejemplares,

@@ -809,12 +809,19 @@ def registrar_prestamo(
             HORA_RESERVA_MINIMO_INICIO,
             MINUTO_RESERVA_MAXIMO_FIN,
         )
+        from apps.reservas.disponibilidad import obtener_dia_no_laborable
 
         fin_local = timezone.localtime(fecha_fin) if timezone.is_aware(fecha_fin) else fecha_fin
         if fin_local.weekday() not in DIAS_LABORABLES:
             raise PrestamoError(
                 "fecha_fin",
                 "La fecha de devolución debe ser un día laborable (lunes a viernes).",
+            )
+        dia_fin_inhabilitado = obtener_dia_no_laborable(fin_local)
+        if dia_fin_inhabilitado is not None:
+            raise PrestamoError(
+                "fecha_fin",
+                f"El día {fin_local.strftime('%d/%m/%Y')} está inhabilitado ({dia_fin_inhabilitado.motivo}). La devolución debe ser un día laborable.",
             )
         minutos_fin = fin_local.hour * 60 + fin_local.minute
         if not (
@@ -1002,7 +1009,15 @@ def registrar_prestamo(
         )
 
     if reserva is None:
+        from apps.reservas.disponibilidad import obtener_dia_no_laborable
+
         hora_entrega_local = timezone.localtime(ahora_entrega)
+        dia_hoy_inhabilitado = obtener_dia_no_laborable(hora_entrega_local)
+        if dia_hoy_inhabilitado is not None:
+            raise PrestamoError(
+                "fecha_entrega",
+                f"Hoy ({hora_entrega_local.strftime('%d/%m/%Y')}) está inhabilitado ({dia_hoy_inhabilitado.motivo}). No se pueden registrar entregas en días no laborables.",
+            )
         cierre_local = hora_entrega_local.replace(hour=18, minute=0, second=0, microsecond=0)
         if hora_entrega_local > cierre_local:
             raise PrestamoError(

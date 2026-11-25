@@ -1,6 +1,8 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Clock, X } from 'lucide-react'
 
+import { crearMapaDiasNoLaborables, useDiasNoLaborables } from '../../reservas/diasNoLaborables'
+
 const DIAS_CABECERA = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
 
 // Accesos rápidos de horario frecuentes dentro de la ventana de atención
@@ -32,6 +34,7 @@ export default function SelectorFechaHoraDesplegable({
   maxHora = '17:30',
   deshabilitado = false,
   soloFecha = false,
+  diasNoLaborables = null,
   etiqueta,
   error,
   ayuda,
@@ -41,6 +44,13 @@ export default function SelectorFechaHoraDesplegable({
   const idGenerado = useId()
   const idInput = idProp || idGenerado
   const contenedorRef = useRef(null)
+  const { mapaDiasNoLaborables: mapaCargado } = useDiasNoLaborables({
+    activo: diasNoLaborables === null,
+  })
+  const mapaNoLaborables = useMemo(
+    () => (diasNoLaborables !== null ? crearMapaDiasNoLaborables(diasNoLaborables) : mapaCargado),
+    [diasNoLaborables, mapaCargado],
+  )
 
   const [abierto, setAbierto] = useState(false)
   const { fecha: fechaVal, hora: horaVal } = useMemo(() => parsearValor(valor), [valor])
@@ -132,23 +142,32 @@ export default function SelectorFechaHoraDesplegable({
 
       // getDay: 0 = Domingo, 6 = Sábado
       const esFinDeSemana = fechaDia.getDay() === 0 || fechaDia.getDay() === 6
+      const diaInhabilitado = mapaNoLaborables.get(iso) || null
       const esAnteriorMin = minDateObj ? fechaDia < minDateObj : false
       const esPosteriorMax = maxDateObj ? fechaDia > maxDateObj : false
 
-      // Bloquear sábados, domingos, fechas anteriores o posteriores
-      const bloqueado = esFinDeSemana || esAnteriorMin || esPosteriorMax
+      // Bloquear sábados, domingos, feriados/días inhabilitados y fechas fuera de rango
+      const bloqueado = esFinDeSemana || Boolean(diaInhabilitado) || esAnteriorMin || esPosteriorMax
+
+      let motivoBloqueo = 'Fuera de rango permitido'
+      if (diaInhabilitado) {
+        motivoBloqueo = `Inhabilitado: ${diaInhabilitado.motivo}`
+      } else if (esFinDeSemana) {
+        motivoBloqueo = 'No laborable (cerrado)'
+      }
 
       items.push({
         diaNumero: d,
         iso,
         esFinDeSemana,
+        esInhabilitado: Boolean(diaInhabilitado),
         bloqueado,
-        motivoBloqueo: esFinDeSemana ? 'No laborable (cerrado)' : 'Fuera de rango permitido',
+        motivoBloqueo,
       })
     }
 
     return items
-  }, [anio, mes, minFecha, maxFecha])
+  }, [anio, mes, minFecha, maxFecha, mapaNoLaborables])
 
   function cambiarMes(delta) {
     setMesActual((prev) => new Date(prev.getFullYear(), prev.getMonth() + delta, 1))
@@ -319,7 +338,11 @@ export default function SelectorFechaHoraDesplegable({
                     type="button"
                     disabled
                     title={`${celda.diaNumero} (${celda.motivoBloqueo})`}
-                    className="flex h-8 flex-col items-center justify-center rounded text-xs text-texto-suave/30 bg-superficie-alta/30 cursor-not-allowed select-none"
+                    className={`flex h-8 flex-col items-center justify-center rounded text-xs cursor-not-allowed select-none ${
+                      celda.esInhabilitado
+                        ? 'bg-rose-50 text-rose-500 line-through dark:bg-rose-950/30 dark:text-rose-400'
+                        : 'text-texto-suave/30 bg-superficie-alta/30'
+                    }`}
                   >
                     <span>{celda.diaNumero}</span>
                   </button>
@@ -344,14 +367,18 @@ export default function SelectorFechaHoraDesplegable({
           </div>
 
           {/* Leyenda aclaratoria */}
-          <div className="mt-2.5 flex items-center justify-between border-t border-borde pt-2 text-[11px] text-texto-suave">
+          <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 border-t border-borde pt-2 text-[11px] text-texto-suave">
             <span className="flex items-center gap-1.5">
               <span className="size-2 rounded-full bg-marca-600" />
               Laborable
             </span>
+            <span className="flex items-center gap-1.5 text-rose-700/80 dark:text-rose-400/80">
+              <span className="size-2 rounded-full bg-rose-400" />
+              Feriado / Inhabilitado
+            </span>
             <span className="flex items-center gap-1.5 text-amber-700/80 dark:text-amber-400/80">
               <span className="size-2 rounded-full bg-gray-300 dark:bg-gray-600" />
-              Sáb/Dom bloqueados
+              Sáb/Dom
             </span>
           </div>
 

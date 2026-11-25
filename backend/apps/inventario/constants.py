@@ -54,15 +54,12 @@ MINIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS = 60
 MAXIMO_TIEMPO_MAXIMO_PRESTAMO_MINUTOS = MAXIMO_DURACION_MINUTOS
 MAXIMO_TIEMPO_MAXIMO_PRESTAMO_DIAS = MAXIMO_DURACION_DIAS
 
-# Tiempo máximo de préstamo por defecto (en minutos) según el Tier mínimo del material:
-# - Avanzado: 6 horas (360 min) por defecto
-# - Estándar: 24 horas / 1 día (1440 min)
-# - Restringido: 3 días (4320 min)
+# Tiempo máximo de préstamo por defecto (en minutos) para todos los tiers: 3 días.
 TIEMPO_MAXIMO_DEFAULT_POR_TIER = {
-    "avanzado": 360,
-    "estandar": 1440,
+    "avanzado": MAXIMO_DURACION_MINUTOS,
+    "estandar": MAXIMO_DURACION_MINUTOS,
     "restringido": 4320,
 }
 
-DEFAULT_TIEMPO_MAXIMO_PRESTAMO_MINUTOS = TIEMPO_MAXIMO_DEFAULT_POR_TIER["estandar"]
+DEFAULT_TIEMPO_MAXIMO_PRESTAMO_MINUTOS = MAXIMO_DURACION_MINUTOS
 

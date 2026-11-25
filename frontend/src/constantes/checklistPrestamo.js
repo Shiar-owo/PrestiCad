@@ -15,8 +15,8 @@ export const TIEMPO_GRACIA_MINUTOS = TIEMPO_TOLERANCIA_DEVOLUCION_MINUTOS
 export const DURACION_MINIMA_PRESTAMO_DIAS = 1
 
 export const TIEMPO_MAXIMO_DEFAULT_POR_TIER = {
-  avanzado: { valor: 6, unidad: 'horas', minutos: 360 },
-  estandar: { valor: 24, unidad: 'horas', minutos: 1440 },
+  avanzado: { valor: 3, unidad: 'dias', minutos: 4320 },
+  estandar: { valor: 3, unidad: 'dias', minutos: 4320 },
   restringido: { valor: 3, unidad: 'dias', minutos: 4320 },
 }
 

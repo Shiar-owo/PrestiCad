@@ -377,11 +377,20 @@ function RegistrarPrestamo() {
   )
   const verificacionPendiente = /^\d{8}$/.test(formulario.dni.trim())
     && (consultandoPerfil || !perfilVerificadoActual && !errorPerfil)
+  const cupoPrestamosAlcanzado = Boolean(
+    perfilVerificadoActual
+    && typeof perfilVerificadoActual.prestamos_activos === 'number'
+    && typeof perfilVerificadoActual.maximo_prestamos_activos === 'number'
+    && perfilVerificadoActual.prestamos_activos >= perfilVerificadoActual.maximo_prestamos_activos,
+  )
+  const tienePrestamosVencidos = Boolean(perfilVerificadoActual?.tiene_prestamos_vencidos)
   const bloqueadoPorElegibilidad = Boolean(
-    materialSeleccionado && /^\d{8}$/.test(formulario.dni.trim())
+    /^\d{8}$/.test(formulario.dni.trim())
     && (
       verificacionPendiente || errorPerfil || !perfilVerificadoActual || !perfilHabilitado
-      || (!tierCumple && !excepcionActiva)
+      || (materialSeleccionado && !tierCumple && !excepcionActiva)
+      || cupoPrestamosAlcanzado
+      || tienePrestamosVencidos
     ),
   )
   const bloqueadoPorReservaConversion = esConversionFija && (
@@ -867,9 +876,32 @@ function RegistrarPrestamo() {
                             <span>Reputación:</span>
                             <strong className="font-bold text-texto">{perfilVerificadoActual.reputacion_puntaje} pts</strong>
                           </span>
+                          {typeof perfilVerificadoActual.prestamos_activos === 'number' && (
+                            <>
+                              <span aria-hidden="true" className="text-borde">·</span>
+                              <span className="inline-flex items-center gap-1">
+                                <span>Préstamos activos:</span>
+                                <strong className={`font-bold ${cupoPrestamosAlcanzado ? 'text-red-700 dark:text-red-400' : 'text-texto'}`}>
+                                  {perfilVerificadoActual.prestamos_activos} / {perfilVerificadoActual.maximo_prestamos_activos ?? 3}
+                                </strong>
+                              </span>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>
+
+                    {tienePrestamosVencidos && (
+                      <div className="rounded-lg bg-red-100 p-3 border border-red-300 text-red-900 dark:bg-red-950/50 dark:border-red-800 dark:text-red-200 text-xs font-semibold">
+                        ⚠️ El usuario tiene préstamos vencidos pendientes de devolución. El registro de nuevos préstamos está bloqueado por morosidad.
+                      </div>
+                    )}
+
+                    {cupoPrestamosAlcanzado && !tienePrestamosVencidos && (
+                      <div className="rounded-lg bg-amber-100 p-3 border border-amber-300 text-amber-900 dark:bg-amber-950/50 dark:border-amber-800 dark:text-amber-200 text-xs font-semibold">
+                        ⚠️ El usuario ha alcanzado su cupo máximo de préstamos activos ({perfilVerificadoActual.prestamos_activos} de {perfilVerificadoActual.maximo_prestamos_activos}). Debe devolver préstamos anteriores antes de recibir uno nuevo.
+                      </div>
+                    )}
 
                     {!perfilHabilitado && (
                       <p className="font-bold text-red-700 dark:text-red-300 text-sm pt-2.5 border-t border-red-300/60 dark:border-red-700/50">

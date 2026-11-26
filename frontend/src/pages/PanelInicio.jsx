@@ -148,6 +148,8 @@ function PanelInicio() {
             <TarjetaReputacion
               tier={usuario.reputacion_tier}
               puntaje={usuario.reputacion_puntaje}
+              puntosGanadosSemana={usuario.reputacion_puntos_ganados_semana}
+              topeSemanal={usuario.reputacion_tope_semanal}
               compacta
             />
           )}

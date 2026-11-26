@@ -669,6 +669,8 @@ function FormularioPerfil({ perfil, onGuardar, onGuardarFoto, onEliminarFoto, gu
           <TarjetaReputacion
             tier={perfil.reputacion_tier}
             puntaje={perfil.reputacion_puntaje}
+            puntosGanadosSemana={perfil.reputacion_puntos_ganados_semana}
+            topeSemanal={perfil.reputacion_tope_semanal}
           />
         </section>
       )}

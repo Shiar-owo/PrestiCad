@@ -1673,11 +1673,12 @@ class RegistrarPrestamoAPITestCase(APITestCase):
     URL = "/api/prestamos/"
 
     def setUp(self):
+        ahora_base = timezone.localtime(timezone.now())
+        lunes = ahora_base - timedelta(days=ahora_base.weekday())
+        fecha_fija = lunes.replace(hour=10, minute=0, second=0, microsecond=0)
         parche_hora_laboral = patch(
             "apps.prestamos.services.timezone.now",
-            return_value=timezone.localtime(timezone.now()).replace(
-                hour=10, minute=0, second=0, microsecond=0,
-            ),
+            return_value=fecha_fija,
         )
         parche_hora_laboral.start()
         self.addCleanup(parche_hora_laboral.stop)
@@ -3647,3 +3648,151 @@ class ReportesDevolucionAPITestCase(DevolucionBaseTestCase):
 
         self.assertEqual(respuesta.status_code, 400)
         self.assertIn("ordenar", respuesta.json())
+
+
+class LimitesPrestamosActivosTestCase(TestCase):
+    """Reglas de negocio: límite de préstamos concurrentes por Tier (2, 3, 5), morosidad y tope de reputación."""
+
+    def setUp(self):
+        self.gestor = crear_usuario("gestor_limites@unsa.edu.pe", "10000001", rol="gestor")
+        self.prestatario_restringido = crear_usuario(
+            "restringido_lim@unsa.edu.pe",
+            "10000002",
+            reputacion_tier="restringido",
+            reputacion_puntaje=-100,
+        )
+        self.prestatario_estandar = crear_usuario(
+            "estandar_lim@unsa.edu.pe",
+            "10000003",
+            reputacion_tier="estandar",
+            reputacion_puntaje=50,
+        )
+        self.prestatario_avanzado = crear_usuario(
+            "avanzado_lim@unsa.edu.pe",
+            "10000004",
+            reputacion_tier="avanzado",
+            reputacion_puntaje=300,
+        )
+        self.registrado_por = self.gestor
+
+    def _entregar(self, usuario, material, es_excepcion=False):
+        return registrar_prestamo(
+            dni_prestatario=usuario.dni,
+            material_id=material.id,
+            tiempo_prestamo_dias=1,
+            checklist_inicial=[{"elemento": "Item", "observacion": ""}],
+            registrado_por=self.registrado_por,
+            es_excepcion=es_excepcion,
+            compromiso_responsabilidad=SimpleUploadedFile("c.pdf", b"%PDF-1.4", content_type="application/pdf") if es_excepcion else None,
+            documento_identidad=SimpleUploadedFile("d.pdf", b"%PDF-1.4", content_type="application/pdf") if es_excepcion else None,
+        )
+
+    def test_restringido_permite_maximo_dos_prestamos_activos(self):
+        m1 = crear_material(codigo_material="REST-01", tier_minimo_requerido="restringido")
+        m2 = crear_material(codigo_material="REST-02", tier_minimo_requerido="restringido")
+        m3 = crear_material(codigo_material="REST-03", tier_minimo_requerido="restringido")
+
+        self._entregar(self.prestatario_restringido, m1)
+        self._entregar(self.prestatario_restringido, m2)
+
+        # El 3er préstamo debe ser rechazado
+        with self.assertRaises(PrestamoError) as ctx:
+            self._entregar(self.prestatario_restringido, m3)
+        self.assertEqual(ctx.exception.status_code, 409)
+        self.assertIn("límite máximo de préstamos activos", ctx.exception.mensaje)
+
+    def test_estandar_permite_maximo_tres_prestamos_activos(self):
+        materiales = [
+            crear_material(codigo_material=f"EST-{i:02d}", tier_minimo_requerido="estandar")
+            for i in range(1, 5)
+        ]
+        self._entregar(self.prestatario_estandar, materiales[0])
+        self._entregar(self.prestatario_estandar, materiales[1])
+        self._entregar(self.prestatario_estandar, materiales[2])
+
+        # El 4to préstamo debe ser rechazado
+        with self.assertRaises(PrestamoError) as ctx:
+            self._entregar(self.prestatario_estandar, materiales[3])
+        self.assertEqual(ctx.exception.status_code, 409)
+        self.assertIn("límite máximo de préstamos activos", ctx.exception.mensaje)
+
+    def test_avanzado_permite_maximo_cinco_prestamos_activos(self):
+        materiales = [
+            crear_material(codigo_material=f"AV-{i:02d}", tier_minimo_requerido="avanzado")
+            for i in range(1, 7)
+        ]
+        for i in range(5):
+            self._entregar(self.prestatario_avanzado, materiales[i])
+
+        # El 6to préstamo debe ser rechazado
+        with self.assertRaises(PrestamoError) as ctx:
+            self._entregar(self.prestatario_avanzado, materiales[5])
+        self.assertEqual(ctx.exception.status_code, 409)
+        self.assertIn("límite máximo de préstamos activos", ctx.exception.mensaje)
+
+    def test_prestamo_por_excepcion_ocupa_cupo_activo(self):
+        # Usuario restringido con 1 préstamo normal
+        m_normal = crear_material(codigo_material="EXC-01", tier_minimo_requerido="restringido")
+        self._entregar(self.prestatario_restringido, m_normal)
+
+        # Préstamo excepcional de material avanzado
+        m_avanzado1 = crear_material(codigo_material="EXC-02", tier_minimo_requerido="avanzado")
+        self._entregar(self.prestatario_restringido, m_avanzado1, es_excepcion=True)
+
+        # Ahora tiene 2 préstamos activos (alcanzó el límite de Restringido). El siguiente debe fallar:
+        m_avanzado2 = crear_material(codigo_material="EXC-03", tier_minimo_requerido="avanzado")
+        with self.assertRaises(PrestamoError) as ctx:
+            self._entregar(self.prestatario_restringido, m_avanzado2, es_excepcion=True)
+        self.assertEqual(ctx.exception.status_code, 409)
+        self.assertIn("límite máximo de préstamos activos", ctx.exception.mensaje)
+
+    def test_usuario_con_prestamo_vencido_queda_bloqueado_para_nuevas_entregas(self):
+        m1 = crear_material(codigo_material="VENC-01", tier_minimo_requerido="estandar")
+        p1 = self._entregar(self.prestatario_estandar, m1)
+
+        # Marcamos p1 como vencido (solo tiene 1 activo de un máx de 3)
+        p1.fecha_limite = timezone.now() - timedelta(hours=2)
+        p1.estado = "vencido"
+        p1.save(update_fields=["fecha_limite", "estado"])
+
+        m2 = crear_material(codigo_material="VENC-02", tier_minimo_requerido="estandar")
+        with self.assertRaises(PrestamoError) as ctx:
+            self._entregar(self.prestatario_estandar, m2)
+
+        self.assertEqual(ctx.exception.status_code, 409)
+        self.assertIn("préstamo vencido pendiente de devolución", ctx.exception.mensaje)
+
+    def test_devolucion_aplica_tope_semanal_de_reputacion(self):
+        m = crear_material(codigo_material="TOPE-01", tier_minimo_requerido="estandar")
+        m.bonificacion_tiempo = 20
+        m.save(update_fields=["bonificacion_tiempo"])
+
+        # Prestatario estándar tiene tope de 60 pts
+        # Simulemos que ya ganó 50 pts esta semana
+        from apps.usuarios.models import TransaccionReputacion
+        TransaccionReputacion.objects.create(
+            usuario=self.prestatario_estandar,
+            fecha=timezone.now(),
+            tipo="bonificacion_devolucion",
+            puntos_delta=50,
+            puntos_solicitados=50,
+        )
+
+        p = self._entregar(self.prestatario_estandar, m)
+        puntaje_antes = self.prestatario_estandar.reputacion_puntaje
+
+        dev = registrar_devolucion(
+            prestamo_id=p.id,
+            checklist_devolucion=[{"elemento": "Item", "estado": "sin_cambios", "observacion": ""}],
+            realizado_por=self.gestor,
+            fecha_devolucion=p.fecha_limite - timedelta(hours=1),
+        )
+
+        # La bonificación base era 20, pero solo le quedaban 10 para llegar a 60
+        self.assertEqual(dev.resultado["bonificacion_base"], 20)
+        self.assertEqual(dev.resultado["bonificacion"], 10)
+        self.assertTrue(dev.resultado["tope_semanal_alcanzado"])
+
+        self.prestatario_estandar.refresh_from_db()
+        self.assertEqual(self.prestatario_estandar.reputacion_puntaje, puntaje_antes + 10)
+

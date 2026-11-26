@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { calcularPorcentajeBarra, CONFIG_TIER } from './TarjetaReputacion'
+import { calcularPorcentajeBarra, CONFIG_TIER, TOPES_SEMANALES_DEFAULT } from './TarjetaReputacion'
 
 describe('TarjetaReputacion - Funciones y Configuración de Tiers', () => {
   it('contiene la configuración y descriptores para avanzado, estandar y restringido', () => {
@@ -15,6 +15,13 @@ describe('TarjetaReputacion - Funciones y Configuración de Tiers', () => {
     expect(CONFIG_TIER.estandar.rango).toBe('-50 a 200 puntos')
     expect(CONFIG_TIER.restringido.rango).toBe('-500 a -51 puntos')
     expect(CONFIG_TIER.avanzado.descripcion).not.toContain('sin restricciones de garantía')
+  })
+
+  it('define los topes semanales de bonificación por tier (restringido=30, estandar=60, avanzado=80)', () => {
+    expect(TOPES_SEMANALES_DEFAULT).toBeDefined()
+    expect(TOPES_SEMANALES_DEFAULT.restringido).toBe(30)
+    expect(TOPES_SEMANALES_DEFAULT.estandar).toBe(60)
+    expect(TOPES_SEMANALES_DEFAULT.avanzado).toBe(80)
   })
 
   it('calcula correctamente el porcentaje de barra en los rangos límites y neutro', () => {

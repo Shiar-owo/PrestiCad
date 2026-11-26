@@ -110,6 +110,18 @@ def _validar_maximo_reservas_activas(usuario_id):
         )
 
 
+def _validar_sin_prestamos_vencidos(usuario_id, ahora=None):
+    from apps.prestamos.services import tiene_prestamos_vencidos
+
+    if tiene_prestamos_vencidos(usuario_id, ahora=ahora):
+        raise ReservaError(
+            "reserva",
+            MENSAJES_ERROR_RESERVA["prestamos_vencidos_pendiente"],
+            status_code=409,
+        )
+
+
+
 def _validar_justificacion(justificacion):
     justificacion_limpia = str(justificacion or "").strip()
     if not justificacion_limpia:
@@ -342,6 +354,7 @@ def crear_reserva(
         Usuario.objects.select_for_update().select_related("rol").get(pk=usuario.pk)
     )
     _validar_usuario_prestatario(usuario_bloqueado)
+    _validar_sin_prestamos_vencidos(usuario_bloqueado.pk, ahora=ahora)
 
     tiers_permitidos = TIERS_ACCESIBLES.get(usuario_bloqueado.reputacion_tier, ())
     if material.tier_minimo_requerido not in tiers_permitidos:
@@ -489,6 +502,7 @@ def crear_reserva_excepcional(
         Usuario.objects.select_for_update().select_related("rol").get(pk=usuario.pk)
     )
     _validar_usuario_prestatario(usuario_bloqueado)
+    _validar_sin_prestamos_vencidos(usuario_bloqueado.pk, ahora=ahora)
     material = _obtener_material_bloqueado(material_id)
     _validar_horario_reserva(
         fecha_inicio,
@@ -680,7 +694,15 @@ def expirar_reservas(*, ahora=None):
         reserva.motivo_cancelacion = MENSAJES_ERROR_RESERVA["motivo_vencimiento_recojo"]
         reserva.save(update_fields=["estado", "motivo_cancelacion", "updated_at"])
         if penalizacion > 0:
-            actualizar_reputacion(reserva.usuario, -abs(penalizacion))
+            actualizar_reputacion(
+                reserva.usuario,
+                -abs(penalizacion),
+                tipo="sancion_reserva_vencida",
+                puntos_solicitados=-abs(penalizacion),
+                reserva_id=str(reserva.id),
+                descripcion=f"Sanción por reserva expirada #{reserva.id} ({reserva.material.nombre})",
+                fecha=ahora,
+            )
         reservas_vencidas += 1
         materiales_afectados.add(reserva.material_id)
 

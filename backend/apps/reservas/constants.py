@@ -52,4 +52,8 @@ MENSAJES_ERROR_RESERVA = {
     ),
     "sin_instancia_disponible": "No hay ejemplares disponibles para confirmar la reserva en este momento.",
     "motivo_vencimiento_recojo": "Cancelada automáticamente por no recoger el ejemplar dentro del plazo (incluida tolerancia de 30 minutos).",
+    "prestamos_vencidos_pendiente": (
+        "No puedes solicitar reservas mientras mantengas préstamos vencidos pendientes de devolución. "
+        "Por favor, regulariza tu entrega en almacén."
+    ),
 }

@@ -137,7 +137,15 @@ class PerfilElegibilidadPrestamoView(APIView):
         usuario = Usuario.objects.select_related("rol").filter(dni=dni).first()
         if usuario is None:
             return Response({"detail": "No existe un usuario registrado con ese DNI."}, status=404)
-        return Response(PerfilElegibilidadPrestamoSerializer(usuario).data)
+
+        datos = dict(PerfilElegibilidadPrestamoSerializer(usuario).data)
+        from apps.prestamos.constants import MAXIMO_PRESTAMOS_ACTIVOS_TIER
+        from apps.prestamos.services import contar_prestamos_activos_usuario, tiene_prestamos_vencidos
+
+        datos["prestamos_activos"] = contar_prestamos_activos_usuario(usuario.pk)
+        datos["maximo_prestamos_activos"] = MAXIMO_PRESTAMOS_ACTIVOS_TIER.get(usuario.reputacion_tier, 3)
+        datos["tiene_prestamos_vencidos"] = tiene_prestamos_vencidos(usuario.pk)
+        return Response(datos)
 
 
 class UsuarioRolView(RetrieveUpdateAPIView):

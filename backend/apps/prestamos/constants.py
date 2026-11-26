@@ -24,6 +24,24 @@ ESTADOS_GARANTIA = [
 
 ESTADOS_QUE_OCUPAN_UNIDAD = ("activo", "vencido")
 
+MAXIMO_PRESTAMOS_ACTIVOS_TIER = {
+    "restringido": 2,
+    "estandar": 3,
+    "avanzado": 5,
+}
+
+MENSAJES_ERROR_PRESTAMO = {
+    "limite_prestamos_alcanzado": (
+        "El prestatario ha alcanzado el límite máximo de préstamos activos permitidos "
+        "para su nivel de reputación ({maximo} activos)."
+    ),
+    "prestamo_vencido_pendiente": (
+        "El prestatario tiene al menos un préstamo vencido pendiente de devolución. "
+        "Debe regularizar su situación antes de recibir nuevos materiales."
+    ),
+}
+
+
 # Límites para sugerir prestatarios al registrar una entrega.
 MINIMO_DIGITOS_BUSQUEDA_PRESTATARIO = 3
 MAXIMO_PRESTATARIOS_SUGERIDOS = 10

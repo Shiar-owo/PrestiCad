@@ -16,7 +16,9 @@ from apps.prestamos.constants import (
     ESTADOS_QUE_OCUPAN_UNIDAD,
     MAXIMO_DIAS_PRESTAMO,
     MAXIMO_MINUTOS_PRESTAMO,
+    MAXIMO_PRESTAMOS_ACTIVOS_TIER,
     MAXIMO_PRESTATARIOS_SUGERIDOS,
+    MENSAJES_ERROR_PRESTAMO,
     MINIMO_DIAS_PRESTAMO,
     MINIMO_MINUTOS_PRESTAMO,
     TIEMPO_GRACIA_MINUTOS,
@@ -30,6 +32,7 @@ from apps.reservas.constants import TOLERANCIA_RECOJO_MINUTOS
 from apps.usuarios.models import Usuario
 from apps.usuarios.services import (
     actualizar_reputacion,
+    calcular_bonificacion_con_tope_semanal,
     puntaje_reputacion_ajustado,
     tier_por_puntaje,
 )
@@ -88,6 +91,44 @@ def tiene_prestamos_activos(usuario_id):
         usuario_id=usuario_id,
         estado__in=ESTADOS_QUE_OCUPAN_UNIDAD,
     ).exists()
+
+
+def tiene_prestamos_vencidos(usuario_id, ahora=None):
+    """Verifica si el usuario tiene préstamos con fecha límite superada y no devueltos."""
+    ahora = ahora or timezone.now()
+    return Prestamo.objects.filter(
+        usuario_id=usuario_id,
+    ).filter(
+        Q(estado="vencido") | Q(estado="activo", fecha_limite__lt=ahora)
+    ).exists()
+
+
+def contar_prestamos_activos_usuario(usuario_id):
+    """Devuelve el total de préstamos vigentes o vencidos en posesión del prestatario."""
+    return Prestamo.objects.filter(
+        usuario_id=usuario_id,
+        estado__in=ESTADOS_QUE_OCUPAN_UNIDAD,
+    ).count()
+
+
+def validar_limite_prestamos_activos(usuario, ahora=None):
+    """Verifica morosidad y límite de concurrencia según el Tier del prestatario."""
+    if tiene_prestamos_vencidos(usuario.pk, ahora=ahora):
+        raise PrestamoError(
+            "dni_prestatario",
+            MENSAJES_ERROR_PRESTAMO["prestamo_vencido_pendiente"],
+            status_code=409,
+        )
+
+    maximo = MAXIMO_PRESTAMOS_ACTIVOS_TIER.get(usuario.reputacion_tier, 3)
+    activos = contar_prestamos_activos_usuario(usuario.pk)
+    if activos >= maximo:
+        raise PrestamoError(
+            "dni_prestatario",
+            MENSAJES_ERROR_PRESTAMO["limite_prestamos_alcanzado"].format(maximo=maximo),
+            status_code=409,
+        )
+
 
 
 def _consultar_prestamos_con_estado(ahora=None):
@@ -940,6 +981,7 @@ def registrar_prestamo(
         except Garantia.DoesNotExist:
             garantia_reserva_reutilizable = None
 
+    validar_limite_prestamos_activos(prestatario, ahora=ahora_entrega)
     _validar_elegibilidad(prestatario, material, es_excepcion=es_excepcion)
     _validar_duracion_material(material, minutos_prestamo, campo_duracion)
 
@@ -1340,7 +1382,19 @@ def _calcular_resultado(prestamo, checklist, fecha_devolucion):
     limite_con_gracia = prestamo.fecha_limite + timedelta(minutes=TIEMPO_GRACIA_MINUTOS)
     en_tiempo_gracia = (not a_tiempo) and (fecha_devolucion <= limite_con_gracia)
     dias_tardanza = _dias_tardanza(fecha_devolucion, prestamo.fecha_limite)
-    bonificacion = material.bonificacion_tiempo if a_tiempo else 0
+
+    bonificacion_base = material.bonificacion_tiempo if a_tiempo else 0
+    tope_semanal_alcanzado = False
+    if a_tiempo and bonificacion_base > 0:
+        (
+            bonificacion,
+            tope_semanal_alcanzado,
+            _ganados_previos,
+            _tope,
+        ) = calcular_bonificacion_con_tope_semanal(usuario, bonificacion_base, ahora=fecha_devolucion)
+    else:
+        bonificacion = 0
+
     deduccion_tardanza = dias_tardanza * material.deduccion_tardanza
 
     estados = {item["estado"] for item in checklist}
@@ -1369,7 +1423,9 @@ def _calcular_resultado(prestamo, checklist, fecha_devolucion):
         "a_tiempo": a_tiempo,
         "en_tiempo_gracia": en_tiempo_gracia,
         "dias_tardanza": dias_tardanza,
+        "bonificacion_base": bonificacion_base,
         "bonificacion": bonificacion,
+        "tope_semanal_alcanzado": tope_semanal_alcanzado,
         "deduccion_tardanza": deduccion_tardanza,
         "dano": dano,
         "hay_dano": dano != "sin_cambios",
@@ -1416,6 +1472,7 @@ def registrar_devolucion(
     `Devolucion` quedan consistentes; si algo falla, nada se aplica.
     """
     prestamo = _obtener_prestamo_para_devolucion(prestamo_id, bloquear=True)
+    material = prestamo.material
     _validar_estado_devoluble(prestamo)
     _validar_checklist_devolucion(checklist_devolucion, prestamo)
     if fotos_checklist is None:
@@ -1425,7 +1482,26 @@ def registrar_devolucion(
     fecha_devolucion = fecha_devolucion or timezone.now()
 
     resultado = _calcular_resultado(prestamo, checklist, fecha_devolucion)
-    actualizar_reputacion(prestamo.usuario, resultado["puntos_delta"])
+    tipo_movimiento = "bonificacion_devolucion" if resultado["a_tiempo"] else (
+        "sancion_dano_total" if resultado["dano"] == "dano_total" else (
+            "sancion_dano_parcial" if resultado["dano"] == "dano_parcial" else "sancion_tardanza"
+        )
+    )
+    puntos_solicitados = (
+        resultado["bonificacion_base"]
+        - resultado["deduccion_tardanza"]
+        - resultado["deduccion_dano"]
+    )
+    actualizar_reputacion(
+        prestamo.usuario,
+        resultado["puntos_delta"],
+        tipo=tipo_movimiento,
+        puntos_solicitados=puntos_solicitados,
+        tope_aplicado=resultado["tope_semanal_alcanzado"],
+        prestamo_id=prestamo.id,
+        descripcion=f"Devolución del préstamo #{prestamo.id} ({material.nombre})",
+        fecha=fecha_devolucion,
+    )
 
     prestamo.estado = "devuelto"
     prestamo.save(update_fields=["estado"])

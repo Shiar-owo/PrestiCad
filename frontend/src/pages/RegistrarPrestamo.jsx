@@ -169,6 +169,15 @@ function RegistrarPrestamo() {
   const referenciasFotos = useRef([])
   const urlsTemporales = useRef(new Set())
 
+  const reservaSeleccionada = useMemo(
+    () => esConversionFija
+      ? reservaFija
+      : reservasConfirmadas.find(
+        (r) => String(r.id) === String(formulario.reservaId),
+      ) || null,
+    [esConversionFija, reservaFija, reservasConfirmadas, formulario.reservaId],
+  )
+
   useEffect(() => () => {
     urlsTemporales.current.forEach((url) => URL.revokeObjectURL(url))
     urlsTemporales.current.clear()
@@ -319,15 +328,6 @@ function RegistrarPrestamo() {
 
     return () => { vigente = false }
   }, [formulario.dni, reservaIdInicial])
-
-  const reservaSeleccionada = useMemo(
-    () => esConversionFija
-      ? reservaFija
-      : reservasConfirmadas.find(
-        (r) => String(r.id) === String(formulario.reservaId),
-      ) || null,
-    [esConversionFija, reservaFija, reservasConfirmadas, formulario.reservaId],
-  )
 
   const opcionesReservas = useMemo(() => {
     const lista = [...reservasConfirmadas]

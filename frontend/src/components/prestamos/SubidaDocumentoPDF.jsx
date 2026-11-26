@@ -1,10 +1,20 @@
 import { useId, useRef } from 'react'
 
-function SubidaDocumentoPDF({ etiqueta, archivo, onCambio, error = '', ayuda, enlaceAyuda }) {
+function SubidaDocumentoPDF({
+  etiqueta,
+  archivo,
+  onCambio,
+  error = '',
+  ayuda,
+  enlaceAyuda,
+  enlaceExistente,
+  requerido = true,
+}) {
   const identificador = useId()
   const entrada = useRef(null)
   const idAyuda = `${identificador}-ayuda`
   const mensaje = error || ayuda
+  const debeSerRequerido = requerido && !archivo
 
   function cambiarArchivo(evento) {
     onCambio(evento.target.files?.[0] ?? null)
@@ -19,14 +29,14 @@ function SubidaDocumentoPDF({ etiqueta, archivo, onCambio, error = '', ayuda, en
     <div className="grid gap-1">
       <label className="text-sm font-semibold text-texto" htmlFor={identificador}>
         {etiqueta}
-        <span aria-hidden="true" className="text-error"> *</span>
+        {debeSerRequerido && <span aria-hidden="true" className="text-error"> *</span>}
       </label>
       <input
         ref={entrada}
         id={identificador}
         type="file"
         accept="application/pdf,.pdf"
-        required
+        required={debeSerRequerido}
         onChange={cambiarArchivo}
         aria-invalid={Boolean(error)}
         aria-describedby={mensaje ? idAyuda : undefined}
@@ -34,7 +44,17 @@ function SubidaDocumentoPDF({ etiqueta, archivo, onCambio, error = '', ayuda, en
       />
       {archivo && (
         <div className="flex flex-wrap items-center gap-2 text-xs text-texto-suave">
-          <span>{archivo.name}</span>
+          <span className="font-medium text-texto">{archivo.name}</span>
+          {enlaceExistente && (
+            <a
+              href={enlaceExistente}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 font-semibold text-acento-700 underline dark:text-acento-300"
+            >
+              Ver PDF
+            </a>
+          )}
           <button
             type="button"
             onClick={quitarArchivo}

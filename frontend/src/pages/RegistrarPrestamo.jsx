@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
 import {
-  AlertTriangle,
   ArrowLeft,
   CheckCircle2,
   Clock,
@@ -168,6 +167,15 @@ function RegistrarPrestamo() {
   const referenciasFotos = useRef([])
   const urlsTemporales = useRef(new Set())
 
+  const reservaSeleccionada = useMemo(
+    () => esConversionFija
+      ? reservaFija
+      : reservasConfirmadas.find(
+        (r) => String(r.id) === String(formulario.reservaId),
+      ) || null,
+    [esConversionFija, reservaFija, reservasConfirmadas, formulario.reservaId],
+  )
+
   useEffect(() => () => {
     urlsTemporales.current.forEach((url) => URL.revokeObjectURL(url))
     urlsTemporales.current.clear()
@@ -215,6 +223,54 @@ function RegistrarPrestamo() {
       vigente = false
     }
   }, [reservaIdInicial])
+
+  useEffect(() => {
+    if (!reservaSeleccionada?.id) return undefined
+    let vigente = true
+    const tieneDoc = Boolean(
+      reservaSeleccionada.garantia?.documento_identidad_disponible
+      ?? reservaSeleccionada.garantia?.tiene_documento_identidad,
+    )
+    const tieneComp = Boolean(
+      reservaSeleccionada.garantia?.compromiso_responsabilidad_disponible
+      ?? reservaSeleccionada.garantia?.tiene_compromiso_responsabilidad,
+    )
+    if (!tieneDoc && !tieneComp) return undefined
+
+    Promise.all([
+      tieneDoc
+        ? fetch(`/api/reservas/${reservaSeleccionada.id}/garantia/documento-identidad/`, { credentials: 'include' })
+          .then((r) => (r.ok ? r.blob() : null))
+          .catch(() => null)
+        : Promise.resolve(null),
+      tieneComp
+        ? fetch(`/api/reservas/${reservaSeleccionada.id}/garantia/compromiso/`, { credentials: 'include' })
+          .then((r) => (r.ok ? r.blob() : null))
+          .catch(() => null)
+        : Promise.resolve(null),
+    ])
+      .then(([blobDni, blobComp]) => {
+        if (!vigente) return
+        setFormulario((actual) => {
+          const nuevoDoc = blobDni && typeof File !== 'undefined'
+            ? new File([blobDni], 'documento_identidad.pdf', { type: 'application/pdf' })
+            : actual.documentoIdentidad
+          const nuevoComp = blobComp && typeof File !== 'undefined'
+            ? new File([blobComp], 'compromiso_responsabilidad.pdf', { type: 'application/pdf' })
+            : actual.compromisoResponsabilidad
+
+          return {
+            ...actual,
+            documentoIdentidad: nuevoDoc,
+            compromisoResponsabilidad: nuevoComp,
+          }
+        })
+      })
+
+    return () => {
+      vigente = false
+    }
+  }, [reservaSeleccionada?.id])
 
   useEffect(() => {
     const dni = formulario.dni.trim()
@@ -266,15 +322,6 @@ function RegistrarPrestamo() {
 
     return () => { vigente = false }
   }, [formulario.dni, reservaIdInicial])
-
-  const reservaSeleccionada = useMemo(
-    () => esConversionFija
-      ? reservaFija
-      : reservasConfirmadas.find(
-        (r) => String(r.id) === String(formulario.reservaId),
-      ) || null,
-    [esConversionFija, reservaFija, reservasConfirmadas, formulario.reservaId],
-  )
 
   const opcionesReservas = useMemo(() => {
     const lista = [...reservasConfirmadas]
@@ -371,6 +418,9 @@ function RegistrarPrestamo() {
   const excepcionActiva = Boolean(
     reservaSeleccionada?.es_excepcion || (puedeSolicitarExcepcion && formulario.esExcepcion),
   )
+  const mostrarControlExcepcion = Boolean(
+    reservaSeleccionada?.es_excepcion || puedeSolicitarExcepcion,
+  )
   const garantiaReutilizada = Boolean(reservaSeleccionada?.garantia?.garantia_completa)
   const requiereGarantia = Boolean(
     excepcionActiva || esMaterialAltoValor(materialSeleccionado),
@@ -422,6 +472,8 @@ function RegistrarPrestamo() {
         materialId: '',
         instanciaId: '',
         esExcepcion: false,
+        documentoIdentidad: null,
+        compromisoResponsabilidad: null,
       }))
     }
     setErrores((actual) => ({
@@ -953,9 +1005,9 @@ function RegistrarPrestamo() {
                   requerido
                 />
 
-                {puedeSolicitarExcepcion && (
+                {mostrarControlExcepcion && (
                   <label
-                    className={`flex cursor-pointer gap-3 rounded-xl border p-3 text-xs ${
+                    className={`flex ${Boolean(reservaSeleccionada) ? 'cursor-not-allowed opacity-90' : 'cursor-pointer'} gap-3 rounded-xl border p-3 text-xs ${
                       excepcionActiva
                         ? 'border-acento-400 bg-acento-50/70 text-acento-900 dark:border-acento-600 dark:bg-acento-500/15 dark:text-acento-200'
                         : 'border-borde bg-superficie text-texto'
@@ -963,14 +1015,21 @@ function RegistrarPrestamo() {
                   >
                     <input
                       type="checkbox"
-                      checked={formulario.esExcepcion}
-                      onChange={(evento) => actualizar('esExcepcion', evento.target.checked)}
-                      className="mt-0.5 h-4 w-4 shrink-0 rounded text-acento-600"
+                      checked={excepcionActiva}
+                      disabled={Boolean(reservaSeleccionada)}
+                      onChange={(evento) => {
+                        if (!reservaSeleccionada) {
+                          actualizar('esExcepcion', evento.target.checked)
+                        }
+                      }}
+                      className="mt-0.5 h-4 w-4 shrink-0 rounded text-acento-600 disabled:cursor-not-allowed"
                     />
                     <div>
                       <span className="block font-bold">Autorizar excepción académica</span>
                       <span className="text-texto-suave">
-                        Permite entregar el material exigiendo garantías y duplicando la deducción por daños.
+                        {reservaSeleccionada?.es_excepcion
+                          ? 'Excepción académica fijada por la reserva confirmada (bloqueada para la entrega).'
+                          : 'Permite entregar el material exigiendo garantías y duplicando la deducción por daños.'}
                       </span>
                     </div>
                   </label>
@@ -1046,9 +1105,9 @@ function RegistrarPrestamo() {
                   {cruzaFinDeSemana(fechaInicioPrestamo, fechaFinPrestamo) && (
                     <div
                       role="note"
-                      className="rounded-lg border border-acento-300 bg-acento-50/70 p-2.5 text-xs text-acento-900 dark:border-acento-800 dark:bg-acento-950/40 dark:text-acento-200"
+                      className="rounded-lg border border-borde bg-superficie-alta p-2.5 text-xs text-texto"
                     >
-                      <strong>Aclaración para el trámite:</strong> Los préstamos se otorgan de lunes a viernes entre 08:00 y 18:00. La devolución pactada debe ser como máximo a las 17:30; su tolerancia llega hasta las 18:00.
+                      <strong>Aclaración para el trámite:</strong> Los préstamos se otorgan de lunes a viernes en el horario de atención de 08:00 a 18:00. La devolución se realiza como máximo a las 17:30 con tolerancia de entrega hasta las 18:00.
                     </div>
                   )}
                   {errores.dias && <p className="text-xs font-medium text-error">{errores.dias}</p>}
@@ -1126,21 +1185,6 @@ function RegistrarPrestamo() {
                     </div>
                   </dl>
                 </div>
-              </div>
-            )}
-
-            {/* Advertencia: ejemplar con reservas programadas */}
-            {formulario.instanciaId && instanciaSeleccionada?.estado === 'reservado' && (
-              <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-950/30">
-                <p className="flex items-start gap-2 text-xs font-medium text-amber-800 dark:text-amber-300">
-                  <AlertTriangle aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-                  <span>
-                    Este ejemplar tiene{' '}
-                    <strong>reservas programadas a futuro</strong>. La duración del préstamo no
-                    debe solaparse con la próxima reserva confirmada. Si hay conflicto de fechas,
-                    el sistema rechazará el registro automáticamente.
-                  </span>
-                </p>
               </div>
             )}
 
@@ -1250,16 +1294,7 @@ function RegistrarPrestamo() {
                     ? 'Garantía obligatoria para préstamo excepcional'
                     : 'Garantía obligatoria para material de alto valor'}
                 </legend>
-                {garantiaReutilizada ? (
-                  <div className="rounded-lg border border-marca-300 bg-marca-50 p-3 text-xs text-marca-900 dark:border-marca-700 dark:bg-marca-950/40 dark:text-marca-200 space-y-1">
-                    <p className="font-bold">
-                      Garantía verificada en la reserva (reutilización automática)
-                    </p>
-                    <p className="text-texto-suave">
-                      Los documentos de identidad y carta de compromiso registrados en la reserva quedarán vinculados a esta entrega.
-                    </p>
-                  </div>
-                ) : (
+                {!garantiaReutilizada && (
                   <p className="text-xs text-texto-suave">
                     Adjunta ambos documentos en PDF. Se almacenarán de forma privada y solo gestión autorizada podrá descargarlos. Tamaño máximo: {TAMANO_MAXIMO_GARANTIA_MB} MB.
                   </p>
@@ -1268,24 +1303,36 @@ function RegistrarPrestamo() {
                   <SubidaDocumentoPDF
                     etiqueta={
                       garantiaReutilizada
-                        ? 'Documento de identidad (PDF, opcional para reemplazar)'
+                        ? 'Documento de identidad (PDF, cargado de la reserva)'
                         : 'Documento de identidad (PDF)'
                     }
                     archivo={formulario.documentoIdentidad}
                     onCambio={(archivo) => actualizar('documentoIdentidad', archivo)}
                     error={errores.documento_identidad}
                     ayuda={`Solo se aceptan archivos PDF (.pdf), hasta ${TAMANO_MAXIMO_GARANTIA_MB} MB.`}
+                    enlaceExistente={
+                      reservaSeleccionada?.id && (reservaSeleccionada.garantia?.documento_identidad_disponible ?? reservaSeleccionada.garantia?.tiene_documento_identidad)
+                        ? `/api/reservas/${reservaSeleccionada.id}/garantia/documento-identidad/`
+                        : undefined
+                    }
+                    requerido={!garantiaReutilizada}
                   />
                   <SubidaDocumentoPDF
                     etiqueta={
                       garantiaReutilizada
-                        ? 'Carta de responsabilidad (PDF, opcional para reemplazar)'
+                        ? 'Carta de responsabilidad (PDF, cargada de la reserva)'
                         : 'Carta de responsabilidad (PDF)'
                     }
                     archivo={formulario.compromisoResponsabilidad}
                     onCambio={(archivo) => actualizar('compromisoResponsabilidad', archivo)}
                     error={errores.compromiso_responsabilidad}
                     ayuda={`Solo se aceptan archivos PDF (.pdf), hasta ${TAMANO_MAXIMO_GARANTIA_MB} MB.`}
+                    enlaceExistente={
+                      reservaSeleccionada?.id && (reservaSeleccionada.garantia?.compromiso_responsabilidad_disponible ?? reservaSeleccionada.garantia?.tiene_compromiso_responsabilidad)
+                        ? `/api/reservas/${reservaSeleccionada.id}/garantia/compromiso/`
+                        : undefined
+                    }
+                    requerido={!garantiaReutilizada}
                     enlaceAyuda={(
                       <a
                         href={URL_FORMATO_COMPROMISO_RESPONSABILIDAD}

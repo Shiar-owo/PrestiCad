@@ -34,6 +34,7 @@ class UsuarioListaSerializer(serializers.ModelSerializer):
     """Datos de perfil para la lista administrativa de usuarios."""
 
     rol = serializers.SlugRelatedField(slug_field="nombre", read_only=True)
+    prestamos_activos = serializers.SerializerMethodField()
 
     class Meta:
         model = Usuario
@@ -51,7 +52,18 @@ class UsuarioListaSerializer(serializers.ModelSerializer):
             "reputacion_tier",
             "rol",
             "estado",
+            "prestamos_activos",
         )
+
+    def get_prestamos_activos(self, obj):
+        """Devuelve el número de préstamos activos solo para prestatarios."""
+        if getattr(obj, "rol", None) and getattr(obj.rol, "nombre", None) == "prestatario":
+            try:
+                from apps.prestamos.services import contar_prestamos_activos_usuario
+                return contar_prestamos_activos_usuario(obj.pk)
+            except ImportError:
+                return None
+        return None
 
 
 class CambioRolSerializer(serializers.ModelSerializer):
@@ -190,6 +202,9 @@ class PerfilUsuarioSerializer(serializers.Serializer):
     reputacion_puntos_ganados_semana = serializers.IntegerField(required=False, default=0)
     reputacion_tope_semanal = serializers.IntegerField(required=False, default=60)
     foto_perfil = FotoPerfilUsuario(allow_null=True, required=False)
+    prestamos_activos = serializers.IntegerField(required=False, default=0)
+    maximo_prestamos_activos = serializers.IntegerField(required=False, default=0)
+    tiene_prestamos_vencidos = serializers.BooleanField(required=False, default=False)
 
 
 class PerfilElegibilidadPrestamoSerializer(serializers.ModelSerializer):

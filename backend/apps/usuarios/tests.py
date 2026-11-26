@@ -896,6 +896,9 @@ class PerfilUsuarioServiceTestCase(TestCase):
                 "foto_perfil": None,
                 "reputacion_puntos_ganados_semana": 0,
                 "reputacion_tope_semanal": 80,
+                "prestamos_activos": 0,
+                "maximo_prestamos_activos": 5,
+                "tiene_prestamos_vencidos": False,
             },
         )
 
@@ -935,6 +938,9 @@ class PerfilUsuarioServiceTestCase(TestCase):
         self.assertEqual(serializer.data["reputacion_tier"], "avanzado")
         self.assertNotIn("id", serializer.data)
         self.assertNotIn("password", serializer.data)
+        self.assertIn("prestamos_activos", serializer.data)
+        self.assertIn("maximo_prestamos_activos", serializer.data)
+        self.assertIn("tiene_prestamos_vencidos", serializer.data)
 
     def test_serializer_de_actualizacion_acepta_contactos_validos(self):
         serializer = ActualizarPerfilSerializer(

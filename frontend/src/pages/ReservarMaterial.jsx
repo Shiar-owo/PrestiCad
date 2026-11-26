@@ -18,6 +18,7 @@ import useTituloPagina from '../hooks/useTituloPagina'
 import {
   MAXIMO_RESERVAS_ACTIVAS,
   calcularMinutosHabilesReserva,
+  calcularSugerenciaSiguienteDia,
   construirFormularioReservaExcepcional,
   contarReservasActivas,
   cruzaFinDeSemana,
@@ -40,7 +41,7 @@ import {
   validarFormularioReserva,
   validarHorarioReserva,
 } from '../reservas/estadoReserva'
-import { useDiasNoLaborables } from '../reservas/diasNoLaborables'
+import { formatearFechaCortaIso, useDiasNoLaborables } from '../reservas/diasNoLaborables'
 import { formatearDuracionMinutos } from '../constantes/checklistPrestamo'
 import {
   NOMBRE_FORMATO_COMPROMISO_RESPONSABILIDAD,
@@ -85,6 +86,7 @@ export default function ReservarMaterial() {
   const [instancias, setInstancias] = useState([])
   const [cargandoInstancias, setCargandoInstancias] = useState(false)
   const [fechaSeleccionada, setFechaSeleccionada] = useState('')
+  const [fechaFinAvanzada, setFechaFinAvanzada] = useState('')
   const [horaInicio, setHoraInicio] = useState('')
   const [horaFin, setHoraFin] = useState('')
 
@@ -193,11 +195,32 @@ export default function ReservarMaterial() {
     0
 
   const erroresInicioActuales = esAvanzado
-    ? validarHorarioReserva(fechaSeleccionada, horaInicio, '', true, null, null, materialSeleccionado, diasNoLaborables)
+    ? validarHorarioReserva(fechaSeleccionada, horaInicio, '', true, null, null, materialSeleccionado, diasNoLaborables, fechaFinAvanzada)
     : validarHorarioReserva(undefined, undefined, undefined, false, fechaInicio, '', materialSeleccionado, diasNoLaborables)
   const inicioValidoParaFin = esAvanzado
     ? Boolean(fechaSeleccionada && horaInicio && !erroresInicioActuales.fecha && !erroresInicioActuales.horaInicio)
     : Boolean(fechaInicio && !erroresInicioActuales.fechaInicio)
+
+  const sugerenciaSiguienteDia = useMemo(() => {
+    if (esAvanzado) {
+      if (!fechaSeleccionada || !horaInicio || erroresInicioActuales.fecha || erroresInicioActuales.horaInicio) return null
+      return calcularSugerenciaSiguienteDia(fechaSeleccionada, horaInicio, materialSeleccionado, diasNoLaborables)
+    }
+    if (!fechaInicio || erroresInicioActuales.fechaInicio) return null
+    return calcularSugerenciaSiguienteDia(fechaInicio, null, materialSeleccionado, diasNoLaborables)
+  }, [esAvanzado, fechaSeleccionada, horaInicio, fechaInicio, erroresInicioActuales, materialSeleccionado, diasNoLaborables])
+
+  function aplicarSugerenciaSiguienteDia() {
+    if (!sugerenciaSiguienteDia?.esPosible) return
+    if (esAvanzado) {
+      setFechaFinAvanzada(sugerenciaSiguienteDia.fechaFinIso)
+      setHoraFin(sugerenciaSiguienteDia.horaFin)
+      setErrores((actuales) => ({ ...actuales, horaFin: '' }))
+    } else {
+      setFechaFin(sugerenciaSiguienteDia.fechaFinCompleta)
+      setErrores((actuales) => ({ ...actuales, fechaFin: '' }))
+    }
+  }
 
   function actualizarFechaInicioReserva(valor) {
     if (!valor) {
@@ -303,17 +326,23 @@ export default function ReservarMaterial() {
     if (!valor) {
       setHoraInicio('')
       setHoraFin('')
+      setFechaFinAvanzada('')
       setErrores((actuales) => ({ ...actuales, horaInicio: '', horaFin: '' }))
       return
     }
-    const validacion = validarHorarioReserva(fechaSeleccionada, valor, horaFin, true)
+    const validacion = validarHorarioReserva(fechaSeleccionada, valor, horaFin, true, null, null, materialSeleccionado, diasNoLaborables, fechaFinAvanzada)
     if (validacion.horaInicio) {
       setHoraInicio('')
       setHoraFin('')
+      setFechaFinAvanzada('')
       setErrores((actuales) => ({ ...actuales, horaInicio: validacion.horaInicio }))
       return
     }
     setHoraInicio(valor)
+    const [h, m] = valor.split(':').map(Number)
+    if (h * 60 + m <= 16 * 60 + 30 && fechaFinAvanzada) {
+      setFechaFinAvanzada('')
+    }
     if (validacion.horaFin && horaFin) setHoraFin('')
     setErrores((actuales) => ({
       ...actuales,
@@ -331,7 +360,17 @@ export default function ReservarMaterial() {
       setErrores((actuales) => ({ ...actuales, horaFin: '' }))
       return
     }
-    const validacion = validarHorarioReserva(fechaSeleccionada, horaInicio, valor, true)
+    const validacion = validarHorarioReserva(
+      fechaSeleccionada,
+      horaInicio,
+      valor,
+      true,
+      null,
+      null,
+      materialSeleccionado,
+      diasNoLaborables,
+      fechaFinAvanzada,
+    )
     if (validacion.horaFin) {
       setHoraFin('')
       setErrores((actuales) => ({ ...actuales, horaFin: validacion.horaFin }))
@@ -383,7 +422,7 @@ export default function ReservarMaterial() {
           ? `${fechaSeleccionada}T${horaInicio}:00`
           : fechaInicio
         const fechaF = esAvanzado
-          ? `${fechaSeleccionada}T${horaFin}:00`
+          ? `${fechaFinAvanzada || fechaSeleccionada}T${horaFin}:00`
           : fechaFin
         const formData = construirFormularioReservaExcepcional({
           materialId,
@@ -399,7 +438,7 @@ export default function ReservarMaterial() {
           ? `${fechaSeleccionada}T${horaInicio}:00`
           : fechaInicio || undefined
         const fechaF = esAvanzado
-          ? `${fechaSeleccionada}T${horaFin}:00`
+          ? `${fechaFinAvanzada || fechaSeleccionada}T${horaFin}:00`
           : fechaFin || undefined
         respuesta = await api.post('/reservas/', {
           material_id: materialId,
@@ -534,9 +573,9 @@ export default function ReservarMaterial() {
         {cruzaFinDeSemana(reservaCreada.fecha_inicio, reservaCreada.fecha_fin) && (
           <div
             role="note"
-            className="rounded-lg border border-acento-300 bg-acento-50/70 p-3.5 text-xs text-acento-900 dark:border-acento-800 dark:bg-acento-950/40 dark:text-acento-200"
+            className="rounded-lg border border-borde bg-superficie-alta p-3.5 text-xs text-texto"
           >
-            <strong>Aclaración para el trámite:</strong> El recojo y la devolución pactados son de lunes a viernes entre 08:00 y 17:30. El recojo tiene 30 minutos de tolerancia, hasta las 18:00.
+            <strong>Aclaración para el trámite:</strong> El recojo y la devolución son de lunes a viernes en el horario de atención de 08:00 a 18:00. El recojo tiene 30 minutos de tolerancia (hasta las 18:00 si se programó a las 17:30).
           </div>
         )}
 
@@ -805,13 +844,17 @@ export default function ReservarMaterial() {
                   htmlFor="input-hora-fin-reserva"
                   className="block text-xs font-semibold uppercase tracking-wide text-texto-suave mb-1"
                 >
-                  Hora de fin *
+                  Hora de fin * {fechaFinAvanzada && fechaFinAvanzada !== fechaSeleccionada && (
+                    <span className="text-marca-600 dark:text-marca-400 font-bold lowercase">
+                      ({formatearFechaCortaIso(fechaFinAvanzada)})
+                    </span>
+                  )}
                 </label>
                 <input
                   id="input-hora-fin-reserva"
                   type="time"
                   value={horaFin}
-                  min={obtenerMinimaHoraFinReserva(horaInicio)}
+                  min={fechaFinAvanzada && fechaFinAvanzada !== fechaSeleccionada ? '08:00' : obtenerMinimaHoraFinReserva(horaInicio)}
                   max={TEXTO_HORA_RESERVA_MAXIMO_FIN}
                   step="60"
                   disabled={!inicioValidoParaFin}
@@ -823,8 +866,30 @@ export default function ReservarMaterial() {
                   <p className="mt-1 text-xs font-medium text-error" role="alert">{errores.horaFin}</p>
                 )}
               </div>
+              {sugerenciaSiguienteDia?.aplica && (
+                <div
+                  role="status"
+                  className={`col-span-full rounded-lg border p-3 text-xs space-y-2 bg-superficie-alta ${
+                    sugerenciaSiguienteDia.esPosible
+                      ? 'border-marca-500 text-texto'
+                      : 'border-amber-500 text-amber-800 dark:text-amber-200'
+                  }`}
+                >
+                  <p className="font-semibold">{sugerenciaSiguienteDia.mensaje}</p>
+                  {sugerenciaSiguienteDia.esPosible && (
+                    <Boton
+                      tipo="button"
+                      variante="secundario"
+                      tamanio="pequeno"
+                      onClick={aplicarSugerenciaSiguienteDia}
+                    >
+                      Programar devolución para el {formatearFechaCortaIso(sugerenciaSiguienteDia.fechaFinIso)} a las 08:00
+                    </Boton>
+                  )}
+                </div>
+              )}
               <p className="text-xs text-texto-suave col-span-3">
-                El recojo y la devolución son de lunes a viernes, entre 08:00 y {TEXTO_HORA_RESERVA_MAXIMO_FIN}. La tolerancia dura 30 minutos.
+                El recojo y la devolución son de lunes a viernes dentro del horario de atención de 08:00 a 18:00. La tolerancia para recojo dura 30 minutos.
               </p>
             </div>
           ) : (
@@ -851,13 +916,35 @@ export default function ReservarMaterial() {
                   onCambio={(nuevoValor) => actualizarFechaFinReserva(nuevoValor)}
                 />
               </div>
+              {sugerenciaSiguienteDia?.aplica && (
+                <div
+                  role="status"
+                  className={`col-span-full rounded-lg border p-3 text-xs space-y-2 bg-superficie-alta ${
+                    sugerenciaSiguienteDia.esPosible
+                      ? 'border-marca-500 text-texto'
+                      : 'border-amber-500 text-amber-800 dark:text-amber-200'
+                  }`}
+                >
+                  <p className="font-semibold">{sugerenciaSiguienteDia.mensaje}</p>
+                  {sugerenciaSiguienteDia.esPosible && (
+                    <Boton
+                      tipo="button"
+                      variante="secundario"
+                      tamanio="pequeno"
+                      onClick={aplicarSugerenciaSiguienteDia}
+                    >
+                      Programar devolución para el {formatearFechaCortaIso(sugerenciaSiguienteDia.fechaFinIso)} a las 08:00
+                    </Boton>
+                  )}
+                </div>
+              )}
               <p className="text-xs text-texto-suave col-span-2">
-                Selecciona primero el inicio. El recojo y la devolución son de lunes a viernes entre 08:00 y {TEXTO_HORA_RESERVA_MAXIMO_FIN}. La tolerancia llega hasta las 18:00. Debe haber al menos 1 hora entre el recojo y la devolución.
+                Selecciona primero el inicio. El recojo y la devolución son de lunes a viernes dentro del horario de atención de 08:00 a 18:00. La tolerancia de recojo llega hasta las 18:00. Debe haber al menos 1 hora entre el recojo y la devolución.
               </p>
               {cruzaFinDeSemana(fechaInicio, fechaFin) && (
                 <div
                   role="note"
-                  className="col-span-2 rounded-lg border border-acento-300 bg-acento-50/70 p-3 text-xs text-acento-900 dark:border-acento-800 dark:bg-acento-950/40 dark:text-acento-200 space-y-1"
+                  className="col-span-2 rounded-lg border border-borde bg-superficie-alta p-3 text-xs text-texto space-y-1"
                 >
                   <p className="font-bold">
                     Aclaración sobre días de fin de semana intermedios:
@@ -865,7 +952,7 @@ export default function ReservarMaterial() {
                   <p>
                     Tu reserva incluye días de fin de semana intermedios (duración total contabilizada:{' '}
                     <strong>{formatearDuracionMinutos(calcularMinutosHabilesReserva(fechaInicio, fechaFin))}</strong>).
-                    Recojo y devolución pactados: lunes a viernes de 08:00 a 17:30. La tolerancia de recojo termina a las 18:00.
+                    Recojo y devolución: lunes a viernes dentro del horario de atención (08:00 a 18:00). La tolerancia de recojo termina a las 18:00.
                   </p>
                 </div>
               )}

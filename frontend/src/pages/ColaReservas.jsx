@@ -153,7 +153,7 @@ export default function ColaReservas() {
     try {
       const respuesta = await api.post(`/reservas/${reserva.id}/aprobar-excepcion/`, {})
       if (respuesta?.estado === 'reservada') {
-        const mensaje = `Excepción académica aprobada para ${reserva.usuario?.nombre_completo || reserva.usuario?.dni}. Se asignó un ejemplar con 30 minutos de tolerancia para el recojo pactado.`
+        const mensaje = `Excepción académica aprobada para ${reserva.usuario?.nombre_completo || reserva.usuario?.dni}. Se asignó un ejemplar con 30 minutos de tolerancia para el recojo.`
         setMensajePopupExito(mensaje)
       } else {
         const mensaje = `La solicitud de excepción de ${reserva.usuario?.nombre_completo || reserva.usuario?.dni} fue aprobada.`

@@ -1,5 +1,5 @@
 import { useContext, useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router'
+import { useNavigate, useSearchParams } from 'react-router'
 
 import { api } from '../api/client'
 import SesionContext from '../contextos/SesionContext'
@@ -25,11 +25,12 @@ export default function HistorialPrestamos() {
   useTituloPagina('Historial de préstamos')
   const { usuario } = useContext(SesionContext)
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [estado, setEstado] = useState('todos')
-  const [nombreEntrada, setNombreEntrada] = useState('')
-  const [nombreFiltro, setNombreFiltro] = useState('')
-  const [dniEntrada, setDniEntrada] = useState('')
-  const [dniFiltro, setDniFiltro] = useState('')
+  const [nombreEntrada, setNombreEntrada] = useState(() => searchParams.get('nombre') || '')
+  const [nombreFiltro, setNombreFiltro] = useState(() => searchParams.get('nombre') || '')
+  const [dniEntrada, setDniEntrada] = useState(() => searchParams.get('dni') || '')
+  const [dniFiltro, setDniFiltro] = useState(() => searchParams.get('dni') || '')
   const [pagina, setPagina] = useState(1)
   const [intento, setIntento] = useState(0)
   const [consulta, setConsulta] = useState(CONSULTA_INICIAL)

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { TAMANO_MAXIMO_SOLICITUD_BYTES } from '../prestamos/tamanoSolicitud'
 import {
   calcularMinutosHabilesReserva,
+  calcularSugerenciaSiguienteDia,
   construirFormularioReservaExcepcional,
   contarReservasActivas,
   cruzaFinDeSemana,
@@ -15,6 +16,7 @@ import {
   obtenerMinimaHoraInicioReserva,
   obtenerMinimoFinReserva,
   obtenerMinimoInicioReserva,
+  obtenerSiguienteDiaLaborable,
   ordenarColaReservas,
   puedeEntregarseReservaAhora,
   presentarEstadoReserva,
@@ -178,7 +180,7 @@ describe('presentación de motivos y fechas', () => {
   it('calcula límites de inicio y fin y ajusta si el máximo cae en fin de semana', () => {
     const ahora = new Date(2026, 5, 17, 10, 20, 35)
     expect(obtenerMinimoInicioReserva(ahora)).toBe('2026-06-17T10:21')
-    expect(obtenerMinimoFinReserva('2026-06-17T10:30')).toBe('2026-06-17T12:00')
+    expect(obtenerMinimoFinReserva('2026-06-17T10:30')).toBe('2026-06-17T11:30')
     // Por defecto (3 días = 4320 min): viernes 14:00 a lunes 14:00.
     expect(
       obtenerMaximoFinReserva('2026-12-18T14:00', { tiempo_maximo_prestamo: 4320 }),
@@ -192,7 +194,7 @@ describe('presentación de motivos y fechas', () => {
       obtenerMaximoFinReserva('2026-12-18T14:00', { tiempo_maximo_prestamo: 1440 }),
     ).toBe('2026-12-18T17:30')
     expect(obtenerMinimaHoraInicioReserva('2026-06-17', ahora)).toBe('10:21')
-    expect(obtenerMinimaHoraFinReserva('10:30')).toBe('12:00')
+    expect(obtenerMinimaHoraFinReserva('10:30')).toBe('11:30')
   })
 
   it('cuenta todos los días en medio (sábado y domingo) en el cómputo de duración', () => {
@@ -212,7 +214,7 @@ describe('presentación de motivos y fechas', () => {
 
     const excedePorTolerancia = validarFormularioReserva({
       materialId: 'mat-1',
-      justificacion: 'El rango pactado completo excede 15 días con tolerancia',
+      justificacion: 'El rango completo de reserva excede 15 días con tolerancia',
       esAvanzado: false,
       material: { tiempo_maximo_prestamo: 21600 },
       fechaInicio: '2026-12-07T14:00',
@@ -264,6 +266,15 @@ describe('presentación de motivos y fechas', () => {
       horaFin: '10:45',
     })
     expect(erroresAvanzado.horaFin).toMatch(/1 hora/)
+
+    const erroresExacto1h = validarFormularioReserva({
+      materialId: 'mat-1',
+      justificacion: 'Uso académico',
+      esAvanzado: false,
+      fechaInicio: '2026-12-16T10:00',
+      fechaFin: '2026-12-16T11:00',
+    })
+    expect(erroresExacto1h).toEqual({})
   })
 
   it('devuelve el motivo correspondiente según el estado de la reserva', () => {
@@ -288,5 +299,36 @@ describe('presentación de motivos y fechas', () => {
     expect(formatearFechaReserva('2026-06-17T13:00:00Z')).toContain('08:00')
     expect(formatearFechaReserva('2026-06-17T17:00:00Z')).toContain('12:00')
     expect(formatearFechaReserva('2026-06-17T22:00:00Z')).toContain('17:00')
+  })
+
+  it('obtiene el siguiente día laborable omitiendo fines de semana y días inhabilitados', () => {
+    // Jueves -> Viernes
+    expect(obtenerSiguienteDiaLaborable('2026-11-26')).toBe('2026-11-27')
+    // Viernes -> Lunes
+    expect(obtenerSiguienteDiaLaborable('2026-11-27')).toBe('2026-11-30')
+    // Viernes con Lunes inhabilitado -> Martes
+    const feriados = [{ id: 1, fecha: '2026-11-30', motivo: 'Feriado' }]
+    expect(obtenerSiguienteDiaLaborable('2026-11-27', feriados)).toBe('2026-12-01')
+  })
+
+  it('calcula sugerencia al siguiente día hábil si la hora supera el cierre de atención respetando el tiempo máximo', () => {
+    // 16:00 no necesita sugerencia (cabe 1 hora antes de las 17:30)
+    expect(calcularSugerenciaSiguienteDia('2026-11-26', '16:00')).toBeNull()
+
+    // 17:00 supera el horario hábil para 1 hora mínima; material con 3 días permite sugerir viernes 08:00 (15h = 900 min)
+    const sug = calcularSugerenciaSiguienteDia('2026-11-26', '17:00', { tiempo_maximo_prestamo: 4320 })
+    expect(sug).not.toBeNull()
+    expect(sug.aplica).toBe(true)
+    expect(sug.esPosible).toBe(true)
+    expect(sug.fechaFinIso).toBe('2026-11-27')
+    expect(sug.horaFin).toBe('08:00')
+    expect(sug.minutosTotales).toBe(900)
+
+    // Material con tiempo_maximo_prestamo de 2 horas (120 min): 900 min supera su tiempo máximo -> esPosible: false
+    const sugInvalido = calcularSugerenciaSiguienteDia('2026-11-26', '17:00', { tiempo_maximo_prestamo: 120 })
+    expect(sugInvalido).not.toBeNull()
+    expect(sugInvalido.aplica).toBe(true)
+    expect(sugInvalido.esPosible).toBe(false)
+    expect(sugInvalido.mensaje).toContain('No es posible extender')
   })
 })

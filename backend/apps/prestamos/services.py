@@ -388,7 +388,7 @@ def _resolver_duracion_prestamo(tiempo_prestamo_minutos, tiempo_prestamo_dias):
         if tiempo_prestamo_minutos > MAXIMO_MINUTOS_PRESTAMO:
             raise PrestamoError(
                 "tiempo_prestamo_minutos",
-                f"El plazo pactado máximo es de {formatear_duracion_minutos(MAXIMO_MINUTOS_PRESTAMO)}; "
+                f"El plazo máximo de préstamo es de {formatear_duracion_minutos(MAXIMO_MINUTOS_PRESTAMO)}; "
                 f"con la tolerancia de {TIEMPO_GRACIA_MINUTOS} minutos, el total es de {MAXIMO_DIAS_PRESTAMO} días.",
             )
         dias = max(1, math.ceil(tiempo_prestamo_minutos / 1440))
@@ -404,11 +404,11 @@ def _resolver_duracion_prestamo(tiempo_prestamo_minutos, tiempo_prestamo_dias):
             "tiempo_prestamo_dias",
             f"El tiempo de préstamo debe estar entre {MINIMO_DIAS_PRESTAMO} y {MAXIMO_DIAS_PRESTAMO} días.",
         )
-    minutos_pactados = min(
+    minutos_calculados = min(
         tiempo_prestamo_dias * 1440,
         MAXIMO_MINUTOS_PRESTAMO,
     )
-    return minutos_pactados, tiempo_prestamo_dias, "tiempo_prestamo_dias"
+    return minutos_calculados, tiempo_prestamo_dias, "tiempo_prestamo_dias"
 
 
 def _validar_duracion_material(material, tiempo_prestamo_minutos, campo_duracion):
@@ -872,7 +872,7 @@ def registrar_prestamo(
         ):
             raise PrestamoError(
                 "fecha_fin",
-                f"La devolución pactada debe respetar el horario de devolución, entre "
+                f"La devolución debe respetar el horario de devolución, entre "
                 f"{HORA_RESERVA_MINIMO_INICIO:02d}:00 y "
                 f"{HORA_RESERVA_MAXIMO_FIN:02d}:{MINUTO_RESERVA_MAXIMO_FIN:02d}.",
             )
@@ -961,7 +961,7 @@ def registrar_prestamo(
                 status_code=409,
             )
         minutos_prestamo = max(0, int((reserva.fecha_fin - ahora_entrega).total_seconds() // 60))
-        if minutos_prestamo < MINIMO_MINUTOS_PRESTAMO:
+        if minutos_prestamo <= 0:
             raise PrestamoError(
                 "reserva_id",
                 "El rango de fechas de la reserva no es válido.",

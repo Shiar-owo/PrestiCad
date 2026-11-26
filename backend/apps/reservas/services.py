@@ -258,7 +258,7 @@ def _validar_horario_reserva(
     ahora=None,
 ):
     """Valida que la reserva esté dentro del horario de atención y días laborables.
-    Recojo y devolución pactados deben quedar de lunes a viernes entre 08:00 y 17:30.
+    Recojo y devolución deben quedar de lunes a viernes entre 08:00 y 17:30.
     Todos los días intermedios (incluyendo fines de semana) cuentan en el cálculo de duración."""
     ahora = ahora or timezone.now()
     if fecha_inicio is None or fecha_fin is None:
@@ -283,7 +283,7 @@ def _validar_horario_reserva(
         if not (HORA_RESERVA_MINIMO_INICIO * 60 <= minutos_dia <= HORA_RESERVA_MAXIMO_FIN * 60 + 30):
             raise ReservaError(
                 etiqueta,
-                f"El horario pactado es de {HORA_RESERVA_MINIMO_INICIO:02d}:00 a "
+                f"El horario permitido para recojo y devolución es de {HORA_RESERVA_MINIMO_INICIO:02d}:00 a "
                 f"{HORA_RESERVA_MAXIMO_FIN:02d}:{MINUTO_RESERVA_MAXIMO_FIN:02d}.",
             )
 
@@ -298,13 +298,6 @@ def _validar_horario_reserva(
         raise ReservaError(
             "fecha_fin",
             "La reserva debe tener una duración mínima de 1 hora (60 minutos).",
-        )
-
-    limite_recojo = fecha_inicio + timedelta(minutes=TOLERANCIA_RECOJO_MINUTOS)
-    if fecha_fin - limite_recojo < timedelta(minutes=MINIMO_MINUTOS_RESERVA):
-        raise ReservaError(
-            "fecha_fin",
-            "Debe haber al menos 1 hora entre el límite de recojo y la devolución pactada.",
         )
     maximo_configurado = maximo_minutos or MAXIMO_DURACION_PACTADA_MINUTOS
     maximo_efectivo = min(maximo_configurado, MAXIMO_DURACION_PACTADA_MINUTOS)

@@ -1,4 +1,5 @@
 import { useContext, useEffect, useState } from 'react'
+import { useNavigate } from 'react-router'
 
 import { api } from '../api/client'
 import SesionContext from '../contextos/SesionContext'
@@ -31,6 +32,7 @@ const ETIQUETAS_ROL = {
 function UsuariosRoles() {
   useTituloPagina('Gestionar roles')
   const { usuario: usuarioAutenticado } = useContext(SesionContext)
+  const navigate = useNavigate()
   const [usuarios, setUsuarios] = useState([])
   const [cargando, setCargando] = useState(true)
   const [guardandoId, setGuardandoId] = useState(null)
@@ -268,6 +270,28 @@ function UsuariosRoles() {
             </dl>
             {!['gestor', 'administrador'].includes(perfilSeleccionado.rol) && (
               <ResumenTier tier={perfilSeleccionado.reputacion_tier} className="mt-3" />
+            )}
+            {!['gestor', 'administrador'].includes(perfilSeleccionado.rol) && (
+              <div className="mt-4 rounded-lg border border-borde bg-superficie p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-texto-suave mb-2">
+                  Préstamos activos
+                </p>
+                <p className="text-sm font-bold text-texto mb-3">
+                  {perfilSeleccionado.prestamos_activos ?? 0} en curso
+                </p>
+                <Boton
+                  variante="secundario"
+                  tamanio="pequeno"
+                  onClick={() => {
+                    setPerfilSeleccionado(null)
+                    navigate(
+                      `/panel/historial?dni=${encodeURIComponent(perfilSeleccionado.dni)}`,
+                    )
+                  }}
+                >
+                  Ver historial de préstamos
+                </Boton>
+              </div>
             )}
           </section>
         </div>

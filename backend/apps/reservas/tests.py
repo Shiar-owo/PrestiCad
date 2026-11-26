@@ -1,7 +1,7 @@
 """Pruebas de servicios, API y concurrencia para el módulo de reservas (HU06-HU08, HU13)."""
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager, nullcontext
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 from io import BytesIO
 import tempfile
 from threading import Barrier
@@ -1204,3 +1204,94 @@ class DiasNoLaborablesAPITestCase(APITestCase):
         self.assertTrue(dia_info["es_dia_inhabilitado"])
         self.assertEqual(dia_info["motivo_inhabilitado"], "Mantenimiento eléctrico")
         self.assertFalse(dia_info["disponible"])
+
+
+class BloqueoMorosidadReservasTestCase(TestCase):
+    """Reglas de negocio: un prestatario con préstamos vencidos no puede solicitar reservas."""
+
+    def setUp(self):
+        self.prestatario = crear_usuario("prestatario_moroso@unsa.edu.pe", "99000001", reputacion_tier="estandar")
+        self.gestor = crear_usuario("gestor_reservas@unsa.edu.pe", "99000002", rol="gestor")
+        self.material_estandar = crear_material(codigo_material="RES-EST-01", tier_minimo_requerido="estandar")
+        self.material_avanzado = crear_material(codigo_material="RES-AV-01", tier_minimo_requerido="avanzado")
+
+        tz = timezone.get_current_timezone()
+        # Fecha de reserva para el próximo lunes a las 10:00
+        lunes = timezone.localdate() + timedelta(days=(7 - timezone.localdate().weekday()))
+        self.inicio = timezone.make_aware(datetime.combine(lunes, time(10, 0)), tz)
+        self.fin = timezone.make_aware(datetime.combine(lunes, time(14, 0)), tz)
+
+    def test_prestatario_con_prestamo_vencido_no_puede_crear_reserva_normal(self):
+        # Entregamos un préstamo con el helper del módulo
+        p = registrar_prestamo(
+            dni_prestatario=self.prestatario.dni,
+            material_id=self.material_estandar.id,
+            tiempo_prestamo_dias=1,
+            checklist_inicial=[{"elemento": "Item", "observacion": ""}],
+            registrado_por=self.gestor,
+        )
+        # Marcamos como vencido
+        p.fecha_limite = timezone.now() - timedelta(hours=3)
+        p.estado = "vencido"
+        p.save(update_fields=["fecha_limite", "estado"])
+
+        with self.assertRaises(ReservaError) as ctx:
+            crear_reserva(
+                usuario=self.prestatario,
+                material_id=self.material_estandar.id,
+                justificacion="Proyecto de curso",
+                fecha_inicio=self.inicio,
+                fecha_fin=self.fin,
+            )
+        self.assertEqual(ctx.exception.status_code, 409)
+        self.assertIn("préstamos vencidos pendientes de devolución", ctx.exception.mensaje)
+
+    def test_prestatario_con_prestamo_vencido_no_puede_crear_reserva_excepcional(self):
+        p = registrar_prestamo(
+            dni_prestatario=self.prestatario.dni,
+            material_id=self.material_estandar.id,
+            tiempo_prestamo_dias=1,
+            checklist_inicial=[{"elemento": "Item", "observacion": ""}],
+            registrado_por=self.gestor,
+        )
+        p.fecha_limite = timezone.now() - timedelta(hours=3)
+        p.estado = "vencido"
+        p.save(update_fields=["fecha_limite", "estado"])
+
+        with self.assertRaises(ReservaError) as ctx:
+            crear_reserva_excepcional(
+                usuario=self.prestatario,
+                material_id=self.material_avanzado.id,
+                justificacion="Excepción académica",
+                documento_identidad=SimpleUploadedFile("dni.pdf", b"%PDF-1.4", content_type="application/pdf"),
+                compromiso_responsabilidad=SimpleUploadedFile("comp.pdf", b"%PDF-1.4", content_type="application/pdf"),
+                fecha_inicio=self.inicio,
+                fecha_fin=self.fin,
+            )
+        self.assertEqual(ctx.exception.status_code, 409)
+        self.assertIn("préstamos vencidos pendientes de devolución", ctx.exception.mensaje)
+
+    def test_expiracion_reserva_registra_sancion_auditable(self):
+        from apps.reservas.services import expirar_reservas
+        from apps.usuarios.models import TransaccionReputacion
+
+        reserva = crear_reserva(
+            usuario=self.prestatario,
+            material_id=self.material_estandar.id,
+            justificacion="Reserva a expirar",
+            fecha_inicio=self.inicio,
+            fecha_fin=self.fin,
+        )
+        # Adelantamos el tiempo para que expire el recojo
+        ahora_expiracion = reserva.fecha_limite_recojo + timedelta(minutes=1)
+        expirar_reservas(ahora=ahora_expiracion)
+
+        reserva.refresh_from_db()
+        self.assertEqual(reserva.estado, "cancelada_por_vencimiento")
+
+        # Comprobar que se registró la transacción en TransaccionReputacion
+        tx = TransaccionReputacion.objects.filter(usuario=self.prestatario, tipo="sancion_reserva_vencida").first()
+        self.assertIsNotNone(tx)
+        self.assertEqual(tx.puntos_delta, -20)
+        self.assertEqual(tx.reserva_id, str(reserva.id))
+

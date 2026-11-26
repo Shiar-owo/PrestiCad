@@ -12,7 +12,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
-from apps.usuarios.models import Credencial, Rol, Usuario
+from apps.usuarios.models import Credencial, Rol, TransaccionReputacion, Usuario
 from apps.usuarios.middleware import (
     ExpiracionSesionInactividadMiddleware,
     SesionAutenticadaMiddleware,
@@ -20,9 +20,12 @@ from apps.usuarios.middleware import (
 from apps.usuarios.serializers import ActualizarPerfilSerializer, PerfilUsuarioSerializer
 from apps.usuarios.services import (
     UsuariosError,
-    autenticar_usuario,
     actualizar_perfil,
     actualizar_reputacion,
+    autenticar_usuario,
+    calcular_bonificacion_con_tope_semanal,
+    calcular_puntos_ganados_semana_actual,
+    obtener_inicio_semana_operativa,
     obtener_perfil,
     puntaje_reputacion_ajustado,
     registrar_usuario,
@@ -97,6 +100,154 @@ class ActualizarReputacionTestCase(TestCase):
         self.assertEqual(puntaje, 500)
         self.assertEqual(self.usuario.reputacion_puntaje, 500)
         self.assertEqual(self.usuario.reputacion_tier, "avanzado")
+
+
+class TopeSemanalReputacionTestCase(TestCase):
+    """Reglas de negocio del tope semanal de puntos ganados (lunes a viernes)."""
+
+    def setUp(self):
+        self.usuario_restringido = Usuario.objects.create(
+            nombre="Carlos",
+            apellido="Restringido",
+            email="carlos.rest@unsa.edu.pe",
+            dni="11112222",
+            tipo="alumno",
+            facultad="Ingeniería",
+            reputacion_puntaje=-100,
+            reputacion_tier="restringido",
+        )
+        self.usuario_estandar = Usuario.objects.create(
+            nombre="Elena",
+            apellido="Estandar",
+            email="elena.est@unsa.edu.pe",
+            dni="22223333",
+            tipo="alumno",
+            facultad="Ingeniería",
+            reputacion_puntaje=50,
+            reputacion_tier="estandar",
+        )
+        self.usuario_avanzado = Usuario.objects.create(
+            nombre="Marcos",
+            apellido="Avanzado",
+            email="marcos.av@unsa.edu.pe",
+            dni="33334444",
+            tipo="alumno",
+            facultad="Ingeniería",
+            reputacion_puntaje=300,
+            reputacion_tier="avanzado",
+        )
+
+    def test_inicio_semana_operativa_es_lunes_a_las_cero_horas(self):
+        # Miércoles 18 de Noviembre de 2026 a las 14:30
+        miercoles = timezone.make_aware(timezone.datetime(2026, 11, 18, 14, 30))
+        inicio = obtener_inicio_semana_operativa(miercoles)
+        inicio_local = timezone.localtime(inicio)
+        self.assertEqual(inicio_local.weekday(), 0)  # Lunes
+        self.assertEqual(inicio_local.day, 16)
+        self.assertEqual(inicio_local.hour, 0)
+        self.assertEqual(inicio_local.minute, 0)
+
+    def test_puntos_ganados_semana_solo_cuenta_positivos_desde_el_lunes(self):
+        ahora = timezone.now()
+        lunes_actual = obtener_inicio_semana_operativa(ahora)
+
+        # Transacción de la semana anterior (+20) -> no debe contar
+        TransaccionReputacion.objects.create(
+            usuario=self.usuario_estandar,
+            fecha=lunes_actual - timedelta(days=2),
+            tipo="bonificacion_devolucion",
+            puntos_delta=20,
+            puntos_solicitados=20,
+        )
+        # Transacción de esta semana (+15) -> debe contar
+        TransaccionReputacion.objects.create(
+            usuario=self.usuario_estandar,
+            fecha=lunes_actual + timedelta(hours=5),
+            tipo="bonificacion_devolucion",
+            puntos_delta=15,
+            puntos_solicitados=15,
+        )
+        # Deducción de esta semana (-10) -> no debe restar del acumulador de ganados
+        TransaccionReputacion.objects.create(
+            usuario=self.usuario_estandar,
+            fecha=lunes_actual + timedelta(hours=10),
+            tipo="sancion_tardanza",
+            puntos_delta=-10,
+            puntos_solicitados=-10,
+        )
+        # Otra bonificación de esta semana (+15) -> debe contar
+        TransaccionReputacion.objects.create(
+            usuario=self.usuario_estandar,
+            fecha=lunes_actual + timedelta(hours=20),
+            tipo="bonificacion_devolucion",
+            puntos_delta=15,
+            puntos_solicitados=15,
+        )
+
+        total_ganados = calcular_puntos_ganados_semana_actual(self.usuario_estandar, ahora=ahora)
+        self.assertEqual(total_ganados, 30)
+
+    def test_tope_restringido_maximo_treinta_con_soft_clamp(self):
+        # Tier Restringido tiene tope de 30 pts
+        # Primera devolución: bonificación de 20 pts -> se otorgan 20 completos
+        bonif1, tope1, _, _ = calcular_bonificacion_con_tope_semanal(self.usuario_restringido, 20)
+        self.assertEqual(bonif1, 20)
+        self.assertFalse(tope1)
+
+        # Registramos la transacción de 20 pts
+        actualizar_reputacion(self.usuario_restringido, 20, tipo="bonificacion_devolucion")
+
+        # Segunda devolución: bonificación de 20 pts -> solo deben otorgarse 10 pts (tope 30)
+        bonif2, tope2, _, _ = calcular_bonificacion_con_tope_semanal(self.usuario_restringido, 20)
+        self.assertEqual(bonif2, 10)
+        self.assertTrue(tope2)
+
+        # Registramos los 10 pts
+        actualizar_reputacion(
+            self.usuario_restringido,
+            10,
+            tipo="bonificacion_devolucion",
+            puntos_solicitados=20,
+            tope_aplicado=True,
+        )
+
+        # Tercera devolución: bonificación de 20 pts -> debe ser 0 (tope ya alcanzado)
+        bonif3, tope3, _, _ = calcular_bonificacion_con_tope_semanal(self.usuario_restringido, 20)
+        self.assertEqual(bonif3, 0)
+        self.assertTrue(tope3)
+
+    def test_tope_estandar_maximo_sesenta_y_avanzado_ochenta(self):
+        # Tier Estándar: tope 60
+        bonif, tope, _, tope_max = calcular_bonificacion_con_tope_semanal(self.usuario_estandar, 70)
+        self.assertEqual(bonif, 60)
+        self.assertTrue(tope)
+        self.assertEqual(tope_max, 60)
+
+        # Tier Avanzado: tope 80
+        bonif_av, tope_av, _, tope_max_av = calcular_bonificacion_con_tope_semanal(self.usuario_avanzado, 100)
+        self.assertEqual(bonif_av, 80)
+        self.assertTrue(tope_av)
+        self.assertEqual(tope_max_av, 80)
+
+    def test_actualizar_reputacion_persiste_transaccion_auditable(self):
+        self.assertEqual(self.usuario_estandar.transacciones_reputacion.count(), 0)
+
+        actualizar_reputacion(
+            self.usuario_estandar,
+            15,
+            tipo="bonificacion_devolucion",
+            puntos_solicitados=15,
+            prestamo_id=123,
+            descripcion="Devolución puntual",
+        )
+
+        self.assertEqual(self.usuario_estandar.transacciones_reputacion.count(), 1)
+        tx = self.usuario_estandar.transacciones_reputacion.first()
+        self.assertEqual(tx.tipo, "bonificacion_devolucion")
+        self.assertEqual(tx.puntos_delta, 15)
+        self.assertEqual(tx.prestamo_id, 123)
+        self.assertEqual(tx.descripcion, "Devolución puntual")
+
 
 
 class ModuloUsuariosTestCase(SimpleTestCase):
@@ -743,6 +894,8 @@ class PerfilUsuarioServiceTestCase(TestCase):
                 "reputacion_puntaje": 225,
                 "reputacion_tier": "avanzado",
                 "foto_perfil": None,
+                "reputacion_puntos_ganados_semana": 0,
+                "reputacion_tope_semanal": 80,
             },
         )
 

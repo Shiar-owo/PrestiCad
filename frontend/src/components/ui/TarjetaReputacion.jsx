@@ -43,19 +43,37 @@ export const CONFIG_TIER = {
   },
 }
 
+export const TOPES_SEMANALES_DEFAULT = {
+  restringido: 30,
+  estandar: 60,
+  avanzado: 80,
+}
+
 export function calcularPorcentajeBarra(puntaje) {
   const p = typeof puntaje === 'number' ? puntaje : 0
   const normalizado = Math.max(-500, Math.min(500, p))
   return Math.round(((normalizado + 500) / 1000) * 100)
 }
 
-function TarjetaReputacion({ tier = 'estandar', puntaje = 0, compacta = false, className = '' }) {
+function TarjetaReputacion({
+  tier = 'estandar',
+  puntaje = 0,
+  puntosGanadosSemana = 0,
+  topeSemanal = null,
+  compacta = false,
+  className = '',
+}) {
   const claveTier = String(tier).toLowerCase()
   const config = CONFIG_TIER[claveTier] || CONFIG_TIER.estandar
   const IconoPrincipal = config.icono
   const nombreTier = ETIQUETAS_TIER[claveTier] || config.nombre
   const porcentaje = calcularPorcentajeBarra(puntaje)
   const signoPuntaje = puntaje > 0 ? `+${puntaje}` : `${puntaje}`
+  const topeEfectivo = typeof topeSemanal === 'number' && topeSemanal > 0
+    ? topeSemanal
+    : TOPES_SEMANALES_DEFAULT[claveTier] || 60
+  const puntosSemana = typeof puntosGanadosSemana === 'number' ? Math.max(0, puntosGanadosSemana) : 0
+  const topeAlcanzado = puntosSemana >= topeEfectivo
 
   if (compacta) {
     return (
@@ -82,8 +100,16 @@ function TarjetaReputacion({ tier = 'estandar', puntaje = 0, compacta = false, c
           </span>
         </div>
 
+        {/* Progreso semanal */}
+        <div className="mt-2.5 flex items-center justify-between text-[11px] font-medium text-texto-suave border-t border-borde/30 pt-2">
+          <span>Esta semana (Lun-Vie):</span>
+          <span className={`font-bold ${topeAlcanzado ? 'text-amber-700 dark:text-amber-400' : 'text-texto'}`}>
+            +{puntosSemana} / {topeEfectivo} pts {topeAlcanzado ? '(Tope)' : ''}
+          </span>
+        </div>
+
         {/* Mini barra de nivel */}
-        <div className="mt-3">
+        <div className="mt-2">
           <div className="flex justify-between text-[11px] font-semibold text-texto-suave">
             <span>Escala</span>
             <span>{config.rango}</span>
@@ -134,6 +160,25 @@ function TarjetaReputacion({ tier = 'estandar', puntaje = 0, compacta = false, c
             {config.descripcion}
           </p>
         </div>
+      </div>
+
+      {/* Progreso semanal (Lunes a Viernes) */}
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-superficie/60 p-3 text-xs text-texto-suave border border-borde/40 dark:bg-superficie-alta/30">
+        <div className="flex items-center gap-2">
+          <span className="font-semibold text-texto">Puntos ganados esta semana (Lun-Vie):</span>
+          <span className="font-bold text-texto">
+            +{puntosSemana} de {topeEfectivo} pts máx.
+          </span>
+        </div>
+        {topeAlcanzado ? (
+          <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-900 border border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-700">
+            Tope semanal alcanzado
+          </span>
+        ) : (
+          <span className="text-[11px] text-texto-suave">
+            Disponible: +{Math.max(0, topeEfectivo - puntosSemana)} pts
+          </span>
+        )}
       </div>
 
       {/* Barra de progreso visual de reputación */}

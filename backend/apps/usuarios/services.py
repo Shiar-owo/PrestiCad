@@ -2,10 +2,11 @@
 from datetime import timedelta
 
 from django.contrib.auth.hashers import check_password, make_password
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, models, transaction
 from django.utils import timezone
 
-from apps.usuarios.models import Credencial, Rol, Usuario
+from apps.usuarios.constants import MAXIMO_PUNTOS_SEMANALES_TIER
+from apps.usuarios.models import Credencial, Rol, TransaccionReputacion, Usuario
 from apps.usuarios.validators import validar_y_normalizar_telefono
 
 INTENTOS_FALLIDOS_MAXIMOS = 5
@@ -188,7 +189,7 @@ def usuario_tiene_prestamos_activos(usuario_id):
     return tiene_prestamos_activos(usuario_id)
 
 
-def obtener_perfil(usuario):
+def obtener_perfil(usuario, ahora=None):
     return {
         "nombre": usuario.nombre,
         "apellido": usuario.apellido,
@@ -204,6 +205,8 @@ def obtener_perfil(usuario):
         "reputacion_puntaje": usuario.reputacion_puntaje,
         "reputacion_tier": usuario.reputacion_tier,
         "foto_perfil": usuario.foto_perfil,
+        "reputacion_puntos_ganados_semana": calcular_puntos_ganados_semana_actual(usuario, ahora=ahora),
+        "reputacion_tope_semanal": MAXIMO_PUNTOS_SEMANALES_TIER.get(usuario.reputacion_tier, 60),
     }
 
 
@@ -299,8 +302,87 @@ def tier_por_puntaje(puntaje):
     return "estandar"
 
 
-def actualizar_reputacion(usuario, delta):
-    """Aplica un delta al puntaje con clamp y recalcula el Tier (RN03).
+def obtener_inicio_semana_operativa(ahora=None):
+    """Devuelve el lunes de la semana actual a las 00:00:00 en la zona horaria local."""
+    ahora_local = timezone.localtime(ahora or timezone.now())
+    inicio_dia = ahora_local.replace(hour=0, minute=0, second=0, microsecond=0)
+    return inicio_dia - timedelta(days=ahora_local.weekday())
+
+
+def calcular_puntos_ganados_semana_actual(usuario, ahora=None):
+    """Suma los puntos positivos de transacciones registradas desde el lunes en curso."""
+    inicio_semana = obtener_inicio_semana_operativa(ahora)
+    total = (
+        TransaccionReputacion.objects.filter(
+            usuario=usuario,
+            fecha__gte=inicio_semana,
+            puntos_delta__gt=0,
+        ).aggregate(total=models.Sum("puntos_delta"))["total"]
+        or 0
+    )
+    return total
+
+
+def calcular_bonificacion_con_tope_semanal(usuario, bonificacion_base, ahora=None):
+    """Aplica la cota máxima semanal de ganancia de puntos según el Tier del usuario.
+
+    Devuelve: (bonificacion_efectiva, tope_alcanzado, ganados_previos, tope)
+    """
+    if bonificacion_base <= 0:
+        return 0, False, 0, 0
+
+    tope = MAXIMO_PUNTOS_SEMANALES_TIER.get(usuario.reputacion_tier, 60)
+    ganados_previos = calcular_puntos_ganados_semana_actual(usuario, ahora=ahora)
+    margen_disponible = max(0, tope - ganados_previos)
+
+    bonificacion_efectiva = min(bonificacion_base, margen_disponible)
+    tope_alcanzado = (ganados_previos + bonificacion_efectiva) >= tope
+
+    return bonificacion_efectiva, tope_alcanzado, ganados_previos, tope
+
+
+def registrar_transaccion_reputacion(
+    *,
+    usuario,
+    puntos_delta,
+    tipo="ajuste_administrativo",
+    puntos_solicitados=None,
+    tope_aplicado=False,
+    prestamo_id=None,
+    reserva_id=None,
+    descripcion="",
+    fecha=None,
+):
+    """Persiste el evento inmutable de cambio de puntos para auditoría."""
+    fecha_movimiento = fecha or timezone.now()
+    solicitados = puntos_delta if puntos_solicitados is None else puntos_solicitados
+
+    return TransaccionReputacion.objects.create(
+        usuario=usuario,
+        fecha=fecha_movimiento,
+        tipo=tipo,
+        puntos_delta=puntos_delta,
+        puntos_solicitados=solicitados,
+        tope_aplicado=tope_aplicado,
+        prestamo_id=prestamo_id,
+        reserva_id=reserva_id,
+        descripcion=descripcion,
+    )
+
+
+def actualizar_reputacion(
+    usuario,
+    delta,
+    *,
+    tipo="ajuste_administrativo",
+    puntos_solicitados=None,
+    tope_aplicado=False,
+    prestamo_id=None,
+    reserva_id=None,
+    descripcion="",
+    fecha=None,
+):
+    """Aplica un delta al puntaje con clamp, recalcula el Tier y persiste TransaccionReputacion (RN03).
 
     Devuelve el puntaje resultante para que el llamante pueda componer el
     resultado que persista o exponga.
@@ -310,5 +392,16 @@ def actualizar_reputacion(usuario, delta):
     usuario.reputacion_tier = tier_por_puntaje(puntaje_nuevo)
     usuario.save(
         update_fields=["reputacion_puntaje", "reputacion_tier", "updated_at"],
+    )
+    registrar_transaccion_reputacion(
+        usuario=usuario,
+        puntos_delta=delta,
+        tipo=tipo,
+        puntos_solicitados=puntos_solicitados,
+        tope_aplicado=tope_aplicado,
+        prestamo_id=prestamo_id,
+        reserva_id=reserva_id,
+        descripcion=descripcion,
+        fecha=fecha,
     )
     return puntaje_nuevo

@@ -187,6 +187,8 @@ class PerfilUsuarioSerializer(serializers.Serializer):
     departamento_carrera = serializers.CharField(allow_blank=True, required=False, default="")
     reputacion_puntaje = serializers.IntegerField()
     reputacion_tier = serializers.CharField()
+    reputacion_puntos_ganados_semana = serializers.IntegerField(required=False, default=0)
+    reputacion_tope_semanal = serializers.IntegerField(required=False, default=60)
     foto_perfil = FotoPerfilUsuario(allow_null=True, required=False)
 
 
@@ -310,4 +312,6 @@ class SesionUsuarioSerializer(serializers.Serializer):
     estado = serializers.ChoiceField(choices=ESTADOS_USUARIO)
     reputacion_tier = serializers.ChoiceField(choices=TIERS)
     reputacion_puntaje = serializers.IntegerField(required=False, default=0)
+    reputacion_puntos_ganados_semana = serializers.IntegerField(required=False, default=0)
+    reputacion_tope_semanal = serializers.IntegerField(required=False, default=60)
     foto_perfil = FotoPerfilUsuario(read_only=True, required=False, allow_null=True)

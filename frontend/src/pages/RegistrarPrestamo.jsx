@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
 import {
-  AlertTriangle,
   ArrowLeft,
   CheckCircle2,
   Clock,
@@ -164,7 +163,6 @@ function RegistrarPrestamo() {
   const [errorPerfil, setErrorPerfil] = useState('')
   const [elementosSinFoto, setElementosSinFoto] = useState(null)
   const [advertenciaFechaHoraReserva, setAdvertenciaFechaHoraReserva] = useState(false)
-  const [cargandoGarantiaReserva, setCargandoGarantiaReserva] = useState(false)
   const referenciaFormulario = useRef(null)
   const referenciasFotos = useRef([])
   const urlsTemporales = useRef(new Set())
@@ -239,7 +237,6 @@ function RegistrarPrestamo() {
     )
     if (!tieneDoc && !tieneComp) return undefined
 
-    setCargandoGarantiaReserva(true)
     Promise.all([
       tieneDoc
         ? fetch(`/api/reservas/${reservaSeleccionada.id}/garantia/documento-identidad/`, { credentials: 'include' })
@@ -268,9 +265,6 @@ function RegistrarPrestamo() {
             compromisoResponsabilidad: nuevoComp,
           }
         })
-      })
-      .finally(() => {
-        if (vigente) setCargandoGarantiaReserva(false)
       })
 
     return () => {
@@ -1194,21 +1188,6 @@ function RegistrarPrestamo() {
               </div>
             )}
 
-            {/* Advertencia: ejemplar con reservas programadas */}
-            {formulario.instanciaId && instanciaSeleccionada?.estado === 'reservado' && (
-              <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-950/30">
-                <p className="flex items-start gap-2 text-xs font-medium text-amber-800 dark:text-amber-300">
-                  <AlertTriangle aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-                  <span>
-                    Este ejemplar tiene{' '}
-                    <strong>reservas programadas a futuro</strong>. La duración del préstamo no
-                    debe solaparse con la próxima reserva confirmada. Si hay conflicto de fechas,
-                    el sistema rechazará el registro automáticamente.
-                  </span>
-                </p>
-              </div>
-            )}
-
             {/* Checklist del estado inicial */}
             <fieldset className="rounded-xl border border-borde p-5 space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-borde/60 pb-3">
@@ -1315,21 +1294,7 @@ function RegistrarPrestamo() {
                     ? 'Garantía obligatoria para préstamo excepcional'
                     : 'Garantía obligatoria para material de alto valor'}
                 </legend>
-                {garantiaReutilizada ? (
-                  <div className="rounded-lg border border-marca-300 bg-marca-50 p-3 text-xs text-marca-900 dark:border-marca-700 dark:bg-marca-950/40 dark:text-marca-200 space-y-1">
-                    <p className="font-bold">
-                      Garantía verificada en la reserva (reutilización automática)
-                    </p>
-                    <p className="text-texto-suave">
-                      Los documentos de identidad y carta de compromiso registrados en la reserva se cargan automáticamente y quedan vinculados a esta entrega.
-                    </p>
-                    {cargandoGarantiaReserva && (
-                      <p className="text-texto-suave italic">
-                        Cargando documentos adjuntos de la reserva...
-                      </p>
-                    )}
-                  </div>
-                ) : (
+                {!garantiaReutilizada && (
                   <p className="text-xs text-texto-suave">
                     Adjunta ambos documentos en PDF. Se almacenarán de forma privada y solo gestión autorizada podrá descargarlos. Tamaño máximo: {TAMANO_MAXIMO_GARANTIA_MB} MB.
                   </p>

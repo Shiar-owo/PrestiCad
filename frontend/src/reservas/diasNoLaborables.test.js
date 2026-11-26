@@ -44,7 +44,7 @@ describe('diasNoLaborables', () => {
     expect(errores.fechaFin).toContain('Navidad')
   })
 
-  it('rechaza préstamos cuya devolución pactada cae en un día inhabilitado', () => {
+  it('rechaza préstamos cuya devolución cae en un día inhabilitado', () => {
     const errores = validarFormularioPrestamo({
       dni: '12345678',
       material: { id: 'm1', tiempo_maximo_prestamo: 1440 },

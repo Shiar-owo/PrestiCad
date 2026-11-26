@@ -264,15 +264,15 @@ describe('validarFormularioPrestamo', () => {
     })
     expect(evaluarCambioDuracion('-1', '3', 'horas', materialVr)).toEqual({
       valor: '3',
-      error: 'La duración pactada debe ser de al menos 1 hora (60 minutos) y máximo 6 horas; la tolerancia de 30 minutos queda dentro del máximo total de 15 días.',
+      error: 'La duración del préstamo debe ser de al menos 1 hora (60 minutos) y máximo 6 horas; la tolerancia de 30 minutos queda dentro del máximo total de 15 días.',
     })
     expect(evaluarCambioDuracion('0', '3', 'horas', materialVr)).toEqual({
       valor: '3',
-      error: 'La duración pactada debe ser de al menos 1 hora (60 minutos) y máximo 6 horas; la tolerancia de 30 minutos queda dentro del máximo total de 15 días.',
+      error: 'La duración del préstamo debe ser de al menos 1 hora (60 minutos) y máximo 6 horas; la tolerancia de 30 minutos queda dentro del máximo total de 15 días.',
     })
     expect(evaluarCambioDuracion('1.5', '3', 'horas', materialVr)).toEqual({
       valor: '3',
-      error: 'La duración pactada debe ser de al menos 1 hora (60 minutos) y máximo 6 horas; la tolerancia de 30 minutos queda dentro del máximo total de 15 días.',
+      error: 'La duración del préstamo debe ser de al menos 1 hora (60 minutos) y máximo 6 horas; la tolerancia de 30 minutos queda dentro del máximo total de 15 días.',
     })
     expect(evaluarCambioDuracion('6', '3', 'horas', materialVr)).toEqual({ valor: '6', error: '' })
     expect(evaluarCambioDuracion('60', '30', 'minutos', materialVr)).toEqual({ valor: '60', error: '' })

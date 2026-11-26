@@ -696,13 +696,13 @@ function FormularioPerfil({ perfil, onGuardar, onGuardarFoto, onEliminarFoto, gu
               {perfil.tiene_prestamos_vencidos && (
                 <div
                   role="alert"
-                  className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 dark:border-amber-600/40 dark:bg-amber-900/20"
+                  className="flex items-start gap-2 rounded-lg border border-amber-500 bg-superficie-alta px-4 py-3 text-amber-800 dark:text-amber-200"
                 >
                   <AlertTriangle
                     className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400"
                     aria-hidden="true"
                   />
-                  <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
+                  <p className="text-sm font-medium">
                     Tienes préstamos vencidos. Por favor, devuelve los materiales pendientes para
                     restablecer tu acceso al sistema de préstamos.
                   </p>

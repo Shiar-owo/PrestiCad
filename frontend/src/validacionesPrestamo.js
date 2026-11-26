@@ -45,12 +45,12 @@ export function obtenerFechaMaximaFinPrestamo(fechaInicio, material = null) {
 
 export function mensajeRangoDuracion(material = null) {
   const maximoMinutos = obtenerMinutosMaximosMaterial(material)
-  return `La duración pactada debe ser de al menos 1 hora (60 minutos) y máximo ${formatearDuracionMinutos(maximoMinutos)}; la tolerancia de 30 minutos queda dentro del máximo total de ${DURACION_MAXIMA_PRESTAMO_DIAS} días.`
+  return `La duración del préstamo debe ser de al menos 1 hora (60 minutos) y máximo ${formatearDuracionMinutos(maximoMinutos)}; la tolerancia de 30 minutos queda dentro del máximo total de ${DURACION_MAXIMA_PRESTAMO_DIAS} días.`
 }
 
 export function ayudaRangoDuracion(material = null) {
   const maximoMinutos = obtenerMinutosMaximosMaterial(material)
-  return `Mínimo 1 hora (60 minutos) · Máximo pactado para este material: ${formatearDuracionMinutos(maximoMinutos)} · La tolerancia de 30 minutos queda dentro del máximo total de ${DURACION_MAXIMA_PRESTAMO_DIAS} días.`
+  return `Mínimo 1 hora (60 minutos) · Máximo permitido para este material: ${formatearDuracionMinutos(maximoMinutos)} · La tolerancia de 30 minutos queda dentro del máximo total de ${DURACION_MAXIMA_PRESTAMO_DIAS} días.`
 }
 
 export function validarFormularioPrestamo({
@@ -98,7 +98,7 @@ export function validarFormularioPrestamo({
   } else if (minutos < DURACION_MINIMA_PRESTAMO_MINUTOS) {
     errores.dias = 'El tiempo mínimo de préstamo es de 1 hora (60 minutos).'
   } else if (minutos > maximoMinutos) {
-    errores.dias = `El plazo pactado supera el máximo permitido para este material (${formatearDuracionMinutos(maximoMinutos)}); la tolerancia de 30 minutos queda dentro del máximo total de ${DURACION_MAXIMA_PRESTAMO_DIAS} días.`
+    errores.dias = `El tiempo solicitado supera el máximo permitido para este material (${formatearDuracionMinutos(maximoMinutos)}); la tolerancia de 30 minutos queda dentro del máximo total de ${DURACION_MAXIMA_PRESTAMO_DIAS} días.`
   }
 
   if (fechaFin) {
@@ -112,7 +112,7 @@ export function validarFormularioPrestamo({
       } else {
         const minutosFin = fin.getHours() * 60 + fin.getMinutes()
         if (minutosFin < 8 * 60 || minutosFin > 17 * 60 + 30) {
-          errores.dias = 'La devolución pactada debe ser de lunes a viernes entre 08:00 y 17:30.'
+          errores.dias = 'La devolución debe realizarse dentro del horario de atención, de lunes a viernes entre 08:00 y 17:30.'
         }
       }
     }

@@ -20,7 +20,7 @@ export const TEXTO_HORA_RESERVA_MAXIMO_FIN = '17:30'
 export const DIAS_LABORABLES = [1, 2, 3, 4, 5]
 export const TOLERANCIA_RECOJO_MINUTOS = 30
 export const MINIMO_MINUTOS_RESERVA = 60
-export const MINIMO_RANGO_RESERVA_MINUTOS = MINIMO_MINUTOS_RESERVA + TOLERANCIA_RECOJO_MINUTOS
+export const MINIMO_RANGO_RESERVA_MINUTOS = MINIMO_MINUTOS_RESERVA
 
 export const ETIQUETAS_ESTADO_RESERVA = {
   en_espera: 'En espera',
@@ -436,8 +436,8 @@ export function validarHorarioReserva(
       const minutosReserva = (fin.getTime() - inicio.getTime()) / 60000
       if (fin <= inicio) {
         errores.horaFin = 'La hora de fin debe ser posterior a la de inicio.'
-      } else if (minutosReserva < MINIMO_RANGO_RESERVA_MINUTOS) {
-        errores.horaFin = 'Debe haber al menos 1 hora entre el límite de recojo y la devolución pactada.'
+      } else if (minutosReserva < MINIMO_MINUTOS_RESERVA) {
+        errores.horaFin = 'La reserva debe tener una duración mínima de 1 hora (60 minutos).'
       } else if (maximoMinutosMaterial && minutosReserva > maximoMinutosMaterial) {
         errores.horaFin = `La duración de la reserva supera el tiempo máximo permitido para este material (${formatearDuracionMinutos(maximoMinutosMaterial)}).`
       }
@@ -501,10 +501,10 @@ export function validarHorarioReserva(
           errores.fechaFin =
             (errores.fechaFin ? errores.fechaFin + ' ' : '') +
             'La fecha y hora de fin debe ser posterior a la de inicio.'
-        } else if (minutosHabiles < MINIMO_RANGO_RESERVA_MINUTOS) {
+        } else if (minutosHabiles < MINIMO_MINUTOS_RESERVA) {
           errores.fechaFin =
             (errores.fechaFin ? errores.fechaFin + ' ' : '') +
-            'Debe haber al menos 1 hora entre el límite de recojo y la devolución pactada.'
+            'La reserva debe tener una duración mínima de 1 hora (60 minutos).'
         } else if (maximoMinutosMaterial && minutosHabiles > maximoMinutosMaterial) {
           errores.fechaFin =
             (errores.fechaFin ? errores.fechaFin + ' ' : '') +

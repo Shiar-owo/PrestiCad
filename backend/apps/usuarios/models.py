@@ -5,7 +5,13 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils import timezone
 
-from apps.usuarios.constants import ESTADOS_USUARIO, ROLES, TIERS, TIPOS_USUARIO
+from apps.usuarios.constants import (
+    ESTADOS_USUARIO,
+    ROLES,
+    TIERS,
+    TIPOS_TRANSACCION_REPUTACION,
+    TIPOS_USUARIO,
+)
 from apps.usuarios.validators import validar_foto_usuario
 
 
@@ -150,3 +156,67 @@ class Credencial(models.Model):
 
     def __str__(self):
         return self.email
+
+
+class TransaccionReputacion(models.Model):
+    """Auditoría inmutable de cada cambio de puntos de reputación en el sistema."""
+
+    usuario = models.ForeignKey(
+        Usuario,
+        on_delete=models.CASCADE,
+        related_name="transacciones_reputacion",
+        verbose_name="Usuario",
+    )
+    fecha = models.DateTimeField(
+        default=timezone.now,
+        db_index=True,
+        verbose_name="Fecha del movimiento",
+    )
+    tipo = models.CharField(
+        max_length=40,
+        choices=TIPOS_TRANSACCION_REPUTACION,
+        verbose_name="Tipo de transacción",
+    )
+    puntos_delta = models.IntegerField(
+        verbose_name="Puntos aplicados",
+        help_text="Valor neto sumado o restado al puntaje (puede ser negativo).",
+    )
+    puntos_solicitados = models.IntegerField(
+        verbose_name="Puntos solicitados",
+        help_text="Valor original antes de aplicar el tope semanal si correspondió recorte.",
+    )
+    tope_aplicado = models.BooleanField(
+        default=False,
+        verbose_name="¿Tope semanal aplicado?",
+        help_text="Indica si la bonificación fue recortada por alcanzar el límite de la semana.",
+    )
+    prestamo_id = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        verbose_name="ID de préstamo asociado",
+    )
+    reserva_id = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        verbose_name="ID de reserva asociada",
+    )
+    descripcion = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        verbose_name="Descripción o motivo",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Transacción de reputación"
+        verbose_name_plural = "Transacciones de reputación"
+        ordering = ["-fecha", "-id"]
+        indexes = [
+            models.Index(fields=["usuario", "fecha"], name="transac_rep_user_fecha_idx"),
+            models.Index(fields=["usuario", "tipo"], name="transac_rep_user_tipo_idx"),
+        ]
+
+    def __str__(self):
+        signo = f"+{self.puntos_delta}" if self.puntos_delta > 0 else f"{self.puntos_delta}"
+        return f"{self.usuario}: {signo} pts ({self.tipo})"

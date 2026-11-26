@@ -602,6 +602,17 @@ class ReservasAPITestCase(APITestCase):
         self.assertIn("fecha_fin", menor_1h.data)
         self.assertIn("1 hora (60 minutos)", str(menor_1h.data["fecha_fin"]))
 
+        exacto_1h = self.client.post(
+            "/api/reservas/",
+            {
+                **base,
+                "fecha_inicio": inicio.isoformat(),
+                "fecha_fin": (inicio + timedelta(minutes=60)).isoformat(),
+            },
+            format="json",
+        )
+        self.assertEqual(exacto_1h.status_code, 201)
+
     def test_api_reserva_permite_cruzar_fin_de_semana_y_cuenta_todos_los_dias_intermedios(self):
         self._autenticar(self.prestatario)
         # Material configurado a 4 días (dentro del máximo configurable de 15 días).

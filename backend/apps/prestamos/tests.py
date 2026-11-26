@@ -2274,6 +2274,50 @@ class RegistrarPrestamoAPITestCase(APITestCase):
         self.assertIn("antes de la fecha de inicio", error.exception.mensaje)
         self.assertEqual(Prestamo.objects.count(), 0)
 
+    def test_conversion_reserva_una_hora_con_recojo_tardio_dentro_de_tolerancia(self):
+        """Una reserva de 1 hora recogida con 15 minutos de retraso se convierte exitosamente."""
+        from datetime import datetime, time as dtime
+        from apps.reservas.models import Reserva
+
+        self._iniciar_sesion(self.gestor)
+        hoy = timezone.localtime(timezone.now()).date()
+        tz = timezone.get_current_timezone()
+        inicio = timezone.make_aware(datetime.combine(hoy, dtime(10, 0)), tz)
+        fin = timezone.make_aware(datetime.combine(hoy, dtime(11, 0)), tz)
+        instancia = self.material.instancias.get()
+        reserva = Reserva.objects.create(
+            usuario=self.prestatario,
+            material=self.material,
+            instancia=instancia,
+            fecha_inicio=inicio,
+            fecha_fin=fin,
+            estado="reservada",
+            fecha_confirmacion=timezone.now(),
+            fecha_limite_recojo=inicio + timedelta(minutes=30),
+            justificacion="Reserva exacta de 1 hora",
+        )
+        instancia.estado = "reservado"
+        instancia.save(update_fields=["estado", "updated_at"])
+
+        # Llega a las 10:15 (quedan 45 minutos para devolver a las 11:00)
+        llegada = inicio + timedelta(minutes=15)
+        with patch("apps.prestamos.services.timezone.now", return_value=llegada):
+            prestamo = registrar_prestamo(
+                dni_prestatario=self.prestatario.dni,
+                material_id=self.material.id,
+                instancia_id=instancia.id,
+                reserva_id=reserva.id,
+                tiempo_prestamo_minutos=60,
+                checklist_inicial=CHECKLIST,
+                registrado_por=self.gestor,
+            )
+
+        self.assertEqual(prestamo.tiempo_prestamo_minutos, 45)
+        self.assertEqual(prestamo.fecha_limite, fin)
+        self.assertEqual(prestamo.estado, "activo")
+        reserva.refresh_from_db()
+        self.assertEqual(reserva.estado, "convertida_en_prestamo")
+
 
 class DescargarGarantiaAPITestCase(APITestCase):
     URL = "/api/prestamos/{prestamo_id}/garantia/{tipo}/"

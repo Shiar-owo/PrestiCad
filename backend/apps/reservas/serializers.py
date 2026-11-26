@@ -13,7 +13,6 @@ from apps.reservas.constants import (
     HORA_RESERVA_MAXIMO_FIN,
     HORA_RESERVA_MINIMO_INICIO,
     MINUTO_RESERVA_MAXIMO_FIN,
-    TOLERANCIA_RECOJO_MINUTOS,
     HORARIO_ATENCION_FIN,
     HORARIO_ATENCION_INICIO,
     MENSAJES_ERROR_RESERVA,
@@ -96,10 +95,6 @@ class CrearReservaSerializer(serializers.Serializer):
             if minutos_rango < MINIMO_MINUTOS_RESERVA:
                 raise serializers.ValidationError({
                     "fecha_fin": "La reserva debe tener una duración mínima de 1 hora (60 minutos).",
-                })
-            if minutos_rango < MINIMO_MINUTOS_RESERVA + TOLERANCIA_RECOJO_MINUTOS:
-                raise serializers.ValidationError({
-                    "fecha_fin": "Debe haber al menos 1 hora entre el límite de recojo y la devolución pactada.",
                 })
         return attrs
 

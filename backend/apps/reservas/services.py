@@ -299,13 +299,6 @@ def _validar_horario_reserva(
             "fecha_fin",
             "La reserva debe tener una duración mínima de 1 hora (60 minutos).",
         )
-
-    limite_recojo = fecha_inicio + timedelta(minutes=TOLERANCIA_RECOJO_MINUTOS)
-    if fecha_fin - limite_recojo < timedelta(minutes=MINIMO_MINUTOS_RESERVA):
-        raise ReservaError(
-            "fecha_fin",
-            "Debe haber al menos 1 hora entre el límite de recojo y la devolución pactada.",
-        )
     maximo_configurado = maximo_minutos or MAXIMO_DURACION_PACTADA_MINUTOS
     maximo_efectivo = min(maximo_configurado, MAXIMO_DURACION_PACTADA_MINUTOS)
     if minutos_habiles > maximo_efectivo:

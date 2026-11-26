@@ -961,7 +961,7 @@ def registrar_prestamo(
                 status_code=409,
             )
         minutos_prestamo = max(0, int((reserva.fecha_fin - ahora_entrega).total_seconds() // 60))
-        if minutos_prestamo < MINIMO_MINUTOS_PRESTAMO:
+        if minutos_prestamo <= 0:
             raise PrestamoError(
                 "reserva_id",
                 "El rango de fechas de la reserva no es válido.",

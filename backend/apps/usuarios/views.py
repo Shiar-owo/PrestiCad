@@ -52,6 +52,8 @@ class SesionActualView(APIView):
             "estado": usuario.estado,
             "reputacion_tier": usuario.reputacion_tier,
             "reputacion_puntaje": usuario.reputacion_puntaje,
+            "reputacion_puntos_ganados_semana": services.calcular_puntos_ganados_semana_actual(usuario),
+            "reputacion_tope_semanal": services.MAXIMO_PUNTOS_SEMANALES_TIER.get(usuario.reputacion_tier, 60),
             "foto_perfil": usuario.foto_perfil,
         }, context={"request": request}).data)
 
@@ -87,6 +89,8 @@ class AuthLoginView(APIView):
                 "estado": usuario.estado,
                 "reputacion_tier": usuario.reputacion_tier,
                 "reputacion_puntaje": usuario.reputacion_puntaje,
+                "reputacion_puntos_ganados_semana": services.calcular_puntos_ganados_semana_actual(usuario),
+                "reputacion_tope_semanal": services.MAXIMO_PUNTOS_SEMANALES_TIER.get(usuario.reputacion_tier, 60),
                 "foto_perfil": usuario.foto_perfil,
             }, context={"request": request}).data,
         }, status=status.HTTP_200_OK)

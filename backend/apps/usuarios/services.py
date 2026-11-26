@@ -190,7 +190,7 @@ def usuario_tiene_prestamos_activos(usuario_id):
 
 
 def obtener_perfil(usuario, ahora=None):
-    return {
+    datos = {
         "nombre": usuario.nombre,
         "apellido": usuario.apellido,
         "email": usuario.email,
@@ -204,10 +204,23 @@ def obtener_perfil(usuario, ahora=None):
         "departamento_carrera": usuario.departamento_carrera,
         "reputacion_puntaje": usuario.reputacion_puntaje,
         "reputacion_tier": usuario.reputacion_tier,
-        "foto_perfil": usuario.foto_perfil,
+        "foto_perfil": usuario.foto_perfil or None,
         "reputacion_puntos_ganados_semana": calcular_puntos_ganados_semana_actual(usuario, ahora=ahora),
         "reputacion_tope_semanal": MAXIMO_PUNTOS_SEMANALES_TIER.get(usuario.reputacion_tier, 60),
+        "prestamos_activos": 0,
+        "maximo_prestamos_activos": 0,
+        "tiene_prestamos_vencidos": False,
     }
+    if getattr(usuario, "rol", None) and getattr(usuario.rol, "nombre", None) == "prestatario":
+        try:
+            from apps.prestamos.constants import MAXIMO_PRESTAMOS_ACTIVOS_TIER
+            from apps.prestamos.services import contar_prestamos_activos_usuario, tiene_prestamos_vencidos
+            datos["prestamos_activos"] = contar_prestamos_activos_usuario(usuario.pk)
+            datos["maximo_prestamos_activos"] = MAXIMO_PRESTAMOS_ACTIVOS_TIER.get(usuario.reputacion_tier, 3)
+            datos["tiene_prestamos_vencidos"] = tiene_prestamos_vencidos(usuario.pk)
+        except ImportError:
+            pass
+    return datos
 
 
 _SIN_CAMBIO = object()

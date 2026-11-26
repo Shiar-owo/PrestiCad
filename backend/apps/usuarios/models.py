@@ -195,7 +195,8 @@ class TransaccionReputacion(models.Model):
         blank=True,
         verbose_name="ID de préstamo asociado",
     )
-    reserva_id = models.PositiveIntegerField(
+    reserva_id = models.CharField(
+        max_length=50,
         null=True,
         blank=True,
         verbose_name="ID de reserva asociada",

@@ -329,4 +329,8 @@ class SesionUsuarioSerializer(serializers.Serializer):
     reputacion_puntaje = serializers.IntegerField(required=False, default=0)
     reputacion_puntos_ganados_semana = serializers.IntegerField(required=False, default=0)
     reputacion_tope_semanal = serializers.IntegerField(required=False, default=60)
+    prestamos_activos = serializers.IntegerField(required=False, default=0)
+    maximo_prestamos_activos = serializers.IntegerField(required=False, default=0)
+    reservas_activas = serializers.IntegerField(required=False, default=0)
+    maximo_reservas_activas = serializers.IntegerField(required=False, default=0)
     foto_perfil = FotoPerfilUsuario(read_only=True, required=False, allow_null=True)

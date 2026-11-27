@@ -31,16 +31,42 @@ function PanelInicio() {
             <p className="text-sm font-semibold text-texto-suave">Rol asignado</p>
             <p className="mt-1 text-lg font-bold text-texto">{nombreRol}</p>
           </Tarjeta>
-          <Tarjeta className="p-5">
-            <p className="text-sm font-semibold text-texto-suave">Estado de la cuenta</p>
-            {usuario.estado === 'activo' ? (
-              <span className="mt-2 inline-flex rounded-full bg-marca-100 px-2.5 py-0.5 text-sm font-bold text-marca-800 dark:bg-marca-500/15 dark:text-marca-300">
-                Activa
-              </span>
-            ) : (
-              <p className="mt-1 text-lg font-bold text-texto">{usuario.estado}</p>
-            )}
-          </Tarjeta>
+          {usuario.rol === 'prestatario' ? (
+            <Tarjeta className="p-5">
+              <p className="text-sm font-semibold text-texto-suave">Límites de actividad</p>
+              <dl className="mt-2 space-y-2">
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-sm text-texto-suave">Préstamos activos</dt>
+                  <dd className="text-sm font-bold text-texto">
+                    {usuario.prestamos_activos ?? 0} / {usuario.maximo_prestamos_activos ?? '—'}
+                  </dd>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-sm text-texto-suave">Reservas activas</dt>
+                  <dd className="text-sm font-bold text-texto">
+                    {usuario.reservas_activas ?? 0} / {usuario.maximo_reservas_activas ?? '—'}
+                  </dd>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-sm text-texto-suave">Puntos ganados esta semana</dt>
+                  <dd className="text-sm font-bold text-texto">
+                    +{usuario.reputacion_puntos_ganados_semana ?? 0} / {usuario.reputacion_tope_semanal ?? '—'} pts
+                  </dd>
+                </div>
+              </dl>
+            </Tarjeta>
+          ) : (
+            <Tarjeta className="p-5">
+              <p className="text-sm font-semibold text-texto-suave">Estado de la cuenta</p>
+              {usuario.estado === 'activo' ? (
+                <span className="mt-2 inline-flex rounded-full bg-marca-100 px-2.5 py-0.5 text-sm font-bold text-marca-800 dark:bg-marca-500/15 dark:text-marca-300">
+                  Activa
+                </span>
+              ) : (
+                <p className="mt-1 text-lg font-bold text-texto">{usuario.estado}</p>
+              )}
+            </Tarjeta>
+          )}
           {!['gestor', 'administrador'].includes(usuario.rol) && usuario.reputacion_tier && (
             <TarjetaReputacion
               tier={usuario.reputacion_tier}
@@ -48,6 +74,7 @@ function PanelInicio() {
               puntosGanadosSemana={usuario.reputacion_puntos_ganados_semana}
               topeSemanal={usuario.reputacion_tope_semanal}
               compacta
+              mostrarProgresoSemanal={false}
             />
           )}
         </div>

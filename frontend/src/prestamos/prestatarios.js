@@ -9,8 +9,8 @@ export function debeBuscarPrestatarios(valor, seleccionado = null) {
   return dni.length >= MINIMO_DIGITOS_BUSQUEDA_PRESTATARIO && seleccionado?.dni !== dni
 }
 
-export function construirRutaBusquedaPrestatarios(dni) {
-  const parametros = new URLSearchParams({ dni: String(dni || '').trim() })
+export function construirRutaBusquedaPrestatarios(valor, modo = 'dni') {
+  const parametros = new URLSearchParams({ [modo === 'nombre' ? 'nombre' : 'dni']: String(valor || '').trim() })
   return `/prestamos/prestatarios/?${parametros.toString()}`
 }
 

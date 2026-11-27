@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 
 import { api } from '../api/client'
 import useTituloPagina from '../hooks/useTituloPagina'
@@ -9,6 +9,7 @@ import Skeleton from '../components/ui/Skeleton'
 import ErrorAlerta from '../components/ui/ErrorAlerta'
 import EstadoVacio from '../components/ui/EstadoVacio'
 import BadgeEstado from '../components/ui/BadgeEstado'
+import DetallePrestamo from '../components/prestamos/DetallePrestamo'
 
 const TAMANO_PAGINA = 25
 const CONSULTA_INICIAL = { cargando: true, error: '', datos: null }
@@ -41,6 +42,7 @@ export default function HistorialMaterial() {
   useTituloPagina('Historial de préstamos por material')
   const { materialId } = useParams()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [material, setMaterial] = useState(null)
   const [cargandoMaterial, setCargandoMaterial] = useState(true)
   const [errorMaterial, setErrorMaterial] = useState('')
@@ -82,11 +84,6 @@ export default function HistorialMaterial() {
   useEffect(() => {
     let activa = true
 
-    if (!instanciaSeleccionada) {
-      setConsulta({ cargando: false, error: '', datos: null })
-      return undefined
-    }
-
     if (rangoInvalido) {
       setConsulta({
         cargando: false,
@@ -97,7 +94,7 @@ export default function HistorialMaterial() {
     }
 
     const parametros = new URLSearchParams({ page: String(pagina), page_size: String(TAMANO_PAGINA) })
-    parametros.set('instancia_id', instanciaSeleccionada)
+    if (instanciaSeleccionada) parametros.set('instancia_id', instanciaSeleccionada)
     if (fechaDesde) parametros.set('desde', fechaDesde)
     if (fechaHasta) parametros.set('hasta', fechaHasta)
 
@@ -150,6 +147,32 @@ export default function HistorialMaterial() {
   const resultados = datos?.results || []
   const totalPaginas = Math.max(1, Math.ceil((datos?.count || 0) / TAMANO_PAGINA))
   const tieneFiltros = Boolean(fechaDesde || fechaHasta)
+  const prestamoDetalleId = searchParams.get('prestamoId')
+
+  if (prestamoDetalleId) {
+    const prestamoId = Number(prestamoDetalleId)
+    if (!Number.isInteger(prestamoId) || prestamoId < 1) {
+      return <ErrorAlerta mensaje="El identificador del préstamo no es válido." />
+    }
+    const parametrosVolver = new URLSearchParams(searchParams)
+    parametrosVolver.delete('prestamoId')
+    return (
+      <DetallePrestamo
+        prestamo={{ id: prestamoId }}
+        etiquetaVolver="Volver al historial del material"
+        onVolver={() => setSearchParams(parametrosVolver)}
+      />
+    )
+  }
+
+  function enlaceDetallePrestamo(prestamoId) {
+    const parametros = new URLSearchParams({ prestamoId: String(prestamoId) })
+    parametros.set('page', String(pagina))
+    if (instanciaSeleccionada) parametros.set('instancia_id', instanciaSeleccionada)
+    if (fechaDesde) parametros.set('desde', fechaDesde)
+    if (fechaHasta) parametros.set('hasta', fechaHasta)
+    return `?${parametros.toString()}`
+  }
 
   return (
     <section aria-label="Historial de préstamos del material">
@@ -163,7 +186,7 @@ export default function HistorialMaterial() {
         >
           Volver al inventario
         </Boton>
-        <h2 className="text-xl font-bold text-texto">Historial de préstamos</h2>
+      <h2 className="text-xl font-bold text-texto">Historial general del material</h2>
         <p className="mt-1 text-sm text-texto-suave">
           {material
             ? <>{material.nombre} · Código: {material.codigo_material || material.codigo_inventario}</>
@@ -177,9 +200,7 @@ export default function HistorialMaterial() {
           opciones={[
             {
               valor: '',
-              etiqueta: material?.instancias?.length
-                ? 'Selecciona un ejemplar'
-                : 'No hay ejemplares registrados',
+              etiqueta: 'Todos los ejemplares',
             },
             ...(material?.instancias || []).map((instancia) => ({
               valor: instancia.id,
@@ -189,32 +210,27 @@ export default function HistorialMaterial() {
             })),
           ]}
           valor={instanciaSeleccionada}
-          deshabilitado={!material?.instancias?.length}
           onCambio={(evento) => {
             const nuevaInstancia = evento.target.value
             setInstanciaSeleccionada(nuevaInstancia)
-            setConsulta({ cargando: Boolean(nuevaInstancia), error: '', datos: null })
+            setConsulta({ cargando: true, error: '', datos: null })
             setPagina(1)
           }}
         />
-        {instanciaSeleccionada && (
-          <>
-            <Campo
-              etiqueta="Entregado desde"
-              tipo="date"
-              valor={fechaDesde}
-              onCambio={(evento) => cambiarFecha(setFechaDesde, evento.target.value)}
-            />
-            <Campo
-              etiqueta="Entregado hasta"
-              tipo="date"
-              valor={fechaHasta}
-              onCambio={(evento) => cambiarFecha(setFechaHasta, evento.target.value)}
-            />
-          </>
-        )}
+        <Campo
+          etiqueta="Entregado desde"
+          tipo="date"
+          valor={fechaDesde}
+          onCambio={(evento) => cambiarFecha(setFechaDesde, evento.target.value)}
+        />
+        <Campo
+          etiqueta="Entregado hasta"
+          tipo="date"
+          valor={fechaHasta}
+          onCambio={(evento) => cambiarFecha(setFechaHasta, evento.target.value)}
+        />
       </div>
-      {instanciaSeleccionada && tieneFiltros && (
+      {tieneFiltros && (
         <Boton
           variante="fantasma"
           tamanio="pequeno"
@@ -229,15 +245,6 @@ export default function HistorialMaterial() {
       {errorMaterial ? (
         <div className="mt-5">
           <ErrorAlerta mensaje={errorMaterial} />
-        </div>
-      ) : !instanciaSeleccionada ? (
-        <div className="mt-5">
-          <EstadoVacio
-            titulo={material?.instancias?.length ? 'Selecciona un ejemplar' : 'Sin ejemplares individuales'}
-            mensaje={material?.instancias?.length
-              ? 'El historial y sus estadísticas se mostrarán después de elegir un ejemplar.'
-              : 'Este material no tiene ejemplares individuales registrados para consultar su historial.'}
-          />
         </div>
       ) : consulta.error ? (
         <div className="mt-5 grid gap-3">
@@ -265,7 +272,7 @@ export default function HistorialMaterial() {
           {resultados.length === 0 ? (
             <div className="mt-6">
               <EstadoVacio
-                titulo={tieneFiltros ? 'Sin préstamos en este período' : 'Aún no hay préstamos para este material'}
+                titulo={tieneFiltros ? 'Sin préstamos en este período' : instanciaSeleccionada ? 'Aún no hay préstamos para este ejemplar' : 'Aún no hay préstamos para este material'}
                 mensaje={tieneFiltros
                   ? 'Cambia o limpia las fechas para consultar otro período.'
                   : 'El historial aparecerá aquí cuando se registren préstamos.'}
@@ -278,16 +285,19 @@ export default function HistorialMaterial() {
                 <thead>
                   <tr className="border-b border-borde text-left text-xs font-semibold uppercase tracking-wide text-texto-suave">
                     <th scope="col" className="px-4 py-3">Prestatario</th>
+                    <th scope="col" className="px-4 py-3">Ejemplar</th>
                     <th scope="col" className="px-4 py-3">Entrega</th>
                     <th scope="col" className="px-4 py-3">Fecha límite</th>
                     <th scope="col" className="px-4 py-3">Devolución</th>
                     <th scope="col" className="px-4 py-3">Resultado</th>
+                    <th scope="col" className="px-4 py-3">Detalle</th>
                   </tr>
                 </thead>
                 <tbody>
                   {resultados.map((prestamo) => (
                     <tr key={prestamo.id} className="border-b border-borde last:border-b-0 text-texto">
                       <td className="px-4 py-3 font-medium">{prestamo.prestatario}</td>
+                      <td className="whitespace-nowrap px-4 py-3 font-mono text-xs">{prestamo.codigo_ejemplar || '—'}</td>
                       <td className="whitespace-nowrap px-4 py-3">{fechaLegible(prestamo.fecha_entrega)}</td>
                       <td className="whitespace-nowrap px-4 py-3">{fechaLegible(prestamo.fecha_limite)}</td>
                       <td className="whitespace-nowrap px-4 py-3">{fechaLegible(prestamo.fecha_devolucion)}</td>
@@ -296,6 +306,15 @@ export default function HistorialMaterial() {
                           estado={ESTADOS_RESULTADO[prestamo.resultado] || 'desconocido'}
                           texto={ETIQUETAS_RESULTADO[prestamo.resultado] || prestamo.resultado}
                         />
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3">
+                        <Link
+                          to={enlaceDetallePrestamo(prestamo.id)}
+                          className="font-semibold text-acento-700 underline decoration-acento-300 underline-offset-2 hover:text-acento-900 focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-acento-600 dark:text-acento-300 dark:decoration-acento-500/60 dark:hover:text-acento-200"
+                          aria-label={`Ver detalle del préstamo de ${prestamo.prestatario}, entregado ${fechaLegible(prestamo.fecha_entrega)}`}
+                        >
+                          Ver préstamo
+                        </Link>
                       </td>
                     </tr>
                   ))}

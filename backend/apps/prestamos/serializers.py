@@ -55,9 +55,10 @@ class ChecklistInicialItemSerializer(serializers.Serializer):
         return value.strip()
 
 class BusquedaPrestatarioSerializer(serializers.Serializer):
-    """Valida el prefijo de DNI usado para sugerir prestatarios al gestor."""
+    """Valida la búsqueda por DNI o nombre usada para sugerir prestatarios."""
 
-    dni = serializers.CharField(max_length=8, allow_blank=False, trim_whitespace=True)
+    dni = serializers.CharField(max_length=8, required=False, allow_blank=False, trim_whitespace=True)
+    nombre = serializers.CharField(max_length=100, required=False, allow_blank=False, trim_whitespace=True)
 
     def validate_dni(self, value):
         minimo = MINIMO_DIGITOS_BUSQUEDA_PRESTATARIO
@@ -67,11 +68,25 @@ class BusquedaPrestatarioSerializer(serializers.Serializer):
             )
         return value
 
+    def validate_nombre(self, value):
+        if len(value) < MINIMO_DIGITOS_BUSQUEDA_PRESTATARIO:
+            raise serializers.ValidationError(
+                f"Escribe al menos {MINIMO_DIGITOS_BUSQUEDA_PRESTATARIO} caracteres para buscar por nombre."
+            )
+        return value
+
+    def validate(self, attrs):
+        if bool(attrs.get("dni")) == bool(attrs.get("nombre")):
+            raise serializers.ValidationError("Indica un DNI o un nombre para buscar.")
+        return attrs
+
 
 class FiltroHistorialPrestamosSerializer(serializers.Serializer):
-    """Valida el DNI completo opcional del filtro de historial global."""
+    """Valida los filtros opcionales del historial global."""
 
-    dni = serializers.CharField(max_length=8, allow_blank=False, trim_whitespace=True)
+    dni = serializers.CharField(max_length=8, required=False, allow_blank=False, trim_whitespace=True)
+    fecha_desde = serializers.DateField(required=False)
+    fecha_hasta = serializers.DateField(required=False)
 
     def validate_dni(self, value):
         if not re.fullmatch(r"\d{8}", value):
@@ -79,6 +94,13 @@ class FiltroHistorialPrestamosSerializer(serializers.Serializer):
                 "El DNI debe tener exactamente 8 dígitos numéricos."
             )
         return value
+
+    def validate(self, attrs):
+        desde = attrs.get("fecha_desde")
+        hasta = attrs.get("fecha_hasta")
+        if desde and hasta and desde > hasta:
+            raise serializers.ValidationError({"fecha_hasta": "La fecha final debe ser igual o posterior a la fecha inicial."})
+        return attrs
 
 
 class ActualizarDocumentoGarantiaSerializer(serializers.Serializer):
@@ -462,9 +484,9 @@ class ConsultaReportesSerializer(
 
 
 class FiltroHistorialMaterialSerializer(serializers.Serializer):
-    """Valida instancia y período del historial de un material."""
+    """Valida el filtro opcional por ejemplar y el período del historial."""
 
-    instancia_id = serializers.UUIDField(required=True)
+    instancia_id = serializers.UUIDField(required=False)
     desde = serializers.DateField(required=False)
     hasta = serializers.DateField(required=False)
 

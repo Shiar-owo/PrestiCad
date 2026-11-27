@@ -104,12 +104,14 @@ class BuscarPrestatariosView(APIView):
 
     def get(self, request):
         prefijo = request.query_params.get("dni", "").strip()
-        if not prefijo:
+        nombre = request.query_params.get("nombre", "").strip()
+        if not prefijo and not nombre:
             return Response([])
 
-        serializer = BusquedaPrestatarioSerializer(data={"dni": prefijo})
+        serializer = BusquedaPrestatarioSerializer(data={"dni": prefijo} if prefijo else {"nombre": nombre})
         serializer.is_valid(raise_exception=True)
-        prestatarios = buscar_prestatarios_por_dni(serializer.validated_data["dni"])
+        criterio = serializer.validated_data.get("dni") or serializer.validated_data["nombre"]
+        prestatarios = buscar_prestatarios_por_dni(criterio)
         return Response(SugerenciaPrestatarioSerializer(prestatarios, many=True).data)
 
 
@@ -138,12 +140,16 @@ class HistorialPrestamosView(GenericAPIView):
 
     def get(self, request):
         dni = request.query_params.get("dni", "").strip()
+        parametros_filtro = {}
+        for campo_fecha in ("fecha_desde", "fecha_hasta"):
+            valor_fecha = request.query_params.get(campo_fecha)
+            if valor_fecha:
+                parametros_filtro[campo_fecha] = valor_fecha
         if dni:
-            filtro = FiltroHistorialPrestamosSerializer(data={"dni": dni})
-            filtro.is_valid(raise_exception=True)
-            dni = filtro.validated_data["dni"]
-        else:
-            dni = None
+            parametros_filtro["dni"] = dni
+        filtro = FiltroHistorialPrestamosSerializer(data=parametros_filtro)
+        filtro.is_valid(raise_exception=True)
+        dni = filtro.validated_data.get("dni")
 
         nombre = request.query_params.get("nombre", "").strip() or None
 
@@ -155,7 +161,13 @@ class HistorialPrestamosView(GenericAPIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        prestamos = consultar_historial_prestamos(estado=estado, dni=dni, nombre=nombre)
+        prestamos = consultar_historial_prestamos(
+            estado=estado,
+            dni=dni,
+            nombre=nombre,
+            fecha_desde=filtro.validated_data.get("fecha_desde"),
+            fecha_hasta=filtro.validated_data.get("fecha_hasta"),
+        )
         pagina = self.paginate_queryset(prestamos)
         serializer = self.get_serializer(pagina, many=True)
         return self.get_paginated_response(serializer.data)
@@ -175,7 +187,7 @@ class HistorialMaterialView(GenericAPIView):
         try:
             prestamos, resumen = consultar_historial_por_material(
                 material_id,
-                instancia_id=filtro.validated_data["instancia_id"],
+                instancia_id=filtro.validated_data.get("instancia_id"),
                 fecha_desde=filtro.validated_data.get("desde"),
                 fecha_hasta=filtro.validated_data.get("hasta"),
             )

@@ -1506,6 +1506,23 @@ class HistorialMaterialAPITestCase(APITestCase):
             "porcentaje_tardias": 50.0,
         })
 
+        historial_general = self.client.get(
+            self.URL.format(material_id=material.id),
+            {
+                "desde": entrega_a_tiempo.date().isoformat(),
+                "hasta": entrega_pendiente.date().isoformat(),
+            },
+        )
+        self.assertEqual(historial_general.status_code, 200)
+        datos_generales = historial_general.json()
+        self.assertEqual(datos_generales["count"], 4)
+        self.assertEqual(datos_generales["results"][0]["id"], prestamo_pendiente.id)
+        self.assertIn(
+            prestamo_otra_instancia.id,
+            {prestamo["id"] for prestamo in datos_generales["results"]},
+        )
+        self.assertIn("codigo_ejemplar", datos_generales["results"][0])
+
     def test_historial_vacio_devuelve_estadisticas_en_cero(self):
         material = crear_material(codigo_material="MATERIAL-HIST-VACIO")
         self._iniciar_sesion(self.administrador)
@@ -1562,9 +1579,9 @@ class HistorialMaterialAPITestCase(APITestCase):
         )
         self.assertEqual(fecha_invalida.status_code, 400)
 
-        instancia_faltante = self.client.get(url)
-        self.assertEqual(instancia_faltante.status_code, 400)
-        self.assertIn("instancia_id", instancia_faltante.json())
+        historial_general = self.client.get(url)
+        self.assertEqual(historial_general.status_code, 200)
+        self.assertIn("resumen", historial_general.json())
 
         inexistente = self.client.get(
             self.URL.format(material_id=uuid4()),

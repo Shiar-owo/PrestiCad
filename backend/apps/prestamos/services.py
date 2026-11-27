@@ -48,12 +48,11 @@ class PrestamoError(Exception):
         super().__init__(mensaje)
 
 
-def buscar_prestatarios_por_dni(prefijo):
+def buscar_prestatarios_por_dni(prefijo, incluir_inactivos=False):
     """Busca prestatarios activos por DNI o nombre para los selectores de gestión."""
-    base = Usuario.objects.select_related("rol").filter(
-        rol__nombre="prestatario",
-        estado="activo",
-    )
+    base = Usuario.objects.select_related("rol").filter(rol__nombre="prestatario")
+    if not incluir_inactivos:
+        base = base.filter(estado="activo")
     if prefijo.isdigit():
         return base.filter(dni__startswith=prefijo).order_by("dni")[:MAXIMO_PRESTATARIOS_SUGERIDOS]
 
@@ -304,6 +303,7 @@ def consultar_reportes_devolucion(
     fecha_desde=None,
     fecha_hasta=None,
     gestor_id=None,
+    dni=None,
 ):
     """Listado de devoluciones con reporte de daños para su consulta (RN10).
 
@@ -329,6 +329,8 @@ def consultar_reportes_devolucion(
         reportes = reportes.filter(fecha_devolucion__date__lte=fecha_hasta)
     if gestor_id is not None:
         reportes = reportes.filter(realizado_por_id=gestor_id)
+    if dni is not None:
+        reportes = reportes.filter(prestamo__usuario__dni=dni)
     return reportes
 
 

@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useContext, useEffect, useState } from 'react'
 import { Link } from 'react-router'
-import { FileText, Plus, RefreshCw, ShieldAlert } from 'lucide-react'
+import { CalendarCheck2, FileText, Plus, RefreshCw, ShieldAlert } from 'lucide-react'
 
 import { api } from '../api/client'
 import BadgeEstado from '../components/ui/BadgeEstado'
@@ -10,7 +10,9 @@ import ExitoModal from '../components/ui/ExitoModal'
 import EstadoVacio from '../components/ui/EstadoVacio'
 import Skeleton from '../components/ui/Skeleton'
 import Tarjeta from '../components/ui/Tarjeta'
+import ResumenLimitesPrestatario from '../components/prestamos/ResumenLimitesPrestatario'
 import { ETIQUETAS_TIER } from '../constantes/catalogo'
+import SesionContext from '../contextos/SesionContext'
 import useTituloPagina from '../hooks/useTituloPagina'
 import {
   MAXIMO_RESERVAS_ACTIVAS,
@@ -29,6 +31,24 @@ const FILTROS = [
   { id: 'cerradas', etiqueta: 'Cerradas / Expiradas' },
 ]
 
+function CabeceraMisReservas({ tituloId = 'titulo-mis-reservas', children }) {
+  return (
+    <header className="flex flex-col gap-4 rounded-2xl border border-borde bg-gradient-to-r from-superficie via-superficie to-acento-50 p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-6 dark:to-superficie-alta">
+      <div className="flex items-start gap-4">
+        <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-acento-100 text-acento-700 dark:bg-acento-500/15 dark:text-acento-300">
+          <CalendarCheck2 aria-hidden="true" className="size-6" />
+        </span>
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wider text-acento-700 dark:text-acento-300">Tu actividad</p>
+          <h2 id={tituloId} className="mt-1 text-2xl font-bold text-texto">Mis reservas</h2>
+          <p className="mt-1 text-sm text-texto-suave">Consulta tus solicitudes y las fechas de recojo y devolución.</p>
+        </div>
+      </div>
+      {children}
+    </header>
+  )
+}
+
 function filtrarReservas(reservas, filtro) {
   if (filtro === 'activas') return reservas.filter(esReservaActiva)
   if (filtro === 'en_espera') return reservas.filter((r) => r.estado === 'en_espera')
@@ -39,6 +59,7 @@ function filtrarReservas(reservas, filtro) {
 
 export default function MisReservas() {
   useTituloPagina('Mis reservas')
+  const { usuario } = useContext(SesionContext)
   const [reservas, setReservas] = useState([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
@@ -97,21 +118,36 @@ export default function MisReservas() {
   }, [intento])
 
   const activasCount = contarReservasActivas(reservas)
+  const limiteReservas = usuario?.maximo_reservas_activas ?? MAXIMO_RESERVAS_ACTIVAS
   const visibles = filtrarReservas(reservas, filtro)
+  const resumenLimites = (
+    <ResumenLimitesPrestatario
+      prestamosActivos={usuario?.prestamos_activos ?? 0}
+      maximoPrestamos={usuario?.maximo_prestamos_activos ?? 3}
+      reservasActivas={cargando || error ? usuario?.reservas_activas ?? activasCount : activasCount}
+      maximoReservas={limiteReservas}
+    />
+  )
 
   if (cargando) {
     return (
-      <div className="space-y-3" role="status" aria-live="polite">
-        <p className="text-sm text-texto-suave">Cargando tus reservas y solicitudes pendientes de revisión…</p>
-        <Skeleton className="h-28 rounded-xl" />
-        <Skeleton className="h-28 rounded-xl" />
-      </div>
+      <section className="mx-auto w-full max-w-6xl space-y-5" aria-label="Mis reservas">
+        <CabeceraMisReservas />
+        {resumenLimites}
+        <div className="space-y-3" role="status" aria-live="polite">
+          <p className="text-sm text-texto-suave">Cargando tus reservas y solicitudes pendientes de revisión…</p>
+          <Skeleton className="h-28 rounded-xl" />
+          <Skeleton className="h-28 rounded-xl" />
+        </div>
+      </section>
     )
   }
 
   if (error) {
     return (
-      <section aria-label="Consulta de reservas" className="grid gap-4">
+      <section aria-label="Consulta de reservas" className="mx-auto grid w-full max-w-6xl gap-5">
+        <CabeceraMisReservas />
+        {resumenLimites}
         <ErrorAlerta mensaje={error} />
         <Boton
           variante="secundario"
@@ -125,7 +161,7 @@ export default function MisReservas() {
   }
 
   return (
-    <section aria-labelledby="titulo-mis-reservas" className="space-y-5">
+    <section aria-labelledby="titulo-mis-reservas" className="mx-auto w-full max-w-6xl space-y-5">
       <ExitoModal
         titulo="Reserva cancelada"
         mensaje={exitoCancelacion}
@@ -134,19 +170,7 @@ export default function MisReservas() {
           setIntento((actual) => actual + 1)
         }}
       />
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 id="titulo-mis-reservas" className="text-xl font-bold text-texto">
-            Mis reservas
-          </h2>
-          <p className="mt-1 text-sm text-texto-suave">
-            Solicitudes activas:{' '}
-            <span className="font-semibold text-texto">
-              {activasCount} de {MAXIMO_RESERVAS_ACTIVAS}
-            </span>
-          </p>
-        </div>
-
+      <CabeceraMisReservas tituloId="titulo-mis-reservas">
         <div className="flex flex-wrap items-center gap-2">
           <Boton
             variante="secundario"
@@ -156,7 +180,7 @@ export default function MisReservas() {
           >
             Actualizar
           </Boton>
-          {activasCount < MAXIMO_RESERVAS_ACTIVAS ? (
+          {activasCount < limiteReservas ? (
             <Link
               to="/panel/reservas/nueva"
               className="inline-flex items-center gap-2 rounded-lg bg-marca-700 px-3.5 py-2 text-sm font-semibold text-white transition-colors hover:bg-marca-800"
@@ -166,13 +190,15 @@ export default function MisReservas() {
             </Link>
           ) : (
             <span className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
-              Límite de {MAXIMO_RESERVAS_ACTIVAS} solicitudes activas alcanzado
+              Límite de {limiteReservas} solicitudes activas alcanzado
             </span>
           )}
         </div>
-      </div>
+      </CabeceraMisReservas>
 
-      <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Filtrar reservas por estado">
+      {resumenLimites}
+
+      <div className="inline-flex flex-wrap gap-1.5 rounded-xl bg-superficie-alta p-1.5" role="tablist" aria-label="Filtrar reservas por estado">
         {FILTROS.map((opcion) => {
           const activo = filtro === opcion.id
           return (
@@ -185,7 +211,7 @@ export default function MisReservas() {
               className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
                 activo
                   ? 'bg-marca-700 text-white dark:bg-marca-600'
-                  : 'border border-borde bg-superficie text-texto hover:bg-superficie-alta'
+                  : 'text-texto-suave hover:bg-superficie hover:text-texto'
               }`}
             >
               {opcion.etiqueta}
@@ -218,7 +244,7 @@ export default function MisReservas() {
 
             return (
               <li key={reserva.id}>
-                <Tarjeta className="p-5">
+                <Tarjeta className="p-5 shadow-sm transition-shadow hover:shadow-md sm:p-6">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
@@ -245,7 +271,7 @@ export default function MisReservas() {
                   </div>
 
                   <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm">
-                    <div className="rounded-lg border border-borde bg-superficie-alta/40 p-3">
+                    <div className="rounded-xl bg-superficie-alta/50 p-3">
                       <dt className="text-xs font-semibold uppercase tracking-wide text-texto-suave">
                         Fecha de solicitud
                       </dt>
@@ -256,7 +282,7 @@ export default function MisReservas() {
 
                     {reserva.estado === 'en_espera' && (
                       <>
-                        <div className="rounded-lg border border-borde bg-superficie-alta/40 p-3">
+                        <div className="rounded-xl bg-superficie-alta/50 p-3">
                           <dt className="text-xs font-semibold uppercase tracking-wide text-texto-suave">
                             Orden de atención
                           </dt>
@@ -264,7 +290,7 @@ export default function MisReservas() {
                             Pendiente de revisión por el Gestor de Almacén
                           </dd>
                         </div>
-                        <div className="rounded-lg border border-borde bg-superficie-alta/40 p-3">
+                        <div className="rounded-xl bg-superficie-alta/50 p-3">
                           <dt className="text-xs font-semibold uppercase tracking-wide text-texto-suave">
                             Plazo para revisar la solicitud (72 h)
                           </dt>
@@ -276,7 +302,7 @@ export default function MisReservas() {
                     )}
 
                     {reserva.fecha_inicio && reserva.fecha_fin && (
-                      <div className="rounded-lg border border-borde bg-superficie-alta/40 p-3 sm:col-span-2 lg:col-span-3">
+                      <div className="rounded-xl bg-superficie-alta/50 p-3 sm:col-span-2 lg:col-span-3">
                         <dt className="text-xs font-semibold uppercase tracking-wide text-texto-suave">
                           Rango reservado
                         </dt>
@@ -289,7 +315,7 @@ export default function MisReservas() {
 
                     {reserva.estado === 'reservada' && (
                       <>
-                        <div className="rounded-lg border border-marca-200 bg-marca-50/50 p-3 dark:border-marca-800 dark:bg-marca-950/30">
+                        <div className="rounded-xl bg-marca-50/70 p-3 dark:bg-marca-950/30">
                           <dt className="text-xs font-semibold uppercase tracking-wide text-marca-800 dark:text-marca-300">
                             Ejemplar reservado
                           </dt>
@@ -313,7 +339,7 @@ export default function MisReservas() {
                     )}
 
                     {reserva.fecha_recojo && (
-                      <div className="rounded-lg border border-borde bg-superficie-alta/40 p-3">
+                      <div className="rounded-xl bg-superficie-alta/50 p-3">
                         <dt className="text-xs font-semibold uppercase tracking-wide text-texto-suave">
                           Fecha de entrega en préstamo
                         </dt>
@@ -324,7 +350,7 @@ export default function MisReservas() {
                     )}
                   </dl>
 
-                  <div className="mt-3 rounded-lg border border-borde bg-superficie p-3 text-sm">
+                  <div className="mt-3 rounded-xl bg-superficie-alta/50 p-4 text-sm">
                     <span className="text-xs font-semibold uppercase tracking-wide text-texto-suave">
                       Justificación:
                     </span>
@@ -349,7 +375,7 @@ export default function MisReservas() {
                   )}
 
                   {reserva.garantia && (
-                    <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-borde bg-superficie-alta/40 p-3 text-xs">
+                    <div className="mt-3 flex flex-wrap items-center gap-3 rounded-xl bg-superficie-alta/50 p-3 text-xs">
                       <span className="font-semibold text-texto">Documentos de garantía adjuntos:</span>
                       {(reserva.garantia.documento_identidad_disponible || reserva.garantia.tiene_documento_identidad) && (
                         <a

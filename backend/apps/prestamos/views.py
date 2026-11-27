@@ -111,7 +111,8 @@ class BuscarPrestatariosView(APIView):
         serializer = BusquedaPrestatarioSerializer(data={"dni": prefijo} if prefijo else {"nombre": nombre})
         serializer.is_valid(raise_exception=True)
         criterio = serializer.validated_data.get("dni") or serializer.validated_data["nombre"]
-        prestatarios = buscar_prestatarios_por_dni(criterio)
+        incluir_inactivos = request.query_params.get("incluir_inactivos") == "1"
+        prestatarios = buscar_prestatarios_por_dni(criterio, incluir_inactivos=incluir_inactivos)
         return Response(SugerenciaPrestatarioSerializer(prestatarios, many=True).data)
 
 

@@ -15,6 +15,7 @@ import Campo from '../ui/Campo'
 export default function SelectorPrestatario({
   etiqueta = 'Buscar prestatario por DNI',
   modo = 'dni',
+  incluirInactivos = false,
   valor,
   onCambio,
   onSeleccionar = null,
@@ -73,7 +74,7 @@ export default function SelectorPrestatario({
     setErrorBusqueda('')
     const temporizador = window.setTimeout(async () => {
       try {
-        const resultados = await api.get(construirRutaBusquedaPrestatarios(consulta, modo))
+        const resultados = await api.get(construirRutaBusquedaPrestatarios(consulta, modo, incluirInactivos))
         if (vigente) setSugerencias(resultados)
       } catch {
         if (vigente) {
@@ -89,7 +90,7 @@ export default function SelectorPrestatario({
       vigente = false
       window.clearTimeout(temporizador)
     }
-  }, [valor, seleccionado, modo])
+  }, [valor, seleccionado, modo, incluirInactivos])
 
   function cambiar(evento) {
     const nuevoValor = modo === 'nombre'

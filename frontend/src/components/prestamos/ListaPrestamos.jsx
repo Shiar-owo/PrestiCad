@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { ordenarPrestamos, textoEstadoPrestamo } from '../../prestamos/estadoPrestamo'
 import { filtrarPrestamos } from '../../prestamos/filtroPrestamos'
 import BadgeEstado from '../ui/BadgeEstado'
+import Boton from '../ui/Boton'
 import EstadoVacio from '../ui/EstadoVacio'
 import DetallePrestamo from './DetallePrestamo'
 import FiltroPrestamos from './FiltroPrestamos'
@@ -25,8 +26,11 @@ export default function ListaPrestamos({ prestamos, onSeleccionar, onDevolucion 
 
   return (
     <section aria-label="Mis Préstamos">
-      <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
-        <h3 className="text-lg font-bold text-texto">Mis Préstamos</h3>
+      <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-borde bg-superficie p-4 shadow-sm sm:flex-row sm:items-end sm:justify-between sm:p-5">
+        <div>
+          <h3 className="text-lg font-bold text-texto">Tus registros</h3>
+          <p className="mt-0.5 text-xs text-texto-suave">{visibles.length} de {ordenados.length} préstamos</p>
+        </div>
         <FiltroPrestamos estado={filtro} onCambiar={setFiltro} />
       </div>
 
@@ -42,7 +46,7 @@ export default function ListaPrestamos({ prestamos, onSeleccionar, onDevolucion 
           />
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {visibles.map((prestamo) => {
             const materialNombre = prestamo.material_snapshot?.nombre || prestamo.material_nombre
             const materialCodigo = prestamo.material_snapshot?.codigo_material || prestamo.material_codigo
@@ -51,82 +55,86 @@ export default function ListaPrestamos({ prestamos, onSeleccionar, onDevolucion 
             return (
               <article
                 key={prestamo.id}
-                className="rounded-xl border border-borde bg-white dark:bg-superficie p-5 hover:shadow-md hover:border-acento-200 transition-all cursor-pointer group"
+                className="group flex min-h-64 flex-col rounded-2xl border border-borde bg-superficie p-5 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-acento-400 hover:shadow-md"
                 onClick={() => {
                   setSeleccionado(prestamo)
                   onSeleccionar?.(prestamo)
                 }}
               >
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <h4 className="font-bold text-texto text-sm leading-tight group-hover:text-acento-700 dark:group-hover:text-acento-300">
+                <div className="mb-4 flex items-start justify-between gap-3 border-b border-borde pb-3">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-texto-suave">Préstamo #{prestamo.id}</p>
+                    <h4 className="mt-1 break-words text-base font-bold leading-tight text-texto group-hover:text-acento-700 dark:group-hover:text-acento-300">
                       {materialNombre}
                     </h4>
-                    <p className="text-xs text-texto-suave font-mono mt-0.5">
+                    <p className="mt-1 break-all font-mono text-xs text-texto-suave">
                       {materialCodigo}
                     </p>
                   </div>
                   <BadgeEstado
                     estado={prestamo.estado_visible}
                     texto={textoEstadoPrestamo(prestamo, prestamo.estado_visible)}
-                    className="text-[10px]"
                   />
                 </div>
 
-                <div className="space-y-2 mb-4">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-texto-suave">Código Material</span>
-                    <span className="font-medium text-texto-suave font-mono">
-                      {materialCodigo}
-                    </span>
+                <dl className="grid flex-1 content-start gap-2 sm:grid-cols-2">
+                  <div className="rounded-xl bg-superficie-alta/50 p-3">
+                    <dt className="text-xs font-semibold text-texto-suave">Código de Material</dt>
+                    <dd className="mt-1 break-all font-mono text-sm font-semibold text-texto">{materialCodigo}</dd>
                   </div>
                   {codigoEjemplar && (
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-texto-suave">Código de ejemplar</span>
-                      <span className="font-medium text-texto-suave font-mono">
-                        {codigoEjemplar}
-                      </span>
+                    <div className="rounded-xl bg-superficie-alta/50 p-3">
+                      <dt className="text-xs font-semibold text-texto-suave">Código de ejemplar</dt>
+                      <dd className="mt-1 break-all font-mono text-sm font-semibold text-texto">{codigoEjemplar}</dd>
                     </div>
                   )}
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-texto-suave">Fecha entrega</span>
-                  <span className="font-medium text-texto-suave">
-                    {prestamo.fecha_entrega
-                      ? new Intl.DateTimeFormat('es-PE', { dateStyle: 'short' }).format(new Date(prestamo.fecha_entrega))
-                      : '—'}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-texto-suave">Fecha límite</span>
-                  <span className="font-medium text-texto-suave">
-                    {prestamo.fecha_limite
-                      ? new Intl.DateTimeFormat('es-PE', { dateStyle: 'short' }).format(new Date(prestamo.fecha_limite))
-                      : '—'}
-                  </span>
-                </div>
-              </div>
+                  <div className="rounded-xl bg-superficie-alta/50 p-3">
+                    <dt className="text-xs font-semibold text-texto-suave">Fecha de entrega</dt>
+                    <dd className="mt-1 text-sm text-texto">
+                      {prestamo.fecha_entrega
+                        ? new Intl.DateTimeFormat('es-PE', { dateStyle: 'short' }).format(new Date(prestamo.fecha_entrega))
+                        : '—'}
+                    </dd>
+                  </div>
+                  <div className="rounded-xl bg-acento-50 p-3 dark:bg-acento-500/10">
+                    <dt className="text-xs font-semibold text-acento-800 dark:text-acento-300">Fecha límite</dt>
+                    <dd className="mt-1 text-sm font-semibold text-acento-900 dark:text-acento-200">
+                      {prestamo.fecha_limite
+                        ? new Intl.DateTimeFormat('es-PE', { dateStyle: 'short' }).format(new Date(prestamo.fecha_limite))
+                        : '—'}
+                    </dd>
+                  </div>
+                </dl>
 
-              <div className="mt-4 pt-4 border-t border-borde flex items-center justify-between gap-2">
-                <button
-                  type="button"
-                  className="flex-1 text-sm font-medium text-acento-700 hover:text-acento-900 dark:text-acento-300 dark:hover:text-acento-100 underline underline-offset-4 px-3 py-2 rounded-lg hover:bg-acento-50 dark:hover:bg-acento-900/20 transition-colors"
-                  onClick={() => {
-                    setSeleccionado(prestamo)
-                    onSeleccionar?.(prestamo)
-                  }}
-                >
-                  Ver detalle
-                </button>
-                {esDevoluble(prestamo.estado) && onDevolucion && (
-                  <button
-                    type="button"
-                    className="flex-1 text-sm font-medium text-marca-700 hover:text-marca-900 dark:text-marca-300 dark:hover:text-marca-100 px-3 py-2 rounded-lg hover:bg-marca-50 dark:hover:bg-marca-900/20 transition-colors border border-marca-200 dark:border-marca-800"
-                    onClick={() => onDevolucion(prestamo.id)}
+                <div className="mt-4 flex items-center justify-between gap-2 border-t border-borde pt-4">
+                  <Boton
+                    tipo="button"
+                    variante="accion"
+                    tamanio="pequeno"
+                    className="flex-1"
+                    onClick={(evento) => {
+                      evento.stopPropagation()
+                      setSeleccionado(prestamo)
+                      onSeleccionar?.(prestamo)
+                    }}
                   >
-                    Devolver
-                  </button>
-                )}
-              </div>
+                    Ver detalle
+                  </Boton>
+                  {esDevoluble(prestamo.estado) && onDevolucion && (
+                    <Boton
+                      tipo="button"
+                      variante="primario"
+                      tamanio="pequeno"
+                      className="flex-1"
+                      onClick={(evento) => {
+                        evento.stopPropagation()
+                        onDevolucion(prestamo.id)
+                      }}
+                    >
+                      Devolver
+                    </Boton>
+                  )}
+                </div>
             </article>
           )})}
         </div>

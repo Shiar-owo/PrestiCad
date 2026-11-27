@@ -471,9 +471,13 @@ class ConsultaReportesSerializer(
     fecha_desde = serializers.DateField(required=False)
     fecha_hasta = serializers.DateField(required=False)
     gestor_id = serializers.IntegerField(required=False, min_value=1)
+    dni = serializers.CharField(max_length=8, required=False, trim_whitespace=True)
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
+        dni = attrs.get("dni")
+        if dni and not re.fullmatch(r"\d{8}", dni):
+            raise serializers.ValidationError({"dni": "El DNI debe tener exactamente 8 dígitos numéricos."})
         fecha_desde = attrs.get("fecha_desde")
         fecha_hasta = attrs.get("fecha_hasta")
         if fecha_desde and fecha_hasta and fecha_desde > fecha_hasta:

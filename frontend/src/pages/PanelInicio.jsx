@@ -1,7 +1,9 @@
-import { useContext } from 'react'
+import { useContext, useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import {
+  AlertTriangle,
   ArrowUpRight,
+  CalendarClock,
   CalendarCheck2,
   ClipboardCheck,
   ShieldCheck,
@@ -12,9 +14,13 @@ import {
 import SesionContext from '../contextos/SesionContext'
 import useTituloPagina from '../hooks/useTituloPagina'
 import { ETIQUETAS_ROL } from '../constantes/roles'
+import { MAXIMO_ACTIVOS_POR_TIER } from '../constantes/catalogo'
 import Tarjeta from '../components/ui/Tarjeta'
-import TarjetaReputacion from '../components/ui/TarjetaReputacion'
+import TarjetaReputacion, { CONFIG_TIER } from '../components/ui/TarjetaReputacion'
 import { ACCESOS_POR_ROL } from '../navegacion/accesos'
+import { api } from '../api/client'
+import { obtenerEstadoVisible } from '../prestamos/estadoPrestamo'
+import { formatearFechaReserva } from '../reservas/estadoReserva'
 
 const MENSAJES_BIENVENIDA = {
   prestatario: 'Consulta tus préstamos, revisa tus reservas y sigue tu reputación.',
@@ -45,9 +51,116 @@ function IndicadorInicio({ icono: Icono, etiqueta, valor, detalle, tono = 'marca
   )
 }
 
+function TarjetaPuntosSemanales({ tier, puntos = 0, tope = 0 }) {
+  const config = CONFIG_TIER[tier] || CONFIG_TIER.estandar
+  const puntosActuales = Math.max(0, Number(puntos) || 0)
+  const limite = Math.max(0, Number(tope) || 0)
+  const porcentaje = limite > 0 ? Math.min(100, (puntosActuales / limite) * 100) : 0
+  const topeAlcanzado = limite > 0 && puntosActuales >= limite
+
+  return (
+    <Tarjeta className={`relative flex h-full flex-col justify-between overflow-hidden border p-5 shadow-xs ${config.colorBorde} ${config.colorFondo}`}>
+      <div>
+        <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-texto-suave">
+          <Sparkles aria-hidden="true" className={`size-4 ${config.colorIcono}`} />
+          Puntos ganados esta semana
+        </p>
+        <p className="mt-3 flex flex-wrap items-baseline gap-x-2">
+          <span className={`text-3xl font-extrabold tracking-tight ${config.colorPuntaje}`}>+{puntosActuales}</span>
+          <span className="text-sm font-semibold text-texto-suave">/ {limite} pts</span>
+        </p>
+        <span className={`mt-2 inline-flex rounded-full border px-2.5 py-1 text-xs font-bold ${config.colorBadge}`}>
+          {topeAlcanzado ? 'Tope semanal alcanzado' : `Límite semanal · Tier ${config.nombre}`}
+        </span>
+      </div>
+      <div className="mt-5">
+        <div
+          className="h-2 overflow-hidden rounded-full bg-superficie-alta/80 dark:bg-superficie-alta"
+          role="progressbar"
+          aria-label={`Puntos ganados esta semana: ${puntosActuales} de ${limite}`}
+          aria-valuemin="0"
+          aria-valuemax={limite || 1}
+          aria-valuenow={Math.min(puntosActuales, limite || 1)}
+        >
+          <div className={`h-full rounded-full ${config.colorBarra}`} style={{ width: `${porcentaje}%` }} />
+        </div>
+        <p className="mt-2 text-xs font-medium text-texto-suave">
+          {topeAlcanzado ? 'Has alcanzado el máximo de puntos de esta semana.' : `Puedes ganar ${Math.max(0, limite - puntosActuales)} puntos más esta semana.`}
+        </p>
+      </div>
+    </Tarjeta>
+  )
+}
+
+function TarjetaProximaDevolucion({ prestamo, cargando, error }) {
+  const vencido = prestamo && obtenerEstadoVisible(prestamo) === 'vencido'
+  return (
+    <Tarjeta className="flex h-full flex-col justify-between border-borde p-5 shadow-xs">
+      <div>
+        <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-texto-suave">
+          {vencido
+            ? <AlertTriangle aria-hidden="true" className="size-4 text-amber-600 dark:text-amber-400" />
+            : <CalendarClock aria-hidden="true" className="size-4 text-acento-700 dark:text-acento-300" />}
+          Próxima devolución
+        </p>
+        {cargando ? (
+          <p className="mt-4 text-sm text-texto-suave" role="status">Consultando tus préstamos…</p>
+        ) : error ? (
+          <p className="mt-4 text-sm font-semibold text-error">No se pudo consultar tu próxima devolución.</p>
+        ) : prestamo ? (
+          <>
+            <p className="mt-4 break-words text-lg font-bold leading-snug text-texto">{prestamo.material_nombre}</p>
+            <p className={`mt-2 text-sm font-semibold ${vencido ? 'text-amber-800 dark:text-amber-300' : 'text-acento-800 dark:text-acento-300'}`}>
+              {vencido ? 'Vencido desde' : 'Fecha límite'}: {formatearFechaReserva(prestamo.fecha_limite)}
+            </p>
+          </>
+        ) : (
+          <p className="mt-4 text-sm font-semibold text-texto">No tienes devoluciones pendientes.</p>
+        )}
+      </div>
+      <Link
+        to="/panel/prestamos"
+        className="mt-5 inline-flex w-fit items-center gap-1.5 text-sm font-semibold text-acento-700 underline decoration-acento-300 underline-offset-2 hover:text-acento-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-acento-600 dark:text-acento-300 dark:hover:text-acento-200"
+      >
+        Ver Mis Préstamos <ArrowUpRight aria-hidden="true" className="size-4" />
+      </Link>
+    </Tarjeta>
+  )
+}
+
 function PanelInicio() {
   useTituloPagina('Inicio')
-  const { usuario } = useContext(SesionContext)
+  const { usuario, refrescarSesion } = useContext(SesionContext)
+  const [prestamoProximo, setPrestamoProximo] = useState(null)
+  const [cargandoPrestamoProximo, setCargandoPrestamoProximo] = useState(false)
+  const [errorPrestamoProximo, setErrorPrestamoProximo] = useState(false)
+
+  useEffect(() => {
+    if (usuario?.rol !== 'prestatario') return undefined
+    let vigente = true
+    setCargandoPrestamoProximo(true)
+    setErrorPrestamoProximo(false)
+    refrescarSesion().catch(() => {})
+    api.get('/prestamos/mis-prestamos/')
+      .then((prestamos) => {
+        if (!vigente) return
+        const candidatos = (Array.isArray(prestamos) ? prestamos : [])
+          .filter((prestamo) => ['activo', 'vencido'].includes(obtenerEstadoVisible(prestamo)))
+          .filter((prestamo) => Number.isFinite(new Date(prestamo.fecha_limite).getTime()))
+          .sort((a, b) => new Date(a.fecha_limite) - new Date(b.fecha_limite))
+        setPrestamoProximo(candidatos[0] || null)
+      })
+      .catch(() => {
+        if (vigente) {
+          setPrestamoProximo(null)
+          setErrorPrestamoProximo(true)
+        }
+      })
+      .finally(() => {
+        if (vigente) setCargandoPrestamoProximo(false)
+      })
+    return () => { vigente = false }
+  }, [refrescarSesion, usuario?.id, usuario?.rol])
 
   if (!usuario) {
     return null
@@ -115,27 +228,25 @@ function PanelInicio() {
         </div>
 
         {esPrestatario ? (
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             <IndicadorInicio
               icono={ClipboardCheck}
               etiqueta="Préstamos activos"
               valor={`${usuario.prestamos_activos ?? 0} / ${usuario.maximo_prestamos_activos ?? '—'}`}
-              detalle="En uso / límite permitido"
+              detalle="En uso / límite de tu Tier"
               tono="marca"
             />
             <IndicadorInicio
               icono={CalendarCheck2}
               etiqueta="Reservas activas"
-              valor={`${usuario.reservas_activas ?? 0} / ${usuario.maximo_reservas_activas ?? '—'}`}
-              detalle="En uso / límite permitido"
+              valor={`${usuario.reservas_activas ?? 0} / ${usuario.maximo_reservas_activas ?? MAXIMO_ACTIVOS_POR_TIER[usuario.reputacion_tier] ?? 3}`}
+              detalle="En uso / límite de tu Tier"
               tono="acento"
             />
-            <IndicadorInicio
-              icono={Sparkles}
-              etiqueta="Puntos ganados esta semana"
-              valor={`+${usuario.reputacion_puntos_ganados_semana ?? 0} / ${usuario.reputacion_tope_semanal ?? '—'}`}
-              detalle="Puntos ganados / tope semanal"
-              tono="neutro"
+            <TarjetaProximaDevolucion
+              prestamo={prestamoProximo}
+              cargando={cargandoPrestamoProximo}
+              error={errorPrestamoProximo}
             />
             {usuario.reputacion_tier && (
               <TarjetaReputacion
@@ -145,8 +256,14 @@ function PanelInicio() {
                 topeSemanal={usuario.reputacion_tope_semanal}
                 compacta
                 mostrarProgresoSemanal={false}
+                className="xl:col-span-2"
               />
             )}
+            <TarjetaPuntosSemanales
+              tier={usuario.reputacion_tier}
+              puntos={usuario.reputacion_puntos_ganados_semana}
+              tope={usuario.reputacion_tope_semanal}
+            />
           </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 xl:max-w-2xl">

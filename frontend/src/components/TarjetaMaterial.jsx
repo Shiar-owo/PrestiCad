@@ -4,11 +4,18 @@ import { ETIQUETAS_TIER, ETIQUETAS_TIPO } from '../constantes/catalogo'
 import Boton from './ui/Boton'
 import Tarjeta from './ui/Tarjeta'
 
+const ESTILOS_TIER = {
+  avanzado: 'bg-emerald-100 text-emerald-800 ring-emerald-300 dark:bg-emerald-500/20 dark:text-emerald-300 dark:ring-emerald-600/50',
+  estandar: 'bg-blue-100 text-blue-800 ring-blue-300 dark:bg-blue-500/20 dark:text-blue-300 dark:ring-blue-600/50',
+  restringido: 'bg-amber-100 text-amber-900 ring-amber-300 dark:bg-amber-500/20 dark:text-amber-200 dark:ring-amber-600/50',
+}
+
 function TarjetaMaterial({ material, onSeleccionar }) {
   const tipoLegible = ETIQUETAS_TIPO[material.tipo] || material.tipo
   const tierLegible = ETIQUETAS_TIER[material.tier_minimo_requerido] || material.tier_minimo_requerido
 
   const unidades = material.unidades_disponibles ?? material.stock ?? 0
+  const stockTotal = Number(material.stock ?? unidades)
   const hayDisponibilidad = unidades > 0
   const especificacionesBreves = [material.marca, material.modelo].filter(Boolean).join(' • ')
 
@@ -78,7 +85,7 @@ function TarjetaMaterial({ material, onSeleccionar }) {
             <span
               className={`font-semibold ${hayDisponibilidad ? 'text-marca-700 dark:text-marca-400' : 'text-error'}`}
             >
-              {unidades} de {material.stock ?? unidades} ejemplar{Number(material.stock ?? unidades) === 1 ? '' : 'es'} disponible{Number(material.stock ?? unidades) === 1 ? '' : 's'}
+              {unidades} de {stockTotal} {stockTotal === 1 ? 'unidad disponible' : 'unidades disponibles'}
             </span>
           </div>
 
@@ -106,7 +113,15 @@ function TarjetaMaterial({ material, onSeleccionar }) {
             )}
 
           {tierLegible && (
-            <p className="mt-1 text-xs text-texto-suave">Tier mínimo: {tierLegible}</p>
+            <div className="mt-2 flex items-center justify-between gap-2">
+              <span className="text-xs text-texto-suave">Tier mínimo:</span>
+              <span
+                className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold ring-1 ${ESTILOS_TIER[material.tier_minimo_requerido] || 'bg-superficie-alta text-texto ring-borde'}`}
+                aria-label={`Tier mínimo requerido: ${tierLegible}`}
+              >
+                {tierLegible}
+              </span>
+            </div>
           )}
         </div>
 

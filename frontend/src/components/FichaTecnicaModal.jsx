@@ -172,10 +172,10 @@ function FichaTecnicaModal({
                       }`}
                     >
                       {ficha.unidadesDisponibles}{' '}
-                      {ficha.unidadesDisponibles === 1 ? 'ejemplar' : 'ejemplares'}
+                      {ficha.unidadesDisponibles === 1 ? 'unidad' : 'unidades'}
                     </span>
                     <span className="text-xs text-texto-suave">
-                      de {ficha.stockTotal} en total
+                      de {ficha.stockTotal} {ficha.stockTotal === 1 ? 'unidad en total' : 'unidades en total'}
                     </span>
                   </div>
                 </div>
@@ -231,12 +231,12 @@ function FichaTecnicaModal({
             </div>
           </div>
 
-          {/* Sección de ejemplares físicos */}
+          {/* Sección de unidades físicas */}
           <div>
             <div className="border-b border-borde pb-3">
               <h4 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-texto">
                 <Layers className="size-4 text-acento-600 dark:text-acento-400" aria-hidden="true" />
-                Ejemplares físicos ({ficha.instancias?.length || ficha.stockTotal})
+                Unidades físicas ({ficha.instancias?.length || ficha.stockTotal})
               </h4>
               <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 {onAgregarInstancias && (
@@ -247,32 +247,32 @@ function FichaTecnicaModal({
                     icono={Plus}
                     onClick={() => setMostrarAltaInstancias((actual) => !actual)}
                   >
-                    {mostrarAltaInstancias ? 'Cerrar alta' : 'Agregar ejemplares'}
+                    {mostrarAltaInstancias ? 'Cerrar alta' : 'Agregar unidades'}
                   </Boton>
                 )}
                 <div className="flex flex-wrap items-center gap-1.5 text-xs">
                   {ficha.resumenInstancias?.disponible > 0 && (
                     <span className="inline-flex items-center gap-1 rounded-md bg-marca-50 px-2 py-0.5 font-medium text-marca-700 ring-1 ring-marca-300 dark:bg-marca-950/40 dark:text-marca-300 dark:ring-marca-800">
                       <span className="size-1.5 rounded-full bg-marca-600" />
-                      {ficha.resumenInstancias.disponible} disponibles
+                      {ficha.resumenInstancias.disponible} unidades disponibles
                     </span>
                   )}
                   {ficha.resumenInstancias?.reservado > 0 && (
                     <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-0.5 font-medium text-amber-700 ring-1 ring-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-800">
                       <span className="size-1.5 rounded-full bg-amber-600" />
-                      {ficha.resumenInstancias.reservado} reservadas
+                      {ficha.resumenInstancias.reservado} unidades reservadas
                     </span>
                   )}
                   {ficha.resumenInstancias?.prestado > 0 && (
                     <span className="inline-flex items-center gap-1 rounded-md bg-acento-50 px-2 py-0.5 font-medium text-acento-700 ring-1 ring-acento-300 dark:bg-acento-950/40 dark:text-acento-300 dark:ring-acento-800">
                       <span className="size-1.5 rounded-full bg-acento-600" />
-                      {ficha.resumenInstancias.prestado} prestadas
+                      {ficha.resumenInstancias.prestado} unidades prestadas
                     </span>
                   )}
                   {ficha.resumenInstancias?.en_mantenimiento > 0 && (
                     <span className="inline-flex items-center gap-1 rounded-md bg-rose-50 px-2 py-0.5 font-medium text-rose-700 ring-1 ring-rose-300 dark:bg-rose-950/40 dark:text-rose-300 dark:ring-rose-800">
                       <span className="size-1.5 rounded-full bg-rose-600" />
-                      {ficha.resumenInstancias.en_mantenimiento} en mantenimiento
+                      {ficha.resumenInstancias.en_mantenimiento} unidades en mantenimiento
                     </span>
                   )}
                 </div>
@@ -297,7 +297,7 @@ function FichaTecnicaModal({
                     <thead className="border-b border-borde bg-superficie-alta/60 text-xs font-semibold uppercase tracking-wider text-texto-suave">
                       <tr>
                         <th scope="col" className="px-4 py-2.5">Foto</th>
-                        <th scope="col" className="px-4 py-2.5">Código de Ejemplar</th>
+                        <th scope="col" className="px-4 py-2.5">Código de unidad</th>
                         <th scope="col" className="px-4 py-2.5">N° de Serie</th>
                         <th scope="col" className="px-4 py-2.5">Estado</th>
                         <th scope="col" className="px-4 py-2.5">Observaciones</th>
@@ -320,7 +320,7 @@ function FichaTecnicaModal({
                             {inst.foto ? (
                               <img
                                 src={inst.foto}
-                                alt={`Foto del ejemplar ${inst.codigoEjemplar}`}
+                                alt={`Foto de la unidad ${inst.codigoEjemplar}`}
                                 className="size-14 rounded-md border border-borde object-cover"
                                 loading="lazy"
                               />
@@ -359,9 +359,9 @@ function FichaTecnicaModal({
                                   tipo="button"
                                   deshabilitado={['prestado', 'reservado'].includes(inst.estado)}
                                   title={['prestado', 'reservado'].includes(inst.estado)
-                                    ? 'No se puede eliminar un ejemplar prestado o reservado.'
+                                    ? 'No se puede eliminar una unidad prestada o reservada.'
                                     : undefined}
-                                  aria-label={`Eliminar ejemplar ${inst.codigoEjemplar}`}
+                                  aria-label={`Eliminar unidad ${inst.codigoEjemplar}`}
                                   onClick={() => onEliminarInstancia(inst)}
                                 >
                                   Eliminar
@@ -377,7 +377,7 @@ function FichaTecnicaModal({
               </div>
             ) : (
               <p className="mt-3 rounded-xl border border-borde bg-superficie p-3.5 text-xs text-texto-suave">
-                Este material tiene {ficha.stockTotal} ejemplar{ficha.stockTotal === 1 ? '' : 'es'} sin registro individual.
+                Este material tiene {ficha.stockTotal} unidad{ficha.stockTotal === 1 ? '' : 'es'} sin registro individual.
               </p>
             )}
           </div>

@@ -602,7 +602,7 @@ export default function ReservarMaterial() {
             Volver a mis reservas
           </Link>
           <h2 id="titulo-reservar-material" className="mt-1 text-xl font-bold text-texto">
-            Reservar material o solicitar lista de espera
+            Reservar material
           </h2>
           <p className="mt-0.5 text-sm text-texto-suave">
             Tu Tier actual:{' '}
@@ -619,7 +619,7 @@ export default function ReservarMaterial() {
 
       {reservasActivas >= MAXIMO_RESERVAS_ACTIVAS && (
         <ErrorAlerta
-          mensaje={`Ya alcanzaste el máximo de ${MAXIMO_RESERVAS_ACTIVAS} solicitudes activas simultáneas (entre reservas confirmadas y solicitudes en espera).`}
+          mensaje={`Ya alcanzaste el máximo de ${MAXIMO_RESERVAS_ACTIVAS} solicitudes activas simultáneas (reservas confirmadas y excepciones pendientes de revisión).`}
         />
       )}
 
@@ -704,15 +704,15 @@ export default function ReservarMaterial() {
                 <p>
                   <span className="font-semibold text-texto">Modalidad estimada:</span>{' '}
                   {aplicaExcepcion
-                    ? 'Solicitud excepcional en espera (72 h, sujeta a aprobación del gestor)'
+                    ? 'Excepción pendiente de revisión (72 h, sujeta a aprobación del gestor)'
                     : unidadesDisponibles > 0
                       ? 'Reserva confirmada inmediata (recojo dentro de 30 min)'
-                      : 'Lista de espera sin bloquear inventario (72 h de vigencia)'}
+                      : 'No disponible para las fechas seleccionadas'}
                 </p>
               </div>
 
               {yaTieneActivaEnMaterial && (
-                <ErrorAlerta mensaje="Ya tienes una reserva confirmada o solicitud en espera activa para este material." />
+                <ErrorAlerta mensaje="Ya tienes una reserva confirmada o una excepción pendiente de revisión para este material." />
               )}
 
               {bloqueadoPorTier && (
@@ -745,7 +745,7 @@ export default function ReservarMaterial() {
                     </a>
                   </p>
                   <p>
-                    La solicitud quedará en estado <strong>En espera</strong> hasta que el Gestor de Almacén verifique la garantía y la apruebe manualmente para entrar a la lista de espera.
+                    La solicitud quedará <strong>pendiente de revisión</strong> hasta que el Gestor de Almacén verifique la garantía y la apruebe manualmente.
                   </p>
                 </div>
               )}

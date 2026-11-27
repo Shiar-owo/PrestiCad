@@ -40,7 +40,7 @@ function extraerMensajeError(error, porDefecto) {
 }
 
 export default function ColaReservas() {
-  useTituloPagina('Gestión de reservas')
+  useTituloPagina('Reservas')
   const { usuario } = useContext(SesionContext)
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -114,7 +114,7 @@ export default function ColaReservas() {
       })
       .catch(() => {
         if (activa) {
-          setErrorCola('No fue posible consultar la cola de reservas.')
+          setErrorCola('No fue posible consultar las reservas.')
         }
       })
       .finally(() => {
@@ -243,7 +243,7 @@ export default function ColaReservas() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 id="titulo-cola-reservas" className="text-xl font-bold text-texto">
-            Gestión de reservas y agenda por material
+            Reservas
           </h2>
           <p className="mt-1 text-sm text-texto-suave">
             Consulta el calendario de disponibilidad, evalúa excepciones académicas y administra las reservas confirmadas. Las reservas se gestionan por fechas: un mismo ejemplar puede tener múltiples reservas en distintas temporadas.

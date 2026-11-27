@@ -26,7 +26,7 @@ import {
 } from './estadoReserva'
 
 describe('helpers de estado y elegibilidad de reserva', () => {
-  it('presenta cada estado de reserva y agrega el sufijo de excepción', () => {
+  it('presenta cada estado de reserva y etiqueta las excepciones pendientes de revisión', () => {
     expect(presentarEstadoReserva('en_espera').texto).toBe('En espera')
     expect(presentarEstadoReserva('reservada').texto).toBe('Reservada')
     expect(presentarEstadoReserva('cancelada_por_vencimiento').texto).toBe(
@@ -38,7 +38,7 @@ describe('helpers de estado y elegibilidad de reserva', () => {
       'Reservada - Excepción',
     )
     expect(textoEstadoReserva({ estado: 'en_espera', es_excepcion: true })).toBe(
-      'En espera - Excepción',
+      'Pendiente de revisión',
     )
     expect(
       textoEstadoReserva({
@@ -46,7 +46,7 @@ describe('helpers de estado y elegibilidad de reserva', () => {
         es_excepcion: true,
         excepcion_aprobada: true,
       }),
-    ).toBe('En espera (Excepción aprobada)')
+    ).toBe('Excepción aprobada')
     expect(textoEstadoReserva({ estado: 'reservada', es_excepcion: false })).toBe(
       'Reservada',
     )

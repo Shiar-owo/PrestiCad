@@ -30,7 +30,7 @@ const ETIQUETAS_ROL = {
   ...Object.fromEntries(OPCIONES_ROL.map(({ valor, etiqueta }) => [valor, etiqueta])),
 }
 function UsuariosRoles() {
-  useTituloPagina('Gestionar roles')
+  useTituloPagina('Usuarios')
   const { usuario: usuarioAutenticado } = useContext(SesionContext)
   const navigate = useNavigate()
   const [usuarios, setUsuarios] = useState([])
@@ -119,7 +119,7 @@ function UsuariosRoles() {
     <section className="mx-auto w-full max-w-6xl px-4 py-8">
       <ExitoModal mensaje={mensajeExito} onCerrar={() => setMensajeExito('')} />
       <header className="mb-5">
-        <h2 className="text-xl font-bold text-texto">Gestionar usuarios, roles y permisos</h2>
+        <h2 className="text-xl font-bold text-texto">Usuarios y roles</h2>
         <p className="mt-1 text-sm text-texto-suave">
           Asigna roles, consulta perfiles y activa o desactiva cuentas del sistema.
         </p>

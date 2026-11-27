@@ -64,7 +64,7 @@ function PanelInicio() {
     <div className="space-y-8 pb-4">
       <section
         aria-labelledby="titulo-bienvenida"
-        className="overflow-hidden rounded-2xl border border-white bg-gradient-to-r from-superficie via-superficie to-acento-50 p-6 shadow-sm sm:p-8 dark:to-superficie-alta"
+        className="overflow-hidden rounded-2xl border border-borde bg-gradient-to-r from-superficie via-superficie to-acento-50 p-6 shadow-sm sm:p-8 dark:to-superficie-alta"
       >
         <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-center gap-4 sm:gap-5">
@@ -77,7 +77,7 @@ function PanelInicio() {
             ) : (
               <span
                 aria-hidden="true"
-                className="flex size-16 shrink-0 items-center justify-center rounded-full border-2 border-white bg-marca-600 text-lg font-bold text-white shadow-sm sm:size-18"
+                className="flex size-16 shrink-0 items-center justify-center rounded-full border-2 border-white bg-marca-600 text-lg font-bold text-white shadow-sm sm:size-26"
               >
                 {iniciales || <UserRound className="size-6" />}
               </span>

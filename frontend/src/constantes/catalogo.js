@@ -30,6 +30,12 @@ export const ETIQUETAS_TIER = {
   restringido: 'Restringido',
 }
 
+export const MAXIMO_ACTIVOS_POR_TIER = {
+  restringido: 2,
+  estandar: 3,
+  avanzado: 5,
+}
+
 export const OPCIONES_TIPO = Object.entries(ETIQUETAS_TIPO).map(([valor, etiqueta]) => ({
   valor,
   etiqueta,

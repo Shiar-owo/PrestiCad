@@ -26,6 +26,7 @@ from apps.reservas.constants import (
     MINUTO_RESERVA_MAXIMO_FIN,
     HORAS_ESPERA,
     MENSAJES_ERROR_RESERVA,
+    MAXIMO_RESERVAS_ACTIVAS_TIER,
     MINIMO_MINUTOS_RESERVA,
     TOLERANCIA_RECOJO_MINUTOS,
 )
@@ -96,10 +97,10 @@ def _obtener_material_bloqueado(material_id):
         ) from error
 
 
-def _validar_maximo_reservas_activas(usuario_id):
-    maximo = getattr(settings, "MAXIMO_RESERVAS_ACTIVAS", 3)
+def _validar_maximo_reservas_activas(usuario):
+    maximo = MAXIMO_RESERVAS_ACTIVAS_TIER.get(usuario.reputacion_tier, 3)
     activas = Reserva.objects.filter(
-        usuario_id=usuario_id,
+        usuario_id=usuario.pk,
         estado__in=ESTADOS_ACTIVOS,
     ).count()
     if activas >= maximo:
@@ -363,7 +364,7 @@ def crear_reserva(
             status_code=400,
         )
 
-    _validar_maximo_reservas_activas(usuario_bloqueado.id)
+    _validar_maximo_reservas_activas(usuario_bloqueado)
 
     instancia_elegida = None
     if instancia_id is not None:
@@ -516,7 +517,7 @@ def crear_reserva_excepcional(
             status_code=400,
         )
 
-    _validar_maximo_reservas_activas(usuario_bloqueado.id)
+    _validar_maximo_reservas_activas(usuario_bloqueado)
 
     if not obtener_instancias_disponibles_en_rango(
         material.id, fecha_inicio, fecha_fin, bloquear_filas=True

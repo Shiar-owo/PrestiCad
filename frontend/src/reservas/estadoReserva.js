@@ -9,8 +9,6 @@ import {
   formatearFechaCortaIso,
 } from './diasNoLaborables'
 
-export const MAXIMO_RESERVAS_ACTIVAS = 3
-
 export const ESTADOS_ACTIVOS_RESERVA = ['en_espera', 'reservada']
 
 export const HORARIO_ATENCION_INICIO = 8

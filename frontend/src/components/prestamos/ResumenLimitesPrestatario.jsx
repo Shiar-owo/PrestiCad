@@ -18,7 +18,7 @@ function IndicadorLimite({ etiqueta, usados, limite, icono: Icono, tono }) {
       }
 
   return (
-    <div className="rounded-xl bg-superficie p-4 sm:p-5">
+    <div className="rounded-xl border border-borde/70 bg-superficie-alta/50 p-4 sm:p-5 dark:border-borde dark:bg-superficie-alta">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm font-semibold text-texto-suave">{etiqueta}</p>
@@ -55,10 +55,10 @@ export default function ResumenLimitesPrestatario({
   maximoReservas = 3,
 }) {
   return (
-    <Tarjeta className="border-acento-200 bg-gradient-to-r from-acento-50 to-superficie p-4 sm:p-5 dark:border-acento-800 dark:from-acento-950/30 dark:to-superficie">
+    <Tarjeta className="border-acento-200 bg-superficie p-4 sm:p-5 dark:border-acento-800 dark:bg-superficie-alta">
       <div className="mb-4">
         <h2 className="text-base font-bold text-texto">Tus límites de actividad</h2>
-        <p className="mt-0.5 text-xs text-texto-suave">Consulta cuántos préstamos y reservas activas tienes permitidos.</p>
+        <p className="mt-0.5 text-xs text-texto-suave">Los límites de préstamos y reservas se ajustan a tu Tier de reputación.</p>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <IndicadorLimite

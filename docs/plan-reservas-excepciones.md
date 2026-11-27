@@ -53,7 +53,7 @@ Al finalizar las dos ramas, deben quedar cubiertas:
 |---|---|
 | Garantía | Reutilizar `Garantia`, agregando `reserva` cuando exista el módulo de reservas |
 | Penalización por inasistencia | 20 puntos, configurable con `RESERVA_PENALIZACION_PUNTOS` |
-| Máximo de solicitudes activas | 3, configurable con `MAXIMO_RESERVAS_ACTIVAS` |
+| Máximo de solicitudes activas | Vinculado al Tier: Restringido 2, Estándar 3 y Avanzado 5, igual que el límite de préstamos activos |
 | Alcance | HU06, HU07, HU08 y HU13 completas |
 | Notificaciones | Fuera de alcance; solo estados visibles en “Mis reservas” |
 | Estrategia de ramas | Dos ramas secuenciales |
@@ -306,11 +306,10 @@ En `backend/apps/reservas/constants.py`:
 En `backend/config/settings/base.py`:
 
 ```python
-MAXIMO_RESERVAS_ACTIVAS = int(os.getenv("MAXIMO_RESERVAS_ACTIVAS", "3"))
 RESERVA_PENALIZACION_PUNTOS = int(os.getenv("RESERVA_PENALIZACION_PUNTOS", "20"))
 ```
 
-Agregar ambas variables a `.env.example`.
+Agregar `RESERVA_PENALIZACION_PUNTOS` a `.env.example`. Los límites de reservas se comparten con el mapa de límites por Tier de préstamos.
 
 ### 6.3 Servicios de reservas normales — B1
 

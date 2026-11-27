@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import { api } from './api/client'
 import './estilos.css'
@@ -30,10 +30,17 @@ function App() {
       .finally(() => setUsuario(null))
   }
 
+  const refrescarSesion = useCallback(async () => {
+    const usuarioActualizado = await api.get('/auth/me/')
+    setUsuario((actual) => (actual ? { ...actual, ...usuarioActualizado } : actual))
+    return usuarioActualizado
+  }, [])
+
   const valorContexto = {
     usuario,
     cargandoSesion,
     iniciarSesion: setUsuario,
+    refrescarSesion,
     actualizarPerfil: (perfil) =>
       setUsuario((actual) => (actual ? { ...actual, ...perfil } : actual)),
     cerrarSesion,

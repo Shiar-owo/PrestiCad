@@ -11,11 +11,10 @@ import EstadoVacio from '../components/ui/EstadoVacio'
 import Skeleton from '../components/ui/Skeleton'
 import Tarjeta from '../components/ui/Tarjeta'
 import ResumenLimitesPrestatario from '../components/prestamos/ResumenLimitesPrestatario'
-import { ETIQUETAS_TIER } from '../constantes/catalogo'
+import { ETIQUETAS_TIER, MAXIMO_ACTIVOS_POR_TIER } from '../constantes/catalogo'
 import SesionContext from '../contextos/SesionContext'
 import useTituloPagina from '../hooks/useTituloPagina'
 import {
-  MAXIMO_RESERVAS_ACTIVAS,
   contarReservasActivas,
   esReservaActiva,
   formatearFechaReserva,
@@ -59,7 +58,7 @@ function filtrarReservas(reservas, filtro) {
 
 export default function MisReservas() {
   useTituloPagina('Mis reservas')
-  const { usuario } = useContext(SesionContext)
+  const { usuario, refrescarSesion } = useContext(SesionContext)
   const [reservas, setReservas] = useState([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
@@ -81,6 +80,7 @@ export default function MisReservas() {
       })
       setExitoCancelacion(`La reserva de ${reservaACancelar.material?.nombre || 'material'} fue cancelada correctamente.`)
       setReservaACancelar(null)
+      setIntento((actual) => actual + 1)
     } catch (err) {
       const datos = err?.datos
       const mensaje = datos?.detail || (datos && Object.values(datos).flat()[0]) || 'No se pudo cancelar la reserva.'
@@ -94,6 +94,7 @@ export default function MisReservas() {
     let activa = true
     setCargando(true)
     setError('')
+    refrescarSesion().catch(() => {})
 
     api
       .get('/reservas/mis-reservas/')
@@ -115,10 +116,12 @@ export default function MisReservas() {
     return () => {
       activa = false
     }
-  }, [intento])
+  }, [intento, refrescarSesion])
 
   const activasCount = contarReservasActivas(reservas)
-  const limiteReservas = usuario?.maximo_reservas_activas ?? MAXIMO_RESERVAS_ACTIVAS
+  const limiteReservas = usuario?.maximo_reservas_activas
+    ?? MAXIMO_ACTIVOS_POR_TIER[usuario?.reputacion_tier]
+    ?? 3
   const visibles = filtrarReservas(reservas, filtro)
   const resumenLimites = (
     <ResumenLimitesPrestatario
@@ -167,7 +170,6 @@ export default function MisReservas() {
         mensaje={exitoCancelacion}
         onCerrar={() => {
           setExitoCancelacion('')
-          setIntento((actual) => actual + 1)
         }}
       />
       <CabeceraMisReservas tituloId="titulo-mis-reservas">
@@ -315,7 +317,7 @@ export default function MisReservas() {
 
                     {reserva.estado === 'reservada' && (
                       <>
-                        <div className="rounded-xl bg-marca-50/70 p-3 dark:bg-marca-950/30">
+                        <div className="rounded-xl bg-marca-50/70 p-3 dark:bg-marca-900">
                           <dt className="text-xs font-semibold uppercase tracking-wide text-marca-800 dark:text-marca-300">
                             Ejemplar reservado
                           </dt>

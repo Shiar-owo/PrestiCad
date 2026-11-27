@@ -12,11 +12,10 @@ import Skeleton from '../components/ui/Skeleton'
 import Tarjeta from '../components/ui/Tarjeta'
 import CalendarioDisponibilidad from '../components/reservas/CalendarioDisponibilidad'
 import SelectorFechaHoraDesplegable from '../components/ui/SelectorFechaHoraDesplegable'
-import { ETIQUETAS_TIER, ETIQUETAS_TIPO } from '../constantes/catalogo'
+import { ETIQUETAS_TIER, ETIQUETAS_TIPO, MAXIMO_ACTIVOS_POR_TIER } from '../constantes/catalogo'
 import SesionContext from '../contextos/SesionContext'
 import useTituloPagina from '../hooks/useTituloPagina'
 import {
-  MAXIMO_RESERVAS_ACTIVAS,
   calcularMinutosHabilesReserva,
   calcularSugerenciaSiguienteDia,
   construirFormularioReservaExcepcional,
@@ -169,6 +168,9 @@ export default function ReservarMaterial() {
   )
 
   const tierUsuario = usuario?.reputacion_tier || 'estandar'
+  const maximoReservasActivas = usuario?.maximo_reservas_activas
+    ?? MAXIMO_ACTIVOS_POR_TIER[tierUsuario]
+    ?? 3
   const tierMaterial = materialSeleccionado?.tier_minimo_requerido || 'estandar'
   // Todos los Tiers usan un rango de fechas; Avanzado ya puede abarcar otro día.
   const esAvanzado = false
@@ -553,7 +555,7 @@ export default function ReservarMaterial() {
 
           {confirmada ? (
             <>
-              <div className="rounded-lg border border-marca-200 bg-marca-50/50 p-3 dark:border-marca-800 dark:bg-marca-950/30">
+              <div className="rounded-lg border border-marca-200 bg-marca-50/50 p-3 dark:border-marca-700 dark:bg-marca-900">
                 <dt className="text-xs font-semibold uppercase tracking-wide text-marca-800 dark:text-marca-300">
                   Ejemplar asignado
                 </dt>
@@ -568,7 +570,7 @@ export default function ReservarMaterial() {
                   />
                 )}
               </div>
-              <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3 dark:border-amber-800 dark:bg-marca-950/30">
+              <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3 dark:border-amber-700 dark:bg-amber-900">
                 <dt className="text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-300">
                   Devolución
                 </dt>
@@ -632,15 +634,15 @@ export default function ReservarMaterial() {
             </span>{' '}
             ({usuario?.reputacion_puntaje ?? 0} pts) · Solicitudes activas:{' '}
             <span className="font-semibold text-texto">
-              {reservasActivas} de {MAXIMO_RESERVAS_ACTIVAS}
+              {reservasActivas} de {maximoReservasActivas}
             </span>
           </p>
         </div>
       </div>
 
-      {reservasActivas >= MAXIMO_RESERVAS_ACTIVAS && (
+      {reservasActivas >= maximoReservasActivas && (
         <ErrorAlerta
-          mensaje={`Ya alcanzaste el máximo de ${MAXIMO_RESERVAS_ACTIVAS} solicitudes activas simultáneas (reservas confirmadas y excepciones pendientes de revisión).`}
+          mensaje={`Ya alcanzaste el máximo de ${maximoReservasActivas} solicitudes activas simultáneas para tu Tier (reservas confirmadas y excepciones pendientes de revisión).`}
         />
       )}
 
@@ -1093,7 +1095,7 @@ export default function ReservarMaterial() {
               cargando={enviando}
               deshabilitado={
                 enviando ||
-                reservasActivas >= MAXIMO_RESERVAS_ACTIVAS ||
+                reservasActivas >= maximoReservasActivas ||
                 yaTieneActivaEnMaterial ||
                 bloqueadoPorTier
               }

@@ -8,6 +8,7 @@ import Boton from '../components/ui/Boton'
 import Skeleton from '../components/ui/Skeleton'
 import ErrorAlerta from '../components/ui/ErrorAlerta'
 import ResumenLimitesPrestatario from '../components/prestamos/ResumenLimitesPrestatario'
+import { MAXIMO_ACTIVOS_POR_TIER } from '../constantes/catalogo'
 import SesionContext from '../contextos/SesionContext'
 import {
   ESTADO_CONSULTA_INICIAL,
@@ -32,7 +33,7 @@ function CabeceraMisPrestamos({ usuario, prestamosActivos }) {
         prestamosActivos={prestamosActivos}
         maximoPrestamos={usuario?.maximo_prestamos_activos ?? 3}
         reservasActivas={usuario?.reservas_activas ?? 0}
-        maximoReservas={usuario?.maximo_reservas_activas ?? 3}
+        maximoReservas={usuario?.maximo_reservas_activas ?? MAXIMO_ACTIVOS_POR_TIER[usuario?.reputacion_tier] ?? 3}
       />
     </div>
   )
@@ -40,7 +41,7 @@ function CabeceraMisPrestamos({ usuario, prestamosActivos }) {
 
 export default function MisPrestamos() {
   useTituloPagina('Mis Préstamos')
-  const { usuario } = useContext(SesionContext)
+  const { usuario, refrescarSesion } = useContext(SesionContext)
   const [consulta, dispatch] = useReducer(
     reducirConsultaPrestamos,
     ESTADO_CONSULTA_INICIAL,
@@ -50,6 +51,7 @@ export default function MisPrestamos() {
   useEffect(() => {
     let activa = true
     dispatch({ tipo: 'iniciar' })
+    refrescarSesion().catch(() => {})
 
     api.get('/prestamos/mis-prestamos/')
       .then((prestamos) => {
@@ -70,7 +72,7 @@ export default function MisPrestamos() {
     return () => {
       activa = false
     }
-  }, [intento])
+  }, [intento, refrescarSesion])
 
   const prestamosActivos = consulta.cargando || consulta.error
     ? usuario?.prestamos_activos ?? 0

@@ -1,5 +1,7 @@
 """Constantes y catálogos del dominio de reservas y lista de espera."""
 
+from apps.compartido.constants import MAXIMO_ACTIVOS_SIMULTANEOS_POR_TIER
+
 ESTADOS_RESERVA = [
     ("en_espera", "En espera"),
     ("reservada", "Reservada"),
@@ -30,6 +32,7 @@ TOLERANCIA_RECOJO_MINUTOS = 30
 MINIMO_MINUTOS_RESERVA = 60
 
 ESTADOS_ACTIVOS = ("en_espera", "reservada")
+MAXIMO_RESERVAS_ACTIVAS_TIER = MAXIMO_ACTIVOS_SIMULTANEOS_POR_TIER
 
 MENSAJES_ERROR_RESERVA = {
     "material_no_encontrado": "No existe el material indicado.",

@@ -675,44 +675,6 @@ function FormularioPerfil({ perfil, onGuardar, onGuardarFoto, onEliminarFoto, gu
         </section>
       )}
 
-      {!['gestor', 'administrador'].includes(perfil.rol) && (
-        <section aria-labelledby="titulo-prestamos-activos">
-          <h2 id="titulo-prestamos-activos" className="sr-only">Préstamos activos</h2>
-          <Tarjeta className="p-4">
-            <div className="flex items-center gap-2 border-b border-borde/60 pb-3 mb-3">
-              <Info className="size-5 text-marca-600 dark:text-marca-400" aria-hidden="true" />
-              <h3 className="text-base font-bold text-texto">Préstamos activos</h3>
-            </div>
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center justify-between rounded-lg border border-borde bg-superficie px-4 py-3">
-                <span className="text-sm font-medium text-texto-suave">Préstamos en curso</span>
-                <span className="text-sm font-bold text-texto">
-                  {perfil.prestamos_activos ?? 0}
-                  {typeof perfil.maximo_prestamos_activos === 'number' && perfil.maximo_prestamos_activos > 0
-                    ? ` / ${perfil.maximo_prestamos_activos}`
-                    : ''}
-                </span>
-              </div>
-              {perfil.tiene_prestamos_vencidos && (
-                <div
-                  role="alert"
-                  className="flex items-start gap-2 rounded-lg border border-amber-500 bg-superficie-alta px-4 py-3 text-amber-800 dark:text-amber-200"
-                >
-                  <AlertTriangle
-                    className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400"
-                    aria-hidden="true"
-                  />
-                  <p className="text-sm font-medium">
-                    Tienes préstamos vencidos. Por favor, devuelve los materiales pendientes para
-                    restablecer tu acceso al sistema de préstamos.
-                  </p>
-                </div>
-              )}
-            </div>
-          </Tarjeta>
-        </section>
-      )}
-
       {/* Las dos secciones principales organizadas limpiamente */}
       <div className="grid gap-8 lg:grid-cols-2">
         {/* SECCIÓN 1: Información Institucional y Académica (Solo Lectura) */}

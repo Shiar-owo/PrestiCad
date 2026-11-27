@@ -15,9 +15,9 @@ export const OPCIONES_GESTION_PRESTAMOS = [
   },
   {
     id: 'cola-reservas',
-    etiqueta: 'Cola de Reservas',
+    etiqueta: 'Reservas',
     a: '/panel/cola-reservas',
-    descripcion: 'Gestión de lista de espera, excepciones académicas y reservas confirmadas.',
+    descripcion: 'Revisión de solicitudes excepcionales y gestión de reservas confirmadas.',
     roles: ['gestor', 'administrador'],
   },
   {

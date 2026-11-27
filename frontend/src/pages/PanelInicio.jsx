@@ -1,116 +1,13 @@
 import { useContext } from 'react'
 import { Link } from 'react-router'
-import {
-  ArrowUpRight,
-  CalendarClock,
-  CalendarOff,
-  ClipboardList,
-  Gauge,
-  History,
-  Package,
-  Search,
-  ShieldCheck,
-  UserCircle,
-} from 'lucide-react'
+import { ArrowUpRight } from 'lucide-react'
 
 import SesionContext from '../contextos/SesionContext'
 import useTituloPagina from '../hooks/useTituloPagina'
 import { ETIQUETAS_ROL } from '../constantes/roles'
 import Tarjeta from '../components/ui/Tarjeta'
 import TarjetaReputacion from '../components/ui/TarjetaReputacion'
-
-const ACCESOS = {
-  prestatario: [
-    {
-      etiqueta: 'Mis préstamos',
-      a: '/panel/prestamos',
-      descripcion: 'Consulta el estado y las fechas de tus préstamos',
-      icono: History,
-    },
-    {
-      etiqueta: 'Mis reservas',
-      a: '/panel/reservas',
-      descripcion: 'Gestiona tus reservas confirmadas y solicitudes en lista de espera',
-      icono: CalendarClock,
-    },
-    {
-      etiqueta: 'Mi perfil',
-      a: '/panel/perfil',
-      descripcion: 'Datos personales y nivel de reputación',
-      icono: UserCircle,
-    },
-    {
-      etiqueta: 'Catálogo de materiales',
-      a: '/catalogo',
-      descripcion: 'Explora y busca materiales disponibles',
-      icono: Search,
-    },
-  ],
-  gestor: [
-    {
-      etiqueta: 'Gestionar Préstamos',
-      a: '/panel/gestion-prestamos',
-      descripcion: 'Registrar préstamo, registrar devolución, historial y reportes',
-      icono: ClipboardList,
-    },
-    {
-      etiqueta: 'Cola de reservas',
-      a: '/panel/cola-reservas',
-      descripcion: 'Solicitudes en lista de espera, excepciones académicas y reservas confirmadas',
-      icono: CalendarClock,
-    },
-    {
-      etiqueta: 'Gestión de inventario',
-      a: '/panel/inventario',
-      descripcion: 'Alta, edición y estado de los materiales',
-      icono: Package,
-    },
-    {
-      etiqueta: 'Vista catálogo',
-      a: '/panel/catalogo',
-      descripcion: 'Búsqueda y filtrado de materiales',
-      icono: Search,
-    },
-  ],
-  administrador: [
-    {
-      etiqueta: 'Gestionar Préstamos',
-      a: '/panel/gestion-prestamos',
-      descripcion: 'Registrar préstamo, registrar devolución, historial y reportes',
-      icono: ClipboardList,
-    },
-    {
-      etiqueta: 'Cola de reservas',
-      a: '/panel/cola-reservas',
-      descripcion: 'Solicitudes en lista de espera, excepciones académicas y reservas confirmadas',
-      icono: CalendarClock,
-    },
-    {
-      etiqueta: 'Gestión de inventario',
-      a: '/panel/inventario',
-      descripcion: 'Alta, edición y estado de los materiales',
-      icono: Package,
-    },
-    {
-      etiqueta: 'Gestionar usuarios y roles',
-      a: '/admin/roles',
-      descripcion: 'Asignación de roles, perfiles y activación o desactivación de cuentas',
-      icono: ShieldCheck,
-    },
-    {
-      etiqueta: 'Días no laborables',
-      a: '/admin/dias-no-laborables',
-      descripcion: 'Inhabilitar feriados, cierres o días sin atención en el calendario',
-      icono: CalendarOff,
-    },
-    {
-      etiqueta: 'Vista catálogo',
-      a: '/panel/catalogo',
-      descripcion: 'Búsqueda y filtrado de materiales',
-      icono: Search,
-    },
-  ],
-}
+import { ACCESOS_POR_ROL } from '../navegacion/accesos'
 
 function PanelInicio() {
   useTituloPagina('Inicio')
@@ -121,7 +18,7 @@ function PanelInicio() {
   }
 
   const nombreRol = ETIQUETAS_ROL[usuario.rol] || usuario.rol
-  const accesos = ACCESOS[usuario.rol] || []
+  const accesos = ACCESOS_POR_ROL[usuario.rol] || []
 
   return (
     <div className="space-y-8">
@@ -161,9 +58,9 @@ function PanelInicio() {
           Accesos rápidos
         </h2>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {accesos.map(({ etiqueta, a, descripcion, icono: Icono }) => (
+          {accesos.map(({ id, etiqueta, a, descripcion, icono: Icono }) => (
             <Link
-              key={a}
+              key={id}
               to={a}
               className="group flex items-start justify-between gap-3 rounded-xl border border-borde bg-superficie p-4 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-acento-600 hover:border-acento-400 hover:bg-superficie-alta"
             >

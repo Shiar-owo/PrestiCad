@@ -12,7 +12,7 @@ describe('obtenerOpcionesGestionPrestamos', () => {
     expect(opciones.map((opcion) => opcion.etiqueta)).toEqual([
       'Registrar Préstamo',
       'Registrar Devolución',
-      'Cola de Reservas',
+      'Reservas',
       'Historial de Préstamos',
       'Reportes',
     ])
@@ -24,7 +24,7 @@ describe('obtenerOpcionesGestionPrestamos', () => {
     expect(opciones.map((opcion) => opcion.etiqueta)).toEqual([
       'Registrar Préstamo',
       'Registrar Devolución',
-      'Cola de Reservas',
+      'Reservas',
       'Historial de Préstamos',
       'Reportes',
     ])

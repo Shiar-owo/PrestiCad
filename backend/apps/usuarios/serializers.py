@@ -7,6 +7,25 @@ from apps.usuarios.constants import ESTADOS_USUARIO, ROLES, TIERS, TIPOS_USUARIO
 from apps.usuarios.models import Credencial, Rol, Usuario
 from apps.usuarios.validators import validar_foto_usuario, validar_y_normalizar_telefono
 
+
+class FotoPerfilUsuario(serializers.ImageField):
+    """Devuelve la foto como URL pública accesible para el navegador.
+
+    En desarrollo antepone `MEDIA_URL_PUBLICA` para evitar el host interno del
+    contenedor (`backend:8000`) generado por DRF cuando hay contexto de request.
+    """
+
+    def to_representation(self, value):
+        if not value:
+            return None
+
+        url = value.url
+        if url.startswith(("http://", "https://")):
+            return url
+
+        return f"{settings.MEDIA_URL_PUBLICA.rstrip('/')}/{url.lstrip('/')}"
+
+
 DNI_VALIDATOR = RegexValidator(
     r"^\d{8}$",
     message="El DNI debe tener exactamente 8 dígitos numéricos.",
@@ -35,6 +54,7 @@ class UsuarioListaSerializer(serializers.ModelSerializer):
 
     rol = serializers.SlugRelatedField(slug_field="nombre", read_only=True)
     prestamos_activos = serializers.SerializerMethodField()
+    foto_perfil = FotoPerfilUsuario(read_only=True, allow_null=True)
 
     class Meta:
         model = Usuario
@@ -53,6 +73,7 @@ class UsuarioListaSerializer(serializers.ModelSerializer):
             "rol",
             "estado",
             "prestamos_activos",
+            "foto_perfil",
         )
 
     def get_prestamos_activos(self, obj):
@@ -161,26 +182,6 @@ class UsuarioRegistroSerializer(RechazarCamposNoPermitidosMixin, serializers.Mod
             "facultad": {"error_messages": {"required": "La facultad es obligatoria.", "blank": "La facultad es obligatoria."}},
             "departamento_carrera": {"required": False, "allow_blank": True, "default": ""},
         }
-
-
-class FotoPerfilUsuario(serializers.ImageField):
-    """Devuelve la foto del usuario como una URL accesible para el navegador.
-
-    Al igual que en inventario, en desarrollo antepone `MEDIA_URL_PUBLICA` para
-    evitar el host interno del contenedor (`backend:8000`) generado por DRF
-    cuando hay contexto de request, permitiendo que el navegador del usuario
-    pueda cargar y persistir la imagen tras recargar la página.
-    """
-
-    def to_representation(self, value):
-        if not value:
-            return None
-
-        url = value.url
-        if url.startswith(("http://", "https://")):
-            return url
-
-        return f"{settings.MEDIA_URL_PUBLICA.rstrip('/')}/{url.lstrip('/')}"
 
 
 class PerfilUsuarioSerializer(serializers.Serializer):

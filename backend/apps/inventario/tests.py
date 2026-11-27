@@ -2329,7 +2329,9 @@ class InstanciaMaterialAPITestCase(ConMediaTemporal, APITestCase):
     def test_busqueda_materiales_incluye_instancias_y_resumen(self):
         resp = self.client.get("/api/materiales/buscar/?q=Osciloscopio")
         self.assertEqual(resp.status_code, 200)
-        resultados = resp.json()
+        respuesta_paginada = resp.json()
+        self.assertEqual(respuesta_paginada["count"], 1)
+        resultados = respuesta_paginada["results"]
         self.assertEqual(len(resultados), 1)
         item = resultados[0]
         self.assertIn("instancias", item)

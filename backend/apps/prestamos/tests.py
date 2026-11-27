@@ -5,7 +5,7 @@ from contextlib import contextmanager, nullcontext
 import json
 import tempfile
 import unittest
-from datetime import timedelta
+from datetime import time, timedelta
 from io import BytesIO
 from pathlib import Path
 from threading import Barrier
@@ -87,10 +87,15 @@ def registrar_prestamo(**datos):
     )
     ahora = timezone.localtime(timezone.now())
     contexto_hora = nullcontext()
-    if ahora.hour < 8 or ahora.hour > 18:
+    if ahora.time() < time(8, 0) or ahora.time() > time(18, 0):
+        hora_entrega = ahora.replace(hour=10, minute=0, second=0, microsecond=0)
+        if hora_entrega <= ahora:
+            hora_entrega += timedelta(days=1)
+        while hora_entrega.weekday() > 4:
+            hora_entrega += timedelta(days=1)
         contexto_hora = patch(
             "apps.prestamos.services.timezone.now",
-            return_value=ahora.replace(hour=10, minute=0, second=0, microsecond=0),
+            return_value=hora_entrega,
         )
     with contexto_hora:
         with patch.object(
@@ -99,6 +104,17 @@ def registrar_prestamo(**datos):
             _ALMACENAMIENTO_FOTOS_TEST,
         ):
             return registrar_prestamo_real(**datos)
+
+
+def _proxima_entrega_en_horario():
+    ahora = timezone.localtime(timezone.now())
+    dias_hasta_lunes = (-ahora.weekday()) % 7
+    lunes = (ahora + timedelta(days=dias_hasta_lunes)).replace(
+        hour=10, minute=0, second=0, microsecond=0
+    )
+    if lunes <= ahora:
+        lunes += timedelta(days=7)
+    return lunes
 
 
 def crear_pdf(nombre):
@@ -3831,23 +3847,27 @@ class LimitesPrestamosActivosTestCase(TestCase):
         # Prestatario estándar tiene tope de 60 pts
         # Simulemos que ya ganó 50 pts esta semana
         from apps.usuarios.models import TransaccionReputacion
-        TransaccionReputacion.objects.create(
-            usuario=self.prestatario_estandar,
-            fecha=timezone.now(),
-            tipo="bonificacion_devolucion",
-            puntos_delta=50,
-            puntos_solicitados=50,
-        )
+        with patch(
+            "apps.prestamos.services.timezone.now",
+            return_value=_proxima_entrega_en_horario(),
+        ):
+            TransaccionReputacion.objects.create(
+                usuario=self.prestatario_estandar,
+                fecha=timezone.now(),
+                tipo="bonificacion_devolucion",
+                puntos_delta=50,
+                puntos_solicitados=50,
+            )
 
-        p = self._entregar(self.prestatario_estandar, m)
-        puntaje_antes = self.prestatario_estandar.reputacion_puntaje
+            p = self._entregar(self.prestatario_estandar, m)
+            puntaje_antes = self.prestatario_estandar.reputacion_puntaje
 
-        dev = registrar_devolucion(
-            prestamo_id=p.id,
-            checklist_devolucion=[{"elemento": "Item", "estado": "sin_cambios", "observacion": ""}],
-            realizado_por=self.gestor,
-            fecha_devolucion=p.fecha_limite - timedelta(hours=1),
-        )
+            dev = registrar_devolucion(
+                prestamo_id=p.id,
+                checklist_devolucion=[{"elemento": "Item", "estado": "sin_cambios", "observacion": ""}],
+                realizado_por=self.gestor,
+                fecha_devolucion=p.fecha_limite - timedelta(hours=1),
+            )
 
         # La bonificación base era 20, pero solo le quedaban 10 para llegar a 60
         self.assertEqual(dev.resultado["bonificacion_base"], 20)

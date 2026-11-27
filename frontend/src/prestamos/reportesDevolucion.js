@@ -4,6 +4,7 @@ export function construirRutaReportes({
   dano = 'todos',
   fechaDesde = '',
   fechaHasta = '',
+  dni = '',
   pagina = 1,
 } = {}) {
   const parametros = new URLSearchParams({
@@ -14,6 +15,7 @@ export function construirRutaReportes({
   if (dano && dano !== 'todos') parametros.set('dano', dano)
   if (fechaDesde) parametros.set('fecha_desde', fechaDesde)
   if (fechaHasta) parametros.set('fecha_hasta', fechaHasta)
+  if (dni) parametros.set('dni', dni)
 
   return `/prestamos/devoluciones/reportes/?${parametros.toString()}`
 }

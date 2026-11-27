@@ -16,6 +16,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from apps.inventario import services
+from apps.compartido.pagination import PaginacionEstandar
 from apps.inventario.models import InstanciaMaterial, Material
 from apps.inventario.permissions import EsGestorOAdministrador
 from apps.inventario.serializers import (
@@ -155,6 +156,7 @@ class MaterialSearchView(ListAPIView):
 
     serializer_class = MaterialSerializer
     permission_classes = [AllowAny]
+    pagination_class = PaginacionEstandar
 
     def get_queryset(self):
         params = self.request.query_params
@@ -167,6 +169,17 @@ class MaterialSearchView(ListAPIView):
             categoria=categoria,
             estado=estado,
         )
+
+
+class MaterialInventarioPaginadoView(ListAPIView):
+    """Listado paginado para la tabla de gestión; no altera el endpoint legado."""
+    serializer_class = MaterialSerializer
+    permission_classes = [EsGestorOAdministrador]
+    pagination_class = PaginacionEstandar
+
+    def get_queryset(self):
+        queryset = services.buscar_materiales(q=self.request.query_params.get("q"))
+        return queryset.order_by("nombre", "id")
 
 
 class InstanciaMaterialListCreateView(ListCreateAPIView):

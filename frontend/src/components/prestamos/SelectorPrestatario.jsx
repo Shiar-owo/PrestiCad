@@ -14,6 +14,8 @@ import Campo from '../ui/Campo'
 
 export default function SelectorPrestatario({
   etiqueta = 'Buscar prestatario por DNI',
+  modo = 'dni',
+  incluirInactivos = false,
   valor,
   onCambio,
   onSeleccionar = null,
@@ -50,12 +52,16 @@ export default function SelectorPrestatario({
 
   useEffect(() => {
     let vigente = true
-    const dni = String(valor || '').trim()
+    const consulta = String(valor || '').trim()
+    const valorSeleccionado = modo === 'nombre' ? seleccionado?.nombre_completo : seleccionado?.dni
 
-    if (seleccionado && seleccionado.dni !== dni) setSeleccionado(null)
+    if (seleccionado && valorSeleccionado !== consulta) setSeleccionado(null)
 
-    // Si ya completó los 8 dígitos del DNI, no mostrar lista flotante; la vista ya consulta el perfil directamente
-    if (dni.length >= 8 || !debeBuscarPrestatarios(dni, seleccionado)) {
+    const consultaCompleta = modo === 'dni' && consulta.length >= 8
+    const puedeBuscar = modo === 'nombre'
+      ? consulta.length >= MINIMO_DIGITOS_BUSQUEDA_PRESTATARIO && valorSeleccionado !== consulta
+      : debeBuscarPrestatarios(consulta, seleccionado)
+    if (consultaCompleta || !puedeBuscar) {
       setSugerencias([])
       setCargando(false)
       setErrorBusqueda('')
@@ -68,7 +74,7 @@ export default function SelectorPrestatario({
     setErrorBusqueda('')
     const temporizador = window.setTimeout(async () => {
       try {
-        const resultados = await api.get(construirRutaBusquedaPrestatarios(dni))
+        const resultados = await api.get(construirRutaBusquedaPrestatarios(consulta, modo, incluirInactivos))
         if (vigente) setSugerencias(resultados)
       } catch {
         if (vigente) {
@@ -84,10 +90,12 @@ export default function SelectorPrestatario({
       vigente = false
       window.clearTimeout(temporizador)
     }
-  }, [valor, seleccionado])
+  }, [valor, seleccionado, modo, incluirInactivos])
 
   function cambiar(evento) {
-    const nuevoValor = normalizarDniPrestatario(evento.target.value)
+    const nuevoValor = modo === 'nombre'
+      ? evento.target.value
+      : normalizarDniPrestatario(evento.target.value)
     setSeleccionado(null)
     onCambio(nuevoValor)
   }
@@ -101,7 +109,9 @@ export default function SelectorPrestatario({
   }
 
   const ayudaCampo = error || ayuda || (
-    `Escribe al menos ${MINIMO_DIGITOS_BUSQUEDA_PRESTATARIO} dígitos para ver coincidencias.`
+    modo === 'nombre'
+      ? `Escribe al menos ${MINIMO_DIGITOS_BUSQUEDA_PRESTATARIO} caracteres para ver coincidencias.`
+      : `Escribe al menos ${MINIMO_DIGITOS_BUSQUEDA_PRESTATARIO} dígitos para ver coincidencias.`
   )
 
   return (
@@ -113,9 +123,9 @@ export default function SelectorPrestatario({
           onCambio={cambiar}
           error={error}
           ayuda={ayudaCampo}
-          inputMode="numeric"
+          inputMode={modo === 'nombre' ? 'search' : 'numeric'}
           autoComplete="off"
-          maxLength={8}
+          maxLength={modo === 'nombre' ? 100 : 8}
           requerido={requerido}
           deshabilitado={deshabilitado}
           role="combobox"

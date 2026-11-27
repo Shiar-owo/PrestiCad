@@ -200,10 +200,9 @@ def obtener_limites_prestatario(usuario):
     if getattr(getattr(usuario, "rol", None), "nombre", None) != "prestatario":
         return datos
 
-    from django.conf import settings
     from apps.prestamos.constants import MAXIMO_PRESTAMOS_ACTIVOS_TIER
     from apps.prestamos.services import contar_prestamos_activos_usuario
-    from apps.reservas.constants import ESTADOS_ACTIVOS
+    from apps.reservas.constants import ESTADOS_ACTIVOS, MAXIMO_RESERVAS_ACTIVAS_TIER
     from apps.reservas.models import Reserva
 
     datos["prestamos_activos"] = contar_prestamos_activos_usuario(usuario.pk)
@@ -212,7 +211,7 @@ def obtener_limites_prestatario(usuario):
         usuario_id=usuario.pk,
         estado__in=ESTADOS_ACTIVOS,
     ).count()
-    datos["maximo_reservas_activas"] = getattr(settings, "MAXIMO_RESERVAS_ACTIVAS", 3)
+    datos["maximo_reservas_activas"] = MAXIMO_RESERVAS_ACTIVAS_TIER.get(usuario.reputacion_tier, 3)
     return datos
 
 

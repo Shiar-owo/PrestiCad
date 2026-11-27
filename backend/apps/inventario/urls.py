@@ -6,6 +6,7 @@ from apps.inventario.views import (
     InstanciaMaterialListCreateView,
     MaterialDetailView,
     MaterialListCreateView,
+    MaterialInventarioPaginadoView,
     MaterialSearchView,
 )
 
@@ -13,6 +14,7 @@ urlpatterns = [
     path("materiales/", MaterialListCreateView.as_view(), name="materiales"),
     path("materiales/buscar/", MaterialSearchView.as_view(), name="materiales-buscar"),
     path("materiales/buscar", MaterialSearchView.as_view()),
+    path("materiales/gestion/", MaterialInventarioPaginadoView.as_view(), name="materiales-gestion-paginado"),
     path("materiales/<uuid:pk>/", MaterialDetailView.as_view(), name="material-detalle"),
     path(
         "materiales/<uuid:material_id>/instancias/",

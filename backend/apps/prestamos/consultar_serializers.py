@@ -382,6 +382,7 @@ class PrestamoMaterialHistorialSerializer(serializers.ModelSerializer):
     """Fila resumida del historial de préstamos de un material."""
 
     prestatario = serializers.SerializerMethodField()
+    codigo_ejemplar = serializers.SerializerMethodField()
     fecha_devolucion = serializers.SerializerMethodField()
     resultado = serializers.SerializerMethodField()
 
@@ -390,6 +391,7 @@ class PrestamoMaterialHistorialSerializer(serializers.ModelSerializer):
         fields = (
             "id",
             "prestatario",
+            "codigo_ejemplar",
             "fecha_entrega",
             "fecha_limite",
             "fecha_devolucion",
@@ -399,6 +401,11 @@ class PrestamoMaterialHistorialSerializer(serializers.ModelSerializer):
 
     def get_prestatario(self, obj):
         return f"{obj.usuario.nombre} {obj.usuario.apellido}".strip()
+
+    def get_codigo_ejemplar(self, obj):
+        if obj.instancia_id is None:
+            return None
+        return obj.instancia.codigo_ejemplar
 
     def get_fecha_devolucion(self, obj):
         try:

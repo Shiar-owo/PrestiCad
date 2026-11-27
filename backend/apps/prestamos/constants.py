@@ -1,6 +1,7 @@
 """Estados del ciclo de vida de un préstamo."""
 
 from apps.compartido.constants import (
+    MAXIMO_ACTIVOS_SIMULTANEOS_POR_TIER,
     MAXIMO_DURACION_DIAS,
     MAXIMO_DURACION_PACTADA_MINUTOS,
     TOLERANCIA_DEVOLUCION_MINUTOS,
@@ -24,11 +25,7 @@ ESTADOS_GARANTIA = [
 
 ESTADOS_QUE_OCUPAN_UNIDAD = ("activo", "vencido")
 
-MAXIMO_PRESTAMOS_ACTIVOS_TIER = {
-    "restringido": 2,
-    "estandar": 3,
-    "avanzado": 5,
-}
+MAXIMO_PRESTAMOS_ACTIVOS_TIER = MAXIMO_ACTIVOS_SIMULTANEOS_POR_TIER
 
 MENSAJES_ERROR_PRESTAMO = {
     "limite_prestamos_alcanzado": (

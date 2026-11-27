@@ -11,7 +11,7 @@ from django.core.files.storage import FileSystemStorage
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from django.db import close_old_connections
-from django.test import TestCase, TransactionTestCase, override_settings
+from django.test import TestCase, TransactionTestCase
 from django.utils import timezone
 from PIL import Image
 from rest_framework.test import APITestCase
@@ -44,7 +44,7 @@ from apps.reservas.services import (
     rechazar_reserva,
 )
 from apps.usuarios.models import Rol
-from apps.usuarios.services import registrar_usuario
+from apps.usuarios.services import obtener_limites_prestatario, registrar_usuario
 from apps.usuarios.sesiones import (
     CLAVE_SESION_ULTIMA_ACTIVIDAD,
     CLAVE_SESION_USUARIO_ID,
@@ -63,6 +63,17 @@ def _rango_reserva_futuro():
         inicio += timedelta(days=1)
     inicio = inicio.replace(hour=10, minute=0)
     return inicio, inicio + timedelta(minutes=90)
+
+
+def _proxima_entrega_en_horario():
+    ahora = timezone.localtime(timezone.now())
+    dias_hasta_lunes = (-ahora.weekday()) % 7
+    lunes = (ahora + timedelta(days=dias_hasta_lunes)).replace(
+        hour=10, minute=0, second=0, microsecond=0
+    )
+    if lunes <= ahora:
+        lunes += timedelta(days=7)
+    return lunes
 
 
 def crear_reserva(**datos):
@@ -152,10 +163,15 @@ def registrar_prestamo(**datos):
     )
     ahora = timezone.localtime(timezone.now())
     contexto_hora = nullcontext()
-    if ahora.hour < 8 or ahora.hour > 18:
+    if ahora.time() < time(8, 0) or ahora.time() > time(18, 0):
+        hora_entrega = ahora.replace(hour=10, minute=0, second=0, microsecond=0)
+        if hora_entrega <= ahora:
+            hora_entrega += timedelta(days=1)
+        while hora_entrega.weekday() > 4:
+            hora_entrega += timedelta(days=1)
         contexto_hora = patch(
             "apps.prestamos.services.timezone.now",
-            return_value=ahora.replace(hour=10, minute=0, second=0, microsecond=0),
+            return_value=hora_entrega,
         )
     with contexto_hora:
         with storage_garantias_temporal():
@@ -238,20 +254,24 @@ class ReservasServiceTestCase(TestCase):
 
     def test_prestamo_activo_impide_reservar_un_rango_que_se_solapa(self):
         material = crear_material(codigo_material="EQ-RES-04", stock=1)
-        prestamo = registrar_prestamo(
-            dni_prestatario=self.prestatario_estandar.dni,
-            material_id=material.id,
-            tiempo_prestamo_dias=1,
-            checklist_inicial=CHECKLIST,
-            registrado_por=self.gestor,
-        )
-
-        with self.assertRaises(ReservaError) as error:
-            crear_reserva(
-                usuario=self.prestatario_avanzado,
+        with patch(
+            "apps.prestamos.services.timezone.now",
+            return_value=_proxima_entrega_en_horario(),
+        ):
+            prestamo = registrar_prestamo(
+                dni_prestatario=self.prestatario_estandar.dni,
                 material_id=material.id,
-                justificacion="Rango ocupado por un préstamo activo",
+                tiempo_prestamo_dias=1,
+                checklist_inicial=CHECKLIST,
+                registrado_por=self.gestor,
             )
+
+            with self.assertRaises(ReservaError) as error:
+                crear_reserva(
+                    usuario=self.prestatario_avanzado,
+                    material_id=material.id,
+                    justificacion="Rango ocupado por un préstamo activo",
+                )
 
         self.assertEqual(error.exception.status_code, 409)
         self.assertEqual(Reserva.objects.filter(material=material).count(), 0)
@@ -298,11 +318,11 @@ class ReservasServiceTestCase(TestCase):
         self.assertFalse(Reserva.objects.filter(material=material).exists())
         self.assertEqual(self.prestatario_estandar.reputacion_puntaje, puntaje_antes)
 
-    @override_settings(MAXIMO_RESERVAS_ACTIVAS=2)
     def test_maximo_reservas_activas_bloquea_exceso(self):
         m1 = crear_material(codigo_material="EQ-MAX-01", stock=1)
         m2 = crear_material(codigo_material="EQ-MAX-02", stock=1)
         m3 = crear_material(codigo_material="EQ-MAX-03", stock=1)
+        m4 = crear_material(codigo_material="EQ-MAX-04", stock=1)
 
         crear_reserva(
             usuario=self.prestatario_estandar,
@@ -314,14 +334,31 @@ class ReservasServiceTestCase(TestCase):
             material_id=m2.id,
             justificacion="Dos",
         )
+        crear_reserva(
+            usuario=self.prestatario_estandar,
+            material_id=m3.id,
+            justificacion="Tres",
+        )
 
         with self.assertRaises(ReservaError) as ctx:
             crear_reserva(
                 usuario=self.prestatario_estandar,
-                material_id=m3.id,
-                justificacion="Tres",
+                material_id=m4.id,
+                justificacion="Cuatro",
             )
         self.assertEqual(ctx.exception.status_code, 409)
+
+    def test_limite_reservas_se_iguala_al_limite_prestamos_por_tier(self):
+        limites_esperados = {
+            "restringido": (self.prestatario_restringido, 2),
+            "estandar": (self.prestatario_estandar, 3),
+            "avanzado": (self.prestatario_avanzado, 5),
+        }
+        for tier, (usuario, maximo) in limites_esperados.items():
+            with self.subTest(tier=tier):
+                datos = obtener_limites_prestatario(usuario)
+                self.assertEqual(datos["maximo_reservas_activas"], maximo)
+                self.assertEqual(datos["maximo_prestamos_activos"], maximo)
 
     def test_reserva_excepcional_permite_estandar_con_material_avanzado(self):
         material = crear_material(
@@ -407,16 +444,20 @@ class ReservasServiceTestCase(TestCase):
             self.assertIn("antes de la fecha de inicio", antes_del_inicio.exception.mensaje)
 
             # Préstamo directo sobre instancia reservada sin reserva_id es rechazado
-            with self.assertRaises(PrestamoError) as err_directo:
-                registrar_prestamo_real(
-                    dni_prestatario=self.prestatario_estandar.dni,
-                    material_id=material.id,
-                    instancia_id=aprobada.instancia_id,
-                    tiempo_prestamo_dias=1,
-                    checklist_inicial=CHECKLIST,
-                    fotos_checklist=[crear_foto_checklist() for _ in CHECKLIST],
-                    registrado_por=self.gestor,
-                )
+            with patch(
+                "apps.prestamos.services.timezone.now",
+                return_value=aprobada.fecha_inicio - timedelta(hours=2),
+            ):
+                with self.assertRaises(PrestamoError) as err_directo:
+                    registrar_prestamo_real(
+                        dni_prestatario=self.prestatario_estandar.dni,
+                        material_id=material.id,
+                        instancia_id=aprobada.instancia_id,
+                        tiempo_prestamo_dias=1,
+                        checklist_inicial=CHECKLIST,
+                        fotos_checklist=[crear_foto_checklist() for _ in CHECKLIST],
+                        registrado_por=self.gestor,
+                    )
             self.assertEqual(err_directo.exception.status_code, 409)
 
             # Conversión válida con reserva_id reutilizando la garantía sin volver a subir PDFs
@@ -480,22 +521,26 @@ class ReservasServiceTestCase(TestCase):
 
     def test_mismo_prestatario_no_reserva_ejemplar_prestado_en_rango_solapado(self):
         material = crear_material(codigo_material="EQ-RES-MISMO", stock=1)
-        prestamo = registrar_prestamo(
-            dni_prestatario=self.prestatario_estandar.dni,
-            material_id=material.id,
-            tiempo_prestamo_dias=1,
-            checklist_inicial=CHECKLIST,
-            registrado_por=self.gestor,
-        )
-        inicio, fin = _rango_reserva_futuro()
-        with self.assertRaises(ReservaError) as error:
-            crear_reserva(
-                usuario=self.prestatario_estandar,
+        with patch(
+            "apps.prestamos.services.timezone.now",
+            return_value=_proxima_entrega_en_horario(),
+        ):
+            prestamo = registrar_prestamo(
+                dni_prestatario=self.prestatario_estandar.dni,
                 material_id=material.id,
-                justificacion="Quiero seguir usándolo",
-                fecha_inicio=inicio,
-                fecha_fin=fin,
+                tiempo_prestamo_dias=1,
+                checklist_inicial=CHECKLIST,
+                registrado_por=self.gestor,
             )
+            inicio, fin = _rango_reserva_futuro()
+            with self.assertRaises(ReservaError) as error:
+                crear_reserva(
+                    usuario=self.prestatario_estandar,
+                    material_id=material.id,
+                    justificacion="Quiero seguir usándolo",
+                    fecha_inicio=inicio,
+                    fecha_fin=fin,
+                )
 
         self.assertEqual(error.exception.status_code, 409)
         self.assertEqual(prestamo.estado, "activo")
@@ -658,11 +703,15 @@ class ReservasAPITestCase(APITestCase):
 
     def test_reserva_rechaza_inicio_o_fin_en_sabado_o_domingo(self):
         self._autenticar(self.prestatario)
-        sabado = timezone.localtime(timezone.now()).replace(hour=10, minute=0, second=0, microsecond=0) + timedelta(days=1)
-        while sabado.weekday() != 5:
-            sabado += timedelta(days=1)
+        ahora = timezone.localtime(timezone.now())
+        dias_hasta_viernes = (4 - ahora.weekday()) % 7
+        viernes = (ahora + timedelta(days=dias_hasta_viernes)).replace(
+            hour=10, minute=0, second=0, microsecond=0
+        )
+        if viernes <= ahora:
+            viernes += timedelta(days=7)
+        sabado = viernes + timedelta(days=1)
         lunes = sabado + timedelta(days=2)
-        viernes = sabado - timedelta(days=1)
 
         # Inicio en sábado
         resp_sab_inicio = self.client.post(
@@ -1009,33 +1058,36 @@ class ReservasCalendarioTestCase(APITestCase):
         """Se rechaza el préstamo si su duración sobrepasa el inicio de una reserva futura."""
         from apps.prestamos.services import PrestamoError
 
-        # Reserva confirmada para dentro de un día laborable
-        hoy = timezone.localtime(timezone.now()).replace(second=0, microsecond=0)
-        reserva_inicio = hoy + timedelta(days=1)
-        while reserva_inicio.weekday() > 4:
-            reserva_inicio += timedelta(days=1)
-        reserva_inicio = reserva_inicio.replace(hour=10, minute=0)
-        reserva_fin = reserva_inicio.replace(hour=14, minute=0)
+        with patch(
+            "apps.prestamos.services.timezone.now",
+            return_value=_proxima_entrega_en_horario(),
+        ):
+            # El préstamo empieza el lunes a las 10:00 y el recojo reservado
+            # es el martes a las 10:00, dentro del intervalo que ocuparía.
+            reserva_inicio = timezone.localtime(timezone.now()).replace(
+                second=0, microsecond=0
+            ) + timedelta(days=1)
+            reserva_inicio = reserva_inicio.replace(hour=10, minute=0)
+            reserva_fin = reserva_inicio.replace(hour=14, minute=0)
 
-        crear_reserva(
-            usuario=self.prestatario_1,
-            material_id=self.material.id,
-            justificacion="Reserva inminente",
-            fecha_inicio=reserva_inicio,
-            fecha_fin=reserva_fin,
-        )
-
-        # Intento de préstamo por 3 días (sobrepasaría el inicio de la reserva)
-        checklist = [{"elemento": "Pantalla", "observacion": "OK"}]
-        with self.assertRaises(PrestamoError) as ctx:
-            registrar_prestamo(
-                dni_prestatario=self.prestatario_2.dni,
+            crear_reserva(
+                usuario=self.prestatario_1,
                 material_id=self.material.id,
-                tiempo_prestamo_minutos=4290,
-                checklist_inicial=checklist,
-                registrado_por=self.gestor,
+                justificacion="Reserva inminente",
+                fecha_inicio=reserva_inicio,
+                fecha_fin=reserva_fin,
             )
-        self.assertIn("reserva", ctx.exception.mensaje.lower())
+
+            checklist = [{"elemento": "Pantalla", "observacion": "OK"}]
+            with self.assertRaises(PrestamoError) as ctx:
+                registrar_prestamo(
+                    dni_prestatario=self.prestatario_2.dni,
+                    material_id=self.material.id,
+                    tiempo_prestamo_minutos=4290,
+                    checklist_inicial=checklist,
+                    registrado_por=self.gestor,
+                )
+            self.assertIn("reserva", ctx.exception.mensaje.lower())
 
     def test_api_disponibilidad_calendario(self):
         """El endpoint de disponibilidad devuelve los días y franjas ocupadas correctamente."""

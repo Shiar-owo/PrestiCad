@@ -50,7 +50,7 @@ export function mensajeRangoDuracion(material = null) {
 
 export function ayudaRangoDuracion(material = null) {
   const maximoMinutos = obtenerMinutosMaximosMaterial(material)
-  return `Mínimo 1 hora (60 minutos) · Máximo permitido para este material: ${formatearDuracionMinutos(maximoMinutos)} · La tolerancia de 30 minutos queda dentro del máximo total de ${DURACION_MAXIMA_PRESTAMO_DIAS} días.`
+  return `Mín. 1 h (60 min) · Máx. para este material: ${formatearDuracionMinutos(maximoMinutos)} · La tolerancia de 30 minutos está incluida en el tope de ${DURACION_MAXIMA_PRESTAMO_DIAS} días.`
 }
 
 export function validarFormularioPrestamo({

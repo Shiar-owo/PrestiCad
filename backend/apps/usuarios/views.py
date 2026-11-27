@@ -2,6 +2,8 @@
 import json
 
 from django.http import JsonResponse
+from django.db.models import Count, OuterRef, Q, Subquery, Sum, Value
+from django.db.models.functions import Coalesce
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
 from django.views.decorators.http import require_GET
@@ -10,11 +12,13 @@ from rest_framework.generics import ListCreateAPIView, RetrieveUpdateAPIView
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from apps.compartido.pagination import PaginacionEstandar
+from apps.compartido.busqueda import expresion_nombre_completo, normalizar_termino
 from rest_framework.views import APIView
 
 from apps.usuarios import services
 from apps.usuarios.authentication import AutenticacionSesionUsuario
-from apps.usuarios.models import Usuario
+from apps.usuarios.models import TransaccionReputacion, Usuario
 from apps.usuarios.permissions import EsAdministrador, EsGestorAlmacen
 from apps.usuarios.serializers import (
     ActualizarPerfilSerializer,
@@ -105,7 +109,43 @@ class AuthLogoutView(APIView):
 
 
 class UsuarioListCreateView(ListCreateAPIView):
-    queryset = Usuario.objects.select_related("rol").all()
+    queryset = Usuario.objects.select_related("rol").all().order_by("nombre", "apellido", "id")
+    pagination_class = PaginacionEstandar
+
+    def get_queryset(self):
+        from apps.prestamos.constants import ESTADOS_QUE_OCUPAN_UNIDAD
+        from apps.reservas.constants import ESTADOS_ACTIVOS
+        from apps.usuarios.services import obtener_inicio_semana_operativa
+
+        puntos_semana = (
+            TransaccionReputacion.objects.filter(
+                usuario_id=OuterRef("pk"),
+                fecha__gte=obtener_inicio_semana_operativa(),
+                puntos_delta__gt=0,
+            )
+            .order_by()
+            .values("usuario_id")
+            .annotate(total=Sum("puntos_delta"))
+            .values("total")[:1]
+        )
+        queryset = super().get_queryset().annotate(
+            prestamos_activos_total=Count(
+                "prestamos",
+                filter=Q(prestamos__estado__in=ESTADOS_QUE_OCUPAN_UNIDAD),
+                distinct=True,
+            ),
+            reservas_activas_total=Count(
+                "reservas",
+                filter=Q(reservas__estado__in=ESTADOS_ACTIVOS),
+                distinct=True,
+            ),
+            puntos_ganados_semana_total=Coalesce(Subquery(puntos_semana), Value(0)),
+        )
+        q = self.request.query_params.get("q", "").strip()
+        if q:
+            queryset = queryset.annotate(nombre_completo_normalizado=expresion_nombre_completo())
+            queryset = queryset.filter(nombre_completo_normalizado__contains=normalizar_termino(q))
+        return queryset
 
     def get_serializer_class(self):
         if self.request.method == "POST":

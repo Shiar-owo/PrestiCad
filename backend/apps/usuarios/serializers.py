@@ -7,6 +7,25 @@ from apps.usuarios.constants import ESTADOS_USUARIO, ROLES, TIERS, TIPOS_USUARIO
 from apps.usuarios.models import Credencial, Rol, Usuario
 from apps.usuarios.validators import validar_foto_usuario, validar_y_normalizar_telefono
 
+
+class FotoPerfilUsuario(serializers.ImageField):
+    """Devuelve la foto como URL pública accesible para el navegador.
+
+    En desarrollo antepone `MEDIA_URL_PUBLICA` para evitar el host interno del
+    contenedor (`backend:8000`) generado por DRF cuando hay contexto de request.
+    """
+
+    def to_representation(self, value):
+        if not value:
+            return None
+
+        url = value.url
+        if url.startswith(("http://", "https://")):
+            return url
+
+        return f"{settings.MEDIA_URL_PUBLICA.rstrip('/')}/{url.lstrip('/')}"
+
+
 DNI_VALIDATOR = RegexValidator(
     r"^\d{8}$",
     message="El DNI debe tener exactamente 8 dígitos numéricos.",
@@ -35,6 +54,12 @@ class UsuarioListaSerializer(serializers.ModelSerializer):
 
     rol = serializers.SlugRelatedField(slug_field="nombre", read_only=True)
     prestamos_activos = serializers.SerializerMethodField()
+    maximo_prestamos_activos = serializers.SerializerMethodField()
+    reservas_activas = serializers.SerializerMethodField()
+    maximo_reservas_activas = serializers.SerializerMethodField()
+    reputacion_puntos_ganados_semana = serializers.SerializerMethodField()
+    reputacion_tope_semanal = serializers.SerializerMethodField()
+    foto_perfil = FotoPerfilUsuario(read_only=True, allow_null=True)
 
     class Meta:
         model = Usuario
@@ -53,17 +78,64 @@ class UsuarioListaSerializer(serializers.ModelSerializer):
             "rol",
             "estado",
             "prestamos_activos",
+            "maximo_prestamos_activos",
+            "reservas_activas",
+            "maximo_reservas_activas",
+            "reputacion_puntos_ganados_semana",
+            "reputacion_tope_semanal",
+            "foto_perfil",
         )
+
+    @staticmethod
+    def _es_prestatario(obj):
+        return getattr(obj, "rol", None) and getattr(obj.rol, "nombre", None) == "prestatario"
 
     def get_prestamos_activos(self, obj):
         """Devuelve el número de préstamos activos solo para prestatarios."""
-        if getattr(obj, "rol", None) and getattr(obj.rol, "nombre", None) == "prestatario":
+        if self._es_prestatario(obj):
+            if hasattr(obj, "prestamos_activos_total"):
+                return obj.prestamos_activos_total
             try:
                 from apps.prestamos.services import contar_prestamos_activos_usuario
                 return contar_prestamos_activos_usuario(obj.pk)
             except ImportError:
                 return None
         return None
+
+    def get_maximo_prestamos_activos(self, obj):
+        if not self._es_prestatario(obj):
+            return None
+        from apps.prestamos.constants import MAXIMO_PRESTAMOS_ACTIVOS_TIER
+        return MAXIMO_PRESTAMOS_ACTIVOS_TIER.get(obj.reputacion_tier, 3)
+
+    def get_reservas_activas(self, obj):
+        if not self._es_prestatario(obj):
+            return None
+        if hasattr(obj, "reservas_activas_total"):
+            return obj.reservas_activas_total
+        from apps.reservas.constants import ESTADOS_ACTIVOS
+        from apps.reservas.models import Reserva
+        return Reserva.objects.filter(usuario_id=obj.pk, estado__in=ESTADOS_ACTIVOS).count()
+
+    def get_maximo_reservas_activas(self, obj):
+        if not self._es_prestatario(obj):
+            return None
+        from apps.reservas.constants import MAXIMO_RESERVAS_ACTIVAS_TIER
+        return MAXIMO_RESERVAS_ACTIVAS_TIER.get(obj.reputacion_tier, 3)
+
+    def get_reputacion_puntos_ganados_semana(self, obj):
+        if not self._es_prestatario(obj):
+            return None
+        if hasattr(obj, "puntos_ganados_semana_total"):
+            return obj.puntos_ganados_semana_total
+        from apps.usuarios.services import calcular_puntos_ganados_semana_actual
+        return calcular_puntos_ganados_semana_actual(obj)
+
+    def get_reputacion_tope_semanal(self, obj):
+        if not self._es_prestatario(obj):
+            return None
+        from apps.usuarios.constants import MAXIMO_PUNTOS_SEMANALES_TIER
+        return MAXIMO_PUNTOS_SEMANALES_TIER.get(obj.reputacion_tier, 60)
 
 
 class CambioRolSerializer(serializers.ModelSerializer):
@@ -161,26 +233,6 @@ class UsuarioRegistroSerializer(RechazarCamposNoPermitidosMixin, serializers.Mod
             "facultad": {"error_messages": {"required": "La facultad es obligatoria.", "blank": "La facultad es obligatoria."}},
             "departamento_carrera": {"required": False, "allow_blank": True, "default": ""},
         }
-
-
-class FotoPerfilUsuario(serializers.ImageField):
-    """Devuelve la foto del usuario como una URL accesible para el navegador.
-
-    Al igual que en inventario, en desarrollo antepone `MEDIA_URL_PUBLICA` para
-    evitar el host interno del contenedor (`backend:8000`) generado por DRF
-    cuando hay contexto de request, permitiendo que el navegador del usuario
-    pueda cargar y persistir la imagen tras recargar la página.
-    """
-
-    def to_representation(self, value):
-        if not value:
-            return None
-
-        url = value.url
-        if url.startswith(("http://", "https://")):
-            return url
-
-        return f"{settings.MEDIA_URL_PUBLICA.rstrip('/')}/{url.lstrip('/')}"
 
 
 class PerfilUsuarioSerializer(serializers.Serializer):

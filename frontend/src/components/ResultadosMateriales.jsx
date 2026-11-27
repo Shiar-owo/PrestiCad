@@ -5,6 +5,7 @@ import TarjetaMaterial from './TarjetaMaterial'
 
 function ResultadosMateriales({
   materiales = [],
+  total,
   cargando = false,
   error = '',
   onSeleccionarMaterial,
@@ -39,8 +40,7 @@ function ResultadosMateriales({
   return (
     <section className="mt-6" aria-label="Resultados de materiales">
       <p className="mb-4 text-sm text-texto-suave">
-        Mostrando <strong className="text-texto">{listaMateriales.length}</strong>{' '}
-        {listaMateriales.length === 1 ? 'material encontrado' : 'materiales encontrados'}
+        {total ?? listaMateriales.length} {((total ?? listaMateriales.length) === 1) ? 'material encontrado' : 'materiales encontrados'}
       </p>
 
       <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">

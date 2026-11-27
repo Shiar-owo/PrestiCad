@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router'
+import { CalendarDays, FileText, History, Pencil, Search, Trash2 } from 'lucide-react'
 
 import { api } from '../api/client'
 import useTituloPagina from '../hooks/useTituloPagina'
@@ -18,6 +19,7 @@ import Tarjeta from '../components/ui/Tarjeta'
 import Skeleton from '../components/ui/Skeleton'
 import ErrorAlerta from '../components/ui/ErrorAlerta'
 import EstadoVacio from '../components/ui/EstadoVacio'
+import ControlesPaginacion from '../components/ui/ControlesPaginacion'
 import { obtenerCodigoInstancia } from '../inventario/eliminacionMaterial'
 
 const ETIQUETAS_MODO_REGISTRO = {
@@ -43,6 +45,8 @@ function Materiales() {
   useTituloPagina('Inventario')
   const navigate = useNavigate()
   const [materiales, setMateriales] = useState([])
+  const [totalMateriales, setTotalMateriales] = useState(0)
+  const [pagina, setPagina] = useState(1)
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
   const [mostrarFormulario, setMostrarFormulario] = useState(false)
@@ -52,17 +56,22 @@ function Materiales() {
   const [materialCalendario, setMaterialCalendario] = useState(null)
   const [registroAEliminar, setRegistroAEliminar] = useState(null)
   const [mensajePopupExito, setMensajePopupExito] = useState('')
+  const [busquedaNombre, setBusquedaNombre] = useState('')
 
   useEffect(() => {
-    cargarMateriales()
-  }, [])
+    const temporizador = setTimeout(() => cargarMateriales(pagina, busquedaNombre), busquedaNombre ? 300 : 0)
+    return () => clearTimeout(temporizador)
+  }, [pagina, busquedaNombre])
 
-  async function cargarMateriales() {
+  async function cargarMateriales(paginaSolicitada = pagina, q = busquedaNombre) {
     setCargando(true)
     setError('')
     try {
-      const datos = await api.get('/materiales/')
-      setMateriales(Array.isArray(datos) ? datos : [])
+      const params = new URLSearchParams({ page: String(paginaSolicitada), page_size: '25' })
+      if (q.trim()) params.set('q', q.trim())
+      const datos = await api.get(`/materiales/gestion/?${params}`)
+      setMateriales(Array.isArray(datos.results) ? datos.results : [])
+      setTotalMateriales(Number(datos.count) || 0)
     } catch {
       setError('No se pudo cargar la lista de materiales.')
     } finally {
@@ -92,7 +101,8 @@ function Materiales() {
     if (!resultadoRegistro) setMensajePopupExito('Los cambios del material se guardaron correctamente.')
     setMostrarFormulario(false)
     setMaterialEnEdicion(null)
-    await cargarMateriales()
+    setPagina(1)
+    await cargarMateriales(1)
   }
 
   async function actualizarFichaTrasAgregarInstancias() {
@@ -128,6 +138,7 @@ function Materiales() {
   const instanciasRegistradas = Array.isArray(materialRegistrado?.instancias)
     ? materialRegistrado.instancias
     : []
+  const materialesFiltrados = materiales
 
   return (
     <section>
@@ -249,6 +260,26 @@ function Materiales() {
         </div>
       )}
 
+      {!mostrarFormulario && (
+        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <label htmlFor="buscar-material-inventario" className="sr-only">
+            Buscar material por nombre
+          </label>
+          <div className="relative w-full sm:max-w-sm">
+            <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-texto-suave" />
+            <input
+              id="buscar-material-inventario"
+              type="search"
+              value={busquedaNombre}
+              onChange={(evento) => { setBusquedaNombre(evento.target.value); setPagina(1) }}
+              placeholder="Buscar material por nombre…"
+              className="w-full rounded-lg border border-borde bg-superficie py-2 pl-9 pr-3 text-sm text-texto placeholder:text-texto-suave focus-visible:outline-2 focus-visible:outline-acento-600"
+            />
+          </div>
+          <p className="text-xs text-texto-suave" aria-live="polite">{totalMateriales} materiales</p>
+        </div>
+      )}
+
       {mostrarFormulario && (
         <MaterialForm
           key={materialEnEdicion?.id || 'nuevo'}
@@ -266,44 +297,57 @@ function Materiales() {
         </div>
       )}
 
-      {!cargando && !mostrarFormulario && materiales.length === 0 && (
+      {!cargando && !mostrarFormulario && totalMateriales === 0 && !busquedaNombre && (
         <EstadoVacio titulo="Aún no hay materiales registrados" mensaje="Registra el primer material del inventario." />
       )}
 
-      {!cargando && !mostrarFormulario && materiales.length > 0 && (
-        <Tarjeta className="overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+      {!cargando && !mostrarFormulario && totalMateriales === 0 && busquedaNombre && (
+        <EstadoVacio titulo="No se encontraron materiales" mensaje="Prueba con otro nombre. La búsqueda ignora mayúsculas y tildes." />
+      )}
+
+      {!cargando && !mostrarFormulario && materialesFiltrados.length > 0 && (
+        <Tarjeta className="overflow-hidden border-borde shadow-sm">
+          <div
+            className="overflow-x-auto"
+            role="region"
+            aria-label="Tabla de inventario de materiales"
+            tabIndex={0}
+          >
+            <table className="min-w-[980px] w-full text-sm">
               <thead>
-                <tr className="border-b border-borde text-left text-xs uppercase tracking-wide text-texto-suave">
-                  <th className="px-4 py-3 font-semibold">Código de Material</th>
-                  <th className="px-4 py-3 font-semibold">Nombre</th>
-                  <th className="px-4 py-3 font-semibold">Foto</th>
-                  <th className="px-4 py-3 font-semibold">Tipo</th>
-                  <th className="px-4 py-3 font-semibold">Stock</th>
-                  <th className="px-4 py-3 font-semibold">Disponibles</th>
-                  <th className="px-4 py-3 font-semibold">Tier mínimo</th>
-                  <th className="px-4 py-3 font-semibold">Acciones</th>
+                <tr className="border-b border-borde bg-superficie-alta/70 text-left text-xs uppercase tracking-wide text-texto-suave">
+                  <th scope="col" className="whitespace-nowrap px-4 py-3.5 font-bold">Código de Material</th>
+                  <th scope="col" className="px-4 py-3.5 font-bold">Nombre</th>
+                  <th scope="col" className="px-4 py-3.5 font-bold">Foto</th>
+                  <th scope="col" className="px-4 py-3.5 font-bold">Tipo</th>
+                  <th scope="col" className="px-4 py-3.5 text-center font-bold">Stock</th>
+                  <th scope="col" className="px-4 py-3.5 font-bold">Disponibles</th>
+                  <th scope="col" className="px-4 py-3.5 font-bold">Tier mínimo</th>
+                  <th scope="col" className="px-4 py-3.5 font-bold">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-borde">
-                {materiales.map((material) => (
-                  <tr key={material.id} className="text-texto">
-                    <td className="px-4 py-3 font-mono text-xs">{material.codigo_material || material.codigo_inventario}</td>
-                    <td className="px-4 py-3 font-semibold">{material.nombre}</td>
-                    <td className="px-4 py-3">
+                {materialesFiltrados.map((material) => (
+                  <tr key={material.id} className="text-texto transition-colors hover:bg-superficie-alta/40">
+                    <td className="whitespace-nowrap px-4 py-3.5">
+                      <code className="rounded-md bg-superficie-alta px-2 py-1 font-mono text-xs font-semibold text-texto">
+                        {material.codigo_material || material.codigo_inventario}
+                      </code>
+                    </td>
+                    <td className="max-w-64 px-4 py-3.5 font-semibold leading-snug">{material.nombre}</td>
+                    <td className="px-4 py-3.5">
                       {material.foto ? (
                         <img
-                          className="flex size-10 items-center justify-center overflow-hidden rounded-lg border border-borde object-cover"
+                          className="size-11 rounded-lg border border-borde object-cover shadow-xs"
                           src={material.foto}
                           alt={`Foto de ${material.nombre}`}
-                          width="40"
-                          height="40"
+                          width="44"
+                          height="44"
                           loading="lazy"
                         />
                       ) : (
                         <span
-                          className="flex size-10 items-center justify-center rounded-lg border border-borde bg-superficie-alta text-sm text-texto-suave"
+                          className="flex size-11 items-center justify-center rounded-lg border border-borde bg-superficie-alta text-sm text-texto-suave"
                           role="img"
                           aria-label={`${material.nombre} no tiene foto`}
                         >
@@ -311,42 +355,64 @@ function Materiales() {
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3">{ETIQUETAS_TIPO[material.tipo] || material.tipo}</td>
-                    <td className="px-4 py-3">{material.stock}</td>
-                    <td className="px-4 py-3">{material.unidades_disponibles}</td>
-                    <td className="px-4 py-3">
-                      {ETIQUETAS_TIER[material.tier_minimo_requerido] || material.tier_minimo_requerido}
+                    <td className="px-4 py-3.5">
+                      <span className="inline-flex rounded-full bg-acento-100 px-2.5 py-1 text-xs font-semibold text-acento-800 dark:bg-acento-500/15 dark:text-acento-300">
+                        {ETIQUETAS_TIPO[material.tipo] || material.tipo}
+                      </span>
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-wrap items-center gap-2">
+                    <td className="px-4 py-3.5 text-center">
+                      <span className="inline-flex min-w-10 justify-center rounded-lg bg-superficie-alta px-2.5 py-1.5 font-bold tabular-nums text-texto">
+                        {material.stock}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${Number(material.unidades_disponibles) > 0
+                        ? 'bg-marca-100 text-marca-800 dark:bg-marca-500/15 dark:text-marca-300'
+                        : 'bg-amber-100 text-amber-900 dark:bg-amber-500/15 dark:text-amber-300'
+                      }`}>
+                        <span aria-hidden="true" className={`size-1.5 rounded-full ${Number(material.unidades_disponibles) > 0 ? 'bg-marca-600 dark:bg-marca-400' : 'bg-amber-600 dark:bg-amber-400'}`} />
+                        {material.unidades_disponibles}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <span className="inline-flex rounded-full border border-borde px-2.5 py-1 text-xs font-medium text-texto-suave">
+                        {ETIQUETAS_TIER[material.tier_minimo_requerido] || material.tier_minimo_requerido}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <div className="flex min-w-[300px] flex-wrap items-center gap-1.5 rounded-xl border border-borde bg-superficie-alta/50 p-1.5">
                         <Boton
-                          variante="fantasma"
+                          variante="accion"
                           tamanio="pequeno"
                           tipo="button"
+                          icono={CalendarDays}
                           onClick={() => setMaterialCalendario(material)}
                         >
                           Calendario
                         </Boton>
                         <Boton
-                          variante="fantasma"
+                          variante="accion"
                           tamanio="pequeno"
                           tipo="button"
+                          icono={History}
                           onClick={() => navigate(`/panel/inventario/${material.id}/historial`)}
                         >
                           Historial
                         </Boton>
                         <Boton
-                          variante="fantasma"
+                          variante="accion"
                           tamanio="pequeno"
                           tipo="button"
+                          icono={FileText}
                           onClick={() => setMaterialFicha(material)}
                         >
                           Ficha
                         </Boton>
                         <Boton
-                          variante="secundario"
+                          variante="primario"
                           tamanio="pequeno"
                           tipo="button"
+                          icono={Pencil}
                           onClick={() => abrirFormularioEdicion(material)}
                         >
                           Editar
@@ -355,6 +421,7 @@ function Materiales() {
                           variante="peligro"
                           tamanio="pequeno"
                           tipo="button"
+                          icono={Trash2}
                           onClick={() => setRegistroAEliminar({ tipo: 'material', material })}
                         >
                           Eliminar
@@ -368,6 +435,8 @@ function Materiales() {
           </div>
         </Tarjeta>
       )}
+
+      {!cargando && !mostrarFormulario && <ControlesPaginacion pagina={pagina} total={totalMateriales} onCambiar={setPagina} cargando={cargando} />}
 
       {materialCalendario && (
         <div

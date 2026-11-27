@@ -19,7 +19,7 @@ const OPCIONES_ESTADO_INICIAL_EJEMPLAR = [
 
 function obtenerMensajeError(error) {
   if (!(error instanceof ErrorApi) || !error.datos) {
-    return 'No se pudieron agregar los ejemplares. Inténtalo de nuevo.'
+    return 'No se pudieron agregar las unidades. Inténtalo de nuevo.'
   }
   const respuesta = error.datos
   if (Array.isArray(respuesta.instancias) && typeof respuesta.instancias[0] === 'string') {
@@ -29,7 +29,7 @@ function obtenerMensajeError(error) {
     .filter(([campo]) => !['indice', 'campo', 'mensaje', 'instancias'].includes(campo))
     .flatMap(([, valor]) => Array.isArray(valor) ? valor : [valor])
     .filter((valor) => typeof valor === 'string')
-  return mensajes.join(' ') || 'Revisa los datos de los ejemplares.'
+  return mensajes.join(' ') || 'Revisa los datos de las unidades.'
 }
 
 function AgregarEjemplaresMaterial({ material, onGuardado, onCancelar }) {
@@ -135,14 +135,14 @@ function AgregarEjemplaresMaterial({ material, onGuardado, onCancelar }) {
       <form onSubmit={enviar} noValidate className="grid gap-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h5 className="font-semibold text-texto">Agregar ejemplares</h5>
+            <h5 className="font-semibold text-texto">Agregar unidades</h5>
             <p className="mt-1 text-xs text-texto-suave">
               Puedes agregar de uno a 50. Cada código debe ser único.{' '}
               <span className="text-error" aria-hidden="true">*</span> Campos obligatorios.
             </p>
           </div>
           <Campo
-            etiqueta="Cantidad de ejemplares"
+            etiqueta="Cantidad de unidades"
             tipo="number"
             valor={cantidad}
             onCambio={cambiarCantidad}
@@ -159,20 +159,20 @@ function AgregarEjemplaresMaterial({ material, onGuardado, onCancelar }) {
         <div className="grid gap-3">
           {ejemplares.map((fila, indice) => (
             <div key={fila.id} className="grid gap-3 rounded-lg border border-borde bg-superficie p-4">
-              <h6 className="text-sm font-semibold text-texto">Ejemplar {indice + 1}</h6>
+              <h6 className="text-sm font-semibold text-texto">Unidad {indice + 1}</h6>
               {erroresFilas[indice] && (
                 <ErrorAlerta mensaje={Object.values(erroresFilas[indice]).join(' ')} />
               )}
               <div className="grid gap-3 sm:grid-cols-2">
                 <Campo
-                  etiqueta="Código de Ejemplar"
+                  etiqueta="Código de unidad"
                   valor={fila.codigo_ejemplar}
                   onCambio={(evento) => actualizarFila(indice, 'codigo_ejemplar', evento.target.value)}
                   maxLength={50}
                   requerido
                 />
                 <Campo
-                  etiqueta="Estado inicial del ejemplar"
+                  etiqueta="Estado inicial de la unidad"
                   opciones={OPCIONES_ESTADO_INICIAL_EJEMPLAR}
                   valor={fila.estado || 'disponible'}
                   onCambio={(evento) => actualizarFila(indice, 'estado', evento.target.value)}
@@ -185,7 +185,7 @@ function AgregarEjemplaresMaterial({ material, onGuardado, onCancelar }) {
                   maxLength={80}
                 />
                 <Campo
-                  etiqueta="Color del ejemplar (opcional)"
+                  etiqueta="Color de la unidad (opcional)"
                   valor={fila.color}
                   onCambio={(evento) => actualizarFila(indice, 'color', evento.target.value)}
                   maxLength={30}
@@ -207,7 +207,7 @@ function AgregarEjemplaresMaterial({ material, onGuardado, onCancelar }) {
               </div>
               <div className="grid gap-2">
                 <label className="text-sm font-semibold text-texto" htmlFor={`alta-foto-${fila.id}`}>
-                  Foto del ejemplar (opcional)
+                  Foto de la unidad (opcional)
                 </label>
                 {erroresFilas[indice]?.foto && (
                   <p className="text-xs text-error">{erroresFilas[indice].foto}</p>
@@ -224,7 +224,7 @@ function AgregarEjemplaresMaterial({ material, onGuardado, onCancelar }) {
                   <img
                     className="size-20 rounded-lg border border-borde object-cover"
                     src={fila.vistaPrevia}
-                    alt={`Vista previa del ejemplar ${indice + 1}`}
+                    alt={`Vista previa de la unidad ${indice + 1}`}
                   />
                 )}
               </div>
@@ -237,7 +237,7 @@ function AgregarEjemplaresMaterial({ material, onGuardado, onCancelar }) {
             Cancelar
           </Boton>
           <Boton tipo="submit" cargando={enviando} deshabilitado={enviando}>
-            Agregar {ejemplares.length === 1 ? 'ejemplar' : `${ejemplares.length} ejemplares`}
+            Agregar {ejemplares.length === 1 ? 'unidad' : `${ejemplares.length} unidades`}
           </Boton>
         </div>
       </form>

@@ -239,15 +239,21 @@ export default function ColaReservas() {
   const instanciasDisponibles = cola?.instancias_disponibles || []
 
   return (
-    <section aria-labelledby="titulo-cola-reservas" className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 id="titulo-cola-reservas" className="text-xl font-bold text-texto">
-            Reservas
-          </h2>
-          <p className="mt-1 text-sm text-texto-suave">
-            Consulta el calendario de disponibilidad, evalúa excepciones académicas y administra las reservas confirmadas. Las reservas se gestionan por fechas: un mismo ejemplar puede tener múltiples reservas en distintas temporadas.
-          </p>
+    <section aria-labelledby="titulo-cola-reservas" className="mx-auto w-full max-w-7xl space-y-6">
+      <header className="flex flex-col gap-4 rounded-2xl border border-borde bg-gradient-to-r from-superficie via-superficie to-acento-50 p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-6 dark:to-superficie-alta">
+        <div className="flex items-start gap-4">
+          <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-marca-600/15 text-marca-700 dark:bg-marca-500/15 dark:text-marca-300">
+            <Calendar aria-hidden="true" className="size-6" />
+          </span>
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wider text-acento-700 dark:text-acento-300">Gestión de préstamos</p>
+            <h2 id="titulo-cola-reservas" className="mt-1 text-xl font-bold text-texto">
+              Reservas
+            </h2>
+            <p className="mt-1 max-w-3xl text-sm leading-relaxed text-texto-suave">
+              Consulta el calendario de disponibilidad, evalúa excepciones académicas y administra las reservas confirmadas. Las reservas se gestionan por fechas: un mismo ejemplar puede tener múltiples reservas en distintas temporadas.
+            </p>
+          </div>
         </div>
         <Boton
           variante="secundario"
@@ -258,15 +264,24 @@ export default function ColaReservas() {
         >
           Actualizar
         </Boton>
-      </div>
+      </header>
 
       {/* Selector y buscador de material */}
-      <Tarjeta className="p-4 space-y-3">
-        <div className="grid gap-3 sm:grid-cols-2">
+      <Tarjeta className="space-y-4 p-5 sm:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-borde pb-3">
+          <div>
+            <h3 className="text-base font-bold text-texto">Filtrar reservas</h3>
+            <p className="mt-0.5 text-xs text-texto-suave">Busca un material o consulta todas las reservas.</p>
+          </div>
+          <span className="rounded-full bg-superficie-alta px-3 py-1 text-xs font-semibold text-texto-suave">
+            {materialesFiltrados.length} materiales
+          </span>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label
               htmlFor="buscar-material-cola"
-              className="block text-xs font-semibold uppercase tracking-wide text-texto-suave"
+              className="block text-xs font-semibold text-texto"
             >
               Filtrar material por nombre o código
             </label>
@@ -281,7 +296,7 @@ export default function ColaReservas() {
                 value={busquedaMaterial}
                 onChange={(e) => setBusquedaMaterial(e.target.value)}
                 placeholder="Ej. Laptop, Osciloscopio, EQP-001…"
-                className="w-full rounded-lg border border-borde bg-white pl-9 pr-3 py-2 text-sm text-texto dark:bg-superficie"
+                className="w-full rounded-lg border border-borde bg-white py-2 pl-9 pr-3 text-sm text-texto shadow-xs transition focus:border-acento-500 focus:outline-none focus:ring-2 focus:ring-acento-500/20 dark:bg-superficie"
               />
             </div>
           </div>
@@ -289,7 +304,7 @@ export default function ColaReservas() {
           <div>
             <label
               htmlFor="select-material-cola"
-              className="block text-xs font-semibold uppercase tracking-wide text-texto-suave"
+            className="block text-xs font-semibold text-texto"
             >
               Material seleccionado
             </label>
@@ -297,7 +312,7 @@ export default function ColaReservas() {
               id="select-material-cola"
               value={materialIdSeleccionado}
               onChange={(e) => seleccionarMaterial(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-borde bg-white px-3 py-2 text-sm text-texto dark:bg-superficie"
+              className="mt-1 w-full rounded-lg border border-borde bg-white px-3 py-2 text-sm text-texto shadow-xs transition focus:border-acento-500 focus:outline-none focus:ring-2 focus:ring-acento-500/20 dark:bg-superficie"
             >
               <option value="">Todas las reservas (todos los materiales)</option>
               {materialesFiltrados.map((m) => {
@@ -395,8 +410,8 @@ export default function ColaReservas() {
       {!cargandoCola && cola && (
         <div className="space-y-6">
           {/* Resumen del material y ejemplares libres o vista general */}
-          <Tarjeta className="p-5 space-y-3">
-            <div className="flex flex-wrap items-start justify-between gap-3">
+          <Tarjeta className="space-y-5 p-5 sm:p-6">
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
               <div>
                 <span className="text-xs font-semibold uppercase tracking-wide text-acento-700 dark:text-acento-300">
                   {cola.material ? (
@@ -412,19 +427,33 @@ export default function ColaReservas() {
                   {cola.material ? cola.material.nombre : 'Todas las reservas y solicitudes activas'}
                 </h3>
               </div>
-              <div className="flex flex-wrap gap-2 text-xs font-semibold">
+              <div className="grid gap-2 sm:grid-cols-2 xl:min-w-[28rem]">
                 {cola.material && (
-                  <span className="rounded-lg bg-marca-100 px-3 py-1 text-marca-800 dark:bg-marca-950/60 dark:text-marca-300">
-                    {instanciasDisponibles.length}{' '}
-                    {instanciasDisponibles.length === 1 ? 'ejemplar disponible' : 'ejemplares disponibles'}
-                  </span>
+                  <div className="rounded-xl bg-marca-50 p-3 dark:bg-marca-950/40">
+                    <span className="block text-xs font-semibold text-marca-800 dark:text-marca-300">
+                      Ejemplares disponibles
+                    </span>
+                    <span className="mt-1 block text-2xl font-bold tabular-nums text-marca-800 dark:text-marca-200">
+                      {instanciasDisponibles.length}
+                    </span>
+                  </div>
                 )}
-                <span className="rounded-lg bg-amber-100 px-3 py-1 text-amber-900 dark:bg-amber-950/60 dark:text-amber-200">
-                  {enEsperaExcepciones.length} excepciones pendientes
-                </span>
-                <span className="rounded-lg bg-acento-100 px-3 py-1 text-acento-900 dark:bg-acento-950/60 dark:text-acento-200">
-                  {reservasConfirmadas.length} reservada(s)
-                </span>
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-900">
+                  <span className="block text-xs font-semibold text-amber-900 dark:text-amber-200">
+                    Pendientes de revisión
+                  </span>
+                  <span className="mt-1 block text-2xl font-bold tabular-nums text-amber-900 dark:text-amber-100">
+                    {enEsperaExcepciones.length}
+                  </span>
+                </div>
+                <div className="rounded-xl border border-acento-200 bg-acento-50 p-3 dark:border-acento-700 dark:bg-acento-900">
+                  <span className="block text-xs font-semibold text-acento-900 dark:text-acento-200">
+                    Reservas pendientes de recojo
+                  </span>
+                  <span className="mt-1 block text-2xl font-bold tabular-nums text-acento-900 dark:text-acento-100">
+                    {reservasConfirmadas.length}
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -456,11 +485,16 @@ export default function ColaReservas() {
 
           {/* Calendario de disponibilidad del material seleccionado */}
           {materialIdSeleccionado && (
-            <Tarjeta className="p-5 space-y-3">
-              <h3 className="flex items-center gap-2 text-base font-bold text-texto">
-                <Calendar aria-hidden="true" className="size-5 text-acento-600 dark:text-acento-400" />
-                Disponibilidad por fechas
-              </h3>
+            <Tarjeta className="space-y-4 p-5 sm:p-6">
+              <div className="flex items-start gap-3 border-b border-borde pb-3">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-acento-100 text-acento-700 dark:bg-acento-500/15 dark:text-acento-300">
+                  <Calendar aria-hidden="true" className="size-5" />
+                </span>
+                <div>
+                  <h3 className="text-base font-bold text-texto">Disponibilidad por fechas</h3>
+                  <p className="mt-0.5 text-xs text-texto-suave">Consulta la ocupación de este material en el calendario.</p>
+                </div>
+              </div>
               <p className="text-xs text-texto-suave">
                 Vista del calendario de ocupación del material. Los días en verde tienen al menos un
                 ejemplar libre; los días en rojo están completamente reservados o prestados.
@@ -471,13 +505,16 @@ export default function ColaReservas() {
 
           {/* Excepciones académicas pendientes de revisión */}
           <section aria-labelledby="subtitulo-excepciones" className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-borde pb-3">
             <h3
               id="subtitulo-excepciones"
               className="flex items-center gap-2 text-base font-bold text-texto"
             >
               <ShieldAlert aria-hidden="true" className="size-5 text-amber-600" />
-              Excepciones académicas pendientes de revisión ({enEsperaExcepciones.length})
+              Excepciones académicas pendientes de revisión
             </h3>
+            <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold tabular-nums text-amber-900 dark:bg-amber-950/60 dark:text-amber-200">{enEsperaExcepciones.length}</span>
+            </div>
             {enEsperaExcepciones.length === 0 ? (
               <p className="rounded-xl border border-borde bg-superficie p-4 text-sm text-texto-suave">
                 No hay solicitudes de excepción académica pendientes para este material.
@@ -486,7 +523,7 @@ export default function ColaReservas() {
               <ul className="grid gap-3">
                 {enEsperaExcepciones.map((reserva) => (
                   <li key={reserva.id}>
-                    <Tarjeta className="border-amber-300 p-4 dark:border-amber-800 space-y-3">
+                    <Tarjeta className="space-y-4 border-l-4 border-l-amber-400 p-4 sm:p-5 dark:border-l-amber-500">
                       <div className="flex flex-wrap items-start justify-between gap-2">
                         <div>
                           <div className="flex flex-wrap items-center gap-2">
@@ -520,7 +557,7 @@ export default function ColaReservas() {
                         />
                       </div>
 
-                      <p className="rounded-lg bg-superficie-alta/50 p-2.5 text-sm text-texto">
+                      <p className="rounded-lg bg-superficie-alta/50 p-3 text-sm leading-relaxed text-texto">
                         <span className="font-semibold">Justificación:</span>{' '}
                         {reserva.justificacion}
                       </p>
@@ -559,6 +596,7 @@ export default function ColaReservas() {
                         {esGestor && (
                           <div className="flex flex-wrap gap-2">
                             <Boton
+                              variante="accion"
                               tamanio="pequeno"
                               icono={CheckCircle2}
                               cargando={procesandoId === reserva.id}
@@ -576,7 +614,7 @@ export default function ColaReservas() {
                               Aprobar excepción
                             </Boton>
                             <Boton
-                              variante="peligro"
+                              variante="peligro-secundario"
                               tamanio="pequeno"
                               icono={XCircle}
                               deshabilitado={Boolean(procesandoId)}
@@ -604,13 +642,16 @@ export default function ColaReservas() {
 
           {/* Reservas confirmadas vigentes */}
           <section aria-labelledby="subtitulo-confirmadas" className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-borde pb-3">
             <h3
               id="subtitulo-confirmadas"
               className="flex items-center gap-2 text-base font-bold text-texto"
             >
               <PackageCheck aria-hidden="true" className="size-5 text-marca-700 dark:text-marca-400" />
-              Reservas confirmadas pendientes de recojo ({reservasConfirmadas.length})
+              Reservas confirmadas pendientes de recojo
             </h3>
+            <span className="rounded-full bg-acento-100 px-3 py-1 text-xs font-bold tabular-nums text-acento-900 dark:bg-acento-950/60 dark:text-acento-200">{reservasConfirmadas.length}</span>
+            </div>
             {reservasConfirmadas.length === 0 ? (
               <EstadoVacio
                 titulo="Sin reservas confirmadas activas"
@@ -620,7 +661,7 @@ export default function ColaReservas() {
               <ul className="grid gap-3">
                 {reservasConfirmadas.map((reserva) => (
                   <li key={reserva.id}>
-                    <Tarjeta className="p-4 space-y-3">
+                    <Tarjeta className="space-y-4 p-4 sm:p-5">
                       <div className="flex flex-wrap items-start justify-between gap-2">
                         <div>
                           <div className="flex flex-wrap items-center gap-2">
@@ -661,7 +702,7 @@ export default function ColaReservas() {
                         />
                       </div>
 
-                      <p className="rounded-lg bg-superficie-alta/40 p-2.5 text-sm text-texto">
+                      <p className="rounded-lg bg-superficie-alta/50 p-3 text-sm leading-relaxed text-texto">
                         <span className="font-semibold">Justificación:</span>{' '}
                         {reserva.justificacion}
                       </p>
@@ -679,7 +720,7 @@ export default function ColaReservas() {
                             Entregar / Convertir en préstamo
                           </Boton>
                           <Boton
-                            variante="peligro"
+                            variante="peligro-secundario"
                             tamanio="pequeno"
                             icono={XCircle}
                             deshabilitado={Boolean(procesandoId)}

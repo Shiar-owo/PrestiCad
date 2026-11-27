@@ -48,17 +48,18 @@ class PrestamoError(Exception):
         super().__init__(mensaje)
 
 
-def buscar_prestatarios_por_dni(prefijo):
-    """Busca prestatarios activos por prefijo de DNI para la entrega de materiales."""
-    return (
-        Usuario.objects.select_related("rol")
-        .filter(
-            rol__nombre="prestatario",
-            estado="activo",
-            dni__startswith=prefijo,
-        )
-        .order_by("dni")[:MAXIMO_PRESTATARIOS_SUGERIDOS]
-    )
+def buscar_prestatarios_por_dni(prefijo, incluir_inactivos=False):
+    """Busca prestatarios activos por DNI o nombre para los selectores de gestión."""
+    base = Usuario.objects.select_related("rol").filter(rol__nombre="prestatario")
+    if not incluir_inactivos:
+        base = base.filter(estado="activo")
+    if prefijo.isdigit():
+        return base.filter(dni__startswith=prefijo).order_by("dni")[:MAXIMO_PRESTATARIOS_SUGERIDOS]
+
+    terminos = prefijo.strip().split()
+    for termino in terminos:
+        base = base.filter(Q(nombre__icontains=termino) | Q(apellido__icontains=termino))
+    return base.order_by("apellido", "nombre", "dni")[:MAXIMO_PRESTATARIOS_SUGERIDOS]
 
 
 def contar_unidades_disponibles(material):
@@ -189,7 +190,9 @@ def consultar_prestamos_usuario(usuario_id, ahora=None):
     return _consultar_prestamos_con_estado(ahora=ahora).filter(usuario_id=usuario_id)
 
 
-def consultar_historial_prestamos(ahora=None, estado=None, dni=None, nombre=None):
+def consultar_historial_prestamos(
+    ahora=None, estado=None, dni=None, nombre=None, fecha_desde=None, fecha_hasta=None
+):
     """Lista global de préstamos para consulta histórica de gestión."""
     prestamos = _consultar_prestamos_con_estado(ahora=ahora).select_related(
         "usuario",
@@ -205,6 +208,10 @@ def consultar_historial_prestamos(ahora=None, estado=None, dni=None, nombre=None
         prestamos = prestamos.filter(estado_consulta=estado)
     if dni is not None:
         prestamos = prestamos.filter(usuario__dni=dni)
+    if fecha_desde is not None:
+        prestamos = prestamos.filter(fecha_entrega__date__gte=fecha_desde)
+    if fecha_hasta is not None:
+        prestamos = prestamos.filter(fecha_entrega__date__lte=fecha_hasta)
     if nombre:
         for termino in nombre.strip().split():
             prestamos = prestamos.filter(
@@ -216,14 +223,15 @@ def consultar_historial_prestamos(ahora=None, estado=None, dni=None, nombre=None
 
 def consultar_historial_por_material(
     material_id,
-    instancia_id,
+    instancia_id=None,
     fecha_desde=None,
     fecha_hasta=None,
 ):
-    """Devuelve préstamos de una instancia y sus estadísticas de puntualidad.
+    """Devuelve préstamos de un material y estadísticas de puntualidad.
 
-    El período se aplica a la fecha de entrega. Las estadísticas consideran
-    solo préstamos devueltos; la puntualidad se determina por fecha límite.
+    Si se indica una instancia, limita la consulta a ese ejemplar. El período
+    se aplica a la fecha de entrega y los resultados se ordenan del más reciente
+    al más antiguo. Las estadísticas consideran solo préstamos devueltos.
     """
     if not Material.objects.filter(pk=material_id).exists():
         raise PrestamoError(
@@ -231,7 +239,7 @@ def consultar_historial_por_material(
             "No existe el material solicitado.",
             status_code=404,
         )
-    if not InstanciaMaterial.objects.filter(
+    if instancia_id is not None and not InstanciaMaterial.objects.filter(
         pk=instancia_id,
         material_id=material_id,
     ).exists():
@@ -241,10 +249,12 @@ def consultar_historial_por_material(
             status_code=404,
         )
 
-    prestamos = (
-        _consultar_prestamos_con_estado()
-        .filter(material_id=material_id, instancia_id=instancia_id)
-        .select_related("usuario", "devolucion")
+    prestamos = _consultar_prestamos_con_estado().filter(material_id=material_id)
+    if instancia_id is not None:
+        prestamos = prestamos.filter(instancia_id=instancia_id)
+    prestamos = prestamos.select_related("usuario", "instancia", "devolucion").order_by(
+        "-fecha_entrega",
+        "-id",
     )
     if fecha_desde is not None:
         prestamos = prestamos.filter(fecha_entrega__date__gte=fecha_desde)
@@ -293,6 +303,7 @@ def consultar_reportes_devolucion(
     fecha_desde=None,
     fecha_hasta=None,
     gestor_id=None,
+    dni=None,
 ):
     """Listado de devoluciones con reporte de daños para su consulta (RN10).
 
@@ -318,6 +329,8 @@ def consultar_reportes_devolucion(
         reportes = reportes.filter(fecha_devolucion__date__lte=fecha_hasta)
     if gestor_id is not None:
         reportes = reportes.filter(realizado_por_id=gestor_id)
+    if dni is not None:
+        reportes = reportes.filter(prestamo__usuario__dni=dni)
     return reportes
 
 

@@ -2,17 +2,17 @@ const PRESENTACION_TIER = {
   avanzado: {
     etiqueta: 'Avanzado',
     estilo: 'bg-emerald-50 text-emerald-800 ring-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:ring-emerald-700/60',
-    descripcion: 'Acceso a materiales de todos los Tiers y prioridad en la atención de reservas.',
+    descripcion: 'Puede solicitar materiales de todos los Tiers.',
   },
   estandar: {
     etiqueta: 'Estándar',
     estilo: 'bg-blue-50 text-blue-800 ring-blue-200 dark:bg-blue-500/15 dark:text-blue-300 dark:ring-blue-700/60',
-    descripcion: 'Acceso estándar; las prórrogas requieren aprobación.',
+    descripcion: 'Puede solicitar materiales de Tier Restringido y Estándar. Para materiales de Tier Avanzado, requiere revisión excepcional.',
   },
   restringido: {
     etiqueta: 'Restringido',
     estilo: 'bg-amber-50 text-amber-900 ring-amber-200 dark:bg-amber-500/15 dark:text-amber-200 dark:ring-amber-700/60',
-    descripcion: 'Acceso limitado a materiales básicos y sin prórrogas.',
+    descripcion: 'Puede solicitar materiales de Tier Restringido. Para materiales de un Tier superior, requiere revisión excepcional.',
   },
 }
 

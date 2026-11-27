@@ -183,7 +183,7 @@ function Materiales() {
                 etiqueta="Modo de registro"
                 valor={ETIQUETAS_MODO_REGISTRO[resumenRegistro.modo] || resumenRegistro.modo}
               />
-              <DatoResumen etiqueta="Total de instancias" valor={instanciasRegistradas.length} />
+              <DatoResumen etiqueta="Total de ejemplares" valor={instanciasRegistradas.length} />
               <DatoResumen etiqueta="Marca" valor={materialRegistrado.marca} />
               <DatoResumen etiqueta="Modelo" valor={materialRegistrado.modelo} />
               <DatoResumen etiqueta="Color" valor={materialRegistrado.color} />
@@ -198,7 +198,7 @@ function Materiales() {
 
             <section className="mt-5">
               <h4 className="border-b border-borde pb-2 text-sm font-bold text-texto">
-                Detalle de instancias
+                Detalle de ejemplares
               </h4>
               <div className="mt-3 overflow-x-auto rounded-lg border border-borde">
                 <table className="min-w-full divide-y divide-borde text-left text-xs">
@@ -231,7 +231,7 @@ function Materiales() {
                     )) : (
                       <tr>
                         <td colSpan={7} className="px-3 py-4 text-center text-texto-suave">
-                          No hay instancias para mostrar.
+                          No hay ejemplares para mostrar.
                         </td>
                       </tr>
                     )}

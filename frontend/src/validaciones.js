@@ -114,7 +114,7 @@ export function validarStock(stock) {
   }
 
   if (valor < 1) {
-    return 'El stock debe ser al menos 1 unidad.'
+    return 'El stock debe incluir al menos 1 ejemplar.'
   }
 
   return ''

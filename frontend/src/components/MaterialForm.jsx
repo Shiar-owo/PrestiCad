@@ -82,7 +82,7 @@ const ETIQUETAS_CAMPOS_ERROR = {
   codigo_material: 'Código de Material',
   codigo_ejemplar: 'Código de Ejemplar',
   tipo: 'Tipo',
-  stock: 'Cantidad de ejemplares',
+  stock: 'Stock',
   estado: 'Estado',
   estado_inicial_ejemplares: 'Estado',
   tiempo_maximo_prestamo: 'Tiempo máximo de préstamo',
@@ -337,7 +337,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
       ...previos,
       stock: cantidadValida
         ? ''
-        : `Ingresa un número entero entre 2 y ${MAXIMO_EJEMPLARES_REGISTRO}.`,
+        : `El stock debe ser un número entero entre 2 y ${MAXIMO_EJEMPLARES_REGISTRO}.`,
     }))
 
     if (cantidadValida) redimensionarFilas(cantidad)
@@ -615,7 +615,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
         || cantidad < 2
         || cantidad > MAXIMO_EJEMPLARES_REGISTRO
         || cantidad !== ejemplares.length) {
-        erroresFormulario.stock = `Ingresa un número entero entre 2 y ${MAXIMO_EJEMPLARES_REGISTRO}.`
+        erroresFormulario.stock = `El stock debe ser un número entero entre 2 y ${MAXIMO_EJEMPLARES_REGISTRO}.`
       }
       const erroresCodigo = datos.modo === 'detalle' ? validarCodigosDuplicados(ejemplares) : []
       if (datos.modo === 'detalle') {
@@ -851,7 +851,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
                   Atención: {instanciasBloqueadas.length} ejemplar{instanciasBloqueadas.length === 1 ? '' : 'es'} en estado Prestado o Reservado no será{instanciasBloqueadas.length === 1 ? '' : 'n'} modificado{instanciasBloqueadas.length === 1 ? '' : 's'}
                 </p>
                 <p className="mt-1">
-                  Por regla de negocio, las instancias en estado <strong>Prestado</strong> o{' '}
+                  Por regla de negocio, los ejemplares en estado <strong>Prestado</strong> o{' '}
                   <strong>Reservado</strong> deben seguir su procedimiento correspondiente (registro de
                   devolución o gestión de reserva) para volver a estar en <strong>Disponible</strong>.
                 </p>
@@ -944,7 +944,7 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
                 valor={datos.codigo_material.trim()
                   ? codigoEjemplarPorDefecto(datos.codigo_material, 0)
                   : ''}
-                ayuda="Se genera automáticamente para la única unidad registrada."
+                ayuda="Se genera automáticamente para el único ejemplar registrado."
                 readOnly
               />
             )}
@@ -992,14 +992,14 @@ function MaterialForm({ material, onGuardado, onCancelar }) {
                     ? `Cambio confirmado: al guardar, los ejemplares elegibles pasarán a "${datos.estado === 'en_mantenimiento' ? 'En mantenimiento' : 'Disponible'}".`
                     : 'Cambiar el estado general afectará solo a los ejemplares Disponibles o En mantenimiento; los Prestados o Reservados conservarán su estado.'
                   : datos.estado === 'en_mantenimiento'
-                    ? 'Todas las instancias están En mantenimiento y sus estados no se pueden modificar.'
-                    : 'Todas las instancias inician Disponibles; puedes poner algunas En mantenimiento. Si todas quedan así, el material también cambiará a En mantenimiento.'}
+                    ? 'Todos los ejemplares están En mantenimiento y sus estados no se pueden modificar.'
+                    : 'Todos los ejemplares inician Disponibles; puedes poner algunos En mantenimiento. Si todos quedan así, el material también cambiará a En mantenimiento.'}
                 requerido={!esEdicion}
               />
             )}
             {!esEdicion && datos.modo !== 'unico' && (
               <Campo
-                etiqueta="Cantidad de ejemplares"
+                etiqueta="Stock"
                 tipo="number"
                 min="2"
                 max={MAXIMO_EJEMPLARES_REGISTRO}

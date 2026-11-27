@@ -24,7 +24,7 @@ import {
 const FILTROS = [
   { id: 'todas', etiqueta: 'Todas' },
   { id: 'activas', etiqueta: 'Activas' },
-  { id: 'en_espera', etiqueta: 'En espera' },
+  { id: 'en_espera', etiqueta: 'Pendientes de revisión' },
   { id: 'reservada', etiqueta: 'Confirmadas' },
   { id: 'cerradas', etiqueta: 'Cerradas / Expiradas' },
 ]
@@ -102,7 +102,7 @@ export default function MisReservas() {
   if (cargando) {
     return (
       <div className="space-y-3" role="status" aria-live="polite">
-        <p className="text-sm text-texto-suave">Cargando tus reservas y solicitudes en espera…</p>
+        <p className="text-sm text-texto-suave">Cargando tus reservas y solicitudes pendientes de revisión…</p>
         <Skeleton className="h-28 rounded-xl" />
         <Skeleton className="h-28 rounded-xl" />
       </div>
@@ -137,7 +137,7 @@ export default function MisReservas() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 id="titulo-mis-reservas" className="text-xl font-bold text-texto">
-            Mis reservas y solicitudes en espera
+            Mis reservas
           </h2>
           <p className="mt-1 text-sm text-texto-suave">
             Solicitudes activas:{' '}
@@ -198,12 +198,12 @@ export default function MisReservas() {
         <EstadoVacio
           titulo={
             reservas.length === 0
-              ? 'Aún no tienes reservas ni solicitudes en espera'
+              ? 'Aún no tienes reservas ni solicitudes pendientes de revisión'
               : 'Sin reservas para este filtro'
           }
           mensaje={
             reservas.length === 0
-              ? 'Puedes elegir el rango de fecha y hora para reservar un material disponible o unirte a la lista de espera desde el catálogo.'
+              ? 'Puedes elegir el rango de fecha y hora para reservar un material disponible desde el catálogo.'
               : 'Prueba seleccionando otro filtro de estado.'
           }
         />
@@ -261,16 +261,12 @@ export default function MisReservas() {
                             Orden de atención
                           </dt>
                           <dd className="mt-1 font-medium text-texto">
-                            {reserva.es_excepcion
-                              ? 'Evaluación manual por Gestor de Almacén'
-                              : reserva.posicion_cola
-                                ? `Posición #${reserva.posicion_cola} en la cola de espera`
-                                : 'En cola de espera'}
+                            Pendiente de revisión por el Gestor de Almacén
                           </dd>
                         </div>
                         <div className="rounded-lg border border-borde bg-superficie-alta/40 p-3">
                           <dt className="text-xs font-semibold uppercase tracking-wide text-texto-suave">
-                            Vigencia en espera (72 h)
+                            Plazo para revisar la solicitud (72 h)
                           </dt>
                           <dd className="mt-1 font-medium text-texto">
                             {formatearFechaReserva(reserva.fecha_limite_espera)}

@@ -54,7 +54,7 @@ function extraerMensajeError(fallo, respaldo) {
 }
 
 export default function DiasNoLaborables() {
-  useTituloPagina('Días no laborables')
+  useTituloPagina('Calendario')
   const { diasNoLaborables, cargando, recargar } = useDiasNoLaborables()
   const [fecha, setFecha] = useState('')
   const [motivo, setMotivo] = useState('')
@@ -132,7 +132,7 @@ export default function DiasNoLaborables() {
             <CalendarOff className="size-5" aria-hidden="true" />
           </span>
           <div>
-            <h2 className="text-xl font-bold text-texto">Días no laborables y feriados</h2>
+            <h2 className="text-xl font-bold text-texto">Calendario de días no laborables</h2>
             <p className="mt-0.5 text-sm text-texto-suave">
               Inhabilita días específicos (feriados, cierres o mantenimiento) para impedir reservas y devoluciones en esas fechas.
             </p>

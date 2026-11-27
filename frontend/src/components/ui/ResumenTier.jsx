@@ -2,7 +2,7 @@ const PRESENTACION_TIER = {
   avanzado: {
     etiqueta: 'Avanzado',
     estilo: 'bg-emerald-50 text-emerald-800 ring-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:ring-emerald-700/60',
-    descripcion: 'Acceso a materiales de todos los Tiers y prioridad en la cola de reservas.',
+    descripcion: 'Acceso a materiales de todos los Tiers y prioridad en la atención de reservas.',
   },
   estandar: {
     etiqueta: 'Estándar',

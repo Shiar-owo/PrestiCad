@@ -3,7 +3,7 @@ import { Link, NavLink, useLocation } from 'react-router'
 import { Menu, Moon, Sun, X } from 'lucide-react'
 
 import SesionContext from '../../contextos/SesionContext'
-import { esRutaGestionPrestamos } from '../../prestamos/navegacionPrestamos'
+import { ACCESOS_POR_ROL, rutaAccesoActiva } from '../../navegacion/accesos'
 import MenuUsuario from './MenuUsuario'
 
 function claseEnlace({ isActive }) {
@@ -33,6 +33,7 @@ function Encabezado({ tema, onAlternarTema }) {
   const { usuario } = useContext(SesionContext)
   const [menuAbierto, setMenuAbierto] = useState(false)
   const { pathname } = useLocation()
+  const accesos = ACCESOS_POR_ROL[usuario?.rol] || []
 
   useEffect(() => {
     setMenuAbierto(false)
@@ -58,24 +59,11 @@ function Encabezado({ tema, onAlternarTema }) {
               <NavLink to="/panel" end className={claseEnlace}>
                 Inicio
               </NavLink>
-              {['gestor', 'administrador'].includes(usuario.rol) && (
-                <Link
-                  to="/panel/gestion-prestamos"
-                  className={claseEnlace({ isActive: esRutaGestionPrestamos(pathname) })}
-                >
-                  Gestionar préstamos
+              {accesos.map(({ id, etiqueta, a }) => (
+                <Link key={id} to={a} className={claseEnlace({ isActive: rutaAccesoActiva(id, pathname) })}>
+                  {etiqueta}
                 </Link>
-              )}
-              {usuario.rol === 'administrador' && (
-                <>
-                  <NavLink to="/admin/roles" className={claseEnlace}>
-                    Gestionar roles
-                  </NavLink>
-                  <NavLink to="/admin/dias-no-laborables" className={claseEnlace}>
-                    Días no laborables
-                  </NavLink>
-                </>
-              )}
+              ))}
             </>
           )}
         </nav>
@@ -144,27 +132,11 @@ function Encabezado({ tema, onAlternarTema }) {
                 <EnlaceMovil to="/panel" activo={pathname === '/panel'}>
                   Inicio
                 </EnlaceMovil>
-                {['gestor', 'administrador'].includes(usuario.rol) && (
-                  <EnlaceMovil
-                    to="/panel/gestion-prestamos"
-                    activo={esRutaGestionPrestamos(pathname)}
-                  >
-                    Gestionar préstamos
+                {accesos.map(({ id, etiqueta, a }) => (
+                  <EnlaceMovil key={id} to={a} activo={rutaAccesoActiva(id, pathname)}>
+                    {etiqueta}
                   </EnlaceMovil>
-                )}
-                {usuario.rol === 'administrador' && (
-                  <>
-                    <EnlaceMovil to="/admin/roles" activo={pathname === '/admin/roles'}>
-                      Gestionar roles
-                    </EnlaceMovil>
-                    <EnlaceMovil
-                      to="/admin/dias-no-laborables"
-                      activo={pathname === '/admin/dias-no-laborables'}
-                    >
-                      Días no laborables
-                    </EnlaceMovil>
-                  </>
-                )}
+                ))}
               </>
             )}
             {!usuario && (

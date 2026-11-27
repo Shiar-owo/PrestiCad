@@ -40,7 +40,7 @@ function extraerMensajeError(error, porDefecto) {
 }
 
 export default function ColaReservas() {
-  useTituloPagina('Gestión de reservas')
+  useTituloPagina('Reservas')
   const { usuario } = useContext(SesionContext)
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -114,7 +114,7 @@ export default function ColaReservas() {
       })
       .catch(() => {
         if (activa) {
-          setErrorCola('No fue posible consultar la cola de reservas.')
+          setErrorCola('No fue posible consultar las reservas.')
         }
       })
       .finally(() => {
@@ -243,7 +243,7 @@ export default function ColaReservas() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 id="titulo-cola-reservas" className="text-xl font-bold text-texto">
-            Gestión de reservas y agenda por material
+            Reservas
           </h2>
           <p className="mt-1 text-sm text-texto-suave">
             Consulta el calendario de disponibilidad, evalúa excepciones académicas y administra las reservas confirmadas. Las reservas se gestionan por fechas: un mismo ejemplar puede tener múltiples reservas en distintas temporadas.
@@ -304,7 +304,8 @@ export default function ColaReservas() {
                 const disp = m.unidades_disponibles ?? m.resumen_instancias?.disponible ?? 0
                 return (
                   <option key={m.id} value={m.id}>
-                    {m.nombre} ({m.codigo_material}) — {disp} de {m.stock} libre(s)
+                    {m.nombre} ({m.codigo_material}) — {disp} de {m.stock}{' '}
+                    {m.stock === 1 ? 'ejemplar' : 'ejemplares'} disponibles
                   </option>
                 )
               })}
@@ -414,7 +415,8 @@ export default function ColaReservas() {
               <div className="flex flex-wrap gap-2 text-xs font-semibold">
                 {cola.material && (
                   <span className="rounded-lg bg-marca-100 px-3 py-1 text-marca-800 dark:bg-marca-950/60 dark:text-marca-300">
-                    {instanciasDisponibles.length} disponible(s)
+                    {instanciasDisponibles.length}{' '}
+                    {instanciasDisponibles.length === 1 ? 'ejemplar disponible' : 'ejemplares disponibles'}
                   </span>
                 )}
                 <span className="rounded-lg bg-amber-100 px-3 py-1 text-amber-900 dark:bg-amber-950/60 dark:text-amber-200">

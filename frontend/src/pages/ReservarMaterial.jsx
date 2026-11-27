@@ -490,7 +490,7 @@ export default function ReservarMaterial() {
         titulo={confirmada ? 'Reserva confirmada' : 'Solicitud registrada'}
         mensaje={confirmada
           ? 'La reserva fue aceptada y el ejemplar quedó asignado.'
-          : 'La solicitud de excepción fue aceptada y quedó pendiente de evaluación.'}
+          : 'La solicitud de excepción fue aceptada y quedó pendiente de revisión.'}
         onCerrar={() => setMostrarExitoReserva(false)}
         abierto={mostrarExitoReserva}
       />
@@ -517,7 +517,7 @@ export default function ReservarMaterial() {
         <p className="text-sm text-texto-suave">
           {confirmada
             ? 'Se ha bloqueado un ejemplar disponible para ti. Acércate al almacén antes de la fecha límite para concretar el préstamo.'
-            : 'Tu solicitud excepcional con documentos de garantía quedó pendiente de evaluación por el Gestor de Almacén.'}
+            : 'Tu solicitud excepcional con documentos de garantía quedó pendiente de revisión por el Gestor de Almacén.'}
         </p>
 
         <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm">
@@ -563,7 +563,7 @@ export default function ReservarMaterial() {
                   Estado de revisión
                 </dt>
                 <dd className="mt-1 font-bold text-texto">
-                  Pendiente de evaluación por el gestor
+                  Pendiente de revisión por el Gestor de Almacén
                 </dd>
               </div>
             </>
@@ -602,7 +602,7 @@ export default function ReservarMaterial() {
             Volver a mis reservas
           </Link>
           <h2 id="titulo-reservar-material" className="mt-1 text-xl font-bold text-texto">
-            Reservar material o solicitar lista de espera
+            Reservar material
           </h2>
           <p className="mt-0.5 text-sm text-texto-suave">
             Tu Tier actual:{' '}
@@ -619,7 +619,7 @@ export default function ReservarMaterial() {
 
       {reservasActivas >= MAXIMO_RESERVAS_ACTIVAS && (
         <ErrorAlerta
-          mensaje={`Ya alcanzaste el máximo de ${MAXIMO_RESERVAS_ACTIVAS} solicitudes activas simultáneas (entre reservas confirmadas y solicitudes en espera).`}
+          mensaje={`Ya alcanzaste el máximo de ${MAXIMO_RESERVAS_ACTIVAS} solicitudes activas simultáneas (reservas confirmadas y excepciones pendientes de revisión).`}
         />
       )}
 
@@ -657,7 +657,8 @@ export default function ReservarMaterial() {
                 const tierMat = ETIQUETAS_TIER[mat.tier_minimo_requerido] || mat.tier_minimo_requerido
                 return (
                   <option key={mat.id} value={mat.id}>
-                    {mat.nombre} ({mat.codigo_material}) — {disp} de {mat.stock} libre(s) · Tier mín: {tierMat}
+                    {mat.nombre} ({mat.codigo_material}) — {disp} de {mat.stock}{' '}
+                    {mat.stock === 1 ? 'ejemplar' : 'ejemplares'} disponibles · Tier mín: {tierMat}
                   </option>
                 )
               })}
@@ -684,7 +685,8 @@ export default function ReservarMaterial() {
                       : 'bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-200'
                   }`}
                 >
-                  {unidadesDisponibles} de {materialSeleccionado.stock} disponible(s)
+                  {unidadesDisponibles} de {materialSeleccionado.stock}{' '}
+                  {materialSeleccionado.stock === 1 ? 'ejemplar disponible' : 'ejemplares disponibles'}
                 </span>
               </div>
 
@@ -704,15 +706,15 @@ export default function ReservarMaterial() {
                 <p>
                   <span className="font-semibold text-texto">Modalidad estimada:</span>{' '}
                   {aplicaExcepcion
-                    ? 'Solicitud excepcional en espera (72 h, sujeta a aprobación del gestor)'
+                    ? 'Excepción pendiente de revisión (72 h, sujeta a aprobación del gestor)'
                     : unidadesDisponibles > 0
                       ? 'Reserva confirmada inmediata (recojo dentro de 30 min)'
-                      : 'Lista de espera sin bloquear inventario (72 h de vigencia)'}
+                      : 'No disponible para las fechas seleccionadas'}
                 </p>
               </div>
 
               {yaTieneActivaEnMaterial && (
-                <ErrorAlerta mensaje="Ya tienes una reserva confirmada o solicitud en espera activa para este material." />
+                <ErrorAlerta mensaje="Ya tienes una reserva confirmada o una excepción pendiente de revisión para este material." />
               )}
 
               {bloqueadoPorTier && (
@@ -745,7 +747,7 @@ export default function ReservarMaterial() {
                     </a>
                   </p>
                   <p>
-                    La solicitud quedará en estado <strong>En espera</strong> hasta que el Gestor de Almacén verifique la garantía y la apruebe manualmente para entrar a la lista de espera.
+                    La solicitud quedará <strong>pendiente de revisión</strong> hasta que el Gestor de Almacén verifique la garantía y la apruebe manualmente.
                   </p>
                 </div>
               )}
@@ -758,7 +760,7 @@ export default function ReservarMaterial() {
                 htmlFor="select-instancia-reserva"
                 className="block text-sm font-semibold text-texto"
               >
-                Instancia / ejemplar *
+                Ejemplar *
               </label>
               <select
                 id="select-instancia-reserva"
@@ -769,7 +771,7 @@ export default function ReservarMaterial() {
                 }}
                 className="mt-1.5 w-full rounded-lg border border-borde bg-white px-3 py-2 text-sm text-texto dark:bg-superficie"
               >
-                <option value="">Selecciona una instancia disponible…</option>
+                <option value="">Selecciona un ejemplar disponible…</option>
                 {instancias.map((inst) => (
                   <option key={inst.id} value={inst.id}>
                     {inst.codigo_ejemplar}{inst.ubicacion ? ` (${inst.ubicacion})` : ''}

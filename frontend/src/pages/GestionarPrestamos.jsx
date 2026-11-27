@@ -47,7 +47,7 @@ export function SeccionGestionPrestamosLayout() {
               to="/panel/gestion-prestamos"
               className="text-lg font-bold text-texto hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-acento-600"
             >
-              Gestionar Préstamos
+              Préstamos
             </Link>
             <p className="mt-0.5 text-xs text-texto-suave">
               Sección centralizada para entregas, devoluciones, historial y reportes de préstamos.
@@ -55,7 +55,7 @@ export function SeccionGestionPrestamosLayout() {
           </div>
           {!esIndex && (
             <nav
-              aria-label="Opciones de Gestionar Préstamos"
+              aria-label="Opciones de Préstamos"
               className="flex flex-wrap gap-1.5"
             >
               {opcionesDisponibles.map(({ id, etiqueta, a }) => {
@@ -78,7 +78,7 @@ export function SeccionGestionPrestamosLayout() {
 }
 
 export default function GestionarPrestamos() {
-  useTituloPagina('Gestionar Préstamos')
+  useTituloPagina('Préstamos')
   const { usuario } = useContext(SesionContext)
 
   if (!usuario) return null
@@ -87,7 +87,7 @@ export default function GestionarPrestamos() {
     <section aria-labelledby="titulo-gestionar-prestamos" className="space-y-4">
       <header>
         <h2 id="titulo-gestionar-prestamos" className="text-xl font-bold text-texto">
-          Opciones de gestión de préstamos
+          Préstamos
         </h2>
         <p className="mt-1 text-sm text-texto-suave">
           Selecciona el módulo de préstamos con el que deseas trabajar.

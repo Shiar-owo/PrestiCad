@@ -27,7 +27,7 @@ export const MINIMO_MINUTOS_RESERVA = 60
 export const MINIMO_RANGO_RESERVA_MINUTOS = MINIMO_MINUTOS_RESERVA
 
 export const ETIQUETAS_ESTADO_RESERVA = {
-  en_espera: 'En espera',
+  en_espera: 'Pendiente de revisión',
   reservada: 'Reservada',
   expirada: 'Expirada',
   rechazada: 'Rechazada',
@@ -37,7 +37,7 @@ export const ETIQUETAS_ESTADO_RESERVA = {
 }
 
 export const PRESENTACION_ESTADOS_RESERVA = {
-  en_espera: { texto: 'En espera', clase: 'reserva-estado--en-espera' },
+  en_espera: { texto: 'Pendiente de revisión', clase: 'reserva-estado--en-espera' },
   reservada: { texto: 'Reservada', clase: 'reserva-estado--reservada' },
   expirada: { texto: 'Expirada', clase: 'reserva-estado--expirada' },
   rechazada: { texto: 'Rechazada', clase: 'reserva-estado--rechazada' },
@@ -73,9 +73,7 @@ export function textoEstadoReserva(reserva, estado = reserva?.estado) {
     return 'Reservada - Excepción'
   }
   if (reserva?.es_excepcion && estado === 'en_espera') {
-    return reserva.excepcion_aprobada
-      ? 'En espera (Excepción aprobada)'
-      : 'En espera - Excepción'
+    return reserva.excepcion_aprobada ? 'Excepción aprobada' : 'Pendiente de revisión'
   }
   return presentarEstadoReserva(estado).texto
 }

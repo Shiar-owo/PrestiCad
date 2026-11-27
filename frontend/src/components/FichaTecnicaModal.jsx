@@ -172,10 +172,10 @@ function FichaTecnicaModal({
                       }`}
                     >
                       {ficha.unidadesDisponibles}{' '}
-                      {ficha.unidadesDisponibles === 1 ? 'unidad' : 'unidades'}
+                      {ficha.unidadesDisponibles === 1 ? 'ejemplar' : 'ejemplares'}
                     </span>
                     <span className="text-xs text-texto-suave">
-                      de {ficha.stockTotal} {ficha.stockTotal === 1 ? 'total' : 'totales'}
+                      de {ficha.stockTotal} en total
                     </span>
                   </div>
                 </div>
@@ -231,12 +231,12 @@ function FichaTecnicaModal({
             </div>
           </div>
 
-          {/* Sección de Ejemplares e Instancias Físicas */}
+          {/* Sección de ejemplares físicos */}
           <div>
             <div className="border-b border-borde pb-3">
               <h4 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-texto">
                 <Layers className="size-4 text-acento-600 dark:text-acento-400" aria-hidden="true" />
-                Ejemplares e Instancias Físicas ({ficha.instancias?.length || ficha.stockTotal})
+                Ejemplares físicos ({ficha.instancias?.length || ficha.stockTotal})
               </h4>
               <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 {onAgregarInstancias && (
@@ -377,12 +377,12 @@ function FichaTecnicaModal({
               </div>
             ) : (
               <p className="mt-3 rounded-xl border border-borde bg-superficie p-3.5 text-xs text-texto-suave">
-                Este material cuenta con un registro global de {ficha.stockTotal} unidades sin instancias individualizadas en el sistema.
+                Este material tiene {ficha.stockTotal} ejemplar{ficha.stockTotal === 1 ? '' : 'es'} sin registro individual.
               </p>
             )}
           </div>
 
-          {/* Sección de Calendario de Reservas Futuras por Objeto (PRTCAD-221) */}
+          {/* Sección de calendario de reservas futuras */}
           {material?.id && (
             <div>
               <h4 className="flex items-center gap-2 border-b border-borde pb-2 text-sm font-bold uppercase tracking-wider text-texto">

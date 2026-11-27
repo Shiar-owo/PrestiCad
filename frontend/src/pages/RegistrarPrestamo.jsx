@@ -114,12 +114,12 @@ const OPCIONES_MATERIAL = (materiales) => [
   { valor: '', etiqueta: 'Selecciona un material' },
   ...materiales.map((material) => ({
     valor: String(material.id),
-    etiqueta: `${material.nombre} — Código de Material: ${material.codigo_material || material.codigo_inventario} (${material.unidades_disponibles} libres ahora${Number(material.resumen_instancias?.reservado) > 0 ? `, ${material.resumen_instancias.reservado} con reservas futuras` : ''})`,
+    etiqueta: `${material.nombre} — Código de Material: ${material.codigo_material || material.codigo_inventario} (${material.unidades_disponibles} ejemplares disponibles ahora${Number(material.resumen_instancias?.reservado) > 0 ? `, ${material.resumen_instancias.reservado} con reservas futuras` : ''})`,
   })),
 ]
 
 function RegistrarPrestamo() {
-  useTituloPagina('Registrar entrega')
+  useTituloPagina('Registrar préstamo')
   const navigate = useNavigate()
   const { diasNoLaborables } = useDiasNoLaborables()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -213,7 +213,7 @@ function RegistrarPrestamo() {
         setErrorReservaConversion(
           fallo instanceof ErrorApi && fallo.datos?.detail
             ? fallo.datos.detail
-            : 'No se pudo validar la reserva para la entrega. Vuelve a Cola de reservas e inténtalo nuevamente.',
+            : 'No se pudo validar la reserva para la entrega. Vuelve a Reservas e inténtalo nuevamente.',
         )
       })
       .finally(() => {
@@ -362,7 +362,7 @@ function RegistrarPrestamo() {
         }
       })
       .catch(() => {
-        if (!cancelado) setErrorInstancias('No se pudieron cargar las instancias disponibles.')
+        if (!cancelado) setErrorInstancias('No se pudieron cargar los ejemplares disponibles.')
       })
       .finally(() => {
         if (!cancelado) setCargandoInstancias(false)
@@ -729,7 +729,7 @@ function RegistrarPrestamo() {
       <div className="rounded-2xl border border-borde bg-fondo p-6 sm:p-8 shadow-xs space-y-8">
         <header className="flex flex-col gap-1 border-b border-borde/70 pb-5">
           <h2 id="titulo-registro-prestamo" className="text-2xl font-bold tracking-tight text-texto">
-            Registrar entrega de préstamo
+            Registrar entrega del préstamo
           </h2>
           <p className="text-sm text-texto-suave">
             Verifica la identidad, reputación institucional y ejemplar asignado antes de confirmar la entrega física.
@@ -775,7 +775,7 @@ function RegistrarPrestamo() {
 
         {!cargando && materiales.length === 0 && !reservaSeleccionada && (
           <div className="rounded-xl border border-borde bg-superficie-alta/50 p-4 text-sm text-texto-suave">
-            No hay materiales con unidades libres para préstamo directo en este momento. Si el prestatario cuenta con una <strong>reserva confirmada</strong> vigente, ingresa su DNI para convertirla en préstamo.
+            No hay ejemplares disponibles para préstamo directo en este momento. Si el prestatario cuenta con una <strong>reserva confirmada</strong> vigente, ingresa su DNI para convertirla en préstamo.
           </div>
         )}
 
@@ -1042,7 +1042,7 @@ function RegistrarPrestamo() {
                   onCambio={(evento) => actualizar('instanciaId', evento.target.value)}
                   error={errores.instancia_id}
                   ayuda={!materialSeleccionado
-                    ? 'Selecciona primero el material para listar sus unidades.'
+                    ? 'Selecciona primero el material para consultar sus ejemplares.'
                     : reservaSeleccionada
                       ? 'Ejemplar asignado exclusivamente a esta reserva.'
                       : cargandoInstancias

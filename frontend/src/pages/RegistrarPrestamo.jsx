@@ -16,6 +16,7 @@ import {
   mapearErroresFotoChecklist,
   obtenerElementosSinFoto,
   obtenerFechaMaximaFinPrestamo,
+  obtenerMinutosMaximosMaterial,
   validarFormularioPrestamo,
 } from '../validacionesPrestamo'
 import useTituloPagina from '../hooks/useTituloPagina'
@@ -96,6 +97,16 @@ function mensajeApi(error) {
 
 function fechaLegible(valor) {
   return valor ? formatearFechaReserva(valor) : ''
+}
+
+function agregarFechaLimiteMaterial(mensaje, fechaInicio, material) {
+  if (!mensaje?.includes('supera el máximo permitido para este material')) return mensaje
+  const inicio = new Date(fechaInicio)
+  if (Number.isNaN(inicio.getTime())) return mensaje
+  const limite = new Date(
+    inicio.getTime() + obtenerMinutosMaximosMaterial(material) * 60 * 1000,
+  )
+  return `${mensaje}\nFecha y hora límite de devolución para este material: ${fechaLegible(limite)}.`
 }
 
 function fechaParaCalendario(valor = new Date()) {
@@ -637,7 +648,9 @@ function RegistrarPrestamo() {
     const fotosFaltantes = obtenerElementosSinFoto(formulario.checklist)
     setElementosSinFoto(fotosFaltantes.length > 0 ? fotosFaltantes : null)
     if (Object.keys(validacion).length > 0) {
-      const mensajes = listarMensajesError(validacion)
+      const mensajes = listarMensajesError(validacion).map((mensaje) => (
+        agregarFechaLimiteMaterial(mensaje, fechaInicioPrestamo, materialSeleccionado)
+      ))
       if (mensajes.length) {
         setErrorConfirmacion([...new Set(mensajes)].join('\n'))
       }
@@ -712,11 +725,19 @@ function RegistrarPrestamo() {
         const mensajes = [
           ...Object.values(erroresDeCampo),
           ...Object.values(erroresFotosApi),
-        ]
+        ].map((mensaje) => agregarFechaLimiteMaterial(
+          mensaje,
+          fechaInicioPrestamo,
+          materialSeleccionado,
+        ))
         setErrorConfirmacion([...new Set(mensajes)].join('\n') || mensajeApi(errorApi))
         enfocarPrimerError()
       } else {
-        setErrorConfirmacion(mensajeApi(errorApi))
+        setErrorConfirmacion(agregarFechaLimiteMaterial(
+          mensajeApi(errorApi),
+          fechaInicioPrestamo,
+          materialSeleccionado,
+        ))
       }
     } finally {
       setGuardando(false)

@@ -57,6 +57,13 @@ function extraerMensajeError(error) {
   return 'No se pudo registrar la solicitud de reserva. Verifica los datos e intenta nuevamente.'
 }
 
+function agregarFechaLimiteMaterial(mensaje, fechaInicio, material) {
+  if (!mensaje?.includes('tiempo máximo permitido para este material')) return mensaje
+  const limite = obtenerMaximoFinReserva(fechaInicio, material)
+  if (!limite) return mensaje
+  return `${mensaje}\nFecha y hora límite de reserva para este material: ${formatearFechaReserva(limite)}.`
+}
+
 export default function ReservarMaterial() {
   useTituloPagina('Reservar material')
   const { usuario } = useContext(SesionContext)
@@ -408,7 +415,14 @@ export default function ReservarMaterial() {
 
     if (Object.keys(nuevosErrores).length > 0) {
       setErrores(nuevosErrores)
-      setErrorEnvio(Object.values(nuevosErrores).flat().filter(Boolean).join('\n'))
+      const inicio = esAvanzado
+        ? `${fechaSeleccionada}T${horaInicio}:00`
+        : fechaInicio
+      const mensajes = Object.values(nuevosErrores)
+        .flat()
+        .filter(Boolean)
+        .map((mensaje) => agregarFechaLimiteMaterial(mensaje, inicio, materialSeleccionado))
+      setErrorEnvio(mensajes.join('\n'))
       return
     }
 
@@ -451,7 +465,14 @@ export default function ReservarMaterial() {
       setReservaCreada(respuesta)
       setMostrarExitoReserva(true)
     } catch (err) {
-      setErrorEnvio(extraerMensajeError(err))
+      const inicio = esAvanzado
+        ? `${fechaSeleccionada}T${horaInicio}:00`
+        : fechaInicio
+      setErrorEnvio(agregarFechaLimiteMaterial(
+        extraerMensajeError(err),
+        inicio,
+        materialSeleccionado,
+      ))
     } finally {
       setEnviando(false)
     }

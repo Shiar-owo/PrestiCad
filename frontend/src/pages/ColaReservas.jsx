@@ -438,7 +438,7 @@ export default function ColaReservas() {
                     </span>
                   </div>
                 )}
-                <div className="rounded-xl bg-amber-50 p-3 dark:bg-amber-950/30">
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-900">
                   <span className="block text-xs font-semibold text-amber-900 dark:text-amber-200">
                     Pendientes de revisión
                   </span>
@@ -446,7 +446,7 @@ export default function ColaReservas() {
                     {enEsperaExcepciones.length}
                   </span>
                 </div>
-                <div className="rounded-xl bg-acento-50 p-3 dark:bg-acento-950/30">
+                <div className="rounded-xl border border-acento-200 bg-acento-50 p-3 dark:border-acento-700 dark:bg-acento-900">
                   <span className="block text-xs font-semibold text-acento-900 dark:text-acento-200">
                     Reservas pendientes de recojo
                   </span>

@@ -12,7 +12,6 @@ import {
 
 import { api, ErrorApi } from '../api/client'
 import {
-  ayudaRangoDuracion,
   mapearErroresFotoChecklist,
   obtenerElementosSinFoto,
   obtenerFechaMaximaFinPrestamo,
@@ -39,8 +38,8 @@ import {
 } from '../constantes/garantia'
 import { esMaterialAltoValor } from '../constantes/catalogo'
 import {
+  DURACION_MAXIMA_PRESTAMO_DIAS,
   TAMANO_MAXIMO_FOTO_CHECKLIST_MB,
-  formatearDuracionMinutos,
 } from '../constantes/checklistPrestamo'
 import { construirSolicitudPrestamo } from '../prestamos/solicitudPrestamo'
 import { validarTamanoSolicitud } from '../prestamos/tamanoSolicitud'
@@ -97,6 +96,22 @@ function mensajeApi(error) {
 
 function fechaLegible(valor) {
   return valor ? formatearFechaReserva(valor) : ''
+}
+
+function formatearDuracionCompacta(minutos) {
+  const total = Math.floor(Number(minutos))
+  if (!Number.isFinite(total) || total <= 0) return '—'
+  const dias = Math.floor(total / 1440)
+  const horas = Math.floor((total % 1440) / 60)
+  const resto = total % 60
+  return [dias && `${dias} d`, horas && `${horas} h`, resto && `${resto} min`]
+    .filter(Boolean)
+    .join(' ')
+}
+
+function ayudaPlazoCompacta(material) {
+  const maximo = obtenerMinutosMaximosMaterial(material)
+  return `Mín. 1 h (60 min) · Máx. del material: ${formatearDuracionCompacta(maximo)}.`
 }
 
 function agregarFechaLimiteMaterial(mensaje, fechaInicio, material) {
@@ -826,7 +841,7 @@ function RegistrarPrestamo() {
                 />
 
                 {esConversionFija && reservaSeleccionada ? (
-                  <div className="rounded-xl border border-marca-300 bg-marca-50/50 p-4 space-y-2.5 shadow-xs dark:border-marca-800 dark:bg-marca-950/30">
+                  <div className="rounded-xl border border-marca-300 bg-marca-50/50 p-4 space-y-2.5 shadow-xs dark:border-marca-700 dark:bg-superficie-alta">
                     <div className="flex flex-wrap items-center justify-between gap-2 border-b border-marca-200/60 pb-2 dark:border-marca-800/60">
                       <span className="block text-xs font-bold uppercase tracking-wider text-marca-900 dark:text-marca-200">
                         Reserva confirmada vinculada
@@ -1114,12 +1129,12 @@ function RegistrarPrestamo() {
                     <span>
                       {duracionBloqueadaPorReserva
                         ? 'Fechas fijadas por la reserva confirmada.'
-                        : ayudaRangoDuracion(materialSeleccionado)}
+                        : ayudaPlazoCompacta(materialSeleccionado)}
                     </span>
                     {Number.isFinite(duracionPrestamoMinutos) && duracionPrestamoMinutos > 0 && (
                       <span className="text-xs font-bold text-texto">
-                        Duración: {formatearDuracionMinutos(duracionPrestamoMinutos)}
-                        {cruzaFinDeSemana(fechaInicioPrestamo, fechaFinPrestamo) ? ' (todos los días intermedios computan)' : ''}
+                        Duración: {formatearDuracionCompacta(duracionPrestamoMinutos)}
+                        {cruzaFinDeSemana(fechaInicioPrestamo, fechaFinPrestamo) ? ' · Días intermedios incluidos' : ''}
                       </span>
                     )}
                   </div>
@@ -1128,7 +1143,7 @@ function RegistrarPrestamo() {
                       role="note"
                       className="rounded-lg border border-borde bg-superficie-alta p-2.5 text-xs text-texto"
                     >
-                      <strong>Aclaración para el trámite:</strong> Los préstamos se otorgan de lunes a viernes en el horario de atención de 08:00 a 18:00. La devolución se realiza como máximo a las 17:30 con tolerancia de entrega hasta las 18:00.
+                      <strong>Atención:</strong> Lun–vie, 08:00–18:00 · devolución hasta 17:30 (+30 min de tolerancia).
                     </div>
                   )}
                   {errores.dias && <p className="text-xs font-medium text-error">{errores.dias}</p>}
@@ -1382,14 +1397,6 @@ function RegistrarPrestamo() {
                 Cancelar
               </Boton>
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
-                <Boton
-                  variante="secundario"
-                  tipo="button"
-                  deshabilitado={guardando}
-                  onClick={cargarMateriales}
-                >
-                  Actualizar disponibilidad
-                </Boton>
                 <Boton
                   tipo="submit"
                   cargando={guardando}

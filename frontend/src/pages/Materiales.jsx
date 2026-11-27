@@ -19,8 +19,8 @@ import Tarjeta from '../components/ui/Tarjeta'
 import Skeleton from '../components/ui/Skeleton'
 import ErrorAlerta from '../components/ui/ErrorAlerta'
 import EstadoVacio from '../components/ui/EstadoVacio'
+import ControlesPaginacion from '../components/ui/ControlesPaginacion'
 import { obtenerCodigoInstancia } from '../inventario/eliminacionMaterial'
-import { normalizarTextoBusqueda } from '../busqueda/normalizarTexto'
 
 const ETIQUETAS_MODO_REGISTRO = {
   unico: 'Único',
@@ -45,6 +45,8 @@ function Materiales() {
   useTituloPagina('Inventario')
   const navigate = useNavigate()
   const [materiales, setMateriales] = useState([])
+  const [totalMateriales, setTotalMateriales] = useState(0)
+  const [pagina, setPagina] = useState(1)
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
   const [mostrarFormulario, setMostrarFormulario] = useState(false)
@@ -57,15 +59,19 @@ function Materiales() {
   const [busquedaNombre, setBusquedaNombre] = useState('')
 
   useEffect(() => {
-    cargarMateriales()
-  }, [])
+    const temporizador = setTimeout(() => cargarMateriales(pagina, busquedaNombre), busquedaNombre ? 300 : 0)
+    return () => clearTimeout(temporizador)
+  }, [pagina, busquedaNombre])
 
-  async function cargarMateriales() {
+  async function cargarMateriales(paginaSolicitada = pagina, q = busquedaNombre) {
     setCargando(true)
     setError('')
     try {
-      const datos = await api.get('/materiales/')
-      setMateriales(Array.isArray(datos) ? datos : [])
+      const params = new URLSearchParams({ page: String(paginaSolicitada), page_size: '25' })
+      if (q.trim()) params.set('q', q.trim())
+      const datos = await api.get(`/materiales/gestion/?${params}`)
+      setMateriales(Array.isArray(datos.results) ? datos.results : [])
+      setTotalMateriales(Number(datos.count) || 0)
     } catch {
       setError('No se pudo cargar la lista de materiales.')
     } finally {
@@ -95,7 +101,8 @@ function Materiales() {
     if (!resultadoRegistro) setMensajePopupExito('Los cambios del material se guardaron correctamente.')
     setMostrarFormulario(false)
     setMaterialEnEdicion(null)
-    await cargarMateriales()
+    setPagina(1)
+    await cargarMateriales(1)
   }
 
   async function actualizarFichaTrasAgregarInstancias() {
@@ -131,10 +138,7 @@ function Materiales() {
   const instanciasRegistradas = Array.isArray(materialRegistrado?.instancias)
     ? materialRegistrado.instancias
     : []
-  const nombreBuscado = normalizarTextoBusqueda(busquedaNombre)
-  const materialesFiltrados = materiales.filter((material) => (
-    normalizarTextoBusqueda(material.nombre).includes(nombreBuscado)
-  ))
+  const materialesFiltrados = materiales
 
   return (
     <section>
@@ -256,7 +260,7 @@ function Materiales() {
         </div>
       )}
 
-      {!mostrarFormulario && !cargando && materiales.length > 0 && (
+      {!mostrarFormulario && (
         <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <label htmlFor="buscar-material-inventario" className="sr-only">
             Buscar material por nombre
@@ -267,14 +271,12 @@ function Materiales() {
               id="buscar-material-inventario"
               type="search"
               value={busquedaNombre}
-              onChange={(evento) => setBusquedaNombre(evento.target.value)}
+              onChange={(evento) => { setBusquedaNombre(evento.target.value); setPagina(1) }}
               placeholder="Buscar material por nombre…"
               className="w-full rounded-lg border border-borde bg-superficie py-2 pl-9 pr-3 text-sm text-texto placeholder:text-texto-suave focus-visible:outline-2 focus-visible:outline-acento-600"
             />
           </div>
-          <p className="text-xs text-texto-suave" aria-live="polite">
-            {materialesFiltrados.length} de {materiales.length} materiales
-          </p>
+          <p className="text-xs text-texto-suave" aria-live="polite">{totalMateriales} materiales</p>
         </div>
       )}
 
@@ -295,11 +297,11 @@ function Materiales() {
         </div>
       )}
 
-      {!cargando && !mostrarFormulario && materiales.length === 0 && (
+      {!cargando && !mostrarFormulario && totalMateriales === 0 && !busquedaNombre && (
         <EstadoVacio titulo="Aún no hay materiales registrados" mensaje="Registra el primer material del inventario." />
       )}
 
-      {!cargando && !mostrarFormulario && materiales.length > 0 && materialesFiltrados.length === 0 && (
+      {!cargando && !mostrarFormulario && totalMateriales === 0 && busquedaNombre && (
         <EstadoVacio titulo="No se encontraron materiales" mensaje="Prueba con otro nombre. La búsqueda ignora mayúsculas y tildes." />
       )}
 
@@ -433,6 +435,8 @@ function Materiales() {
           </div>
         </Tarjeta>
       )}
+
+      {!cargando && !mostrarFormulario && <ControlesPaginacion pagina={pagina} total={totalMateriales} onCambiar={setPagina} cargando={cargando} />}
 
       {materialCalendario && (
         <div

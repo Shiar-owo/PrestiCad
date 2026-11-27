@@ -1157,18 +1157,31 @@ class MaterialBuscarAPITestCase(EscenariosDeMaterialApi):
     def test_buscar_es_publico_y_responde_200(self):
         respuesta = self.client.get(self.BUSCAR_URL)
         self.assertEqual(respuesta.status_code, 200)
-        self.assertEqual(len(respuesta.json()), 4)
+        self.assertEqual(len(respuesta.json()["results"]), 4)
+        self.assertEqual(respuesta.json()["count"], 4)
+
+    def test_buscar_pagina_y_tamano_pagina(self):
+        respuesta = self.client.get(self.BUSCAR_URL, {"page": 2, "page_size": 2})
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.json()["count"], 4)
+        self.assertEqual(len(respuesta.json()["results"]), 2)
+        self.assertIsNotNone(respuesta.json()["previous"])
+
+    def test_buscar_ignora_tildes(self):
+        respuesta = self.client.get(self.BUSCAR_URL, {"q": "osciloscopio"})
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.json()["results"][0]["nombre"], "Osciloscopio Digital")
 
     def test_buscar_sin_barra_final_responde_200(self):
         respuesta = self.client.get("/api/materiales/buscar")
         self.assertEqual(respuesta.status_code, 200)
-        self.assertEqual(len(respuesta.json()), 4)
+        self.assertEqual(len(respuesta.json()["results"]), 4)
 
     def test_buscar_filtro_q_coincidencia_parcial(self):
         # Criterio 1: Búsqueda por nombre parcial case-insensitive
         respuesta = self.client.get(self.BUSCAR_URL, {"q": "dell"})
         self.assertEqual(respuesta.status_code, 200)
-        datos = respuesta.json()
+        datos = respuesta.json()["results"]
         self.assertEqual(len(datos), 1)
         self.assertEqual(datos[0]["nombre"], "Laptop Dell XPS")
 
@@ -1176,7 +1189,7 @@ class MaterialBuscarAPITestCase(EscenariosDeMaterialApi):
         # Criterio 2: Filtrar por categoría
         respuesta = self.client.get(self.BUSCAR_URL, {"categoria": "equipo"})
         self.assertEqual(respuesta.status_code, 200)
-        datos = respuesta.json()
+        datos = respuesta.json()["results"]
         self.assertEqual(len(datos), 2)
         nombres = [item["nombre"] for item in datos]
         self.assertIn("Laptop Dell XPS", nombres)
@@ -1186,7 +1199,7 @@ class MaterialBuscarAPITestCase(EscenariosDeMaterialApi):
         # Criterio 3: Filtrar por estado
         respuesta = self.client.get(self.BUSCAR_URL, {"estado": "disponible"})
         self.assertEqual(respuesta.status_code, 200)
-        datos = respuesta.json()
+        datos = respuesta.json()["results"]
         self.assertEqual(len(datos), 2)
         estados = [item["estado"] for item in datos]
         self.assertTrue(all(e == "disponible" for e in estados))
@@ -1195,7 +1208,7 @@ class MaterialBuscarAPITestCase(EscenariosDeMaterialApi):
         # Criterio 4: nombre, categoría (tipo), estado, disponibilidad (unidades_disponibles)
         respuesta = self.client.get(self.BUSCAR_URL, {"q": "Tanenbaum"})
         self.assertEqual(respuesta.status_code, 200)
-        item = respuesta.json()[0]
+        item = respuesta.json()["results"][0]
         self.assertEqual(item["nombre"], "Libro Redes de Computadoras Tanenbaum")
         self.assertEqual(item["tipo"], "libro")
         self.assertEqual(item["estado"], "disponible")
@@ -1210,7 +1223,7 @@ class MaterialBuscarAPITestCase(EscenariosDeMaterialApi):
         respuesta = self.client.get(self.BUSCAR_URL)
         self.assertEqual(respuesta.status_code, 200)
         self.assertCountEqual(
-            [item["nombre"] for item in respuesta.json()],
+            [item["nombre"] for item in respuesta.json()["results"]],
             [
                 "Cable Red UTP Cat6",
                 "Laptop Dell XPS",
@@ -1227,7 +1240,7 @@ class MaterialBuscarAPITestCase(EscenariosDeMaterialApi):
         respuesta = self.client.get(self.BUSCAR_URL)
         self.assertEqual(respuesta.status_code, 200)
         self.assertCountEqual(
-            [item["nombre"] for item in respuesta.json()],
+            [item["nombre"] for item in respuesta.json()["results"]],
             [
                 "Cable Red UTP Cat6",
                 "Laptop Dell XPS",
@@ -1244,7 +1257,7 @@ class MaterialBuscarAPITestCase(EscenariosDeMaterialApi):
         respuesta = self.client.get(self.BUSCAR_URL)
         self.assertEqual(respuesta.status_code, 200)
         self.assertCountEqual(
-            [item["nombre"] for item in respuesta.json()],
+            [item["nombre"] for item in respuesta.json()["results"]],
             [
                 "Cable Red UTP Cat6",
                 "Laptop Dell XPS",
@@ -1258,12 +1271,12 @@ class MaterialBuscarAPITestCase(EscenariosDeMaterialApi):
 
         respuesta = self.client.get(self.BUSCAR_URL)
         self.assertEqual(respuesta.status_code, 200)
-        self.assertEqual(len(respuesta.json()), 4)
+        self.assertEqual(len(respuesta.json()["results"]), 4)
 
     def test_buscar_con_parametro_tier_explicito(self):
         respuesta = self.client.get(self.BUSCAR_URL, {"tier": "restringido"})
         self.assertEqual(respuesta.status_code, 200)
-        datos = respuesta.json()
+        datos = respuesta.json()["results"]
         self.assertEqual(len(datos), 4)
 
 

@@ -79,6 +79,8 @@ class UsuarioListaSerializer(serializers.ModelSerializer):
     def get_prestamos_activos(self, obj):
         """Devuelve el número de préstamos activos solo para prestatarios."""
         if getattr(obj, "rol", None) and getattr(obj.rol, "nombre", None) == "prestatario":
+            if hasattr(obj, "prestamos_activos_total"):
+                return obj.prestamos_activos_total
             try:
                 from apps.prestamos.services import contar_prestamos_activos_usuario
                 return contar_prestamos_activos_usuario(obj.pk)

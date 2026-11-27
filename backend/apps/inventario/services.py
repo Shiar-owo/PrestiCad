@@ -24,6 +24,7 @@ from apps.inventario.constants import (
 )
 from apps.inventario.models import InstanciaMaterial, Material
 from apps.inventario.validators import validar_foto
+from apps.compartido.busqueda import expresion_texto_normalizado, normalizar_termino
 
 logger = logging.getLogger(__name__)
 
@@ -198,7 +199,8 @@ def buscar_materiales(
     if q:
         q_limpio = q.strip()
         if q_limpio:
-            queryset = queryset.filter(nombre__icontains=q_limpio)
+            queryset = queryset.annotate(nombre_normalizado=expresion_texto_normalizado("nombre"))
+            queryset = queryset.filter(nombre_normalizado__contains=normalizar_termino(q_limpio))
 
     filtro_tipo = categoria or tipo
     if filtro_tipo:

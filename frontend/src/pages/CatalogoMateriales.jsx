@@ -7,22 +7,25 @@ import useTituloPagina from '../hooks/useTituloPagina'
 import BarraBusqueda from '../components/BarraBusqueda'
 import ResultadosMateriales from '../components/ResultadosMateriales'
 import FichaTecnicaModal from '../components/FichaTecnicaModal'
+import ControlesPaginacion from '../components/ui/ControlesPaginacion'
 
 function CatalogoMateriales({ onSeleccionarMaterial }) {
   useTituloPagina('Catálogo')
   const { usuario } = useContext(SesionContext)
   const navigate = useNavigate()
   const [materiales, setMateriales] = useState([])
+  const [total, setTotal] = useState(0)
+  const [pagina, setPagina] = useState(1)
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
   const [filtros, setFiltros] = useState({ q: '', categoria: '' })
   const [materialFicha, setMaterialFicha] = useState(null)
 
   useEffect(() => {
-    buscarMateriales(filtros)
+    buscarMateriales(filtros, 1)
   }, [])
 
-  async function buscarMateriales(nuevosFiltros) {
+  async function buscarMateriales(nuevosFiltros, nuevaPagina = 1) {
     setCargando(true)
     setError('')
     setFiltros(nuevosFiltros)
@@ -31,10 +34,14 @@ function CatalogoMateriales({ onSeleccionarMaterial }) {
       const params = new URLSearchParams()
       if (nuevosFiltros.q) params.set('q', nuevosFiltros.q)
       if (nuevosFiltros.categoria) params.set('categoria', nuevosFiltros.categoria)
+      params.set('page', String(nuevaPagina))
+      params.set('page_size', '25')
 
       const queryString = params.toString() ? `?${params.toString()}` : ''
       const datos = await api.get(`/materiales/buscar/${queryString}`)
-      setMateriales(Array.isArray(datos) ? datos : [])
+      setMateriales(Array.isArray(datos.results) ? datos.results : [])
+      setTotal(Number(datos.count) || 0)
+      setPagina(nuevaPagina)
     } catch {
       setError('No se pudo cargar la lista de materiales. Por favor, inténtalo nuevamente.')
     } finally {
@@ -62,10 +69,12 @@ function CatalogoMateriales({ onSeleccionarMaterial }) {
 
       <ResultadosMateriales
         materiales={materiales}
+        total={total}
         cargando={cargando}
         error={error}
         onSeleccionarMaterial={manejarSeleccionarMaterial}
       />
+      {!cargando && !error && <ControlesPaginacion pagina={pagina} total={total} onCambiar={(n) => buscarMateriales(filtros, n)} cargando={cargando} />}
 
       {materialFicha && (
         <FichaTecnicaModal

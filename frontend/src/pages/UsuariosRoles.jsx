@@ -10,11 +10,11 @@ import Tarjeta from '../components/ui/Tarjeta'
 import Skeleton from '../components/ui/Skeleton'
 import ErrorAlerta from '../components/ui/ErrorAlerta'
 import EstadoVacio from '../components/ui/EstadoVacio'
+import ControlesPaginacion from '../components/ui/ControlesPaginacion'
 import BadgeEstado from '../components/ui/BadgeEstado'
 import ResumenTier from '../components/ui/ResumenTier'
 import Boton from '../components/ui/Boton'
 import ExitoModal from '../components/ui/ExitoModal'
-import { normalizarTextoBusqueda } from '../busqueda/normalizarTexto'
 
 const OPCIONES_ROL = [
   { valor: 'gestor', etiqueta: 'Gestor de Almacén' },
@@ -36,6 +36,8 @@ function UsuariosRoles() {
   const { usuario: usuarioAutenticado } = useContext(SesionContext)
   const navigate = useNavigate()
   const [usuarios, setUsuarios] = useState([])
+  const [totalUsuarios, setTotalUsuarios] = useState(0)
+  const [pagina, setPagina] = useState(1)
   const [cargando, setCargando] = useState(true)
   const [guardandoId, setGuardandoId] = useState(null)
   const [cambiandoEstadoId, setCambiandoEstadoId] = useState(null)
@@ -46,15 +48,19 @@ function UsuariosRoles() {
   const [busquedaNombre, setBusquedaNombre] = useState('')
 
   useEffect(() => {
-    cargarUsuarios()
-  }, [])
+    const temporizador = setTimeout(() => cargarUsuarios(pagina, busquedaNombre), busquedaNombre ? 300 : 0)
+    return () => clearTimeout(temporizador)
+  }, [pagina, busquedaNombre])
 
-  async function cargarUsuarios() {
+  async function cargarUsuarios(paginaSolicitada = pagina, q = busquedaNombre) {
     setCargando(true)
     setError('')
     try {
-      const datos = await api.get('/usuarios/')
-      setUsuarios(Array.isArray(datos) ? datos : [])
+      const params = new URLSearchParams({ page: String(paginaSolicitada), page_size: '25' })
+      if (q.trim()) params.set('q', q.trim())
+      const datos = await api.get(`/usuarios/?${params}`)
+      setUsuarios(Array.isArray(datos.results) ? datos.results : [])
+      setTotalUsuarios(Number(datos.count) || 0)
     } catch (fallo) {
       setError(fallo.status === 403
         ? 'Solo un administrador puede gestionar roles.'
@@ -118,10 +124,7 @@ function UsuariosRoles() {
     }
   }
 
-  const nombreBuscado = normalizarTextoBusqueda(busquedaNombre)
-  const usuariosFiltrados = usuarios.filter((usuario) => (
-    normalizarTextoBusqueda(`${usuario.nombre} ${usuario.apellido}`).includes(nombreBuscado)
-  ))
+  const usuariosFiltrados = usuarios
 
   function renderizarAvatar(usuario) {
     const iniciales = `${usuario.nombre?.[0] || ''}${usuario.apellido?.[0] || ''}`.toUpperCase()
@@ -223,12 +226,11 @@ function UsuariosRoles() {
         </div>
       )}
 
-      {!cargando && usuarios.length === 0 && (
+      {!cargando && totalUsuarios === 0 && !busquedaNombre && (
         <EstadoVacio titulo="Sin usuarios para gestionar" mensaje="No se encontraron usuarios registrados." />
       )}
 
-      {!cargando && usuarios.length > 0 && (
-        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <label htmlFor="buscar-usuario-nombre" className="sr-only">
             Buscar usuario por nombre
           </label>
@@ -238,18 +240,17 @@ function UsuariosRoles() {
               id="buscar-usuario-nombre"
               type="search"
               value={busquedaNombre}
-              onChange={(evento) => setBusquedaNombre(evento.target.value)}
+              onChange={(evento) => { setBusquedaNombre(evento.target.value); setPagina(1) }}
               placeholder="Buscar usuario por nombre…"
               className="w-full rounded-lg border border-borde bg-superficie py-2 pl-9 pr-3 text-sm text-texto placeholder:text-texto-suave focus-visible:outline-2 focus-visible:outline-acento-600"
             />
           </div>
           <p className="text-xs text-texto-suave" aria-live="polite">
-            {usuariosFiltrados.length} de {usuarios.length} usuarios
+            {totalUsuarios} usuarios
           </p>
-        </div>
-      )}
+      </div>
 
-      {!cargando && usuarios.length > 0 && usuariosFiltrados.length === 0 && (
+      {!cargando && totalUsuarios > 0 && usuariosFiltrados.length === 0 && (
         <EstadoVacio titulo="No se encontraron usuarios" mensaje="Prueba con otro nombre. La búsqueda ignora mayúsculas y tildes." />
       )}
 
@@ -345,6 +346,8 @@ function UsuariosRoles() {
           </Tarjeta>
         </div>
       )}
+
+      {!cargando && <ControlesPaginacion pagina={pagina} total={totalUsuarios} onCambiar={setPagina} cargando={cargando} />}
 
       {perfilSeleccionado && (
         <div

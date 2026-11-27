@@ -1,6 +1,6 @@
 import { useContext, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router'
-import { Ban, CircleCheck, Eye, Search, UserRound } from 'lucide-react'
+import { Ban, CalendarCheck2, CircleCheck, ClipboardCheck, Eye, Search, Sparkles, UserRound } from 'lucide-react'
 
 import { api } from '../api/client'
 import SesionContext from '../contextos/SesionContext'
@@ -360,14 +360,25 @@ function UsuariosRoles() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="detalle-perfil-titulo"
-            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-borde bg-white p-6 shadow-xl dark:bg-superficie"
+            className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-borde bg-white p-6 shadow-2xl dark:bg-superficie sm:p-7"
           >
-            <div className="mb-5 flex items-start justify-between gap-4">
-              <div>
-                <h3 id="detalle-perfil-titulo" className="text-xl font-bold text-texto">
-                  Perfil de {perfilSeleccionado.nombre} {perfilSeleccionado.apellido}
-                </h3>
-                <p className="mt-1 text-sm text-texto-suave">Información registrada del usuario.</p>
+            <div className="mb-6 flex items-start justify-between gap-4">
+              <div className="flex min-w-0 items-center gap-4">
+                <div className="shrink-0 [&_img]:size-16 [&_img]:border-2 [&_img]:border-marca-200 [&_img]:shadow-sm [&_span]:size-16 [&_span]:text-lg">
+                  {renderizarAvatar(perfilSeleccionado)}
+                </div>
+                <div className="min-w-0">
+                  <h3 id="detalle-perfil-titulo" className="break-words text-xl font-bold text-texto sm:text-2xl">
+                    {perfilSeleccionado.nombre} {perfilSeleccionado.apellido}
+                  </h3>
+                  <p className="mt-1 break-all text-sm text-texto-suave">{perfilSeleccionado.email}</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <span className="rounded-full bg-marca-100 px-2.5 py-1 text-xs font-semibold text-marca-800 dark:bg-marca-500/15 dark:text-marca-300">
+                      {ETIQUETAS_ROL[perfilSeleccionado.rol] || perfilSeleccionado.rol}
+                    </span>
+                    {renderizarEstado(perfilSeleccionado)}
+                  </div>
+                </div>
               </div>
               <Boton variante="secundario" tamanio="pequeno" onClick={() => setPerfilSeleccionado(null)}>
                 Cerrar
@@ -375,14 +386,11 @@ function UsuariosRoles() {
             </div>
             <dl className="grid gap-3 sm:grid-cols-2">
               {[
-                ['Email', perfilSeleccionado.email],
                 ['DNI', perfilSeleccionado.dni],
                 ['Teléfono', perfilSeleccionado.telefono || 'Sin teléfono registrado'],
                 ['Tipo de usuario', ETIQUETAS_TIPO[perfilSeleccionado.tipo] || perfilSeleccionado.tipo],
                 ['Facultad', perfilSeleccionado.facultad],
                 ['Departamento / carrera', perfilSeleccionado.departamento_carrera || 'Sin especificar'],
-                ['Rol', ETIQUETAS_ROL[perfilSeleccionado.rol] || perfilSeleccionado.rol],
-                ['Estado', perfilSeleccionado.estado],
                 ...(!['gestor', 'administrador'].includes(perfilSeleccionado.rol)
                   ? [['Puntaje de reputación', perfilSeleccionado.reputacion_puntaje]]
                   : []),
@@ -393,17 +401,56 @@ function UsuariosRoles() {
                 </div>
               ))}
             </dl>
-            {!['gestor', 'administrador'].includes(perfilSeleccionado.rol) && (
-              <ResumenTier tier={perfilSeleccionado.reputacion_tier} className="mt-3" />
+            {perfilSeleccionado.rol === 'prestatario' && (
+              <>
+                <div className="mt-5">
+                  <h4 className="mb-3 text-sm font-bold text-texto">Límites y actividad</h4>
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    {[
+                      {
+                        etiqueta: 'Préstamos activos',
+                        valor: perfilSeleccionado.prestamos_activos ?? 0,
+                        limite: perfilSeleccionado.maximo_prestamos_activos ?? 0,
+                        icono: ClipboardCheck,
+                        color: 'bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300',
+                        sufijo: 'en curso',
+                      },
+                      {
+                        etiqueta: 'Reservas activas',
+                        valor: perfilSeleccionado.reservas_activas ?? 0,
+                        limite: perfilSeleccionado.maximo_reservas_activas ?? 0,
+                        icono: CalendarCheck2,
+                        color: 'bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300',
+                        sufijo: 'activas',
+                      },
+                      {
+                        etiqueta: 'Puntos ganados esta semana',
+                        valor: perfilSeleccionado.reputacion_puntos_ganados_semana ?? 0,
+                        limite: perfilSeleccionado.reputacion_tope_semanal ?? 0,
+                        icono: Sparkles,
+                        color: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
+                        sufijo: 'puntos',
+                      },
+                    ].map(({ etiqueta, valor, limite, icono: Icono, color, sufijo }) => (
+                      <article key={etiqueta} className="rounded-xl border border-borde bg-superficie p-4">
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="text-xs font-semibold leading-5 text-texto-suave">{etiqueta}</p>
+                          <span className={`rounded-lg p-2 ${color}`}><Icono className="size-4" aria-hidden="true" /></span>
+                        </div>
+                        <p className="mt-3 text-2xl font-bold tabular-nums text-texto">
+                          {etiqueta === 'Puntos ganados esta semana' ? `+${valor}` : valor}
+                          <span className="ml-1 text-sm font-medium text-texto-suave">/ {limite} {sufijo === 'puntos' ? 'pts' : ''}</span>
+                        </p>
+                      </article>
+                    ))}
+                  </div>
+                </div>
+                <ResumenTier tier={perfilSeleccionado.reputacion_tier} className="mt-4" />
+              </>
             )}
-            {!['gestor', 'administrador'].includes(perfilSeleccionado.rol) && (
-              <div className="mt-4 rounded-lg border border-borde bg-superficie p-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-texto-suave mb-2">
-                  Préstamos activos
-                </p>
-                <p className="text-sm font-bold text-texto mb-3">
-                  {perfilSeleccionado.prestamos_activos ?? 0} en curso
-                </p>
+            {perfilSeleccionado.rol === 'prestatario' && (
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-borde bg-superficie p-4">
+                <p className="text-sm text-texto-suave">Consulta el historial completo de préstamos de este usuario.</p>
                 <Boton
                   variante="secundario"
                   tamanio="pequeno"

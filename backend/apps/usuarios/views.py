@@ -2,7 +2,8 @@
 import json
 
 from django.http import JsonResponse
-from django.db.models import Count, Q
+from django.db.models import Count, OuterRef, Q, Subquery, Sum, Value
+from django.db.models.functions import Coalesce
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
 from django.views.decorators.http import require_GET
@@ -17,7 +18,7 @@ from rest_framework.views import APIView
 
 from apps.usuarios import services
 from apps.usuarios.authentication import AutenticacionSesionUsuario
-from apps.usuarios.models import Usuario
+from apps.usuarios.models import TransaccionReputacion, Usuario
 from apps.usuarios.permissions import EsAdministrador, EsGestorAlmacen
 from apps.usuarios.serializers import (
     ActualizarPerfilSerializer,
@@ -113,8 +114,32 @@ class UsuarioListCreateView(ListCreateAPIView):
 
     def get_queryset(self):
         from apps.prestamos.constants import ESTADOS_QUE_OCUPAN_UNIDAD
+        from apps.reservas.constants import ESTADOS_ACTIVOS
+        from apps.usuarios.services import obtener_inicio_semana_operativa
+
+        puntos_semana = (
+            TransaccionReputacion.objects.filter(
+                usuario_id=OuterRef("pk"),
+                fecha__gte=obtener_inicio_semana_operativa(),
+                puntos_delta__gt=0,
+            )
+            .order_by()
+            .values("usuario_id")
+            .annotate(total=Sum("puntos_delta"))
+            .values("total")[:1]
+        )
         queryset = super().get_queryset().annotate(
-            prestamos_activos_total=Count("prestamos", filter=Q(prestamos__estado__in=ESTADOS_QUE_OCUPAN_UNIDAD))
+            prestamos_activos_total=Count(
+                "prestamos",
+                filter=Q(prestamos__estado__in=ESTADOS_QUE_OCUPAN_UNIDAD),
+                distinct=True,
+            ),
+            reservas_activas_total=Count(
+                "reservas",
+                filter=Q(reservas__estado__in=ESTADOS_ACTIVOS),
+                distinct=True,
+            ),
+            puntos_ganados_semana_total=Coalesce(Subquery(puntos_semana), Value(0)),
         )
         q = self.request.query_params.get("q", "").strip()
         if q:

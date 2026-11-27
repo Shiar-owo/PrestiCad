@@ -54,6 +54,11 @@ class UsuarioListaSerializer(serializers.ModelSerializer):
 
     rol = serializers.SlugRelatedField(slug_field="nombre", read_only=True)
     prestamos_activos = serializers.SerializerMethodField()
+    maximo_prestamos_activos = serializers.SerializerMethodField()
+    reservas_activas = serializers.SerializerMethodField()
+    maximo_reservas_activas = serializers.SerializerMethodField()
+    reputacion_puntos_ganados_semana = serializers.SerializerMethodField()
+    reputacion_tope_semanal = serializers.SerializerMethodField()
     foto_perfil = FotoPerfilUsuario(read_only=True, allow_null=True)
 
     class Meta:
@@ -73,12 +78,21 @@ class UsuarioListaSerializer(serializers.ModelSerializer):
             "rol",
             "estado",
             "prestamos_activos",
+            "maximo_prestamos_activos",
+            "reservas_activas",
+            "maximo_reservas_activas",
+            "reputacion_puntos_ganados_semana",
+            "reputacion_tope_semanal",
             "foto_perfil",
         )
 
+    @staticmethod
+    def _es_prestatario(obj):
+        return getattr(obj, "rol", None) and getattr(obj.rol, "nombre", None) == "prestatario"
+
     def get_prestamos_activos(self, obj):
         """Devuelve el número de préstamos activos solo para prestatarios."""
-        if getattr(obj, "rol", None) and getattr(obj.rol, "nombre", None) == "prestatario":
+        if self._es_prestatario(obj):
             if hasattr(obj, "prestamos_activos_total"):
                 return obj.prestamos_activos_total
             try:
@@ -87,6 +101,41 @@ class UsuarioListaSerializer(serializers.ModelSerializer):
             except ImportError:
                 return None
         return None
+
+    def get_maximo_prestamos_activos(self, obj):
+        if not self._es_prestatario(obj):
+            return None
+        from apps.prestamos.constants import MAXIMO_PRESTAMOS_ACTIVOS_TIER
+        return MAXIMO_PRESTAMOS_ACTIVOS_TIER.get(obj.reputacion_tier, 3)
+
+    def get_reservas_activas(self, obj):
+        if not self._es_prestatario(obj):
+            return None
+        if hasattr(obj, "reservas_activas_total"):
+            return obj.reservas_activas_total
+        from apps.reservas.constants import ESTADOS_ACTIVOS
+        from apps.reservas.models import Reserva
+        return Reserva.objects.filter(usuario_id=obj.pk, estado__in=ESTADOS_ACTIVOS).count()
+
+    def get_maximo_reservas_activas(self, obj):
+        if not self._es_prestatario(obj):
+            return None
+        from apps.reservas.constants import MAXIMO_RESERVAS_ACTIVAS_TIER
+        return MAXIMO_RESERVAS_ACTIVAS_TIER.get(obj.reputacion_tier, 3)
+
+    def get_reputacion_puntos_ganados_semana(self, obj):
+        if not self._es_prestatario(obj):
+            return None
+        if hasattr(obj, "puntos_ganados_semana_total"):
+            return obj.puntos_ganados_semana_total
+        from apps.usuarios.services import calcular_puntos_ganados_semana_actual
+        return calcular_puntos_ganados_semana_actual(obj)
+
+    def get_reputacion_tope_semanal(self, obj):
+        if not self._es_prestatario(obj):
+            return None
+        from apps.usuarios.constants import MAXIMO_PUNTOS_SEMANALES_TIER
+        return MAXIMO_PUNTOS_SEMANALES_TIER.get(obj.reputacion_tier, 60)
 
 
 class CambioRolSerializer(serializers.ModelSerializer):

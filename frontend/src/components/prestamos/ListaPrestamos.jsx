@@ -24,9 +24,9 @@ export default function ListaPrestamos({ prestamos, onSeleccionar, onDevolucion 
   }
 
   return (
-    <section aria-label="Mis préstamos">
+    <section aria-label="Mis Préstamos">
       <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
-        <h3 className="text-lg font-bold text-texto">Mis préstamos</h3>
+        <h3 className="text-lg font-bold text-texto">Mis Préstamos</h3>
         <FiltroPrestamos estado={filtro} onCambiar={setFiltro} />
       </div>
 
@@ -82,7 +82,7 @@ export default function ListaPrestamos({ prestamos, onSeleccionar, onDevolucion 
                   </div>
                   {codigoEjemplar && (
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-texto-suave">Código Ejemplar</span>
+                      <span className="text-texto-suave">Código de ejemplar</span>
                       <span className="font-medium text-texto-suave font-mono">
                         {codigoEjemplar}
                       </span>

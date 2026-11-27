@@ -4,7 +4,7 @@ import { ACCESOS_POR_ROL, rutaAccesoActiva } from './accesos'
 
 describe('accesos por rol', () => {
   it.each([
-    ['prestatario', ['Préstamos', 'Reservas personales'], ['/panel/prestamos', '/panel/reservas']],
+    ['prestatario', ['Mis Préstamos', 'Mis reservas'], ['/panel/prestamos', '/panel/reservas']],
     ['gestor', ['Préstamos', 'Reservas', 'Inventario'], ['/panel/gestion-prestamos', '/panel/cola-reservas', '/panel/inventario']],
     ['administrador', ['Préstamos', 'Reservas', 'Inventario', 'Usuarios', 'Calendario'], ['/panel/gestion-prestamos', '/panel/cola-reservas', '/panel/inventario', '/admin/roles', '/admin/dias-no-laborables']],
   ])('define etiquetas y destinos correctos para %s', (rol, etiquetas, destinos) => {

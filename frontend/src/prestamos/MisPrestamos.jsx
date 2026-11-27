@@ -12,7 +12,7 @@ import {
 } from './consultaPrestamos'
 
 export default function MisPrestamos() {
-  useTituloPagina('Préstamos')
+  useTituloPagina('Mis Préstamos')
   const [consulta, dispatch] = useReducer(
     reducirConsultaPrestamos,
     ESTADO_CONSULTA_INICIAL,

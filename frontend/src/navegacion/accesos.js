@@ -2,8 +2,8 @@ import { CalendarDays, CalendarClock, ClipboardList, Package, ShieldCheck } from
 
 export const ACCESOS_POR_ROL = {
   prestatario: [
-    { id: 'prestamos', etiqueta: 'Préstamos', a: '/panel/prestamos', icono: ClipboardList, descripcion: 'Consulta tus préstamos' },
-    { id: 'reservas', etiqueta: 'Reservas personales', a: '/panel/reservas', icono: CalendarClock, descripcion: 'Consulta y gestiona tus reservas' },
+    { id: 'prestamos', etiqueta: 'Mis Préstamos', a: '/panel/prestamos', icono: ClipboardList, descripcion: 'Consulta tus préstamos' },
+    { id: 'reservas', etiqueta: 'Mis reservas', a: '/panel/reservas', icono: CalendarClock, descripcion: 'Consulta y gestiona tus reservas' },
   ],
   gestor: [
     { id: 'prestamos', etiqueta: 'Préstamos', a: '/panel/gestion-prestamos', icono: ClipboardList, descripcion: 'Registra entregas, devoluciones y consulta el historial' },

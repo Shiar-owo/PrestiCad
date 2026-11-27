@@ -38,7 +38,7 @@ function filtrarReservas(reservas, filtro) {
 }
 
 export default function MisReservas() {
-  useTituloPagina('Reservas personales')
+  useTituloPagina('Mis reservas')
   const [reservas, setReservas] = useState([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
@@ -137,7 +137,7 @@ export default function MisReservas() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 id="titulo-mis-reservas" className="text-xl font-bold text-texto">
-            Reservas personales
+            Mis reservas
           </h2>
           <p className="mt-1 text-sm text-texto-suave">
             Solicitudes activas:{' '}
@@ -261,7 +261,7 @@ export default function MisReservas() {
                             Orden de atención
                           </dt>
                           <dd className="mt-1 font-medium text-texto">
-                            {reserva.es_excepcion ? 'Pendiente de revisión por el Gestor de Almacén' : 'Solicitud pendiente'}
+                            Pendiente de revisión por el Gestor de Almacén
                           </dd>
                         </div>
                         <div className="rounded-lg border border-borde bg-superficie-alta/40 p-3">

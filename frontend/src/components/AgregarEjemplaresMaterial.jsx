@@ -142,7 +142,7 @@ function AgregarEjemplaresMaterial({ material, onGuardado, onCancelar }) {
             </p>
           </div>
           <Campo
-            etiqueta="Cantidad"
+            etiqueta="Cantidad de ejemplares"
             tipo="number"
             valor={cantidad}
             onCambio={cambiarCantidad}

@@ -304,7 +304,8 @@ export default function ColaReservas() {
                 const disp = m.unidades_disponibles ?? m.resumen_instancias?.disponible ?? 0
                 return (
                   <option key={m.id} value={m.id}>
-                    {m.nombre} ({m.codigo_material}) — {disp} de {m.stock} libre(s)
+                    {m.nombre} ({m.codigo_material}) — {disp} de {m.stock}{' '}
+                    {m.stock === 1 ? 'ejemplar' : 'ejemplares'} disponibles
                   </option>
                 )
               })}
@@ -414,7 +415,8 @@ export default function ColaReservas() {
               <div className="flex flex-wrap gap-2 text-xs font-semibold">
                 {cola.material && (
                   <span className="rounded-lg bg-marca-100 px-3 py-1 text-marca-800 dark:bg-marca-950/60 dark:text-marca-300">
-                    {instanciasDisponibles.length} disponible(s)
+                    {instanciasDisponibles.length}{' '}
+                    {instanciasDisponibles.length === 1 ? 'ejemplar disponible' : 'ejemplares disponibles'}
                   </span>
                 )}
                 <span className="rounded-lg bg-amber-100 px-3 py-1 text-amber-900 dark:bg-amber-950/60 dark:text-amber-200">

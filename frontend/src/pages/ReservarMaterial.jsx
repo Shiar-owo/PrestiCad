@@ -490,7 +490,7 @@ export default function ReservarMaterial() {
         titulo={confirmada ? 'Reserva confirmada' : 'Solicitud registrada'}
         mensaje={confirmada
           ? 'La reserva fue aceptada y el ejemplar quedó asignado.'
-          : 'La solicitud de excepción fue aceptada y quedó pendiente de evaluación.'}
+          : 'La solicitud de excepción fue aceptada y quedó pendiente de revisión.'}
         onCerrar={() => setMostrarExitoReserva(false)}
         abierto={mostrarExitoReserva}
       />
@@ -517,7 +517,7 @@ export default function ReservarMaterial() {
         <p className="text-sm text-texto-suave">
           {confirmada
             ? 'Se ha bloqueado un ejemplar disponible para ti. Acércate al almacén antes de la fecha límite para concretar el préstamo.'
-            : 'Tu solicitud excepcional con documentos de garantía quedó pendiente de evaluación por el Gestor de Almacén.'}
+            : 'Tu solicitud excepcional con documentos de garantía quedó pendiente de revisión por el Gestor de Almacén.'}
         </p>
 
         <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm">
@@ -563,7 +563,7 @@ export default function ReservarMaterial() {
                   Estado de revisión
                 </dt>
                 <dd className="mt-1 font-bold text-texto">
-                  Pendiente de evaluación por el gestor
+                  Pendiente de revisión por el Gestor de Almacén
                 </dd>
               </div>
             </>
@@ -657,7 +657,8 @@ export default function ReservarMaterial() {
                 const tierMat = ETIQUETAS_TIER[mat.tier_minimo_requerido] || mat.tier_minimo_requerido
                 return (
                   <option key={mat.id} value={mat.id}>
-                    {mat.nombre} ({mat.codigo_material}) — {disp} de {mat.stock} libre(s) · Tier mín: {tierMat}
+                    {mat.nombre} ({mat.codigo_material}) — {disp} de {mat.stock}{' '}
+                    {mat.stock === 1 ? 'ejemplar' : 'ejemplares'} disponibles · Tier mín: {tierMat}
                   </option>
                 )
               })}
@@ -684,7 +685,8 @@ export default function ReservarMaterial() {
                       : 'bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-200'
                   }`}
                 >
-                  {unidadesDisponibles} de {materialSeleccionado.stock} disponible(s)
+                  {unidadesDisponibles} de {materialSeleccionado.stock}{' '}
+                  {materialSeleccionado.stock === 1 ? 'ejemplar disponible' : 'ejemplares disponibles'}
                 </span>
               </div>
 
@@ -758,7 +760,7 @@ export default function ReservarMaterial() {
                 htmlFor="select-instancia-reserva"
                 className="block text-sm font-semibold text-texto"
               >
-                Instancia / ejemplar *
+                Ejemplar *
               </label>
               <select
                 id="select-instancia-reserva"
@@ -769,7 +771,7 @@ export default function ReservarMaterial() {
                 }}
                 className="mt-1.5 w-full rounded-lg border border-borde bg-white px-3 py-2 text-sm text-texto dark:bg-superficie"
               >
-                <option value="">Selecciona una instancia disponible…</option>
+                <option value="">Selecciona un ejemplar disponible…</option>
                 {instancias.map((inst) => (
                   <option key={inst.id} value={inst.id}>
                     {inst.codigo_ejemplar}{inst.ubicacion ? ` (${inst.ubicacion})` : ''}

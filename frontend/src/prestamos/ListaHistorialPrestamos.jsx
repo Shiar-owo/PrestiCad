@@ -90,7 +90,7 @@ export default function ListaHistorialPrestamos({
               )}
               {codigoEjemplar && (
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-texto-suave">Código Ejemplar</span>
+                  <span className="text-texto-suave">Código de ejemplar</span>
                   <span className="font-medium text-texto-suave font-mono">
                     {codigoEjemplar}
                   </span>

@@ -78,7 +78,7 @@ function TarjetaMaterial({ material, onSeleccionar }) {
             <span
               className={`font-semibold ${hayDisponibilidad ? 'text-marca-700 dark:text-marca-400' : 'text-error'}`}
             >
-              {unidades} de {material.stock ?? unidades} {unidades === 1 ? 'libre' : 'libres'}
+              {unidades} de {material.stock ?? unidades} ejemplar{Number(material.stock ?? unidades) === 1 ? '' : 'es'} disponible{Number(material.stock ?? unidades) === 1 ? '' : 's'}
             </span>
           </div>
 

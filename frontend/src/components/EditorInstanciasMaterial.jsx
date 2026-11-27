@@ -181,7 +181,7 @@ function EditorInstanciasMaterial({ material, alcance, onCambiarAlcance, onGuard
       <header className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="text-lg font-bold text-texto">
-            {esMasivo ? 'Editar todas las instancias' : `Editar ejemplar: ${material.nombre}`}
+            {esMasivo ? 'Editar todos los ejemplares' : `Editar ejemplar: ${material.nombre}`}
           </h3>
           <p className="mt-1 text-sm text-texto-suave">
             {esMasivo

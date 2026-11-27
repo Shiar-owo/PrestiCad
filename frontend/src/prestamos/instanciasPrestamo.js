@@ -15,7 +15,7 @@ export function crearOpcionesInstancia(instancias, cargando = false) {
   return [
     {
       valor: '',
-      etiqueta: cargando ? 'Cargando instancias…' : 'Selecciona una instancia',
+      etiqueta: cargando ? 'Cargando ejemplares…' : 'Selecciona un ejemplar',
     },
     ...instancias.map((instancia) => {
       const detalles = [

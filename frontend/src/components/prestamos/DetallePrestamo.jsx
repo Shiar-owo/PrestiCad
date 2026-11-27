@@ -558,7 +558,7 @@ export default function DetallePrestamo({
                 ) : (
                   <div className="rounded border border-borde bg-amarillo-50 dark:bg-amarillo-900/10 p-3 text-center">
                     <p className="text-xs text-amarillo-700 dark:text-amarillo-300">
-                      Este préstamo no tiene una instancia individual asociada.
+                      Este préstamo no tiene un ejemplar individual asociado.
                     </p>
                   </div>
                 )}

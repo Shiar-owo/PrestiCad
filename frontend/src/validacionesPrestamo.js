@@ -84,7 +84,7 @@ export function validarFormularioPrestamo({
     errores.material = 'Selecciona un material disponible.'
   }
   if (!instanciaId) {
-    errores.instancia_id = 'Selecciona una instancia disponible.'
+    errores.instancia_id = 'Selecciona un ejemplar disponible.'
   }
   if (
     valorTiempo === ''

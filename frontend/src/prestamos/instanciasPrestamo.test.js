@@ -35,7 +35,7 @@ describe('crearOpcionesInstancia', () => {
         },
       ]),
     ).toEqual([
-      { valor: '', etiqueta: 'Selecciona una instancia' },
+      { valor: '', etiqueta: 'Selecciona un ejemplar' },
       {
         valor: 'unidad-1',
         etiqueta: 'EQ-01-01 · Serie: SERIE-01 · Observación: Desgaste leve',
@@ -53,7 +53,7 @@ describe('crearOpcionesInstancia', () => {
 
   it('mantiene el mensaje de carga y el identificador de la unidad', () => {
     expect(crearOpcionesInstancia([{ id: 17, codigo_ejemplar: 'EQ-17' }], true)).toEqual([
-      { valor: '', etiqueta: 'Cargando instancias…' },
+      { valor: '', etiqueta: 'Cargando ejemplares…' },
       { valor: '17', etiqueta: 'EQ-17' },
     ])
   })

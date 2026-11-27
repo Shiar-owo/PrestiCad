@@ -27,7 +27,7 @@ import {
 
 describe('helpers de estado y elegibilidad de reserva', () => {
   it('presenta cada estado de reserva y etiqueta las excepciones pendientes de revisión', () => {
-    expect(presentarEstadoReserva('en_espera').texto).toBe('En espera')
+    expect(presentarEstadoReserva('en_espera').texto).toBe('Pendiente de revisión')
     expect(presentarEstadoReserva('reservada').texto).toBe('Reservada')
     expect(presentarEstadoReserva('cancelada_por_vencimiento').texto).toBe(
       'Cancelada por vencimiento',

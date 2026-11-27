@@ -26,7 +26,7 @@ const ETIQUETAS = {
   activo: 'Activo',
   vencido: 'Vencido',
   devuelto: 'Devuelto',
-  en_espera: 'En espera',
+  en_espera: 'Pendiente de revisión',
   reservada: 'Reservada',
   expirada: 'Expirada',
   rechazada: 'Rechazada',

@@ -61,6 +61,7 @@ function TarjetaReputacion({
   puntosGanadosSemana = 0,
   topeSemanal = null,
   compacta = false,
+  mostrarProgresoSemanal = true,
   className = '',
 }) {
   const claveTier = String(tier).toLowerCase()
@@ -100,13 +101,14 @@ function TarjetaReputacion({
           </span>
         </div>
 
-        {/* Progreso semanal */}
-        <div className="mt-2.5 flex items-center justify-between text-[11px] font-medium text-texto-suave border-t border-borde/30 pt-2">
-          <span>Esta semana (Lun-Vie):</span>
-          <span className={`font-bold ${topeAlcanzado ? 'text-amber-700 dark:text-amber-400' : 'text-texto'}`}>
-            +{puntosSemana} / {topeEfectivo} pts {topeAlcanzado ? '(Tope)' : ''}
-          </span>
-        </div>
+        {mostrarProgresoSemanal && (
+          <div className="mt-2.5 flex items-center justify-between text-[11px] font-medium text-texto-suave border-t border-borde/30 pt-2">
+            <span>Esta semana (Lun-Vie):</span>
+            <span className={`font-bold ${topeAlcanzado ? 'text-amber-700 dark:text-amber-400' : 'text-texto'}`}>
+              +{puntosSemana} / {topeEfectivo} pts {topeAlcanzado ? '(Tope)' : ''}
+            </span>
+          </div>
+        )}
 
         {/* Mini barra de nivel */}
         <div className="mt-2">

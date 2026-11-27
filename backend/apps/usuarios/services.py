@@ -189,6 +189,33 @@ def usuario_tiene_prestamos_activos(usuario_id):
     return tiene_prestamos_activos(usuario_id)
 
 
+def obtener_limites_prestatario(usuario):
+    """Devuelve el uso y los topes vigentes para el resumen de un prestatario."""
+    datos = {
+        "prestamos_activos": 0,
+        "maximo_prestamos_activos": 0,
+        "reservas_activas": 0,
+        "maximo_reservas_activas": 0,
+    }
+    if getattr(getattr(usuario, "rol", None), "nombre", None) != "prestatario":
+        return datos
+
+    from django.conf import settings
+    from apps.prestamos.constants import MAXIMO_PRESTAMOS_ACTIVOS_TIER
+    from apps.prestamos.services import contar_prestamos_activos_usuario
+    from apps.reservas.constants import ESTADOS_ACTIVOS
+    from apps.reservas.models import Reserva
+
+    datos["prestamos_activos"] = contar_prestamos_activos_usuario(usuario.pk)
+    datos["maximo_prestamos_activos"] = MAXIMO_PRESTAMOS_ACTIVOS_TIER.get(usuario.reputacion_tier, 3)
+    datos["reservas_activas"] = Reserva.objects.filter(
+        usuario_id=usuario.pk,
+        estado__in=ESTADOS_ACTIVOS,
+    ).count()
+    datos["maximo_reservas_activas"] = getattr(settings, "MAXIMO_RESERVAS_ACTIVAS", 3)
+    return datos
+
+
 def obtener_perfil(usuario, ahora=None):
     datos = {
         "nombre": usuario.nombre,

@@ -16,6 +16,7 @@ import {
   obtenerElementosSinFoto,
   obtenerFechaMaximaFinPrestamo,
   obtenerMinutosMaximosMaterial,
+  tieneMaterialActualmentePrestado,
   validarFormularioPrestamo,
 } from '../validacionesPrestamo'
 import useTituloPagina from '../hooks/useTituloPagina'
@@ -412,6 +413,10 @@ function RegistrarPrestamo() {
     && perfilVerificadoActual.prestamos_activos >= perfilVerificadoActual.maximo_prestamos_activos,
   )
   const tienePrestamosVencidos = Boolean(perfilVerificadoActual?.tiene_prestamos_vencidos)
+  const yaTieneMaterialPrestado = tieneMaterialActualmentePrestado(
+    perfilVerificadoActual,
+    materialSeleccionado,
+  )
   const bloqueadoPorElegibilidad = Boolean(
     /^\d{8}$/.test(formulario.dni.trim())
     && (
@@ -419,6 +424,7 @@ function RegistrarPrestamo() {
       || (materialSeleccionado && !tierCumple && !excepcionActiva)
       || cupoPrestamosAlcanzado
       || tienePrestamosVencidos
+      || yaTieneMaterialPrestado
     ),
   )
   const bloqueadoPorReservaConversion = esConversionFija && (
@@ -605,6 +611,7 @@ function RegistrarPrestamo() {
       compromisoResponsabilidad: formulario.compromisoResponsabilidad,
       esExcepcion: excepcionActiva,
       garantiaReutilizada,
+      yaTieneMaterialPrestado,
       fechaFin: duracionBloqueadaPorReserva ? null : fechaFinPrestamo,
       diasNoLaborables,
     }
@@ -667,6 +674,7 @@ function RegistrarPrestamo() {
       const erroresApi = errorApi instanceof ErrorApi ? errorApi.datos : null
       const camposApi = {
         dni_prestatario: 'dni',
+        material_id: 'material',
         instancia_id: 'instancia_id',
         fecha_fin: 'dias',
         tiempo_prestamo_minutos: 'dias',
@@ -871,7 +879,11 @@ function RegistrarPrestamo() {
                 {perfilVerificadoActual && (
                   <div
                     className={`rounded-xl border p-4 text-sm space-y-3 shadow-xs ${
-                      perfilHabilitado && (!materialSeleccionado || tierCumple || puedeSolicitarExcepcion)
+                      perfilHabilitado
+                      && !tienePrestamosVencidos
+                      && !cupoPrestamosAlcanzado
+                      && !yaTieneMaterialPrestado
+                      && (!materialSeleccionado || tierCumple || puedeSolicitarExcepcion)
                         ? 'border-marca-300 bg-marca-500/20 dark:border-marca-700/60 dark:bg-marca-500/25'
                         : 'border-red-300 bg-red-500/20 dark:border-red-700/60 dark:bg-red-500/25'
                     }`}
@@ -943,6 +955,12 @@ function RegistrarPrestamo() {
                       </div>
                     )}
 
+                    {yaTieneMaterialPrestado && !tienePrestamosVencidos && !cupoPrestamosAlcanzado && (
+                      <div className="rounded-lg bg-amber-100 p-3 border border-amber-300 text-amber-900 dark:bg-amber-950/50 dark:border-amber-800 dark:text-amber-200 text-xs font-semibold">
+                        ⚠️ El prestatario ya tiene un ejemplar en préstamo de este material. Solo se permite un ejemplar del mismo material por usuario a la vez.
+                      </div>
+                    )}
+
                     {!perfilHabilitado && (
                       <p className="font-bold text-red-700 dark:text-red-300 text-sm pt-2.5 border-t border-red-300/60 dark:border-red-700/50">
                         El usuario no está habilitado para recibir préstamos.
@@ -988,7 +1006,12 @@ function RegistrarPrestamo() {
                   }
                   valor={formulario.materialId}
                   onCambio={(evento) => actualizar('materialId', evento.target.value)}
-                  error={errores.material}
+                  error={
+                    errores.material
+                    || (yaTieneMaterialPrestado
+                      ? 'El prestatario ya tiene un ejemplar en préstamo de este material.'
+                      : undefined)
+                  }
                   deshabilitado={Boolean(reservaSeleccionada)}
                   requerido
                 />

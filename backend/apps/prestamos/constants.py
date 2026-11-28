@@ -36,6 +36,10 @@ MENSAJES_ERROR_PRESTAMO = {
         "El prestatario tiene al menos un préstamo vencido pendiente de devolución. "
         "Debe regularizar su situación antes de recibir nuevos materiales."
     ),
+    "material_ya_prestado": (
+        "El prestatario ya tiene un ejemplar en préstamo de este material. "
+        "Solo se permite un ejemplar del mismo material por usuario a la vez."
+    ),
 }
 
 

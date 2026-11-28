@@ -121,6 +121,28 @@ def contar_prestamos_activos_usuario(usuario_id):
     ).count()
 
 
+def usuario_tiene_prestamo_activo_de_material(usuario_id, material_id):
+    """Verifica si el prestatario ya tiene en posesión un ejemplar del mismo material."""
+    return Prestamo.objects.filter(
+        usuario_id=usuario_id,
+        material_id=material_id,
+        estado__in=ESTADOS_QUE_OCUPAN_UNIDAD,
+    ).exists()
+
+
+def obtener_materiales_prestados_usuario(usuario_id):
+    """Devuelve los UUIDs (str) de materiales actualmente en préstamo para el prestatario."""
+    return [
+        str(material_id)
+        for material_id in Prestamo.objects.filter(
+            usuario_id=usuario_id,
+            estado__in=ESTADOS_QUE_OCUPAN_UNIDAD,
+        )
+        .values_list("material_id", flat=True)
+        .distinct()
+    ]
+
+
 def validar_limite_prestamos_activos(usuario, ahora=None):
     """Verifica morosidad y límite de concurrencia según el Tier del prestatario."""
     if tiene_prestamos_vencidos(usuario.pk, ahora=ahora):
@@ -136,6 +158,16 @@ def validar_limite_prestamos_activos(usuario, ahora=None):
         raise PrestamoError(
             "dni_prestatario",
             MENSAJES_ERROR_PRESTAMO["limite_prestamos_alcanzado"].format(maximo=maximo),
+            status_code=409,
+        )
+
+
+def validar_sin_prestamo_activo_mismo_material(usuario, material):
+    """Impide que un prestatario tenga más de un ejemplar del mismo material a la vez (PRTCAD-232)."""
+    if usuario_tiene_prestamo_activo_de_material(usuario.pk, material.pk):
+        raise PrestamoError(
+            "material_id",
+            MENSAJES_ERROR_PRESTAMO["material_ya_prestado"],
             status_code=409,
         )
 
@@ -1010,6 +1042,7 @@ def registrar_prestamo(
             garantia_reserva_reutilizable = None
 
     validar_limite_prestamos_activos(prestatario, ahora=ahora_entrega)
+    validar_sin_prestamo_activo_mismo_material(prestatario, material)
     _validar_elegibilidad(prestatario, material, es_excepcion=es_excepcion)
     _validar_duracion_material(material, minutos_prestamo, campo_duracion)
 

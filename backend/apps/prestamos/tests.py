@@ -440,6 +440,12 @@ class RegistrarPrestamoServiceTestCase(TestCase):
             reputacion_puntaje=300,
             reputacion_tier="avanzado",
         )
+        otro_avanzado = crear_usuario(
+            "avanzado2@unsa.edu.pe",
+            "10000012",
+            reputacion_puntaje=300,
+            reputacion_tier="avanzado",
+        )
 
         with self.assertRaises(PrestamoError) as error_minimo:
             self._registrar(
@@ -464,7 +470,7 @@ class RegistrarPrestamoServiceTestCase(TestCase):
         )
 
         prestamo_vr_mas_de_8h = self._registrar(
-            dni_prestatario=avanzado.dni,
+            dni_prestatario=otro_avanzado.dni,
             material_id=gafas_vr.id,
             tiempo_prestamo_minutos=540,
             tiempo_prestamo_dias=None,
@@ -864,6 +870,55 @@ class RegistrarPrestamoConcurrenciaTestCase(TransactionTestCase):
         self.assertEqual(resultados.count(("rechazado", 409)), 1)
         self.assertEqual(Prestamo.objects.count(), 1)
         self.assertEqual(material.instancias.filter(estado="prestado").count(), 1)
+
+    def test_dos_registros_concurrentes_mismo_usuario_mismo_material_solo_permiten_uno(self):
+        gestor = crear_usuario("gestor-conc-mat@unsa.edu.pe", "10000023", rol="gestor")
+        prestatario = crear_usuario("conc-mismo-mat@unsa.edu.pe", "10000024")
+        material = crear_material(codigo_material="EQ-CONC-MAT", stock=2)
+        instancias_ids = list(
+            material.instancias.order_by("codigo_ejemplar").values_list("id", flat=True)
+        )
+        barrera = Barrier(2)
+        ahora_laborable = _proxima_entrega_en_horario()
+
+        def registrar(instancia_id):
+            close_old_connections()
+            try:
+                barrera.wait(timeout=10)
+                prestamo = registrar_prestamo_real(
+                    dni_prestatario=prestatario.dni,
+                    material_id=material.id,
+                    instancia_id=instancia_id,
+                    tiempo_prestamo_dias=1,
+                    checklist_inicial=CHECKLIST,
+                    fotos_checklist=[crear_foto_checklist() for _ in CHECKLIST],
+                    registrado_por=gestor,
+                )
+                return ("registrado", prestamo.id)
+            except PrestamoError as error:
+                return ("rechazado", error.status_code, error.campo)
+            finally:
+                close_old_connections()
+
+        with (
+            patch(
+                "apps.prestamos.services.timezone.now",
+                return_value=ahora_laborable,
+            ),
+            patch.object(
+                FotoChecklist._meta.get_field("imagen"),
+                "storage",
+                _ALMACENAMIENTO_FOTOS_TEST,
+            ),
+        ):
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                resultados = list(executor.map(registrar, instancias_ids))
+
+        self.assertEqual(sum(resultado[0] == "registrado" for resultado in resultados), 1)
+        self.assertEqual(resultados.count(("rechazado", 409, "material_id")), 1)
+        self.assertEqual(Prestamo.objects.count(), 1)
+        self.assertEqual(material.instancias.filter(estado="prestado").count(), 1)
+        self.assertEqual(material.instancias.filter(estado="disponible").count(), 1)
 
 
 class ConsultarPrestamosServiceTestCase(TestCase):
@@ -3997,4 +4052,190 @@ class LimitesPrestamosActivosTestCase(TestCase):
         historial = list(consultar_historial_prestamos(nombre="josue rodriguez"))
         self.assertEqual(len(historial), 1)
         self.assertEqual(historial[0].usuario_id, usuario_tilde.id)
+
+    def test_rechaza_segundo_prestamo_simultaneo_del_mismo_material_con_stock_disponible(self):
+        material = crear_material(
+            codigo_material="MAT-DUP-01",
+            tier_minimo_requerido="estandar",
+            stock=2,
+        )
+        instancias = list(material.instancias.order_by("codigo_ejemplar"))
+
+        prestamo = self._entregar(self.prestatario_estandar, material)
+        self.assertEqual(prestamo.instancia_id, instancias[0].id)
+
+        with self.assertRaises(PrestamoError) as ctx:
+            registrar_prestamo(
+                dni_prestatario=self.prestatario_estandar.dni,
+                material_id=material.id,
+                instancia_id=instancias[1].id,
+                tiempo_prestamo_dias=1,
+                checklist_inicial=[{"elemento": "Item", "observacion": ""}],
+                registrado_por=self.gestor,
+            )
+
+        self.assertEqual(ctx.exception.status_code, 409)
+        self.assertEqual(ctx.exception.campo, "material_id")
+        self.assertIn("ya tiene un ejemplar en préstamo de este material", ctx.exception.mensaje)
+        instancias[1].refresh_from_db()
+        self.assertEqual(instancias[1].estado, "disponible")
+
+    def test_rechaza_prestamo_excepcional_duplicado_del_mismo_material(self):
+        material = crear_material(
+            codigo_material="MAT-DUP-EXC",
+            tier_minimo_requerido="avanzado",
+            stock=2,
+        )
+
+        self._entregar(self.prestatario_restringido, material, es_excepcion=True)
+
+        with self.assertRaises(PrestamoError) as ctx:
+            self._entregar(self.prestatario_restringido, material, es_excepcion=True)
+
+        self.assertEqual(ctx.exception.status_code, 409)
+        self.assertEqual(ctx.exception.campo, "material_id")
+        self.assertIn("ya tiene un ejemplar en préstamo de este material", ctx.exception.mensaje)
+
+    def test_permite_otro_material_en_paralelo_y_mismo_material_tras_devolucion(self):
+        m1 = crear_material(codigo_material="MAT-DUP-02", tier_minimo_requerido="estandar", stock=2)
+        m2 = crear_material(codigo_material="MAT-DUP-03", tier_minimo_requerido="estandar", stock=1)
+
+        p1 = self._entregar(self.prestatario_estandar, m1)
+        p2 = self._entregar(self.prestatario_estandar, m2)
+        self.assertEqual(p2.material_id, m2.id)
+
+        registrar_devolucion(
+            prestamo_id=p1.id,
+            checklist_devolucion=[{"elemento": "Item", "estado": "sin_cambios", "observacion": ""}],
+            realizado_por=self.gestor,
+        )
+
+        p3 = self._entregar(self.prestatario_estandar, m1)
+        self.assertEqual(p3.material_id, m1.id)
+        self.assertEqual(p3.estado, "activo")
+
+    def test_rechaza_conversion_reserva_si_prestatario_aun_tiene_ejemplar_del_mismo_material(self):
+        from apps.reservas.models import Reserva
+
+        material = crear_material(
+            codigo_material="MAT-DUP-RES",
+            tier_minimo_requerido="avanzado",
+            stock=2,
+        )
+        instancias = list(material.instancias.order_by("codigo_ejemplar"))
+        ahora = _proxima_entrega_en_horario()
+
+        with patch("apps.prestamos.services.timezone.now", return_value=ahora):
+            registrar_prestamo(
+                dni_prestatario=self.prestatario_avanzado.dni,
+                material_id=material.id,
+                instancia_id=instancias[0].id,
+                tiempo_prestamo_minutos=120,
+                checklist_inicial=CHECKLIST,
+                registrado_por=self.gestor,
+            )
+
+            reserva = Reserva.objects.create(
+                usuario=self.prestatario_avanzado,
+                material=material,
+                instancia=instancias[1],
+                fecha_inicio=ahora,
+                fecha_fin=ahora + timedelta(hours=2),
+                estado="reservada",
+                fecha_confirmacion=ahora,
+                fecha_limite_recojo=ahora + timedelta(minutes=30),
+                justificacion="Segunda unidad del mismo material",
+            )
+            instancias[1].estado = "reservado"
+            instancias[1].save(update_fields=["estado", "updated_at"])
+
+            with self.assertRaises(PrestamoError) as ctx:
+                registrar_prestamo(
+                    dni_prestatario=self.prestatario_avanzado.dni,
+                    material_id=material.id,
+                    instancia_id=instancias[1].id,
+                    reserva_id=reserva.id,
+                    tiempo_prestamo_minutos=120,
+                    checklist_inicial=CHECKLIST,
+                    registrado_por=self.gestor,
+                )
+
+        self.assertEqual(ctx.exception.status_code, 409)
+        self.assertEqual(ctx.exception.campo, "material_id")
+        reserva.refresh_from_db()
+        self.assertEqual(reserva.estado, "reservada")
+
+    def test_endpoint_elegibilidad_expone_materiales_prestados_y_api_bloquea_duplicado(self):
+        cliente = APIClient()
+        sesion = cliente.session
+        sesion[CLAVE_SESION_USUARIO_ID] = self.gestor.id
+        sesion[CLAVE_SESION_ULTIMA_ACTIVIDAD] = timezone.now().isoformat()
+        sesion.save()
+
+        material = crear_material(
+            codigo_material="MAT-DUP-API",
+            tier_minimo_requerido="estandar",
+            stock=2,
+        )
+        instancias = list(material.instancias.order_by("codigo_ejemplar"))
+
+        resp_antes = cliente.get(
+            f"/api/usuarios/elegibilidad-prestamo/?dni={self.prestatario_estandar.dni}"
+        )
+        self.assertEqual(resp_antes.status_code, 200)
+        self.assertEqual(resp_antes.json()["materiales_prestados_ids"], [])
+
+        prestamo = self._entregar(self.prestatario_estandar, material)
+
+        resp_activo = cliente.get(
+            f"/api/usuarios/elegibilidad-prestamo/?dni={self.prestatario_estandar.dni}"
+        )
+        self.assertEqual(resp_activo.status_code, 200)
+        self.assertEqual(resp_activo.json()["materiales_prestados_ids"], [str(material.id)])
+
+        ahora = _proxima_entrega_en_horario()
+        with (
+            patch("apps.prestamos.services.timezone.now", return_value=ahora),
+            patch.object(
+                FotoChecklist._meta.get_field("imagen"),
+                "storage",
+                _ALMACENAMIENTO_FOTOS_TEST,
+            ),
+        ):
+            sesion = cliente.session
+            sesion[CLAVE_SESION_USUARIO_ID] = self.gestor.id
+            sesion[CLAVE_SESION_ULTIMA_ACTIVIDAD] = ahora.isoformat()
+            sesion.save()
+            resp_dup = cliente.post(
+                "/api/prestamos/",
+                data={
+                    "dni_prestatario": self.prestatario_estandar.dni,
+                    "material_id": str(material.id),
+                    "instancia_id": str(instancias[1].id),
+                    "tiempo_prestamo_minutos": 120,
+                    "fecha_fin": (ahora + timedelta(hours=2)).isoformat(),
+                    "checklist_inicial": json.dumps([{"elemento": "Carcasa", "observacion": ""}]),
+                    "foto_checklist_0": crear_foto_checklist(),
+                },
+                format="multipart",
+            )
+        self.assertEqual(resp_dup.status_code, 409, resp_dup.content)
+        self.assertIn("material_id", resp_dup.json())
+
+        sesion = cliente.session
+        sesion[CLAVE_SESION_USUARIO_ID] = self.gestor.id
+        sesion[CLAVE_SESION_ULTIMA_ACTIVIDAD] = timezone.now().isoformat()
+        sesion.save()
+
+        registrar_devolucion(
+            prestamo_id=prestamo.id,
+            checklist_devolucion=[{"elemento": "Item", "estado": "sin_cambios", "observacion": ""}],
+            realizado_por=self.gestor,
+        )
+
+        resp_despues = cliente.get(
+            f"/api/usuarios/elegibilidad-prestamo/?dni={self.prestatario_estandar.dni}"
+        )
+        self.assertEqual(resp_despues.status_code, 200)
+        self.assertEqual(resp_despues.json()["materiales_prestados_ids"], [])
 

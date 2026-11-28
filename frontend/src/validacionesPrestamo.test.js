@@ -8,6 +8,7 @@ import {
   obtenerFechaMaximaFinPrestamo,
   obtenerMinutosMaximosMaterial,
   obtenerElementosSinFoto,
+  tieneMaterialActualmentePrestado,
   validarFoto,
   validarFormularioPrestamo,
 } from './validacionesPrestamo'
@@ -318,5 +319,21 @@ describe('validarFormularioPrestamo', () => {
       1: 'La imagen no es válida.',
     })
     expect(mapearErroresFotoChecklist(null)).toEqual({})
+  })
+
+  it('detecta cuando el prestatario ya tiene un ejemplar del mismo material en préstamo (PRTCAD-232)', () => {
+    const perfil = { materiales_prestados_ids: ['mat-1', 'mat-9'] }
+
+    expect(tieneMaterialActualmentePrestado(perfil, { id: 'mat-1' })).toBe(true)
+    expect(tieneMaterialActualmentePrestado(perfil, { id: 'mat-2' })).toBe(false)
+    expect(tieneMaterialActualmentePrestado({ materiales_prestados_ids: [] }, { id: 'mat-1' })).toBe(false)
+    expect(tieneMaterialActualmentePrestado(null, { id: 'mat-1' })).toBe(false)
+    expect(tieneMaterialActualmentePrestado(perfil, null)).toBe(false)
+
+    const errores = validarFormularioPrestamo({
+      ...formularioValido,
+      yaTieneMaterialPrestado: true,
+    })
+    expect(errores.material).toMatch(/ya tiene un ejemplar en préstamo/)
   })
 })

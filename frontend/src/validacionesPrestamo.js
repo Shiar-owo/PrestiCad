@@ -53,6 +53,12 @@ export function ayudaRangoDuracion(material = null) {
   return `Mín. 1 h (60 min) · Máx. para este material: ${formatearDuracionMinutos(maximoMinutos)} · La tolerancia de 30 minutos está incluida en el tope de ${DURACION_MAXIMA_PRESTAMO_DIAS} días.`
 }
 
+export function tieneMaterialActualmentePrestado(perfil, material) {
+  if (!material?.id || !Array.isArray(perfil?.materiales_prestados_ids)) return false
+  const idObjetivo = String(material.id)
+  return perfil.materiales_prestados_ids.some((id) => String(id) === idObjetivo)
+}
+
 export function validarFormularioPrestamo({
   dni,
   material,
@@ -65,6 +71,7 @@ export function validarFormularioPrestamo({
   compromisoResponsabilidad,
   esExcepcion = false,
   garantiaReutilizada = false,
+  yaTieneMaterialPrestado = false,
   fechaFin = null,
   diasNoLaborables = [],
 }) {
@@ -82,6 +89,8 @@ export function validarFormularioPrestamo({
   }
   if (!material) {
     errores.material = 'Selecciona un material disponible.'
+  } else if (yaTieneMaterialPrestado) {
+    errores.material = 'El prestatario ya tiene un ejemplar en préstamo de este material.'
   }
   if (!instanciaId) {
     errores.instancia_id = 'Selecciona un ejemplar disponible.'

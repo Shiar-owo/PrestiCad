@@ -128,25 +128,10 @@ function ReportesDanos() {
     )
   }
 
-  if (consulta.error) {
-    return (
-      <section aria-label="Reportes de daños" className="grid gap-4">
-        <CabeceraReportes />
-        <ErrorAlerta mensaje={consulta.error} />
-        {!rangoFechasInvalido && (
-          <Boton
-            variante="secundario"
-            className="w-full sm:w-auto"
-            onClick={() => setIntento((valor) => valor + 1)}
-          >
-            Reintentar
-          </Boton>
-        )}
-      </section>
-    )
-  }
-
-  const { count, next, previous, results } = consulta.datos
+  const count = consulta.datos?.count ?? 0
+  const next = consulta.datos?.next ?? null
+  const previous = consulta.datos?.previous ?? null
+  const results = consulta.datos?.results ?? []
   const totalPaginas = Math.max(1, Math.ceil(count / TAMANO_PAGINA_REPORTES))
 
   return (
@@ -166,7 +151,7 @@ function ReportesDanos() {
             <p className="mt-0.5 text-xs text-texto-suave">Filtra por prestatario, tipo de daño o fecha de devolución.</p>
           </div>
           <span className="rounded-full bg-superficie-alta px-3 py-1 text-xs font-semibold text-texto-suave">
-            {consulta.datos.count} {consulta.datos.count === 1 ? 'reporte' : 'reportes'}
+            {count} {count === 1 ? 'reporte' : 'reportes'}
           </span>
         </div>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
@@ -255,7 +240,20 @@ function ReportesDanos() {
         </div>
       </Tarjeta>
 
-      {results.length === 0 ? (
+      {consulta.error ? (
+        <div className="mt-5 grid gap-3">
+          <ErrorAlerta mensaje={consulta.error} />
+          {!rangoFechasInvalido && (
+            <Boton
+              variante="secundario"
+              className="w-full sm:w-auto"
+              onClick={() => setIntento((valor) => valor + 1)}
+            >
+              Reintentar
+            </Boton>
+          )}
+        </div>
+      ) : results.length === 0 ? (
         <div className="mt-6">
           <EstadoVacio
             titulo={hayFiltros ? 'Sin reportes con estos filtros' : 'Aún no hay reportes de daños'}

@@ -31,7 +31,11 @@ function CabeceraMisPrestamos({ usuario, prestamosActivos }) {
       </header>
       <ResumenLimitesPrestatario
         prestamosActivos={prestamosActivos}
-        maximoPrestamos={usuario?.maximo_prestamos_activos ?? 3}
+        maximoPrestamos={
+          usuario?.maximo_prestamos_activos
+          ?? MAXIMO_ACTIVOS_POR_TIER[usuario?.reputacion_tier]
+          ?? 3
+        }
         reservasActivas={usuario?.reservas_activas ?? 0}
         maximoReservas={usuario?.maximo_reservas_activas ?? MAXIMO_ACTIVOS_POR_TIER[usuario?.reputacion_tier] ?? 3}
       />

@@ -2348,6 +2348,7 @@ class RegistrarPrestamoAPITestCase(APITestCase):
         self.assertEqual(prestamo.tiempo_prestamo_minutos, 45)
         self.assertEqual(prestamo.fecha_limite, fin)
         self.assertEqual(prestamo.estado, "activo")
+        prestamo.full_clean()
         reserva.refresh_from_db()
         self.assertEqual(reserva.estado, "convertida_en_prestamo")
 
@@ -3876,4 +3877,124 @@ class LimitesPrestamosActivosTestCase(TestCase):
 
         self.prestatario_estandar.refresh_from_db()
         self.assertEqual(self.prestatario_estandar.reputacion_puntaje, puntaje_antes + 10)
+
+    def test_devolucion_a_tiempo_con_dano_registra_tipo_sancion_y_no_bonificacion(self):
+        from apps.usuarios.models import TransaccionReputacion
+
+        material = crear_material(
+            codigo_material="AUD-DANO-01",
+            tier_minimo_requerido="estandar",
+            bonificacion_tiempo=10,
+            deduccion_dano_parcial=30,
+        )
+        prestamo = self._entregar(self.prestatario_estandar, material)
+
+        with (
+            patch.object(
+                FotoChecklist._meta.get_field("imagen"),
+                "storage",
+                _ALMACENAMIENTO_FOTOS_TEST,
+            ),
+            patch.object(
+                Devolucion._meta.get_field("reporte"),
+                "storage",
+                _ALMACENAMIENTO_FOTOS_TEST,
+            ),
+        ):
+            registrar_devolucion(
+                prestamo_id=prestamo.id,
+                checklist_devolucion=[{"elemento": "Item", "estado": "dano_parcial", "observacion": "Roto"}],
+                fotos_checklist=[crear_foto_checklist()],
+                realizado_por=self.gestor,
+                fecha_devolucion=prestamo.fecha_limite - timedelta(minutes=30),
+            )
+
+        tx = TransaccionReputacion.objects.filter(prestamo_id=prestamo.id).get()
+        self.assertEqual(tx.tipo, "sancion_dano_parcial")
+        self.assertEqual(tx.puntos_delta, -20)
+
+    def test_devolucion_en_tiempo_de_gracia_sin_dano_no_registra_sancion_tardanza(self):
+        from apps.usuarios.models import TransaccionReputacion
+
+        material = crear_material(codigo_material="AUD-GRACIA-01", tier_minimo_requerido="estandar")
+        prestamo = self._entregar(self.prestatario_estandar, material)
+
+        dev = registrar_devolucion(
+            prestamo_id=prestamo.id,
+            checklist_devolucion=[{"elemento": "Item", "estado": "sin_cambios", "observacion": ""}],
+            realizado_por=self.gestor,
+            fecha_devolucion=prestamo.fecha_limite + timedelta(minutes=15),
+        )
+
+        self.assertTrue(dev.resultado["en_tiempo_gracia"])
+        self.assertEqual(dev.resultado["puntos_delta"], 0)
+        self.assertFalse(TransaccionReputacion.objects.filter(prestamo_id=prestamo.id).exists())
+
+    def test_conversion_reserva_con_garantia_permite_reemplazar_un_solo_pdf(self):
+        from apps.reservas.models import Reserva
+
+        material = crear_material(
+            codigo_material="AUD-GAR-01",
+            tier_minimo_requerido="avanzado",
+            es_alto_valor=True,
+        )
+        instancia = material.instancias.get()
+        ahora = _proxima_entrega_en_horario()
+        reserva = Reserva.objects.create(
+            usuario=self.prestatario_avanzado,
+            material=material,
+            instancia=instancia,
+            fecha_inicio=ahora,
+            fecha_fin=ahora + timedelta(hours=2),
+            estado="reservada",
+            fecha_confirmacion=ahora,
+            fecha_limite_recojo=ahora + timedelta(minutes=30),
+            justificacion="Reserva con garantía completa",
+        )
+        instancia.estado = "reservado"
+        instancia.save(update_fields=["estado", "updated_at"])
+
+        with storage_garantias_temporal():
+            garantia_original = Garantia.objects.create(
+                reserva=reserva,
+                estado="registrada",
+                documento_identidad=crear_pdf("dni_original.pdf"),
+                compromiso_responsabilidad=crear_pdf("compromiso_original.pdf"),
+                fecha_registro=ahora,
+            )
+            doc_original = garantia_original.documento_identidad.name
+            comp_original = garantia_original.compromiso_responsabilidad.name
+            with patch("apps.prestamos.services.timezone.now", return_value=ahora + timedelta(minutes=5)):
+                prestamo = registrar_prestamo(
+                    dni_prestatario=self.prestatario_avanzado.dni,
+                    material_id=material.id,
+                    instancia_id=instancia.id,
+                    reserva_id=reserva.id,
+                    tiempo_prestamo_minutos=120,
+                    checklist_inicial=CHECKLIST,
+                    registrado_por=self.gestor,
+                    documento_identidad=crear_pdf("dni_reemplazo.pdf"),
+                )
+            prestamo.garantia.refresh_from_db()
+            self.assertNotEqual(prestamo.garantia.documento_identidad.name, doc_original)
+            self.assertEqual(prestamo.garantia.compromiso_responsabilidad.name, comp_original)
+
+    def test_busqueda_prestatarios_e_historial_ignora_tildes(self):
+        from apps.prestamos.services import buscar_prestatarios_por_dni
+
+        usuario_tilde = crear_usuario(
+            "josue.rodriguez@unsa.edu.pe",
+            "88990011",
+            nombre="Josué",
+            apellido="Rodríguez",
+        )
+        material = crear_material(codigo_material="AUD-TILDE-01", tier_minimo_requerido="estandar")
+        self._entregar(usuario_tilde, material)
+
+        encontrados = list(buscar_prestatarios_por_dni("josue rodriguez"))
+        self.assertEqual([u.dni for u in encontrados], ["88990011"])
+
+        historial = list(consultar_historial_prestamos(nombre="josue rodriguez"))
+        self.assertEqual(len(historial), 1)
+        self.assertEqual(historial[0].usuario_id, usuario_tilde.id)
 

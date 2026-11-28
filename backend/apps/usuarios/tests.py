@@ -1252,3 +1252,89 @@ class SesionAutenticadaMiddlewareTestCase(TestCase):
 
         self.assertIsNone(request.usuario_autenticado)
         self.assertNotIn(CLAVE_SESION_USUARIO_ID, request.session)
+
+
+class ListaUsuariosAdminResumenTestCase(APITestCase):
+    """Comprueba que GET /api/usuarios/ incluye cupos y morosidad anotados."""
+
+    def setUp(self):
+        Rol.objects.get_or_create(nombre="prestatario")
+        Rol.objects.get_or_create(nombre="administrador")
+        self.admin = registrar_usuario(
+            nombre="Admin",
+            apellido="Lista",
+            email="admin.lista@unsa.edu.pe",
+            dni="61000001",
+            telefono="987654301",
+            tipo="administrativo",
+            facultad="Ingeniería",
+            departamento_carrera="Sistemas",
+            password="ClaveSegura123",
+        )
+        self.admin.rol = Rol.objects.get(nombre="administrador")
+        self.admin.save(update_fields=["rol"])
+
+        self.prestatario_moroso = registrar_usuario(
+            nombre="Carlos",
+            apellido="Moroso",
+            email="carlos.moroso@unsa.edu.pe",
+            dni="61000002",
+            telefono="987654302",
+            tipo="alumno",
+            facultad="Ingeniería",
+            departamento_carrera="Sistemas",
+            password="ClaveSegura123",
+        )
+        self.prestatario_al_dia = registrar_usuario(
+            nombre="Elena",
+            apellido="Puntual",
+            email="elena.puntual@unsa.edu.pe",
+            dni="61000003",
+            telefono="987654303",
+            tipo="alumno",
+            facultad="Ingeniería",
+            departamento_carrera="Sistemas",
+            password="ClaveSegura123",
+        )
+
+    def test_lista_usuarios_expone_prestamos_activos_y_morosidad_por_rol(self):
+        from apps.inventario.services import registrar_material
+        from apps.prestamos.models import Prestamo
+
+        material = registrar_material(
+            nombre="Multímetro Lista",
+            codigo_material="USR-LISTA-01",
+            tipo="equipo",
+            stock=1,
+        )
+        Prestamo.objects.create(
+            usuario=self.prestatario_moroso,
+            material=material,
+            instancia=material.instancias.get(),
+            registrado_por=self.admin,
+            fecha_entrega=timezone.now() - timedelta(days=2),
+            fecha_limite=timezone.now() - timedelta(hours=3),
+            tiempo_prestamo_minutos=1440,
+            tiempo_prestamo_dias=1,
+            estado="activo",
+            checklist_inicial=[{"elemento": "Equipo", "observacion": ""}],
+        )
+
+        sesion = self.client.session
+        sesion[CLAVE_SESION_USUARIO_ID] = self.admin.id
+        sesion[CLAVE_SESION_ULTIMA_ACTIVIDAD] = timezone.now().isoformat()
+        sesion.save()
+
+        respuesta = self.client.get("/api/usuarios/")
+        self.assertEqual(respuesta.status_code, status.HTTP_200_OK)
+        por_dni = {item["dni"]: item for item in respuesta.json()["results"]}
+
+        self.assertEqual(por_dni["61000002"]["prestamos_activos"], 1)
+        self.assertEqual(por_dni["61000002"]["maximo_prestamos_activos"], 3)
+        self.assertTrue(por_dni["61000002"]["tiene_prestamos_vencidos"])
+
+        self.assertEqual(por_dni["61000003"]["prestamos_activos"], 0)
+        self.assertFalse(por_dni["61000003"]["tiene_prestamos_vencidos"])
+
+        self.assertIsNone(por_dni["61000001"]["prestamos_activos"])
+        self.assertIsNone(por_dni["61000001"]["tiene_prestamos_vencidos"])

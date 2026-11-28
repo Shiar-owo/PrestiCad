@@ -8,6 +8,7 @@ from django.db.models import Case, CharField, Count, DateTimeField, F, IntegerFi
 from django.db import transaction
 from django.utils import timezone
 
+from apps.compartido.busqueda import expresion_texto_normalizado, normalizar_termino
 from apps.inventario import services as servicios_inventario
 from apps.inventario.constants import TIERS_ACCESIBLES
 from apps.inventario.models import InstanciaMaterial, Material
@@ -57,8 +58,16 @@ def buscar_prestatarios_por_dni(prefijo, incluir_inactivos=False):
         return base.filter(dni__startswith=prefijo).order_by("dni")[:MAXIMO_PRESTATARIOS_SUGERIDOS]
 
     terminos = prefijo.strip().split()
+    base = base.annotate(
+        nombre_normalizado=expresion_texto_normalizado("nombre"),
+        apellido_normalizado=expresion_texto_normalizado("apellido"),
+    )
     for termino in terminos:
-        base = base.filter(Q(nombre__icontains=termino) | Q(apellido__icontains=termino))
+        termino_norm = normalizar_termino(termino)
+        base = base.filter(
+            Q(nombre_normalizado__contains=termino_norm)
+            | Q(apellido_normalizado__contains=termino_norm)
+        )
     return base.order_by("apellido", "nombre", "dni")[:MAXIMO_PRESTATARIOS_SUGERIDOS]
 
 
@@ -213,10 +222,15 @@ def consultar_historial_prestamos(
     if fecha_hasta is not None:
         prestamos = prestamos.filter(fecha_entrega__date__lte=fecha_hasta)
     if nombre:
+        prestamos = prestamos.annotate(
+            usuario_nombre_normalizado=expresion_texto_normalizado("usuario__nombre"),
+            usuario_apellido_normalizado=expresion_texto_normalizado("usuario__apellido"),
+        )
         for termino in nombre.strip().split():
+            termino_norm = normalizar_termino(termino)
             prestamos = prestamos.filter(
-                Q(usuario__nombre__icontains=termino)
-                | Q(usuario__apellido__icontains=termino)
+                Q(usuario_nombre_normalizado__contains=termino_norm)
+                | Q(usuario_apellido_normalizado__contains=termino_norm)
             )
     return prestamos
 
@@ -486,6 +500,7 @@ def _validar_documentos_garantia(
     compromiso_responsabilidad,
     *,
     es_excepcion=False,
+    garantia_existente=None,
 ):
     documentos = (
         ("documento_identidad", documento_identidad, "El documento de identidad en PDF"),
@@ -503,7 +518,7 @@ def _validar_documentos_garantia(
                     campo,
                     "Este material no requiere documentos de garantía.",
                 )
-    if requiere_garantia:
+    if requiere_garantia and garantia_existente is None:
         for campo, archivo, descripcion in documentos:
             if archivo is None:
                 raise PrestamoError(
@@ -1081,15 +1096,13 @@ def registrar_prestamo(
             )
 
     requiere_garantia = es_excepcion or material.requiere_garantia()
-    if garantia_reserva_reutilizable is not None and documento_identidad is None and compromiso_responsabilidad is None:
-        pass
-    else:
-        _validar_documentos_garantia(
-            material,
-            documento_identidad,
-            compromiso_responsabilidad,
-            es_excepcion=es_excepcion,
-        )
+    _validar_documentos_garantia(
+        material,
+        documento_identidad,
+        compromiso_responsabilidad,
+        es_excepcion=es_excepcion,
+        garantia_existente=garantia_reserva_reutilizable,
+    )
 
     try:
         instancia_elegida = servicios_inventario.marcar_instancia_prestada(
@@ -1495,26 +1508,37 @@ def registrar_devolucion(
     fecha_devolucion = fecha_devolucion or timezone.now()
 
     resultado = _calcular_resultado(prestamo, checklist, fecha_devolucion)
-    tipo_movimiento = "bonificacion_devolucion" if resultado["a_tiempo"] else (
-        "sancion_dano_total" if resultado["dano"] == "dano_total" else (
-            "sancion_dano_parcial" if resultado["dano"] == "dano_parcial" else "sancion_tardanza"
-        )
-    )
+    if resultado["dano"] == "dano_total":
+        tipo_movimiento = "sancion_dano_total"
+    elif resultado["dano"] == "dano_parcial":
+        tipo_movimiento = "sancion_dano_parcial"
+    elif resultado["dias_tardanza"] > 0 or resultado["deduccion_tardanza"] > 0:
+        tipo_movimiento = "sancion_tardanza"
+    elif resultado["a_tiempo"]:
+        tipo_movimiento = "bonificacion_devolucion"
+    else:
+        tipo_movimiento = None
+
     puntos_solicitados = (
         resultado["bonificacion_base"]
         - resultado["deduccion_tardanza"]
         - resultado["deduccion_dano"]
     )
-    actualizar_reputacion(
-        prestamo.usuario,
-        resultado["puntos_delta"],
-        tipo=tipo_movimiento,
-        puntos_solicitados=puntos_solicitados,
-        tope_aplicado=resultado["tope_semanal_alcanzado"],
-        prestamo_id=prestamo.id,
-        descripcion=f"Devolución del préstamo #{prestamo.id} ({material.nombre})",
-        fecha=fecha_devolucion,
-    )
+    if tipo_movimiento is not None and (
+        resultado["puntos_delta"] != 0
+        or puntos_solicitados != 0
+        or resultado["tope_semanal_alcanzado"]
+    ):
+        actualizar_reputacion(
+            prestamo.usuario,
+            resultado["puntos_delta"],
+            tipo=tipo_movimiento,
+            puntos_solicitados=puntos_solicitados,
+            tope_aplicado=resultado["tope_semanal_alcanzado"],
+            prestamo_id=prestamo.id,
+            descripcion=f"Devolución del préstamo #{prestamo.id} ({material.nombre})",
+            fecha=fecha_devolucion,
+        )
 
     prestamo.estado = "devuelto"
     prestamo.save(update_fields=["estado"])

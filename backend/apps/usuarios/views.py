@@ -2,8 +2,9 @@
 import json
 
 from django.http import JsonResponse
-from django.db.models import Count, OuterRef, Q, Subquery, Sum, Value
+from django.db.models import Count, Exists, OuterRef, Q, Subquery, Sum, Value
 from django.db.models.functions import Coalesce
+from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
 from django.views.decorators.http import require_GET
@@ -114,19 +115,26 @@ class UsuarioListCreateView(ListCreateAPIView):
 
     def get_queryset(self):
         from apps.prestamos.constants import ESTADOS_QUE_OCUPAN_UNIDAD
+        from apps.prestamos.models import Prestamo
         from apps.reservas.constants import ESTADOS_ACTIVOS
         from apps.usuarios.services import obtener_inicio_semana_operativa
 
+        ahora = timezone.now()
         puntos_semana = (
             TransaccionReputacion.objects.filter(
                 usuario_id=OuterRef("pk"),
-                fecha__gte=obtener_inicio_semana_operativa(),
+                fecha__gte=obtener_inicio_semana_operativa(ahora),
                 puntos_delta__gt=0,
             )
             .order_by()
             .values("usuario_id")
             .annotate(total=Sum("puntos_delta"))
             .values("total")[:1]
+        )
+        prestamos_vencidos_subquery = Prestamo.objects.filter(
+            usuario_id=OuterRef("pk"),
+        ).filter(
+            Q(estado="vencido") | Q(estado="activo", fecha_limite__lt=ahora)
         )
         queryset = super().get_queryset().annotate(
             prestamos_activos_total=Count(
@@ -140,6 +148,7 @@ class UsuarioListCreateView(ListCreateAPIView):
                 distinct=True,
             ),
             puntos_ganados_semana_total=Coalesce(Subquery(puntos_semana), Value(0)),
+            tiene_prestamos_vencidos_flag=Exists(prestamos_vencidos_subquery),
         )
         q = self.request.query_params.get("q", "").strip()
         if q:

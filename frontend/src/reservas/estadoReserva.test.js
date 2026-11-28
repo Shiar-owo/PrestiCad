@@ -331,4 +331,18 @@ describe('presentación de motivos y fechas', () => {
     expect(sugInvalido.esPosible).toBe(false)
     expect(sugInvalido.mensaje).toContain('No es posible extender')
   })
+
+  it('valida correctamente el modo avanzado cuando la devolución sugerida pasa al siguiente día hábil', () => {
+    const errores = validarFormularioReserva({
+      materialId: 'mat-1',
+      justificacion: 'Reserva después de las 16:30 con devolución al siguiente día hábil',
+      esAvanzado: true,
+      fechaSeleccionada: '2026-12-16',
+      fechaFinAvanzada: '2026-12-17',
+      horaInicio: '17:00',
+      horaFin: '08:00',
+      material: { tiempo_maximo_prestamo: 4320 },
+    })
+    expect(errores).toEqual({})
+  })
 })

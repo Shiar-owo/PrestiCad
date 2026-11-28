@@ -144,6 +144,7 @@ export function validarFormularioReserva({
   materialId,
   instanciaId,
   fechaSeleccionada,
+  fechaFinAvanzada = null,
   horaInicio,
   horaFin,
   fechaInicio,
@@ -171,6 +172,7 @@ export function validarFormularioReserva({
     fechaFin,
     material,
     diasNoLaborables,
+    fechaFinAvanzada,
   )
   if (Object.keys(erroresHorario).length > 0) {
     Object.assign(errores, erroresHorario)

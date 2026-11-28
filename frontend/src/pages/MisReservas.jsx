@@ -126,7 +126,11 @@ export default function MisReservas() {
   const resumenLimites = (
     <ResumenLimitesPrestatario
       prestamosActivos={usuario?.prestamos_activos ?? 0}
-      maximoPrestamos={usuario?.maximo_prestamos_activos ?? 3}
+      maximoPrestamos={
+        usuario?.maximo_prestamos_activos
+        ?? MAXIMO_ACTIVOS_POR_TIER[usuario?.reputacion_tier]
+        ?? 3
+      }
       reservasActivas={cargando || error ? usuario?.reservas_activas ?? activasCount : activasCount}
       maximoReservas={limiteReservas}
     />

@@ -55,6 +55,7 @@ class UsuarioListaSerializer(serializers.ModelSerializer):
     rol = serializers.SlugRelatedField(slug_field="nombre", read_only=True)
     prestamos_activos = serializers.SerializerMethodField()
     maximo_prestamos_activos = serializers.SerializerMethodField()
+    tiene_prestamos_vencidos = serializers.SerializerMethodField()
     reservas_activas = serializers.SerializerMethodField()
     maximo_reservas_activas = serializers.SerializerMethodField()
     reputacion_puntos_ganados_semana = serializers.SerializerMethodField()
@@ -79,6 +80,7 @@ class UsuarioListaSerializer(serializers.ModelSerializer):
             "estado",
             "prestamos_activos",
             "maximo_prestamos_activos",
+            "tiene_prestamos_vencidos",
             "reservas_activas",
             "maximo_reservas_activas",
             "reputacion_puntos_ganados_semana",
@@ -107,6 +109,14 @@ class UsuarioListaSerializer(serializers.ModelSerializer):
             return None
         from apps.prestamos.constants import MAXIMO_PRESTAMOS_ACTIVOS_TIER
         return MAXIMO_PRESTAMOS_ACTIVOS_TIER.get(obj.reputacion_tier, 3)
+
+    def get_tiene_prestamos_vencidos(self, obj):
+        if not self._es_prestatario(obj):
+            return None
+        if hasattr(obj, "tiene_prestamos_vencidos_flag"):
+            return bool(obj.tiene_prestamos_vencidos_flag)
+        from apps.prestamos.services import tiene_prestamos_vencidos
+        return tiene_prestamos_vencidos(obj.pk)
 
     def get_reservas_activas(self, obj):
         if not self._es_prestatario(obj):

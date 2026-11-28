@@ -74,7 +74,7 @@ class Prestamo(models.Model):
     tiempo_prestamo_minutos = models.PositiveIntegerField(
         default=1440,
         validators=[
-            MinValueValidator(MINIMO_MINUTOS_PRESTAMO),
+            MinValueValidator(1),
             MaxValueValidator(MAXIMO_MINUTOS_PRESTAMO),
         ],
     )

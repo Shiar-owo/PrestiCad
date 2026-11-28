@@ -21,16 +21,23 @@ import EstadoVacio from '../components/ui/EstadoVacio'
 
 const CONSULTA_INICIAL = { cargando: true, error: '', datos: null }
 
+function normalizarDniUrl(valor) {
+  const limpio = String(valor || '').trim()
+  return /^\d{8}$/.test(limpio) ? limpio : ''
+}
+
 export default function HistorialPrestamos() {
   useTituloPagina('Historial de préstamos')
   const { usuario } = useContext(SesionContext)
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const dniInicialUrl = normalizarDniUrl(searchParams.get('dni'))
+  const nombreInicialUrl = dniInicialUrl ? '' : (searchParams.get('nombre') || '').trim()
   const [estado, setEstado] = useState('todos')
-  const [nombreEntrada, setNombreEntrada] = useState(() => searchParams.get('nombre') || '')
-  const [nombreFiltro, setNombreFiltro] = useState(() => searchParams.get('nombre') || '')
-  const [dniEntrada, setDniEntrada] = useState(() => searchParams.get('dni') || '')
-  const [dniFiltro, setDniFiltro] = useState(() => searchParams.get('dni') || '')
+  const [nombreEntrada, setNombreEntrada] = useState(nombreInicialUrl)
+  const [nombreFiltro, setNombreFiltro] = useState(nombreInicialUrl)
+  const [dniEntrada, setDniEntrada] = useState(dniInicialUrl)
+  const [dniFiltro, setDniFiltro] = useState(dniInicialUrl)
   const [fechaDesde, setFechaDesde] = useState('')
   const [fechaHasta, setFechaHasta] = useState('')
   const [pagina, setPagina] = useState(1)
@@ -38,21 +45,60 @@ export default function HistorialPrestamos() {
   const [consulta, setConsulta] = useState(CONSULTA_INICIAL)
   const [prestamoSeleccionado, setPrestamoSeleccionado] = useState(null)
   const navegacionPendiente = useRef('')
+  const ultimaQueryRef = useRef(searchParams.toString())
+
+  const rangoFechasInvalido = Boolean(fechaDesde && fechaHasta && fechaDesde > fechaHasta)
+  const queryActual = searchParams.toString()
+
+  function sincronizarUrl({ dni = '', nombre = '' }) {
+    const parametros = new URLSearchParams()
+    if (dni) parametros.set('dni', dni)
+    else if (nombre) parametros.set('nombre', nombre)
+    const texto = parametros.toString()
+    ultimaQueryRef.current = texto
+    setSearchParams(parametros, { replace: true })
+  }
 
   useEffect(() => {
+    if (queryActual === ultimaQueryRef.current) return
+    ultimaQueryRef.current = queryActual
+    const dniUrl = normalizarDniUrl(searchParams.get('dni'))
+    const nombreUrl = dniUrl ? '' : (searchParams.get('nombre') || '').trim()
+    setPrestamoSeleccionado(null)
+    navegacionPendiente.current = ''
+    setDniEntrada(dniUrl)
+    setDniFiltro(dniUrl)
+    setNombreEntrada(nombreUrl)
+    setNombreFiltro(nombreUrl)
+    setPagina(1)
+  }, [queryActual, searchParams])
+
+  useEffect(() => {
+    if (dniFiltro) return undefined
     const limpio = nombreEntrada.trim()
     if (limpio === nombreFiltro) return undefined
     const temporizador = window.setTimeout(() => {
       setPrestamoSeleccionado(null)
       navegacionPendiente.current = ''
       setNombreFiltro(limpio)
+      sincronizarUrl({ dni: '', nombre: limpio })
       setPagina(1)
     }, 300)
     return () => window.clearTimeout(temporizador)
-  }, [nombreEntrada, nombreFiltro])
+  }, [nombreEntrada, nombreFiltro, dniFiltro])
 
   useEffect(() => {
     let activa = true
+
+    if (rangoFechasInvalido) {
+      setConsulta((actual) => ({
+        cargando: false,
+        error: 'La fecha inicial no puede ser posterior a la fecha final.',
+        datos: actual.datos,
+      }))
+      return undefined
+    }
+
     setConsulta(iniciarCargaHistorial)
 
     api.get(construirRutaHistorial({
@@ -73,18 +119,37 @@ export default function HistorialPrestamos() {
         if (activa) {
           const conservarDatos = Boolean(navegacionPendiente.current || prestamoSeleccionado)
           navegacionPendiente.current = ''
-          setConsulta({
+          setConsulta((actual) => ({
             cargando: false,
             error: 'No fue posible consultar el historial. Intenta nuevamente.',
-            datos: conservarDatos ? consulta.datos : null,
-          })
+            datos: conservarDatos ? actual.datos : null,
+          }))
         }
       })
 
     return () => {
       activa = false
     }
-  }, [estado, pagina, dniFiltro, nombreFiltro, fechaDesde, fechaHasta, intento])
+  }, [estado, pagina, dniFiltro, nombreFiltro, fechaDesde, fechaHasta, intento, rangoFechasInvalido])
+
+  function limpiarFiltroPrestatario() {
+    setPrestamoSeleccionado(null)
+    navegacionPendiente.current = ''
+    setNombreEntrada('')
+    setNombreFiltro('')
+    setDniEntrada('')
+    setDniFiltro('')
+    sincronizarUrl({ dni: '', nombre: '' })
+    setPagina(1)
+  }
+
+  function limpiarFechas() {
+    setPrestamoSeleccionado(null)
+    navegacionPendiente.current = ''
+    setFechaDesde('')
+    setFechaHasta('')
+    setPagina(1)
+  }
 
   function cambiarFecha(setter, valor) {
     setPrestamoSeleccionado(null)
@@ -101,7 +166,7 @@ export default function HistorialPrestamos() {
   }
 
   function cambiarPaginaDesdeDetalle(direccion) {
-    const hayPagina = direccion === 'anterior' ? consulta.datos.previous : consulta.datos.next
+    const hayPagina = direccion === 'anterior' ? consulta.datos?.previous : consulta.datos?.next
     if (!hayPagina) return
 
     navegacionPendiente.current = direccion
@@ -114,34 +179,10 @@ export default function HistorialPrestamos() {
     setPagina((actual) => actual + (direccion === 'anterior' ? -1 : 1))
   }
 
-  if (consulta.cargando && !consulta.datos && !prestamoSeleccionado) {
-    return (
-      <div className="space-y-3" role="status" aria-live="polite">
-        <p className="text-sm text-texto-suave">Cargando historial de préstamos…</p>
-        <Skeleton className="h-20 rounded-xl" />
-        <Skeleton className="h-20 rounded-xl" />
-      </div>
-    )
-  }
-
-  if (consulta.error && !prestamoSeleccionado) {
-    return (
-      <section aria-label="Historial de préstamos" className="grid gap-4">
-        <div>
-          <h2 className="text-xl font-bold text-texto">Historial de préstamos</h2>
-          <p className="mt-1 text-sm text-texto-suave">
-            Consulta y filtra el historial de préstamos del sistema.
-          </p>
-        </div>
-        <ErrorAlerta mensaje={consulta.error} />
-        <Boton variante="secundario" className="w-full sm:w-auto" onClick={() => setIntento((valor) => valor + 1)}>
-          Reintentar
-        </Boton>
-      </section>
-    )
-  }
-
-  const { count, next, previous, results } = consulta.datos
+  const count = consulta.datos?.count ?? 0
+  const next = consulta.datos?.next ?? null
+  const previous = consulta.datos?.previous ?? null
+  const results = consulta.datos?.results ?? []
   const totalPaginas = Math.max(1, Math.ceil(count / TAMANO_PAGINA_HISTORIAL))
 
   return (
@@ -158,6 +199,7 @@ export default function HistorialPrestamos() {
         <div className="grid gap-2 md:pl-2 xl:pl-3">
           <SelectorPrestatario
             modo="nombre"
+            incluirInactivos
             etiqueta="Buscar por nombre"
             valor={nombreEntrada}
             ayuda="Escribe un nombre para elegir al prestatario; las opciones muestran su DNI."
@@ -165,9 +207,14 @@ export default function HistorialPrestamos() {
               setPrestamoSeleccionado(null)
               navegacionPendiente.current = ''
               setNombreEntrada(valor)
-              setNombreFiltro('')
-              setDniEntrada('')
-              setDniFiltro('')
+              if (dniFiltro || dniEntrada) {
+                setDniEntrada('')
+                setDniFiltro('')
+                sincronizarUrl({ dni: '', nombre: valor.trim() })
+              } else if (!valor.trim() && nombreFiltro) {
+                setNombreFiltro('')
+                sincronizarUrl({ dni: '', nombre: '' })
+              }
               setPagina(1)
             }}
             onSeleccionar={(prestatario) => {
@@ -177,31 +224,14 @@ export default function HistorialPrestamos() {
               setNombreFiltro('')
               setDniEntrada(prestatario.dni)
               setDniFiltro(prestatario.dni)
+              sincronizarUrl({ dni: prestatario.dni, nombre: '' })
               setPagina(1)
             }}
           />
-          {(nombreFiltro || dniFiltro) && (
-            <Boton
-              variante="secundario"
-              tipo="button"
-              tamanio="pequeno"
-              className="w-fit"
-              onClick={() => {
-                setPrestamoSeleccionado(null)
-                navegacionPendiente.current = ''
-                setNombreEntrada('')
-                setNombreFiltro('')
-                setDniEntrada('')
-                setDniFiltro('')
-                setPagina(1)
-              }}
-            >
-              Limpiar búsqueda por nombre
-            </Boton>
-          )}
         </div>
         <div className="grid gap-2">
           <SelectorPrestatario
+            incluirInactivos
             valor={dniEntrada}
             etiqueta="Buscar por DNI"
             ayuda="Escribe el DNI para elegir un prestatario y filtrar sus préstamos."
@@ -209,34 +239,25 @@ export default function HistorialPrestamos() {
               setPrestamoSeleccionado(null)
               navegacionPendiente.current = ''
               setDniEntrada(valor)
-              setDniFiltro('')
+              if (dniFiltro) {
+                setDniFiltro('')
+                setNombreEntrada('')
+                setNombreFiltro('')
+                sincronizarUrl({ dni: '', nombre: '' })
+              }
               setPagina(1)
             }}
             onSeleccionar={(prestatario) => {
               setPrestamoSeleccionado(null)
               navegacionPendiente.current = ''
+              setNombreEntrada('')
+              setNombreFiltro('')
               setDniEntrada(prestatario.dni)
               setDniFiltro(prestatario.dni)
+              sincronizarUrl({ dni: prestatario.dni, nombre: '' })
               setPagina(1)
             }}
           />
-          {dniFiltro && (
-            <Boton
-              variante="secundario"
-              tipo="button"
-              tamanio="pequeno"
-              className="w-fit"
-              onClick={() => {
-                setPrestamoSeleccionado(null)
-                navegacionPendiente.current = ''
-                setDniEntrada('')
-                setDniFiltro('')
-                setPagina(1)
-              }}
-            >
-              Quitar prestatario seleccionado
-            </Boton>
-          )}
         </div>
         <div className="grid gap-3 sm:grid-cols-2 xl:col-span-3">
           <Campo
@@ -256,78 +277,125 @@ export default function HistorialPrestamos() {
             ayuda="Fecha final de entrega."
           />
         </div>
+        {(dniFiltro || nombreFiltro || fechaDesde || fechaHasta) && (
+          <div className="flex flex-wrap gap-2 md:col-span-2 xl:col-span-4">
+            {(dniFiltro || nombreFiltro) && (
+              <Boton
+                variante="secundario"
+                tipo="button"
+                tamanio="pequeno"
+                className="w-fit"
+                onClick={limpiarFiltroPrestatario}
+              >
+                Quitar filtro de prestatario
+              </Boton>
+            )}
+            {(fechaDesde || fechaHasta) && (
+              <Boton
+                variante="secundario"
+                tipo="button"
+                tamanio="pequeno"
+                className="w-fit"
+                onClick={limpiarFechas}
+              >
+                Limpiar fechas
+              </Boton>
+            )}
+          </div>
+        )}
       </div>
 
-      {consulta.cargando && consulta.datos && (
-        <p className="mb-3 text-xs text-texto-suave" role="status" aria-live="polite">
-          Actualizando el historial…
-        </p>
-      )}
-
-      {results.length === 0 ? (
-        <div className="mt-6">
-          <EstadoVacio
-            titulo={dniFiltro || nombreFiltro || fechaDesde || fechaHasta
-              ? 'Sin préstamos para esta búsqueda'
-              : estado === 'todos' ? 'Aún no hay préstamos registrados' : 'Sin préstamos con este estado'}
-            mensaje={
-              dniFiltro || nombreFiltro || fechaDesde || fechaHasta
-                ? 'No se encontraron préstamos que coincidan con los filtros aplicados.'
-                : estado === 'todos'
-                ? 'Los préstamos del sistema aparecerán aquí al registrar una entrega.'
-                : 'Prueba con otro filtro de estado.'
-            }
-          />
+      {consulta.cargando && !consulta.datos && !prestamoSeleccionado ? (
+        <div className="mt-4 space-y-3" role="status" aria-live="polite">
+          <p className="text-sm text-texto-suave">Cargando historial de préstamos…</p>
+          <Skeleton className="h-20 rounded-xl" />
+          <Skeleton className="h-20 rounded-xl" />
         </div>
-      ) : (
-        <ListaHistorialPrestamos
-          prestamos={results}
-          seleccionado={prestamoSeleccionado}
-          onSeleccionar={setPrestamoSeleccionado}
-          onAnteriorPagina={() => cambiarPaginaDesdeDetalle('anterior')}
-          onSiguientePagina={() => cambiarPaginaDesdeDetalle('siguiente')}
-          hayPaginaAnterior={Boolean(previous)}
-          hayPaginaSiguiente={Boolean(next)}
-          puedeEditarGarantia={['gestor', 'administrador'].includes(usuario?.rol)}
-          onDevolucion={
-            ['gestor', 'administrador'].includes(usuario?.rol)
-              ? (prestamoId) => navigate(`/panel/devolucion/${prestamoId}`)
-              : null
-          }
-        />
-      )}
-
-      {consulta.error && prestamoSeleccionado && (
+      ) : consulta.error && !prestamoSeleccionado ? (
         <div className="mt-4 grid gap-3">
           <ErrorAlerta mensaje={consulta.error} />
-          <Boton variante="secundario" tipo="button" className="w-fit" onClick={() => setIntento((valor) => valor + 1)}>
-            Reintentar
-          </Boton>
+          {!rangoFechasInvalido && (
+            <Boton variante="secundario" tipo="button" className="w-full sm:w-auto" onClick={() => setIntento((valor) => valor + 1)}>
+              Reintentar
+            </Boton>
+          )}
         </div>
-      )}
+      ) : (
+        <>
+          {consulta.cargando && consulta.datos && (
+            <p className="mb-3 text-xs text-texto-suave" role="status" aria-live="polite">
+              Actualizando el historial…
+            </p>
+          )}
 
-      {count > 0 && !prestamoSeleccionado && (
-        <nav className="mt-6 flex flex-wrap items-center justify-center gap-3" aria-label="Páginas del historial">
-          <Boton
-            variante="secundario"
-            tipo="button"
-            deshabilitado={!previous}
-            onClick={() => cambiarPaginaDesdeLista('anterior')}
-          >
-            Anterior
-          </Boton>
-          <span className="text-sm text-texto-suave" aria-live="polite">
-            Página {pagina} de {totalPaginas} · {count} préstamos
-          </span>
-          <Boton
-            variante="secundario"
-            tipo="button"
-            deshabilitado={!next}
-            onClick={() => cambiarPaginaDesdeLista('siguiente')}
-          >
-            Siguiente
-          </Boton>
-        </nav>
+          {results.length === 0 ? (
+            <div className="mt-6">
+              <EstadoVacio
+                titulo={dniFiltro || nombreFiltro || fechaDesde || fechaHasta
+                  ? 'Sin préstamos para esta búsqueda'
+                  : estado === 'todos' ? 'Aún no hay préstamos registrados' : 'Sin préstamos con este estado'}
+                mensaje={
+                  dniFiltro || nombreFiltro || fechaDesde || fechaHasta
+                    ? 'No se encontraron préstamos que coincidan con los filtros aplicados.'
+                    : estado === 'todos'
+                    ? 'Los préstamos del sistema aparecerán aquí al registrar una entrega.'
+                    : 'Prueba con otro filtro de estado.'
+                }
+              />
+            </div>
+          ) : (
+            <ListaHistorialPrestamos
+              prestamos={results}
+              seleccionado={prestamoSeleccionado}
+              onSeleccionar={setPrestamoSeleccionado}
+              onAnteriorPagina={() => cambiarPaginaDesdeDetalle('anterior')}
+              onSiguientePagina={() => cambiarPaginaDesdeDetalle('siguiente')}
+              hayPaginaAnterior={Boolean(previous)}
+              hayPaginaSiguiente={Boolean(next)}
+              puedeEditarGarantia={['gestor', 'administrador'].includes(usuario?.rol)}
+              onDevolucion={
+                ['gestor', 'administrador'].includes(usuario?.rol)
+                  ? (prestamoId) => navigate(`/panel/devolucion/${prestamoId}`)
+                  : null
+              }
+            />
+          )}
+
+          {consulta.error && prestamoSeleccionado && (
+            <div className="mt-4 grid gap-3">
+              <ErrorAlerta mensaje={consulta.error} />
+              {!rangoFechasInvalido && (
+                <Boton variante="secundario" tipo="button" className="w-fit" onClick={() => setIntento((valor) => valor + 1)}>
+                  Reintentar
+                </Boton>
+              )}
+            </div>
+          )}
+
+          {count > 0 && !prestamoSeleccionado && (
+            <nav className="mt-6 flex flex-wrap items-center justify-center gap-3" aria-label="Páginas del historial">
+              <Boton
+                variante="secundario"
+                tipo="button"
+                deshabilitado={!previous}
+                onClick={() => cambiarPaginaDesdeLista('anterior')}
+              >
+                Anterior
+              </Boton>
+              <span className="text-sm text-texto-suave" aria-live="polite">
+                Página {pagina} de {totalPaginas} · {count} préstamos
+              </span>
+              <Boton
+                variante="secundario"
+                tipo="button"
+                deshabilitado={!next}
+                onClick={() => cambiarPaginaDesdeLista('siguiente')}
+              >
+                Siguiente
+              </Boton>
+            </nav>
+          )}
+        </>
       )}
     </section>
   )

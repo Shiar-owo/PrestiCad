@@ -251,54 +251,6 @@ function RegistrarPrestamo() {
   }, [reservaIdInicial])
 
   useEffect(() => {
-    if (!reservaSeleccionada?.id) return undefined
-    let vigente = true
-    const tieneDoc = Boolean(
-      reservaSeleccionada.garantia?.documento_identidad_disponible
-      ?? reservaSeleccionada.garantia?.tiene_documento_identidad,
-    )
-    const tieneComp = Boolean(
-      reservaSeleccionada.garantia?.compromiso_responsabilidad_disponible
-      ?? reservaSeleccionada.garantia?.tiene_compromiso_responsabilidad,
-    )
-    if (!tieneDoc && !tieneComp) return undefined
-
-    Promise.all([
-      tieneDoc
-        ? fetch(`/api/reservas/${reservaSeleccionada.id}/garantia/documento-identidad/`, { credentials: 'include' })
-          .then((r) => (r.ok ? r.blob() : null))
-          .catch(() => null)
-        : Promise.resolve(null),
-      tieneComp
-        ? fetch(`/api/reservas/${reservaSeleccionada.id}/garantia/compromiso/`, { credentials: 'include' })
-          .then((r) => (r.ok ? r.blob() : null))
-          .catch(() => null)
-        : Promise.resolve(null),
-    ])
-      .then(([blobDni, blobComp]) => {
-        if (!vigente) return
-        setFormulario((actual) => {
-          const nuevoDoc = blobDni && typeof File !== 'undefined'
-            ? new File([blobDni], 'documento_identidad.pdf', { type: 'application/pdf' })
-            : actual.documentoIdentidad
-          const nuevoComp = blobComp && typeof File !== 'undefined'
-            ? new File([blobComp], 'compromiso_responsabilidad.pdf', { type: 'application/pdf' })
-            : actual.compromisoResponsabilidad
-
-          return {
-            ...actual,
-            documentoIdentidad: nuevoDoc,
-            compromisoResponsabilidad: nuevoComp,
-          }
-        })
-      })
-
-    return () => {
-      vigente = false
-    }
-  }, [reservaSeleccionada?.id])
-
-  useEffect(() => {
     const dni = formulario.dni.trim()
     setPerfilPrestatario(null)
     setDniPerfilVerificado('')
@@ -1339,13 +1291,14 @@ function RegistrarPrestamo() {
                   <SubidaDocumentoPDF
                     etiqueta={
                       garantiaReutilizada
-                        ? 'Documento de identidad (PDF, cargado de la reserva)'
+                        ? 'Documento de identidad (PDF, opcional para reemplazar)'
                         : 'Documento de identidad (PDF)'
                     }
                     archivo={formulario.documentoIdentidad}
                     onCambio={(archivo) => actualizar('documentoIdentidad', archivo)}
                     error={errores.documento_identidad}
                     ayuda={`Solo se aceptan archivos PDF (.pdf), hasta ${TAMANO_MAXIMO_GARANTIA_MB} MB.`}
+                    nombreExistente="documento_identidad.pdf"
                     enlaceExistente={
                       reservaSeleccionada?.id && (reservaSeleccionada.garantia?.documento_identidad_disponible ?? reservaSeleccionada.garantia?.tiene_documento_identidad)
                         ? `/api/reservas/${reservaSeleccionada.id}/garantia/documento-identidad/`
@@ -1356,13 +1309,14 @@ function RegistrarPrestamo() {
                   <SubidaDocumentoPDF
                     etiqueta={
                       garantiaReutilizada
-                        ? 'Carta de responsabilidad (PDF, cargada de la reserva)'
+                        ? 'Carta de responsabilidad (PDF, opcional para reemplazar)'
                         : 'Carta de responsabilidad (PDF)'
                     }
                     archivo={formulario.compromisoResponsabilidad}
                     onCambio={(archivo) => actualizar('compromisoResponsabilidad', archivo)}
                     error={errores.compromiso_responsabilidad}
                     ayuda={`Solo se aceptan archivos PDF (.pdf), hasta ${TAMANO_MAXIMO_GARANTIA_MB} MB.`}
+                    nombreExistente="compromiso_responsabilidad.pdf"
                     enlaceExistente={
                       reservaSeleccionada?.id && (reservaSeleccionada.garantia?.compromiso_responsabilidad_disponible ?? reservaSeleccionada.garantia?.tiene_compromiso_responsabilidad)
                         ? `/api/reservas/${reservaSeleccionada.id}/garantia/compromiso/`

@@ -8,13 +8,14 @@ function SubidaDocumentoPDF({
   ayuda,
   enlaceAyuda,
   enlaceExistente,
+  nombreExistente = '',
   requerido = true,
 }) {
   const identificador = useId()
   const entrada = useRef(null)
   const idAyuda = `${identificador}-ayuda`
   const mensaje = error || ayuda
-  const debeSerRequerido = requerido && !archivo
+  const debeSerRequerido = requerido && !archivo && !enlaceExistente
 
   function cambiarArchivo(evento) {
     onCambio(evento.target.files?.[0] ?? null)
@@ -42,28 +43,32 @@ function SubidaDocumentoPDF({
         aria-describedby={mensaje ? idAyuda : undefined}
         className={`w-full rounded-lg border bg-white px-3 py-2 text-sm text-texto file:mr-3 file:rounded-md file:border-0 file:bg-marca-50 file:px-3 file:py-1.5 file:font-semibold file:text-marca-800 dark:bg-superficie dark:file:bg-marca-500/15 dark:file:text-marca-300 ${error ? 'border-error' : 'border-borde'}`}
       />
-      {archivo && (
+      {archivo ? (
         <div className="flex flex-wrap items-center gap-2 text-xs text-texto-suave">
           <span className="font-medium text-texto">{archivo.name}</span>
-          {enlaceExistente && (
-            <a
-              href={enlaceExistente}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1 font-semibold text-acento-700 underline dark:text-acento-300"
-            >
-              Ver PDF
-            </a>
-          )}
           <button
             type="button"
             onClick={quitarArchivo}
             className="font-semibold text-acento-700 underline dark:text-acento-300"
           >
-            Quitar archivo
+            {enlaceExistente ? 'Quitar reemplazo' : 'Quitar archivo'}
           </button>
         </div>
-      )}
+      ) : enlaceExistente ? (
+        <div className="flex flex-wrap items-center gap-2 text-xs text-texto-suave">
+          <span className="font-medium text-texto">
+            {nombreExistente || 'Documento guardado en la reserva'} (se reutiliza automáticamente)
+          </span>
+          <a
+            href={enlaceExistente}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 font-semibold text-acento-700 underline dark:text-acento-300"
+          >
+            Ver PDF
+          </a>
+        </div>
+      ) : null}
       {mensaje && (
         <p id={idAyuda} className={`text-xs ${error ? 'text-error' : 'text-texto-suave'}`}>
           {mensaje}

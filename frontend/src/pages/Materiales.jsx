@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { CalendarDays, FileText, History, Pencil, Search, Trash2 } from 'lucide-react'
 
@@ -57,6 +57,7 @@ function Materiales() {
   const [registroAEliminar, setRegistroAEliminar] = useState(null)
   const [mensajePopupExito, setMensajePopupExito] = useState('')
   const [busquedaNombre, setBusquedaNombre] = useState('')
+  const solicitudRef = useRef(0)
 
   useEffect(() => {
     const temporizador = setTimeout(() => cargarMateriales(pagina, busquedaNombre), busquedaNombre ? 300 : 0)
@@ -64,18 +65,21 @@ function Materiales() {
   }, [pagina, busquedaNombre])
 
   async function cargarMateriales(paginaSolicitada = pagina, q = busquedaNombre) {
+    const idSolicitud = ++solicitudRef.current
     setCargando(true)
     setError('')
     try {
       const params = new URLSearchParams({ page: String(paginaSolicitada), page_size: '25' })
       if (q.trim()) params.set('q', q.trim())
       const datos = await api.get(`/materiales/gestion/?${params}`)
+      if (idSolicitud !== solicitudRef.current) return
       setMateriales(Array.isArray(datos.results) ? datos.results : [])
       setTotalMateriales(Number(datos.count) || 0)
     } catch {
+      if (idSolicitud !== solicitudRef.current) return
       setError('No se pudo cargar la lista de materiales.')
     } finally {
-      setCargando(false)
+      if (idSolicitud === solicitudRef.current) setCargando(false)
     }
   }
 
@@ -101,8 +105,11 @@ function Materiales() {
     if (!resultadoRegistro) setMensajePopupExito('Los cambios del material se guardaron correctamente.')
     setMostrarFormulario(false)
     setMaterialEnEdicion(null)
-    setPagina(1)
-    await cargarMateriales(1)
+    if (pagina !== 1) {
+      setPagina(1)
+    } else {
+      await cargarMateriales(1, busquedaNombre)
+    }
   }
 
   async function actualizarFichaTrasAgregarInstancias() {

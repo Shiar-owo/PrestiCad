@@ -1,6 +1,6 @@
-import { useContext, useEffect, useState } from 'react'
+import { useContext, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
-import { Ban, CalendarCheck2, CircleCheck, ClipboardCheck, Eye, Search, Sparkles, UserRound } from 'lucide-react'
+import { AlertTriangle, Ban, CalendarCheck2, CircleCheck, ClipboardCheck, Eye, Search, Sparkles, UserRound } from 'lucide-react'
 
 import { api } from '../api/client'
 import SesionContext from '../contextos/SesionContext'
@@ -46,27 +46,40 @@ function UsuariosRoles() {
   const [error, setError] = useState('')
   const [mensajeExito, setMensajeExito] = useState('')
   const [busquedaNombre, setBusquedaNombre] = useState('')
+  const solicitudRef = useRef(0)
 
   useEffect(() => {
     const temporizador = setTimeout(() => cargarUsuarios(pagina, busquedaNombre), busquedaNombre ? 300 : 0)
     return () => clearTimeout(temporizador)
   }, [pagina, busquedaNombre])
 
+  useEffect(() => {
+    if (!perfilSeleccionado) return undefined
+    function manejarEscape(evento) {
+      if (evento.key === 'Escape') setPerfilSeleccionado(null)
+    }
+    document.addEventListener('keydown', manejarEscape)
+    return () => document.removeEventListener('keydown', manejarEscape)
+  }, [perfilSeleccionado])
+
   async function cargarUsuarios(paginaSolicitada = pagina, q = busquedaNombre) {
+    const idSolicitud = ++solicitudRef.current
     setCargando(true)
     setError('')
     try {
       const params = new URLSearchParams({ page: String(paginaSolicitada), page_size: '25' })
       if (q.trim()) params.set('q', q.trim())
       const datos = await api.get(`/usuarios/?${params}`)
+      if (idSolicitud !== solicitudRef.current) return
       setUsuarios(Array.isArray(datos.results) ? datos.results : [])
       setTotalUsuarios(Number(datos.count) || 0)
     } catch (fallo) {
+      if (idSolicitud !== solicitudRef.current) return
       setError(fallo.status === 403
         ? 'Solo un administrador puede gestionar roles.'
         : 'No se pudo cargar la lista de usuarios.')
     } finally {
-      setCargando(false)
+      if (idSolicitud === solicitudRef.current) setCargando(false)
     }
   }
 
@@ -250,7 +263,7 @@ function UsuariosRoles() {
           </p>
       </div>
 
-      {!cargando && totalUsuarios > 0 && usuariosFiltrados.length === 0 && (
+      {!cargando && totalUsuarios === 0 && busquedaNombre.trim() && (
         <EstadoVacio titulo="No se encontraron usuarios" mensaje="Prueba con otro nombre. La búsqueda ignora mayúsculas y tildes." />
       )}
 
@@ -444,6 +457,17 @@ function UsuariosRoles() {
                       </article>
                     ))}
                   </div>
+                  {perfilSeleccionado.tiene_prestamos_vencidos && (
+                    <div
+                      role="alert"
+                      className="mt-3 flex items-start gap-2 rounded-xl border border-amber-400 bg-amber-50 px-3.5 py-2.5 text-xs font-semibold text-amber-900 dark:border-amber-600/60 dark:bg-amber-950/40 dark:text-amber-200"
+                    >
+                      <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden="true" />
+                      <span>
+                        Este prestatario tiene al menos un préstamo vencido pendiente de devolución (bloqueado para nuevos préstamos y reservas).
+                      </span>
+                    </div>
+                  )}
                 </div>
                 <ResumenTier tier={perfilSeleccionado.reputacion_tier} className="mt-4" />
               </>

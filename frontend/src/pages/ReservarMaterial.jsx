@@ -65,7 +65,7 @@ function agregarFechaLimiteMaterial(mensaje, fechaInicio, material) {
 
 export default function ReservarMaterial() {
   useTituloPagina('Reservar material')
-  const { usuario } = useContext(SesionContext)
+  const { usuario, refrescarSesion } = useContext(SesionContext)
   const { diasNoLaborables } = useDiasNoLaborables()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -311,6 +311,7 @@ export default function ReservarMaterial() {
   }
 
   function actualizarFechaAvanzada(valor) {
+    setFechaFinAvanzada('')
     if (!valor) {
       setFechaSeleccionada('')
       setErrores((actuales) => ({ ...actuales, fecha: '' }))
@@ -402,6 +403,7 @@ export default function ReservarMaterial() {
       materialId,
       instanciaId,
       fechaSeleccionada: esAvanzado ? fechaSeleccionada : undefined,
+      fechaFinAvanzada: esAvanzado ? fechaFinAvanzada : undefined,
       horaInicio: esAvanzado ? horaInicio : undefined,
       horaFin: esAvanzado ? horaFin : undefined,
       fechaInicio: esAvanzado ? undefined : fechaInicio,
@@ -466,6 +468,7 @@ export default function ReservarMaterial() {
       }
       setReservaCreada(respuesta)
       setMostrarExitoReserva(true)
+      refrescarSesion?.().catch(() => {})
     } catch (err) {
       const inicio = esAvanzado
         ? `${fechaSeleccionada}T${horaInicio}:00`
